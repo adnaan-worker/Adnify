@@ -44,11 +44,11 @@ class TerminalService {
 			}
 		}
 
-		const id = crypto.randomUUID()
+		const id = window.crypto.randomUUID()
 		const terminal: PersistentTerminal = {
 			id,
 			name,
-			cwd: cwd || process.cwd?.() || '.',
+			cwd: cwd || '.',
 			isRunning: false,
 			output: [],
 			maxOutputLines: MAX_OUTPUT_LINES,

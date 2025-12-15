@@ -5,10 +5,10 @@
 
 import { ChatMode } from '../store'
 
-// Search/Replace 块格式
-export const ORIGINAL = '<<<<<<< ORIGINAL'
-export const DIVIDER = '======='
-export const FINAL = '>>>>>>> UPDATED'
+// Search/Replace 块格式 (与 tools.ts 保持一致)
+export const ORIGINAL = '<<<SEARCH'
+export const DIVIDER = '==='
+export const FINAL = '>>>'
 
 // 限制常量
 export const MAX_FILE_CHARS = 100000
@@ -19,11 +19,11 @@ export const MAX_CONTEXT_CHARS = 50000
 
 // Search/Replace 块模板
 const searchReplaceBlockTemplate = `\
-${ORIGINAL}
+<<<SEARCH
 // ... original code goes here
-${DIVIDER}
+===
 // ... updated code goes here
-${FINAL}`
+>>>`
 
 // 工具描述
 const toolDescriptions = {
@@ -67,10 +67,11 @@ Format:
 ${searchReplaceBlockTemplate}
 
 Guidelines:
-1. ORIGINAL must EXACTLY match existing code (including whitespace)
-2. Each ORIGINAL block must be unique in the file
-3. You can use multiple blocks for multiple changes
-4. Keep ORIGINAL blocks as small as possible while being unique`,
+1. SEARCH block must EXACTLY match existing code (including whitespace and indentation)
+2. Each SEARCH block must be unique in the file
+3. You can use multiple <<<SEARCH...===...>>> blocks for multiple changes
+4. Keep SEARCH blocks as small as possible while being unique
+5. Include enough context lines to make the match unique`,
 
 	write_file: `Write or overwrite entire file content. Use edit_file for partial changes.
 Parameters:

@@ -152,6 +152,38 @@ export function useAgent() {
 			})
 
 			// 发送到 LLM
+			// 先注册监听器，再发送请求，避免竞态条件
+			const resultPromise = new Promise<{ toolCalls?: any[]; error?: string } | null>((resolve) => {
+				let resolved = false
+
+				const cleanup = () => {
+					if (!resolved) {
+						resolved = true
+						unsubDone()
+						unsubError()
+					}
+				}
+
+				const unsubDone = window.electronAPI.onLLMDone((result) => {
+					cleanup()
+					resolve(result)
+				})
+
+				const unsubError = window.electronAPI.onLLMError((error) => {
+					cleanup()
+					resolve({ error })
+				})
+
+				// 超时保护
+				setTimeout(() => {
+					if (!resolved) {
+						cleanup()
+						resolve({ error: 'Request timeout' })
+					}
+				}, 120000) // 2分钟超时
+			})
+
+			// 发送请求
 			await window.electronAPI.sendMessage({
 				config: llmConfig,
 				messages: conversationMessages,
@@ -160,41 +192,36 @@ export function useAgent() {
 			})
 
 			// 等待响应完成
-			await new Promise<void>((resolve) => {
-				const checkDone = () => {
-					const state = useStore.getState()
-					if (!state.isStreaming || abortRef.current) {
-						resolve()
-						return
+			const result = await resultPromise
+
+			// 处理错误
+			if (result?.error) {
+				setIsStreaming(false)
+				break
+			}
+
+			const assistantContent = useStore.getState().messages.at(-1)?.content || ''
+
+			conversationMessages.push({
+				role: 'assistant' as const,
+				content: assistantContent,
+				toolCallId: undefined,
+				toolName: undefined,
+			})
+
+			// 处理工具调用
+			if (result?.toolCalls && result.toolCalls.length > 0 && chatMode === 'agent') {
+				for (const toolCall of result.toolCalls) {
+					if (abortRef.current) break
+
+					const approvalType = getToolApprovalType(toolCall.name)
+					const toolCallWithApproval: ToolCall = {
+						id: toolCall.id,
+						name: toolCall.name,
+						arguments: toolCall.arguments,
+						status: 'pending' as ToolStatus,
+						approvalType,
 					}
-					setTimeout(checkDone, 100)
-				}
-
-				const unsubDone = window.electronAPI.onLLMDone(async (result) => {
-					unsubDone()
-
-					const assistantContent = useStore.getState().messages.at(-1)?.content || ''
-
-					conversationMessages.push({
-						role: 'assistant' as const,
-						content: assistantContent,
-						toolCallId: undefined,
-						toolName: undefined,
-					})
-
-					// 处理工具调用
-					if (result.toolCalls && result.toolCalls.length > 0 && chatMode === 'agent') {
-						for (const toolCall of result.toolCalls) {
-							if (abortRef.current) break
-
-							const approvalType = getToolApprovalType(toolCall.name)
-							const toolCallWithApproval: ToolCall = {
-								id: toolCall.id,
-								name: toolCall.name,
-								arguments: toolCall.arguments,
-								status: 'pending' as ToolStatus,
-								approvalType,
-							}
 
 							// 检查是否需要审批
 							let approved = true
@@ -290,12 +317,6 @@ export function useAgent() {
 							}
 						}
 					}
-
-					resolve()
-				})
-
-				checkDone()
-			})
 		}
 
 		if (loopCount >= maxLoops) {

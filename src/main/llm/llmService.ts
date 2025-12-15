@@ -14,11 +14,13 @@ export class LLMService {
 	}
 
 	private getProvider(config: LLMConfig): LLMProvider {
-		const key = `${config.provider}-${config.apiKey}`
+		// 包含 baseUrl 在缓存 key 中，避免切换 endpoint 时使用旧实例
+		const key = `${config.provider}-${config.apiKey}-${config.baseUrl || 'default'}`
 
 		if (!this.providers.has(key)) {
 			switch (config.provider) {
 				case 'openai':
+				case 'custom':
 					this.providers.set(key, new OpenAIProvider(config.apiKey, config.baseUrl))
 					break
 				case 'anthropic':

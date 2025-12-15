@@ -115,7 +115,7 @@ const TerminalOutput = memo(function TerminalOutput({ terminal }: TerminalOutput
 })
 
 export default function TerminalPanel() {
-  const { language, terminalVisible, setTerminalVisible } = useStore()
+  const { language, terminalVisible, setTerminalVisible, workspacePath } = useStore()
   const [terminals, setTerminals] = useState<PersistentTerminal[]>([])
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -141,10 +141,10 @@ export default function TerminalPanel() {
   // 创建新终端
   const createTerminal = useCallback(async () => {
     const name = `Terminal ${terminals.length + 1}`
-    const terminal = await terminalService.openTerminal(name)
+    const terminal = await terminalService.openTerminal(name, workspacePath || undefined)
     setActiveTerminalId(terminal.id)
     refreshTerminals()
-  }, [terminals.length, refreshTerminals])
+  }, [terminals.length, refreshTerminals, workspacePath])
 
   // 关闭终端
   const closeTerminal = useCallback((id: string) => {

@@ -67,19 +67,20 @@ export class AnthropicProvider implements LLMProvider {
 				onStream({ type: 'text', content: text })
 			})
 
-			stream.on('contentBlockStop', (event) => {
-				if (event.content_block.type === 'tool_use') {
+			const finalMessage = await stream.finalMessage()
+
+			// Extract tool calls from final message
+			for (const block of finalMessage.content) {
+				if (block.type === 'tool_use') {
 					const toolCall: ToolCall = {
-						id: event.content_block.id,
-						name: event.content_block.name,
-						arguments: event.content_block.input as Record<string, any>,
+						id: block.id,
+						name: block.name,
+						arguments: block.input as Record<string, any>,
 					}
 					toolCalls.push(toolCall)
 					onToolCall(toolCall)
 				}
-			})
-
-			await stream.finalMessage()
+			}
 			onComplete({ content: fullContent, toolCalls: toolCalls.length > 0 ? toolCalls : undefined })
 		} catch (error: any) {
 			onError(error)

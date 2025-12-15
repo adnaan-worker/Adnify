@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, FunctionDeclaration, Tool } from '@google/generative-ai'
+import { GoogleGenerativeAI, FunctionDeclaration, Tool, SchemaType } from '@google/generative-ai'
 import { LLMProvider, ChatParams, ToolDefinition, ToolCall } from '../types'
 
 export class GeminiProvider implements LLMProvider {
@@ -11,16 +11,16 @@ export class GeminiProvider implements LLMProvider {
 	private convertTools(tools?: ToolDefinition[]): Tool[] | undefined {
 		if (!tools?.length) return undefined
 
-		const functionDeclarations: FunctionDeclaration[] = tools.map(tool => ({
+		const functionDeclarations = tools.map(tool => ({
 			name: tool.name,
 			description: tool.description,
 			parameters: {
-				type: 'object' as const,
+				type: SchemaType.OBJECT,
 				properties: Object.fromEntries(
 					Object.entries(tool.parameters.properties).map(([key, value]) => [
 						key,
 						{
-							type: value.type,
+							type: value.type as SchemaType,
 							description: value.description,
 							enum: value.enum,
 						}
@@ -28,7 +28,7 @@ export class GeminiProvider implements LLMProvider {
 				),
 				required: tool.parameters.required,
 			}
-		}))
+		})) as FunctionDeclaration[]
 
 		return [{ functionDeclarations }]
 	}

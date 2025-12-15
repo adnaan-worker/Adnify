@@ -90,7 +90,7 @@ function FileTreeItem({ item, depth = 0 }: { item: FileItem; depth?: number }) {
             <File className={`w-3.5 h-3.5 ${getFileIcon(item.name)}`} />
           </>
         )}
-        <span className="text-[13px] truncate leading-none pt-0.5">{item.name}</span>
+        <span className="text-[13px] truncate leading-normal">{item.name}</span>
       </div>
       
       {item.isDirectory && isExpanded && (

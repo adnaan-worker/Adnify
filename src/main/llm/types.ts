@@ -1,4 +1,4 @@
-export type ProviderType = 'openai' | 'anthropic' | 'gemini'
+export type ProviderType = 'openai' | 'anthropic' | 'gemini' | 'custom'
 
 export interface LLMConfig {
 	provider: ProviderType

@@ -164,7 +164,15 @@ ipcMain.handle('settings:set', (_, key: string, value: any) => {
 
 // LLM
 ipcMain.handle('llm:sendMessage', async (_, params) => {
-	return llmService?.sendMessage(params)
+	console.log('[Main] llm:sendMessage received, provider:', params?.config?.provider, 'model:', params?.config?.model)
+	console.log('[Main] baseUrl:', params?.config?.baseUrl)
+	try {
+		await llmService?.sendMessage(params)
+		console.log('[Main] sendMessage completed')
+	} catch (error: any) {
+		console.error('[Main] sendMessage error:', error.message)
+		throw error
+	}
 })
 
 ipcMain.on('llm:abort', () => {
