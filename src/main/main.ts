@@ -11,17 +11,42 @@ let llmService: LLMService | null = null
 let terminalProcess: ChildProcess | null = null
 
 function createWindow() {
-    mainWindow = new BrowserWindow({
-        width: 1600,
-        height: 1000,
-        minWidth: 1200,
-        minHeight: 700,
-        frame: false,
-        titleBarStyle: 'hidden',
-        trafficLightPosition: { x: 15, y: 15 },
-        backgroundColor: '#0d1117',
-        webPreferences: {
-            preload: path.join(__dirname, '../preload/preload.js'),
+
+    const iconPath = process.env.NODE_ENV === 'development'
+
+        ? path.join(__dirname, '../../public/icon.png')
+
+        : path.join(__dirname, '../renderer/icon.png')
+
+
+
+	mainWindow = new BrowserWindow({
+
+		width: 1600,
+
+		height: 1000,
+
+		minWidth: 1200,
+
+		minHeight: 700,
+
+		frame: false,
+
+		titleBarStyle: 'hidden',
+
+        icon: iconPath,
+
+		trafficLightPosition: { x: 15, y: 15 },
+
+
+
+		backgroundColor: '#0d1117',
+
+		webPreferences: {
+
+			preload: path.join(__dirname, '../preload/preload.js'),
+
+
             contextIsolation: true,
             nodeIntegration: false,
         },

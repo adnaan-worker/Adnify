@@ -9,6 +9,7 @@
 body {
   @apply bg-background text-text-primary antialiased font-sans;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  background-image: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.03) 0%, transparent 50%);
 }
 
 #root {
@@ -20,8 +21,8 @@ body {
 
 /* --- Premium Scrollbars --- */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -29,11 +30,11 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-surface-active/50 rounded-full border-[3px] border-solid border-transparent bg-clip-content;
+  @apply bg-white/10 rounded-full border-[2px] border-solid border-transparent bg-clip-content;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-text-muted/80;
+  @apply bg-white/20;
 }
 
 ::-webkit-scrollbar-corner {
@@ -42,7 +43,7 @@ body {
 
 /* --- Selection --- */
 ::selection {
-  @apply bg-accent/20 text-accent-hover;
+  @apply bg-accent/30 text-white;
 }
 
 /* --- Utils --- */
@@ -60,16 +61,20 @@ body {
 
 /* Glassmorphism & Effects */
 .glass-panel {
-  @apply bg-background/80 backdrop-blur-md border border-white/5;
+  @apply bg-[#09090b]/80 backdrop-blur-xl border border-white/5 shadow-2xl;
 }
 
+.text-glow {
+  text-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+}
+
+.border-glow {
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1), 0 0 8px rgba(59, 130, 246, 0.2);
+}
+
+/* Panel Header Gradient */
 .panel-header {
-  @apply h-10 px-4 flex items-center justify-between border-b border-border bg-background/50 backdrop-blur-sm select-none;
-}
-
-/* Subtle glow for active elements */
-.active-glow {
-  box-shadow: 0 0 15px -3px rgba(59, 130, 246, 0.3);
+  @apply h-10 px-4 flex items-center justify-between border-b border-border bg-gradient-to-r from-background-secondary to-background/50 backdrop-blur-sm select-none;
 }
 
 /* Interactive elements transition */

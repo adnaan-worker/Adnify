@@ -1,18 +1,15 @@
 import { Minus, Square, X, Command, Search } from 'lucide-react'
 import { useStore } from '../store'
+import { Logo } from './Logo'
 
 export default function TitleBar() {
   return (
     <div className="h-10 bg-background flex items-center justify-between px-3 drag-region select-none border-b border-border-subtle z-50">
       
       {/* Left Spacer / Logo */}
-      <div className="flex items-center gap-3 no-drag w-1/3 pl-1">
-        <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity cursor-default">
-            <div className="w-4 h-4 rounded bg-gradient-to-tr from-accent to-purple-500 shadow-glow flex items-center justify-center">
-                 <div className="w-1.5 h-1.5 bg-white rounded-full opacity-80" />
-            </div>
-            <span className="text-xs font-bold text-text-primary tracking-widest font-mono">ADNIFY</span>
-        </div>
+      <div className="flex items-center gap-3 no-drag w-1/3 pl-2 opacity-90 hover:opacity-100 transition-opacity cursor-default">
+          <Logo className="w-5 h-5" glow />
+          <span className="text-sm font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60 tracking-wider font-sans">ADNIFY</span>
       </div>
 
       {/* Center - Command Palette Trigger */}

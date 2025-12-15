@@ -13,6 +13,8 @@
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
     "start": "electron .",
+    "dist": "npm run build && electron-builder",
+    "pack": "npm run build && electron-builder --dir",
     "preview": "npm run build && electron ."
   },
   "dependencies": {
@@ -23,10 +25,12 @@
     "lucide-react": "^0.468.0",
     "monaco-editor": "^0.52.0",
     "openai": "^4.96.0",
+    "png2icons": "^2.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "react-syntax-highlighter": "^15.6.1",
+    "sharp": "^0.34.5",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0",
     "xterm-addon-web-links": "^0.9.0",
@@ -41,10 +45,41 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.0",
     "electron": "^33.2.1",
+    "electron-builder": "^24.13.3",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vite-plugin-electron": "^0.28.8"
+  },
+  "build": {
+    "appId": "com.adnify.app",
+    "productName": "Adnify",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": [
+        "nsis",
+        "portable",
+        "dir"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Adnify"
+    },
+    "mac": {
+      "icon": "resources/icon.icns",
+      "target": "dmg"
+    },
+    "linux": {
+      "icon": "resources/icon.png",
+      "target": "AppImage"
+    }
   }
 }
