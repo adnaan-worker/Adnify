@@ -190,9 +190,16 @@ function sendNotification(method: string, params: any): void {
  */
 async function initializeServer(workspacePath: string): Promise<void> {
   try {
+    // Windows 路径需要转换为正确的 file URI 格式
+    // 例如: G:\path -> file:///G:/path
+    const normalizedPath = workspacePath.replace(/\\/g, '/')
+    const rootUri = normalizedPath.startsWith('/') 
+      ? `file://${normalizedPath}` 
+      : `file:///${normalizedPath}`
+    
     await sendRequest('initialize', {
       processId: process.pid,
-      rootUri: `file://${workspacePath.replace(/\\/g, '/')}`,
+      rootUri,
       capabilities: {
         textDocument: {
           synchronization: {
@@ -321,7 +328,7 @@ async function initializeServer(workspacePath: string): Promise<void> {
       },
       workspaceFolders: [
         {
-          uri: `file://${workspacePath.replace(/\\/g, '/')}`,
+          uri: rootUri,
           name: path.basename(workspacePath),
         },
       ],

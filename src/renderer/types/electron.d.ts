@@ -109,8 +109,10 @@ export interface ElectronAPI {
     getFileTree: (path: string, maxDepth?: number) => Promise<string>
 	readFile: (path: string) => Promise<string | null>
 	writeFile: (path: string, content: string) => Promise<boolean>
+	ensureDir: (path: string) => Promise<boolean>
 	saveFile: (content: string, path?: string) => Promise<string | null>
 	fileExists: (path: string) => Promise<boolean>
+	showItemInFolder: (path: string) => Promise<void>
 	mkdir: (path: string) => Promise<boolean>
 	deleteFile: (path: string) => Promise<boolean>
 	renameFile: (oldPath: string, newPath: string) => Promise<boolean>

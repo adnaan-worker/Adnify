@@ -3,7 +3,7 @@
  * 使用原生模块实现高性能
  */
 
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as fsPromises from 'fs/promises'
@@ -499,6 +499,19 @@ ipcMain.handle('file:write', async (_, filePath: string, content: string) => {
     } catch {
         return false
     }
+})
+
+ipcMain.handle('file:ensureDir', async (_, dirPath: string) => {
+    try {
+        await fsPromises.mkdir(dirPath, { recursive: true })
+        return true
+    } catch {
+        return false
+    }
+})
+
+ipcMain.handle('file:showInFolder', async (_, filePath: string) => {
+    shell.showItemInFolder(filePath)
 })
 
 ipcMain.handle('file:save', async (_, content: string, currentPath?: string) => {

@@ -6,6 +6,7 @@ import {
   History, Image as ImageIcon, X,
   Code, GitBranch, Terminal, Database
 } from 'lucide-react'
+import { Logo } from './Logo'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -610,7 +611,7 @@ export default function ChatPanel() {
         {messages.length === 0 && hasApiKey && (
           <div className="h-full flex flex-col items-center justify-center opacity-40 select-none pointer-events-none gap-6 animate-fade-in">
              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-surface to-surface-active border border-border-subtle flex items-center justify-center shadow-2xl">
-                <Sparkles className="w-10 h-10 text-accent/80" />
+                <Logo className="w-12 h-12" glow />
              </div>
              <div className="text-center">
                  <p className="text-lg font-semibold text-text-primary mb-1">Adnify Agent</p>

@@ -397,6 +397,26 @@ function ProviderSettings({
           </p>
         </div>
       )}
+
+      {/* Request Timeout */}
+      <div>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '请求超时' : 'Request Timeout'}</h3>
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            value={(localConfig.timeout || 120000) / 1000}
+            onChange={(e) => setLocalConfig({ ...localConfig, timeout: (parseInt(e.target.value) || 120) * 1000 })}
+            min={30}
+            max={600}
+            step={30}
+            className="w-32 bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
+          />
+          <span className="text-sm text-text-muted">{language === 'zh' ? '秒' : 'seconds'}</span>
+        </div>
+        <p className="text-xs text-text-muted mt-2">
+          {language === 'zh' ? 'API 请求的最大等待时间（30-600秒）' : 'Maximum wait time for API requests (30-600 seconds)'}
+        </p>
+      </div>
     </div>
   )
 }
@@ -1100,6 +1120,25 @@ function SystemSettings({ language }: { language: Language }) {
             ) : null}
           </div>
         </div>
+      </div>
+
+      {/* 引导向导 */}
+      <div className="pt-4 border-t border-border-subtle">
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '引导向导' : 'Setup Wizard'}</h3>
+        <p className="text-xs text-text-muted mb-3">
+          {language === 'zh' 
+            ? '重新运行首次使用引导，帮助你配置基本设置。' 
+            : 'Re-run the first-time setup wizard to configure basic settings.'}
+        </p>
+        <button
+          onClick={async () => {
+            await window.electronAPI.setSetting('onboardingCompleted', false)
+            window.location.reload()
+          }}
+          className="px-4 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg text-sm text-text-primary transition-colors"
+        >
+          {language === 'zh' ? '重新运行引导' : 'Run Setup Wizard'}
+        </button>
       </div>
     </div>
   )

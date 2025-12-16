@@ -12,9 +12,10 @@ import QuickOpen from './components/QuickOpen'
 import ActivityBar from './components/ActivityBar'
 import StatusBar from './components/StatusBar'
 import ComposerPanel from './components/ComposerPanel'
-import LoadingScreen from './components/LoadingScreen'
+import OnboardingWizard from './components/OnboardingWizard'
 import { initEditorConfig } from './config/editorConfig'
 import { themeManager } from './config/themeConfig'
+import { restoreWorkspaceState, initWorkspaceStateSync } from './services/workspaceStateService'
 
 // 暴露 store 给插件系统
 ;(window as any).__ADNIFY_STORE__ = { getState: () => useStore.getState() }
@@ -30,8 +31,9 @@ export default function App() {
   const [showQuickOpen, setShowQuickOpen] = useState(false)
   const [showComposer, setShowComposer] = useState(false)
   
-  // 加载状态
-  const [isLoading, setIsLoading] = useState(true)
+  // 引导状态
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
 
   // Layout State
   const [sidebarWidth, setSidebarWidth] = useState(260)
@@ -39,26 +41,42 @@ export default function App() {
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
   const [isResizingChat, setIsResizingChat] = useState(false)
 
-  // 加载进度回调（传递给 LoadingScreen）
-  const [loadProgress, setLoadProgress] = useState({ progress: 0, status: 'Initializing...' })
+  // 更新 HTML loader 状态
+  const updateLoaderStatus = useCallback((status: string) => {
+    const statusEl = document.querySelector('#initial-loader .loader-status')
+    if (statusEl) statusEl.textContent = status
+  }, [])
+
+  // 移除初始 HTML loader
+  const removeInitialLoader = useCallback(() => {
+    const loader = document.getElementById('initial-loader')
+    if (loader) {
+      loader.classList.add('fade-out')
+      setTimeout(() => loader.remove(), 400)
+    }
+  }, [])
 
   useEffect(() => {
     // Load saved settings & restore workspace
     const loadSettings = async () => {
       try {
         // 初始化编辑器配置和主题
-        setLoadProgress({ progress: 20, status: 'Loading configuration...' })
+        updateLoaderStatus('Loading configuration...')
         await initEditorConfig()
         themeManager.init()
         
-        setLoadProgress({ progress: 40, status: 'Loading settings...' })
+        // 检查是否首次使用（兼容老用户：如果已有配置但没有 onboardingCompleted 字段，视为已完成）
+        const onboardingCompleted = await window.electronAPI.getSetting('onboardingCompleted')
+        const hasExistingConfig = await window.electronAPI.getSetting('llmConfig')
+        
+        updateLoaderStatus('Loading settings...')
         const savedConfig = await window.electronAPI.getSetting('llmConfig')
         if (savedConfig) {
           setLLMConfig(savedConfig)
         }
         const savedLanguage = await window.electronAPI.getSetting('language')
         if (savedLanguage) {
-          setLanguage(savedLanguage)
+          setLanguage(savedLanguage as 'en' | 'zh')
         }
         const savedAutoApprove = await window.electronAPI.getSetting('autoApprove')
         if (savedAutoApprove) {
@@ -66,25 +84,47 @@ export default function App() {
         }
         
         // Auto-restore workspace
-        setLoadProgress({ progress: 60, status: 'Restoring workspace...' })
+        updateLoaderStatus('Restoring workspace...')
         const lastWorkspace = await window.electronAPI.restoreWorkspace()
         if (lastWorkspace) {
           setWorkspacePath(lastWorkspace)
-          setLoadProgress({ progress: 80, status: 'Loading files...' })
+          updateLoaderStatus('Loading files...')
           const items = await window.electronAPI.readDir(lastWorkspace)
           setFiles(items)
+          
+          // 恢复工作区状态（打开的文件等）
+          updateLoaderStatus('Restoring editor state...')
+          await restoreWorkspaceState()
         }
         
-        setLoadProgress({ progress: 100, status: 'Ready!' })
-        // 短暂延迟后隐藏加载屏幕
-        setTimeout(() => setIsLoading(false), 300)
+        updateLoaderStatus('Ready!')
+        // 短暂延迟后移除 loader
+        setTimeout(() => {
+          removeInitialLoader()
+          setIsInitialized(true)
+          // 显示引导的条件：
+          // 1. onboardingCompleted 明确为 false（用户主动要求重新体验）
+          // 2. 或者 onboardingCompleted 未设置且没有现有配置（真正的新用户）
+          const shouldShowOnboarding = onboardingCompleted === false || 
+            (onboardingCompleted === null && !hasExistingConfig)
+          if (shouldShowOnboarding) {
+            setShowOnboarding(true)
+          }
+        }, 200)
       } catch (error) {
         console.error('Failed to load settings:', error)
-        setIsLoading(false)
+        removeInitialLoader()
+        setIsInitialized(true)
       }
     }
     loadSettings()
-  }, [setLLMConfig, setLanguage, setAutoApprove, setWorkspacePath, setFiles])
+  }, [setLLMConfig, setLanguage, setAutoApprove, setWorkspacePath, setFiles, updateLoaderStatus, removeInitialLoader])
+
+  // 初始化工作区状态同步（自动保存打开的文件等）
+  useEffect(() => {
+    const cleanup = initWorkspaceStateSync()
+    return cleanup
+  }, [])
 
   // Resize Logic
   useEffect(() => {
@@ -181,11 +221,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
   }, [handleGlobalKeyDown])
 
-  // 显示加载屏幕
-  if (isLoading) {
-    return <LoadingScreen progress={loadProgress.progress} status={loadProgress.status} />
-  }
-
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden text-text-primary">
       <TitleBar />
@@ -251,6 +286,11 @@ export default function App() {
       )}
       {showComposer && (
         <ComposerPanel onClose={() => setShowComposer(false)} />
+      )}
+      
+      {/* 首次使用引导 */}
+      {showOnboarding && isInitialized && (
+        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
       )}
     </div>
   )

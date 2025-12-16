@@ -9,10 +9,12 @@ import { ChatParams, ToolDefinition, ToolCall } from '../types'
 
 export class GeminiProvider extends BaseProvider {
 	private client: GoogleGenerativeAI
+	private timeout: number
 
-	constructor(apiKey: string) {
+	constructor(apiKey: string, timeout?: number) {
 		super('Gemini')
-		this.log('info', 'Initializing')
+		this.timeout = timeout || 120000 // 默认 2 分钟
+		this.log('info', 'Initializing', { timeout: this.timeout })
 		this.client = new GoogleGenerativeAI(apiKey)
 	}
 

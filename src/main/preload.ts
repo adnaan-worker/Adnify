@@ -133,8 +133,10 @@ export interface ElectronAPI {
     getFileTree: (path: string, maxDepth?: number) => Promise<string>
 	readFile: (path: string) => Promise<string | null>
 	writeFile: (path: string, content: string) => Promise<boolean>
+	ensureDir: (path: string) => Promise<boolean>
 	saveFile: (content: string, path?: string) => Promise<string | null>
 	fileExists: (path: string) => Promise<boolean>
+	showItemInFolder: (path: string) => Promise<void>
 	mkdir: (path: string) => Promise<boolean>
 	deleteFile: (path: string) => Promise<boolean>
 	renameFile: (oldPath: string, newPath: string) => Promise<boolean>
@@ -225,8 +227,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getFileTree: (path: string, maxDepth?: number) => ipcRenderer.invoke('file:getTree', path, maxDepth),
 	readFile: (path: string) => ipcRenderer.invoke('file:read', path),
 	writeFile: (path: string, content: string) => ipcRenderer.invoke('file:write', path, content),
+	ensureDir: (path: string) => ipcRenderer.invoke('file:ensureDir', path),
 	saveFile: (content: string, path?: string) => ipcRenderer.invoke('file:save', content, path),
 	fileExists: (path: string) => ipcRenderer.invoke('file:exists', path),
+	showItemInFolder: (path: string) => ipcRenderer.invoke('file:showInFolder', path),
 	mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),
 	deleteFile: (path: string) => ipcRenderer.invoke('file:delete', path),
 	renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:rename', oldPath, newPath),

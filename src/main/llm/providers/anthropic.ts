@@ -10,12 +10,14 @@ import { ChatParams, ToolDefinition, ToolCall, MessageContent } from '../types'
 export class AnthropicProvider extends BaseProvider {
 	private client: Anthropic
 
-	constructor(apiKey: string, baseUrl?: string) {
+	constructor(apiKey: string, baseUrl?: string, timeout?: number) {
 		super('Anthropic')
-		this.log('info', 'Initializing', { baseUrl: baseUrl || 'default' })
+		const timeoutMs = timeout || 120000 // 默认 2 分钟
+		this.log('info', 'Initializing', { baseUrl: baseUrl || 'default', timeout: timeoutMs })
 		this.client = new Anthropic({
 			apiKey,
-			baseURL: baseUrl
+			baseURL: baseUrl,
+			timeout: timeoutMs,
 		})
 	}
 

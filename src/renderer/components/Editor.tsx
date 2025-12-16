@@ -128,6 +128,9 @@ export default function Editor() {
 
   // 自定义右键菜单状态
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  
+  // Tab 右键菜单状态
+  const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; filePath: string } | null>(null)
 
   const activeFile = openFiles.find(f => f.path === activeFilePath)
   const activeLanguage = activeFile ? getLanguage(activeFile.path) : 'plaintext'
@@ -190,24 +193,44 @@ export default function Editor() {
       ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
       {
         provideDefinition: async (model, position) => {
-          const filePath = model.uri.fsPath || lspUriToPath(model.uri.toString())
-          const result = await goToDefinition(
-            filePath,
-            position.lineNumber - 1, // LSP 使用 0-based 行号
-            position.column - 1
-          )
+          try {
+            const filePath = model.uri.fsPath || lspUriToPath(model.uri.toString())
+            const result = await goToDefinition(
+              filePath,
+              position.lineNumber - 1, // LSP 使用 0-based 行号
+              position.column - 1
+            )
 
-          if (!result || result.length === 0) return null
+            if (!result) return null
 
-          return result.map((loc) => ({
-            uri: monaco.Uri.parse(loc.uri),
-            range: {
-              startLineNumber: loc.range.start.line + 1,
-              startColumn: loc.range.start.character + 1,
-              endLineNumber: loc.range.end.line + 1,
-              endColumn: loc.range.end.character + 1,
-            },
-          }))
+            // LSP 可能返回单个对象或数组，统一处理
+            const locations = Array.isArray(result) ? result : [result]
+            if (locations.length === 0) return null
+
+            return locations
+              .filter((loc: any) => loc && (loc.uri || loc.targetUri)) // 过滤无效结果
+              .map((loc: any) => {
+                // 处理 Location 和 LocationLink 两种格式
+                const uri = loc.uri || loc.targetUri
+                const range = loc.range || loc.targetSelectionRange || loc.targetRange
+                
+                if (!uri || !range || !range.start) return null
+
+                return {
+                  uri: monaco.Uri.parse(uri),
+                  range: {
+                    startLineNumber: range.start.line + 1,
+                    startColumn: range.start.character + 1,
+                    endLineNumber: range.end.line + 1,
+                    endColumn: range.end.character + 1,
+                  },
+                }
+              })
+              .filter(Boolean) as import('monaco-editor').languages.Location[]
+          } catch (error) {
+            console.error('[Editor] Definition provider error:', error)
+            return null
+          }
         },
       }
     )
@@ -597,14 +620,19 @@ export default function Editor() {
   }, [activeFilePath])
 
   // 文件变化时清除状态
-  // 注意：由于使用 key={activeFile.path}，编辑器会在文件切换时重新创建
+  // 文件切换时的处理
   useEffect(() => {
     setLintErrors([])
     
     // 清除补全状态
     ghostTextRef.current?.hide()
     completionService.cancel()
-  }, [activeFilePath])
+    
+    // 通知 LSP 服务器当前文件已打开
+    if (activeFile) {
+      didOpenDocument(activeFile.path, activeFile.content)
+    }
+  }, [activeFilePath, activeFile])
 
   // 清理 ghost text manager
   useEffect(() => {
@@ -622,6 +650,62 @@ export default function Editor() {
       }
     }
   }, [activeFile, markFileSaved])
+
+  // 保存指定文件
+  const saveFile = useCallback(async (filePath: string) => {
+    const file = openFiles.find(f => f.path === filePath)
+    if (file) {
+      const success = await window.electronAPI.writeFile(file.path, file.content)
+      if (success) {
+        markFileSaved(file.path)
+      }
+      return success
+    }
+    return false
+  }, [openFiles, markFileSaved])
+
+  // 关闭文件（带保存提示）
+  const handleCloseFile = useCallback(async (filePath: string) => {
+    const file = openFiles.find(f => f.path === filePath)
+    if (file?.isDirty) {
+      const fileName = filePath.split(/[/\\]/).pop()
+      const result = window.confirm(
+        language === 'zh' 
+          ? `"${fileName}" 有未保存的更改。是否保存？`
+          : `"${fileName}" has unsaved changes. Do you want to save?`
+      )
+      if (result) {
+        await saveFile(filePath)
+      }
+    }
+    closeFile(filePath)
+  }, [openFiles, closeFile, saveFile, language])
+
+  // 关闭其他文件
+  const closeOtherFiles = useCallback(async (keepPath: string) => {
+    for (const file of openFiles) {
+      if (file.path !== keepPath) {
+        await handleCloseFile(file.path)
+      }
+    }
+  }, [openFiles, handleCloseFile])
+
+  // 关闭所有文件
+  const closeAllFiles = useCallback(async () => {
+    for (const file of [...openFiles]) {
+      await handleCloseFile(file.path)
+    }
+  }, [openFiles, handleCloseFile])
+
+  // 关闭右侧文件
+  const closeFilesToRight = useCallback(async (filePath: string) => {
+    const index = openFiles.findIndex(f => f.path === filePath)
+    if (index >= 0) {
+      for (let i = openFiles.length - 1; i > index; i--) {
+        await handleCloseFile(openFiles[i].path)
+      }
+    }
+  }, [openFiles, handleCloseFile])
 
   // Keyboard shortcut for save
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -676,6 +760,10 @@ export default function Editor() {
               <div
                 key={file.path}
                 onClick={() => setActiveFile(file.path)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setTabContextMenu({ x: e.clientX, y: e.clientY, filePath: file.path })
+                }}
                 className={`
                   flex items-center gap-2 px-4 h-full cursor-pointer
                   transition-all group min-w-[120px] max-w-[200px] border-r border-border-subtle/30
@@ -692,7 +780,7 @@ export default function Editor() {
                 <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      closeFile(file.path)
+                      handleCloseFile(file.path)
                     }}
                     className={`p-0.5 rounded hover:bg-surface-active opacity-0 group-hover:opacity-100 transition-opacity ${isActive ? 'opacity-100' : ''}`}
                   >
@@ -931,6 +1019,98 @@ export default function Editor() {
           />
         )}
       </div>
+
+      {/* Tab 右键菜单 */}
+      {tabContextMenu && (
+        <TabContextMenu
+          x={tabContextMenu.x}
+          y={tabContextMenu.y}
+          filePath={tabContextMenu.filePath}
+          onClose={() => setTabContextMenu(null)}
+          onCloseFile={handleCloseFile}
+          onCloseOthers={closeOtherFiles}
+          onCloseAll={closeAllFiles}
+          onCloseToRight={closeFilesToRight}
+          onSave={saveFile}
+          isDirty={openFiles.find(f => f.path === tabContextMenu.filePath)?.isDirty || false}
+          language={language}
+        />
+      )}
+    </div>
+  )
+}
+
+// Tab 右键菜单组件
+interface TabContextMenuProps {
+  x: number
+  y: number
+  filePath: string
+  onClose: () => void
+  onCloseFile: (path: string) => void
+  onCloseOthers: (path: string) => void
+  onCloseAll: () => void
+  onCloseToRight: (path: string) => void
+  onSave: (path: string) => void
+  isDirty: boolean
+  language: string
+}
+
+function TabContextMenu({
+  x, y, filePath, onClose, onCloseFile, onCloseOthers, onCloseAll, onCloseToRight, onSave, isDirty, language
+}: TabContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null)
+  const isZh = language === 'zh'
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [onClose])
+
+  const menuItems = [
+    { label: isZh ? '关闭' : 'Close', action: () => onCloseFile(filePath), shortcut: 'Ctrl+W' },
+    { label: isZh ? '关闭其他' : 'Close Others', action: () => onCloseOthers(filePath) },
+    { label: isZh ? '关闭右侧' : 'Close to the Right', action: () => onCloseToRight(filePath) },
+    { label: isZh ? '关闭所有' : 'Close All', action: () => onCloseAll() },
+    { type: 'separator' as const },
+    { label: isZh ? '保存' : 'Save', action: () => onSave(filePath), shortcut: 'Ctrl+S', disabled: !isDirty },
+    { type: 'separator' as const },
+    { label: isZh ? '复制路径' : 'Copy Path', action: () => navigator.clipboard.writeText(filePath) },
+    { label: isZh ? '在资源管理器中显示' : 'Reveal in Explorer', action: () => window.electronAPI.showItemInFolder(filePath) },
+  ]
+
+  return (
+    <div
+      ref={menuRef}
+      className="fixed bg-background-secondary border border-border-subtle rounded-lg shadow-xl py-1 z-[9999] min-w-[180px]"
+      style={{ left: x, top: y }}
+    >
+      {menuItems.map((item, index) => 
+        item.type === 'separator' ? (
+          <div key={index} className="h-px bg-border-subtle my-1" />
+        ) : (
+          <button
+            key={index}
+            onClick={() => { item.action?.(); onClose() }}
+            disabled={item.disabled}
+            className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between"
+          >
+            <span>{item.label}</span>
+            {item.shortcut && <span className="text-xs text-text-muted ml-4">{item.shortcut}</span>}
+          </button>
+        )
+      )}
     </div>
   )
 }

@@ -10,13 +10,14 @@ import { ChatParams, ToolDefinition, ToolCall, MessageContent } from '../types'
 export class OpenAIProvider extends BaseProvider {
 	private client: OpenAI
 
-	constructor(apiKey: string, baseUrl?: string) {
+	constructor(apiKey: string, baseUrl?: string, timeout?: number) {
 		super('OpenAI')
-		this.log('info', 'Initializing', { baseUrl: baseUrl || 'default' })
+		const timeoutMs = timeout || 120000 // 默认 2 分钟
+		this.log('info', 'Initializing', { baseUrl: baseUrl || 'default', timeout: timeoutMs })
 		this.client = new OpenAI({
 			apiKey,
 			baseURL: baseUrl,
-			timeout: 60000, // 60 秒超时
+			timeout: timeoutMs,
 			maxRetries: 0, // 我们自己处理重试
 		})
 	}

@@ -6,24 +6,182 @@
     <link rel="icon" type="image/png" href="/icon.png" />
     <title>Adnify</title>
     <style>
-      /* Embedded fonts fallback */
-      @font-face {
-        font-family: 'Inter';
-        font-style: normal;
-        font-weight: 400 700;
-        font-display: swap;
-        src: local('Inter'), local('Inter-Regular');
+      /* 初始加载动画 - 极简风格 */
+      :root {
+        --loader-bg: #09090b;
+        --loader-accent: #8b5cf6;
+        --loader-accent-light: #a78bfa;
+        --loader-text: #a1a1aa;
+        --loader-text-dim: #52525b;
+        --loader-surface: #18181b;
       }
-      @font-face {
-        font-family: 'JetBrains Mono';
-        font-style: normal;
-        font-weight: 400 600;
-        font-display: swap;
-        src: local('JetBrains Mono'), local('JetBrainsMono-Regular');
+      
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      
+      body {
+        background: var(--loader-bg);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      
+      #initial-loader {
+        position: fixed;
+        inset: 0;
+        background: var(--loader-bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        opacity: 1;
+        transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      
+      #initial-loader.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      
+      .loader-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        animation: fadeIn 0.4s ease-out;
+      }
+      
+      /* Logo 容器 */
+      .loader-logo {
+        position: relative;
+        width: 72px;
+        height: 72px;
+        margin-bottom: 28px;
+      }
+      
+      /* 外圈旋转动画 */
+      .loader-orbit {
+        position: absolute;
+        inset: -8px;
+        border-radius: 50%;
+        border: 1.5px solid transparent;
+        border-top-color: var(--loader-accent);
+        border-right-color: var(--loader-accent-light);
+        animation: orbit 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+      
+      .loader-orbit-inner {
+        position: absolute;
+        inset: -3px;
+        border-radius: 50%;
+        border: 1px solid rgba(139, 92, 246, 0.2);
+      }
+      
+      /* Logo 背景 */
+      .loader-logo-bg {
+        width: 100%;
+        height: 100%;
+        border-radius: 18px;
+        background: linear-gradient(145deg, var(--loader-surface), #1f1f23);
+        border: 1px solid rgba(255,255,255,0.04);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 
+          0 0 0 1px rgba(0,0,0,0.5),
+          0 8px 32px rgba(0,0,0,0.5),
+          inset 0 1px 0 rgba(255,255,255,0.03);
+      }
+      
+      .loader-logo-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.4));
+      }
+      
+      /* 文字 */
+      .loader-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #fafafa;
+        letter-spacing: -0.3px;
+        margin-bottom: 6px;
+      }
+      
+      .loader-subtitle {
+        font-size: 12px;
+        color: var(--loader-text-dim);
+        margin-bottom: 32px;
+      }
+      
+      /* 进度指示器 - 三点动画 */
+      .loader-dots {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 16px;
+      }
+      
+      .loader-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--loader-accent);
+        opacity: 0.3;
+        animation: dotPulse 1.4s ease-in-out infinite;
+      }
+      
+      .loader-dot:nth-child(1) { animation-delay: 0s; }
+      .loader-dot:nth-child(2) { animation-delay: 0.2s; }
+      .loader-dot:nth-child(3) { animation-delay: 0.4s; }
+      
+      /* 状态文字 */
+      .loader-status {
+        font-size: 11px;
+        color: var(--loader-text-dim);
+        transition: opacity 0.2s;
+      }
+      
+      /* 动画 */
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
+      @keyframes orbit {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      @keyframes dotPulse {
+        0%, 80%, 100% { 
+          opacity: 0.3;
+          transform: scale(1);
+        }
+        40% { 
+          opacity: 1;
+          transform: scale(1.2);
+        }
       }
     </style>
   </head>
   <body class="bg-editor-bg text-editor-text font-sans">
+    <div id="initial-loader">
+      <div class="loader-wrapper">
+        <div class="loader-logo">
+          <div class="loader-orbit"></div>
+          <div class="loader-orbit-inner"></div>
+          <div class="loader-logo-bg">
+            <img class="loader-logo-icon" src="/icon.png" alt="Adnify" />
+          </div>
+        </div>
+        <div class="loader-title">Adnify</div>
+        <div class="loader-subtitle">AI-Powered Code Editor</div>
+        <div class="loader-dots">
+          <div class="loader-dot"></div>
+          <div class="loader-dot"></div>
+          <div class="loader-dot"></div>
+        </div>
+        <div class="loader-status">Initializing...</div>
+      </div>
+    </div>
+    
     <div id="root"></div>
     <script type="module" src="/src/renderer/main.tsx"></script>
   </body>

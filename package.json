@@ -73,6 +73,18 @@
     "directories": {
       "output": "release"
     },
+    "files": [
+      "dist/**/*",
+      "public/**/*",
+      "!**/*.map",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!config.json",
+      "!bootstrap.json",
+      "!.adnify/**"
+    ],
     "win": {
       "icon": "resources/icon.ico",
       "target": [

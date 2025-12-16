@@ -23,21 +23,21 @@ export class LLMService {
 	 * 使用 provider + apiKey + baseUrl 作为缓存 key
 	 */
 	private getProvider(config: LLMConfig): LLMProvider {
-		const key = `${config.provider}-${config.apiKey}-${config.baseUrl || 'default'}`
+		const key = `${config.provider}-${config.apiKey}-${config.baseUrl || 'default'}-${config.timeout || 'default'}`
 
 		if (!this.providers.has(key)) {
-			console.log('[LLMService] Creating new provider:', config.provider)
+			console.log('[LLMService] Creating new provider:', config.provider, 'timeout:', config.timeout)
 
 			switch (config.provider) {
 				case 'openai':
 				case 'custom':
-					this.providers.set(key, new OpenAIProvider(config.apiKey, config.baseUrl))
+					this.providers.set(key, new OpenAIProvider(config.apiKey, config.baseUrl, config.timeout))
 					break
 				case 'anthropic':
-					this.providers.set(key, new AnthropicProvider(config.apiKey, config.baseUrl))
+					this.providers.set(key, new AnthropicProvider(config.apiKey, config.baseUrl, config.timeout))
 					break
 				case 'gemini':
-					this.providers.set(key, new GeminiProvider(config.apiKey))
+					this.providers.set(key, new GeminiProvider(config.apiKey, config.timeout))
 					break
 				default:
 					throw new LLMError(

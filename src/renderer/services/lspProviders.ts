@@ -90,12 +90,18 @@ export function registerLspProviders(monaco: typeof Monaco) {
   // 悬停提供者
   monaco.languages.registerHoverProvider(languages, {
     provideHover: async (model, position) => {
-      const filePath = lspUriToPath(model.uri.toString())
+      const modelUri = model.uri.toString()
+      const filePath = lspUriToPath(modelUri)
+      
+      console.log('[LSP Hover] Request:', { modelUri, filePath, line: position.lineNumber - 1, col: position.column - 1 })
+      
       const result = await getHoverInfo(
         filePath,
         position.lineNumber - 1,
         position.column - 1
       )
+
+      console.log('[LSP Hover] Result:', result)
 
       if (!result || !result.contents) return null
 

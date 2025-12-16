@@ -29,17 +29,46 @@ function getLanguageId(filePath: string): string {
 
 /**
  * 将文件路径转换为 LSP URI
+ * Windows: G:\path\file.ts -> file:///G:/path/file.ts
  */
 export function pathToLspUri(filePath: string): string {
   const normalizedPath = filePath.replace(/\\/g, '/')
-  return `file:///${normalizedPath}`
+  // Windows 路径需要三个斜杠
+  if (/^[a-zA-Z]:/.test(normalizedPath)) {
+    return `file:///${normalizedPath}`
+  }
+  // Unix 路径
+  return `file://${normalizedPath}`
 }
 
 /**
  * 将 LSP URI 转换为文件路径
+ * file:///G:/path/file.ts -> G:\path\file.ts (Windows)
  */
 export function lspUriToPath(uri: string): string {
-  return uri.replace('file:///', '').replace(/\//g, '\\')
+  // 处理 Monaco URI 格式 (可能是 file:///g%3A/path 或 file:///G:/path)
+  let path = uri
+  
+  // 移除 file:// 或 file:/// 前缀
+  if (path.startsWith('file:///')) {
+    path = path.slice(8)
+  } else if (path.startsWith('file://')) {
+    path = path.slice(7)
+  }
+  
+  // URL 解码 (处理 %3A 等编码)
+  try {
+    path = decodeURIComponent(path)
+  } catch {
+    // 忽略解码错误
+  }
+  
+  // Windows 路径转换 (检测盘符来判断是否是 Windows 路径)
+  if (/^[a-zA-Z]:/.test(path)) {
+    path = path.replace(/\//g, '\\')
+  }
+  
+  return path
 }
 
 /**

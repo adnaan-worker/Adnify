@@ -34,6 +34,7 @@ export interface LLMConfig {
 	model: string
 	apiKey: string
 	baseUrl?: string
+	timeout?: number // API 请求超时（毫秒）
 }
 
 // 自动审批设置
