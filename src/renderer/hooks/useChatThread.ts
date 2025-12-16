@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { chatThreadService } from '../agent/chatThreadService'
+import { useStore } from '../store'
 import {
   ChatThread,
   ChatMessage,
@@ -198,7 +199,29 @@ export function useChatThreads() {
       description: string,
       snapshots: Record<string, FileSnapshot>
     ) => {
-      return chatThreadService.addCheckpoint(type, description, snapshots)
+      const checkpointId = chatThreadService.addCheckpoint(type, description, snapshots)
+      // 同步到全局 store（用于 CheckpointPanel 显示）
+      if (checkpointId) {
+        const timestamp = Date.now()
+        // 转换 snapshots 格式以匹配 store 的 Checkpoint 类型
+        const storeSnapshots: Record<string, { path: string; content: string; timestamp: number }> = {}
+        for (const [path, snap] of Object.entries(snapshots)) {
+          storeSnapshots[path] = {
+            path,
+            content: snap.content,
+            timestamp,
+          }
+        }
+        const checkpoint = {
+          id: checkpointId,
+          type,
+          timestamp,
+          description,
+          snapshots: storeSnapshots,
+        }
+        useStore.getState().addCheckpoint(checkpoint)
+      }
+      return checkpointId
     },
     []
   )

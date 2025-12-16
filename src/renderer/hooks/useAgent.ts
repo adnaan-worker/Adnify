@@ -15,10 +15,12 @@ import { sendToLLM, LLMMessageForSend } from './agent/llmClient'
 import { buildSystemPrompt } from '../agent/prompts'
 import { MessageContent, ToolMessageType, FileSnapshot, ToolMessage } from '../agent/types/chatTypes'
 import { LLMToolCall } from '../types/electron'
+import { truncateToolResult } from '../agent/messageSummaryService'
 
 // 配置
 const getMaxToolLoops = () => getEditorConfig().ai.maxToolLoops
 const getMaxHistoryMessages = () => getEditorConfig().ai.maxHistoryMessages
+const getMaxToolResultChars = () => getEditorConfig().ai.maxToolResultChars
 
 // 工具错误消息
 const TOOL_ERROR_MESSAGES = {
@@ -399,8 +401,9 @@ export function useAgent() {
       // 添加用户消息
       addUserMessage(userMessage)
 
-      // 构建对话历史
+      // 构建对话历史（硬截断策略）
       const maxHistory = getMaxHistoryMessages()
+      const maxToolResult = getMaxToolResultChars()
       const recentMessages = messages.slice(-maxHistory)
 
       // 构建当前用户消息内容
@@ -416,25 +419,33 @@ export function useAgent() {
         })
       }
 
-      // 构建对话历史 - 过滤掉没有有效 toolCallId 的工具消息（旧数据兼容）
+      // 构建对话历史 - 过滤掉无效消息，截断工具结果
       const validMessages = recentMessages.filter((m) => {
         if (m.role === 'checkpoint') return false
         if (m.role === 'tool') {
-          // 工具消息必须有有效的 toolCallId
           const toolMsg = m as ToolMessage
           return toolMsg.toolCallId && !toolMsg.toolCallId.includes(':')
         }
         return true
       })
 
+      // 构建对话消息数组（工具结果硬截断）
       const conversationMessages: LLMMessageForSend[] = [
-        ...validMessages.map((m) => ({
-          role: m.role as 'user' | 'assistant' | 'tool',
-          content: 'content' in m ? (m.content as string) : '',
-          toolCallId: m.role === 'tool' ? (m as ToolMessage).toolCallId : undefined,
-          toolName: m.role === 'tool' ? (m as ToolMessage).name : undefined,
-          rawParams: m.role === 'tool' ? (m as ToolMessage).rawParams : undefined,
-        })),
+        ...validMessages.map((m) => {
+          const content = 'content' in m ? (m.content as string) : ''
+          // 工具消息结果截断
+          const truncatedContent = m.role === 'tool' 
+            ? truncateToolResult(content, maxToolResult)
+            : content
+          
+          return {
+            role: m.role as 'user' | 'assistant' | 'tool',
+            content: truncatedContent,
+            toolCallId: m.role === 'tool' ? (m as ToolMessage).toolCallId : undefined,
+            toolName: m.role === 'tool' ? (m as ToolMessage).name : undefined,
+            rawParams: m.role === 'tool' ? (m as ToolMessage).rawParams : undefined,
+          }
+        }),
         { role: 'user' as const, content: currentUserContent },
       ]
 

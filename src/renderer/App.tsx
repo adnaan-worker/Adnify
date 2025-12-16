@@ -74,7 +74,7 @@ function AppContent() {
         // 初始化编辑器配置和主题
         updateLoaderStatus('Loading configuration...')
         await initEditorConfig()
-        themeManager.init()
+        await themeManager.init()
         
         // 检查是否首次使用（兼容老用户：如果已有配置但没有 onboardingCompleted 字段，视为已完成）
         const onboardingCompleted = await window.electronAPI.getSetting('onboardingCompleted')

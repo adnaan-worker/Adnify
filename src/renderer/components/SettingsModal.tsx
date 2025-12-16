@@ -769,7 +769,7 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
                   <input
                     type="number"
                     value={advancedConfig.ai.maxContextChars}
-                    onChange={(e) => handleAdvancedChange('ai.maxContextChars', parseInt(e.target.value) || 50000)}
+                    onChange={(e) => handleAdvancedChange('ai.maxContextChars', parseInt(e.target.value) || 30000)}
                     min={10000} max={200000} step={10000}
                     className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                   />
@@ -780,11 +780,25 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
                   <input
                     type="number"
                     value={advancedConfig.ai.maxHistoryMessages}
-                    onChange={(e) => handleAdvancedChange('ai.maxHistoryMessages', parseInt(e.target.value) || 20)}
+                    onChange={(e) => handleAdvancedChange('ai.maxHistoryMessages', parseInt(e.target.value) || 10)}
                     min={5} max={100}
                     className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                   />
                   <p className="text-xs text-text-muted mt-1">{language === 'zh' ? '发送给 AI 的历史消息数量' : 'Number of history messages sent to AI'}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '工具结果最大字符数' : 'Max Tool Result Chars'}</label>
+                  <input
+                    type="number"
+                    value={advancedConfig.ai.maxToolResultChars || 30000}
+                    onChange={(e) => handleAdvancedChange('ai.maxToolResultChars', parseInt(e.target.value) || 30000)}
+                    min={5000} max={100000} step={5000}
+                    className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+                  />
+                  <p className="text-xs text-text-muted mt-1">{language === 'zh' ? '超出后截断工具输出' : 'Truncate tool output when exceeded'}</p>
                 </div>
               </div>
 

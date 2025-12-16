@@ -70,7 +70,7 @@ class ChatThreadService {
       
       let migrated = false
       
-      // 数据迁移：清理没有有效 toolCallId 的工具消息（旧数据兼容）
+      // 数据迁移和清理
       for (const threadId of Object.keys(state.allThreads)) {
         const thread = state.allThreads[threadId]
         if (thread) {
@@ -80,12 +80,20 @@ class ChatThreadService {
               const toolMsg = m as ToolMessage
               // 过滤掉没有 toolCallId 或使用旧格式（如 "read_file:0"）的工具消息
               if (!toolMsg.toolCallId || toolMsg.toolCallId.includes(':')) {
-                console.log('[ChatThreadService] Filtering invalid tool message:', toolMsg.toolCallId)
                 return false
               }
             }
             return true
           })
+          
+          // 重置所有 assistant 消息的 isStreaming 状态（历史消息不应该显示光标）
+          thread.messages = thread.messages.map((m) => {
+            if (m.role === 'assistant' && (m as AssistantMessage).isStreaming) {
+              return { ...m, isStreaming: false }
+            }
+            return m
+          })
+          
           if (thread.messages.length !== originalLength) {
             migrated = true
           }
@@ -360,10 +368,15 @@ class ChatThreadService {
 
   finalizeLastMessage(): void {
     const thread = this.getCurrentThread()
-    const lastMsg = thread.messages[thread.messages.length - 1]
+    const lastIndex = thread.messages.length - 1
+    const lastMsg = thread.messages[lastIndex]
     
-    if (lastMsg && lastMsg.role === 'assistant') {
-      ;(lastMsg as AssistantMessage).isStreaming = false
+    if (lastMsg && lastMsg.role === 'assistant' && (lastMsg as AssistantMessage).isStreaming) {
+      // 创建新对象以触发 React 更新
+      thread.messages[lastIndex] = {
+        ...lastMsg,
+        isStreaming: false,
+      } as AssistantMessage
       this.emitThreadChange()
     }
   }
@@ -479,7 +492,10 @@ class ChatThreadService {
     // 检查是否已存在
     const exists = thread.state.stagingSelections.some((s) => {
       if (s.type !== selection.type) return false
-      if (s.uri !== selection.uri) return false
+      // 只有 File, CodeSelection, Folder 类型有 uri
+      if ('uri' in s && 'uri' in selection) {
+        if (s.uri !== selection.uri) return false
+      }
       if (s.type === 'CodeSelection' && selection.type === 'CodeSelection') {
         return s.range[0] === selection.range[0] && s.range[1] === selection.range[1]
       }

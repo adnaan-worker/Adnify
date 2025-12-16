@@ -182,37 +182,38 @@ class ThemeManager {
   private currentTheme: Theme = builtinThemes[0]
   private customThemes: Theme[] = []
   private listeners: Set<(theme: Theme) => void> = new Set()
+  private initialized = false
 
   constructor() {
-    this.loadFromStorage()
+    // 不在构造函数中加载，等待 init() 调用
   }
 
-  private loadFromStorage() {
+  async loadFromConfig() {
     try {
-      const savedThemeId = localStorage.getItem('adnify-theme')
-      const savedCustomThemes = localStorage.getItem('adnify-custom-themes')
+      const savedThemeId = await window.electronAPI.getSetting('themeId')
+      const savedCustomThemes = await window.electronAPI.getSetting('customThemes')
       
-      if (savedCustomThemes) {
-        this.customThemes = JSON.parse(savedCustomThemes)
+      if (savedCustomThemes && Array.isArray(savedCustomThemes)) {
+        this.customThemes = savedCustomThemes as Theme[]
       }
       
-      if (savedThemeId) {
+      if (savedThemeId && typeof savedThemeId === 'string') {
         const theme = this.getThemeById(savedThemeId)
         if (theme) {
           this.currentTheme = theme
         }
       }
     } catch (e) {
-      console.error('Failed to load theme from storage:', e)
+      console.error('Failed to load theme from config:', e)
     }
   }
 
-  private saveToStorage() {
+  private saveToConfig() {
     try {
-      localStorage.setItem('adnify-theme', this.currentTheme.id)
-      localStorage.setItem('adnify-custom-themes', JSON.stringify(this.customThemes))
+      window.electronAPI.setSetting('themeId', this.currentTheme.id)
+      window.electronAPI.setSetting('customThemes', this.customThemes)
     } catch (e) {
-      console.error('Failed to save theme to storage:', e)
+      console.error('Failed to save theme to config:', e)
     }
   }
 
@@ -233,7 +234,7 @@ class ThemeManager {
     if (theme) {
       this.currentTheme = theme
       this.applyTheme(theme)
-      this.saveToStorage()
+      this.saveToConfig()
       this.notifyListeners()
     }
   }
@@ -243,7 +244,7 @@ class ThemeManager {
       theme.id = `${theme.id}-${Date.now()}`
     }
     this.customThemes.push(theme)
-    this.saveToStorage()
+    this.saveToConfig()
   }
 
   removeCustomTheme(themeId: string) {
@@ -251,7 +252,7 @@ class ThemeManager {
     if (this.currentTheme.id === themeId) {
       this.setTheme('adnify-dark')
     }
-    this.saveToStorage()
+    this.saveToConfig()
   }
 
   applyTheme(theme: Theme) {
@@ -295,8 +296,11 @@ class ThemeManager {
     this.listeners.forEach(cb => cb(this.currentTheme))
   }
 
-  init() {
+  async init() {
+    if (this.initialized) return
+    await this.loadFromConfig()
     this.applyTheme(this.currentTheme)
+    this.initialized = true
   }
 }
 

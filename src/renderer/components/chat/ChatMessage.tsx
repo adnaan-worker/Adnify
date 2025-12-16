@@ -50,7 +50,7 @@ const CodeBlock = ({ language, children, fontSize }: { language: string | undefi
 
   return (
     <div className="relative group/code my-4 rounded-xl overflow-hidden border border-border-subtle bg-[#0a0a0b]/50 backdrop-blur-sm shadow-sm transition-all hover:border-border-highlight">
-      <div className="flex items-center justify-between px-3 py-2 bg-surface/50 border-b border-border-subtle/50">
+      <div className="flex items-center justify-between px-3 py-2 bg-black/20 border-b border-white/5">
         <span className="text-[10px] text-text-muted font-mono uppercase tracking-wider">
           {language || 'text'}
         </span>
@@ -121,16 +121,16 @@ export default function ChatMessage({
   }
 
   return (
-    <div className={`w-full px-5 py-6 group transition-all duration-300 ${isUser ? 'bg-transparent' : 'bg-surface/10'}`}>
+    <div className={`w-full px-5 py-2 group transition-all duration-300 ${isUser ? 'bg-transparent' : 'bg-surface/10'}`}>
       <div className="flex gap-4 max-w-4xl mx-auto">
         {/* Avatar */}
         <div className="flex-shrink-0 mt-0.5">
           {isUser ? (
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-surface-active to-surface border border-border-subtle flex items-center justify-center text-text-secondary shadow-sm">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-surface-active to-surface border border-border-subtle flex items-center justify-center text-text-secondary shadow-sm">
               <User className="w-4 h-4" />
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full overflow-hidden shadow-glow border border-accent/20">
+            <div className="w-10 h-10 rounded-full overflow-hidden shadow-glow border border-accent/20">
               <img src={aiAvatar} alt="Adnify" className="w-full h-full object-cover" />
             </div>
           )}
@@ -318,7 +318,7 @@ export default function ChatMessage({
               )}
 
               {isAssistantMessage(message) && message.isStreaming && (
-                <span className="inline-block w-2 h-4 bg-accent align-middle ml-1 animate-pulse" />
+                <span className="inline-block w-0.5 h-4 bg-text-primary/70 align-middle ml-0.5 animate-pulse rounded-full" />
               )}
 
               {/* Message Actions */}

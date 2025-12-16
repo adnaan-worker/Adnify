@@ -387,7 +387,7 @@ export default function ChatPanel() {
 
   return (
     <div
-      className={`w-full h-full flex flex-col relative z-10 bg-background transition-colors ${isDragging ? 'bg-accent/5 ring-2 ring-inset ring-accent' : ''}`}
+      className={`absolute inset-0 overflow-hidden bg-background transition-colors ${isDragging ? 'bg-accent/5 ring-2 ring-inset ring-accent' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -515,7 +515,7 @@ export default function ChatPanel() {
       )}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-background pt-14">
+      <div className="absolute inset-0 overflow-y-auto custom-scrollbar bg-background pt-14 pb-48 z-0">
         {/* API Key Warning */}
         {!hasApiKey && (
           <div className="m-4 p-4 border border-warning/20 bg-warning/5 rounded-lg flex gap-3 animate-slide-in">
@@ -565,7 +565,7 @@ export default function ChatPanel() {
         )}
 
         {/* Messages List */}
-        <div className="flex flex-col pb-4">
+        <div className="flex flex-col pb-32">
           {messages.map((msg) => renderMessage(msg))}
           
           {/* Stream Tool Indicator (Global/Legacy) */}
@@ -590,8 +590,13 @@ export default function ChatPanel() {
         />
       )}
 
-      {/* Staging Selections (Context Bar) */}
-      <div className="px-4 py-2 border-t border-border-subtle bg-surface/30 backdrop-blur-sm">
+      {/* Bottom Input Area - Fixed at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 bg-background">
+        {/* Gradient Mask for Scrolling */}
+        <div className="h-8 bg-gradient-to-t from-background to-transparent pointer-events-none -mt-8" />
+
+        {/* Staging Selections (Context Bar) */}
+        <div className="px-6 py-2">
         <div className="flex items-center gap-2 flex-wrap">
           {activeFilePath && !stagingSelections.some(s => s.type === 'File' && s.uri === activeFilePath) && (
             <button
@@ -662,24 +667,25 @@ export default function ChatPanel() {
         </div>
       </div>
 
-      {/* Input */}
-      <ChatInput
-        input={input}
-        setInput={setInput}
-        images={images}
-        setImages={setImages}
-        isStreaming={isStreaming}
-        hasApiKey={hasApiKey}
-        hasPendingToolCall={isAwaitingApproval}
-        chatMode={chatMode}
-        onSubmit={handleSubmit}
-        onAbort={abort}
-        onInputChange={handleInputChange}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-        textareaRef={textareaRef}
-        inputContainerRef={inputContainerRef}
-      />
+        {/* Input */}
+        <ChatInput
+          input={input}
+          setInput={setInput}
+          images={images}
+          setImages={setImages}
+          isStreaming={isStreaming}
+          hasApiKey={hasApiKey}
+          hasPendingToolCall={isAwaitingApproval}
+          chatMode={chatMode}
+          onSubmit={handleSubmit}
+          onAbort={abort}
+          onInputChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          textareaRef={textareaRef}
+          inputContainerRef={inputContainerRef}
+        />
+      </div>
     </div>
   )
 }

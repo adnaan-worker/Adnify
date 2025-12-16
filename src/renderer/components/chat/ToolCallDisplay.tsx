@@ -70,7 +70,7 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   get_lint_errors: 'Lint Errors',
 }
 
-// ===== 状态指示器 =====
+// ===== 状态指示器 (更小) =====
 
 interface StatusIndicatorProps {
   status: ToolMessageType | 'pending' | 'running'
@@ -81,18 +81,18 @@ function StatusIndicator({ status }: StatusIndicatorProps) {
     case 'running_now':
     case 'running':
     case 'pending':
-      return <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
+      return <Loader2 className="w-3 h-3 text-accent animate-spin" />
     case 'success':
-      return <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+      return <CheckCircle2 className="w-3 h-3 text-green-500/80" />
     case 'tool_error':
     case 'invalid_params':
-      return <XCircle className="w-3.5 h-3.5 text-red-500" />
+      return <XCircle className="w-3 h-3 text-red-500/80" />
     case 'rejected':
-      return <Ban className="w-3.5 h-3.5 text-text-muted" />
+      return <Ban className="w-3 h-3 text-text-muted" />
     case 'tool_request':
-      return <div className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse shadow-[0_0_8px_rgba(var(--color-accent),0.5)]" />
+      return <div className="w-2 h-2 rounded-full bg-accent animate-pulse shadow-[0_0_5px_rgba(var(--color-accent),0.5)]" />
     default:
-      return <div className="w-2 h-2 rounded-full bg-text-muted" />
+      return <div className="w-1.5 h-1.5 rounded-full bg-text-muted/50" />
   }
 }
 
@@ -118,12 +118,12 @@ function ToolParams({ params, toolName }: ToolParamsProps) {
   if (displayParams.length === 0) return null
 
   return (
-    <div className="text-[10px] text-text-muted/60 truncate font-mono flex items-center gap-2">
+    <div className="text-[10px] text-text-muted/50 truncate font-mono flex items-center gap-2">
       {displayParams.map(([key, value], i) => (
         <span key={key} className="flex items-center gap-1">
-          {i > 0 && <span className="text-border-subtle">|</span>}
+          {i > 0 && <span className="text-white/5">|</span>}
           <span className="opacity-70">{key}:</span> 
-          <span className="opacity-100 text-text-secondary">{typeof value === 'string' ? value.slice(0, 40) : JSON.stringify(value).slice(0, 20)}</span>
+          <span className="opacity-100 text-text-secondary/70">{typeof value === 'string' ? value.slice(0, 40) : JSON.stringify(value).slice(0, 20)}</span>
         </span>
       ))}
     </div>
@@ -194,7 +194,7 @@ function ApprovalButtons({ onApprove, onReject }: ApprovalButtonsProps) {
   )
 }
 
-// ===== 主组件 =====
+// ===== 主组件 (极简模式) =====
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall | ToolMessage | LLMToolCall
@@ -261,30 +261,30 @@ export function ToolCallDisplay({
 
   return (
     <div className={`
-      group relative rounded-lg transition-all duration-200 border border-transparent
+      group relative rounded-md transition-all duration-200 border border-transparent
       ${hasResult || needsApproval ? 'hover:bg-white/5' : ''}
-      ${isExpanded ? 'bg-white/5 border-white/5 pb-2' : ''}
+      ${isExpanded ? 'bg-white/5 border-white/5 pb-2 my-2' : ''}
     `}>
       {/* Header - Compact Line */}
       <div
-        className={`flex items-center gap-3 px-2 py-1.5 ${hasResult ? 'cursor-pointer' : ''}`}
+        className={`flex items-center gap-3 px-2 py-1.5 flex-nowrap ${hasResult ? 'cursor-pointer' : ''}`}
         onClick={() => hasResult && setIsExpanded(!isExpanded)}
       >
         {/* Status Indicator (Left) */}
-        <div className="flex items-center justify-center w-4 h-4 shrink-0">
+        <div className="flex items-center justify-center w-3 h-3 shrink-0">
            <StatusIndicator status={status} />
         </div>
 
         {/* Tool Name & Desc Container */}
         <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
-             <span className={`text-[11px] font-medium transition-colors ${status === 'running_now' ? 'text-accent' : 'text-text-primary/70 group-hover:text-text-primary'}`}>
+             <span className={`text-[10px] font-medium transition-colors whitespace-nowrap ${status === 'running_now' ? 'text-accent' : 'text-text-muted group-hover:text-text-secondary'}`}>
                {displayName}
              </span>
              
              {/* Primary Description (Inline) */}
              {primaryDesc && (
                <span 
-                 className={`text-[10px] text-text-muted/60 truncate ${params.path && onFileClick ? 'hover:text-accent cursor-pointer underline decoration-dotted underline-offset-2' : ''}`}
+                 className={`text-[10px] text-text-muted/60 truncate max-w-[200px] ${params.path && onFileClick ? 'hover:text-accent cursor-pointer underline decoration-dotted underline-offset-2' : ''}`}
                  onClick={(e) => {
                     if (params.path && onFileClick) {
                       e.stopPropagation()
@@ -298,7 +298,7 @@ export function ToolCallDisplay({
              
              {/* Params (Inline if collapsed) */}
              {!isExpanded && !needsApproval && (
-                <div className="hidden sm:block overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
+                <div className="hidden sm:block overflow-hidden opacity-0 group-hover:opacity-40 transition-opacity">
                    <ToolParams params={params} toolName={name} />
                 </div>
              )}
@@ -307,7 +307,7 @@ export function ToolCallDisplay({
         {/* Right Actions */}
         <div className="flex items-center gap-2 shrink-0">
             {error && (
-              <span className="text-[10px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded-full border border-red-500/20">
+              <span className="text-[9px] text-red-400 bg-red-500/10 px-1 py-0 rounded border border-red-500/20">
                 Error
               </span>
             )}
@@ -315,7 +315,7 @@ export function ToolCallDisplay({
             {/* Chevron */}
             {hasResult && (
               <ChevronRight
-                className={`w-3 h-3 text-text-muted/30 transition-transform duration-200 ${isExpanded ? 'rotate-90 text-text-primary' : 'group-hover:text-text-secondary'}`}
+                className={`w-3 h-3 text-text-muted/20 transition-transform duration-200 ${isExpanded ? 'rotate-90 text-text-primary' : 'group-hover:text-text-secondary'}`}
               />
             )}
         </div>

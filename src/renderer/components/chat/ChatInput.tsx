@@ -109,7 +109,7 @@ export default function ChatInput({
   )
 
   return (
-    <div ref={inputContainerRef} className="p-4 pt-2 bg-background z-20 border-t border-white/5">
+    <div ref={inputContainerRef} className="p-4 pt-0 z-20 bg-transparent">
       <div
         className={`
             relative group rounded-2xl border transition-all duration-300 ease-out
@@ -117,8 +117,8 @@ export default function ChatInput({
               isStreaming
                 ? 'border-accent/30 bg-accent/5 shadow-[0_0_20px_rgba(var(--color-accent),0.1)]'
                 : isFocused 
-                  ? 'border-accent/40 bg-surface shadow-[0_0_30px_-10px_rgba(var(--color-accent),0.1)]'
-                  : 'border-white/10 bg-surface/30 hover:bg-surface/50 hover:border-white/20'
+                  ? 'border-accent/40 bg-background shadow-2xl shadow-accent/5'
+                  : 'border-white/10 bg-background/80 backdrop-blur-xl hover:border-white/20 shadow-xl'
             }
         `}
       >

@@ -62,8 +62,13 @@ body {
 
 /* --- Selection --- */
 ::selection {
-  background-color: var(--color-accent-muted);
-  color: white;
+  background-color: rgb(var(--color-accent-muted) / 0.4);
+  color: rgb(var(--color-text-primary));
+}
+
+*::selection {
+  background-color: rgb(var(--color-accent-muted) / 0.4);
+  color: rgb(var(--color-text-primary));
 }
 
 /* --- Utils --- */
