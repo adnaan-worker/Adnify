@@ -470,15 +470,15 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
               <div className="flex gap-1 mb-2">
                 <div 
                   className="w-4 h-4 rounded" 
-                  style={{ backgroundColor: theme.colors.background }}
+                  style={{ backgroundColor: `rgb(${theme.colors.background})` }}
                 />
                 <div 
                   className="w-4 h-4 rounded" 
-                  style={{ backgroundColor: theme.colors.accent }}
+                  style={{ backgroundColor: `rgb(${theme.colors.accent})` }}
                 />
                 <div 
                   className="w-4 h-4 rounded" 
-                  style={{ backgroundColor: theme.colors.textPrimary }}
+                  style={{ backgroundColor: `rgb(${theme.colors.textPrimary})` }}
                 />
               </div>
               <span className="text-xs font-medium">{theme.name}</span>

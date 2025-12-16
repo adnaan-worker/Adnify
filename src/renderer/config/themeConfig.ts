@@ -1,10 +1,11 @@
 /**
  * 主题系统配置
  * 支持内置主题和自定义主题
+ * 使用 RGB 格式以支持 Tailwind 透明度修饰符
  */
 
 export interface ThemeColors {
-  // 背景色
+  // 背景色 (RGB 格式: "r g b")
   background: string
   backgroundSecondary: string
   surface: string
@@ -30,12 +31,6 @@ export interface ThemeColors {
   statusWarning: string
   statusError: string
   statusInfo: string
-  
-  // 编辑器色
-  editorBackground: string
-  editorLineHighlight: string
-  editorSelection: string
-  editorCursor: string
 }
 
 export interface Theme {
@@ -43,10 +38,17 @@ export interface Theme {
   name: string
   type: 'dark' | 'light'
   colors: ThemeColors
-  monacoTheme: string // Monaco 编辑器主题名称
+  monacoTheme: string
 }
 
-// 内置主题
+// 辅助函数：将 HEX 转换为 RGB 格式 "r g b"
+function hexToRgb(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  if (!result) return '0 0 0'
+  return `${parseInt(result[1], 16)} ${parseInt(result[2], 16)} ${parseInt(result[3], 16)}`
+}
+
+// 内置主题 (使用 RGB 格式)
 export const builtinThemes: Theme[] = [
   {
     id: 'adnify-dark',
@@ -54,27 +56,23 @@ export const builtinThemes: Theme[] = [
     type: 'dark',
     monacoTheme: 'vs-dark',
     colors: {
-      background: '#0d0d0f',
-      backgroundSecondary: '#111113',
-      surface: '#18181b',
-      surfaceHover: '#1f1f23',
-      surfaceActive: '#27272a',
-      textPrimary: '#fafafa',
-      textSecondary: '#a1a1aa',
-      textMuted: '#71717a',
-      borderSubtle: '#27272a',
-      borderStrong: '#3f3f46',
-      accent: '#8b5cf6',
-      accentHover: '#7c3aed',
-      accentMuted: '#8b5cf620',
-      statusSuccess: '#22c55e',
-      statusWarning: '#f59e0b',
-      statusError: '#ef4444',
-      statusInfo: '#3b82f6',
-      editorBackground: '#0d0d0f',
-      editorLineHighlight: '#18181b',
-      editorSelection: '#8b5cf640',
-      editorCursor: '#8b5cf6',
+      background: '13 13 15',
+      backgroundSecondary: '17 17 19',
+      surface: '24 24 27',
+      surfaceHover: '31 31 35',
+      surfaceActive: '39 39 42',
+      textPrimary: '250 250 250',
+      textSecondary: '161 161 170',
+      textMuted: '113 113 122',
+      borderSubtle: '39 39 42',
+      borderStrong: '63 63 70',
+      accent: '139 92 246',
+      accentHover: '124 58 237',
+      accentMuted: '139 92 246',
+      statusSuccess: '34 197 94',
+      statusWarning: '245 158 11',
+      statusError: '239 68 68',
+      statusInfo: '59 130 246',
     },
   },
   {
@@ -83,27 +81,23 @@ export const builtinThemes: Theme[] = [
     type: 'dark',
     monacoTheme: 'vs-dark',
     colors: {
-      background: '#0d1117',
-      backgroundSecondary: '#161b22',
-      surface: '#21262d',
-      surfaceHover: '#30363d',
-      surfaceActive: '#484f58',
-      textPrimary: '#c9d1d9',
-      textSecondary: '#8b949e',
-      textMuted: '#6e7681',
-      borderSubtle: '#21262d',
-      borderStrong: '#30363d',
-      accent: '#58a6ff',
-      accentHover: '#79c0ff',
-      accentMuted: '#58a6ff20',
-      statusSuccess: '#3fb950',
-      statusWarning: '#d29922',
-      statusError: '#f85149',
-      statusInfo: '#58a6ff',
-      editorBackground: '#0d1117',
-      editorLineHighlight: '#161b22',
-      editorSelection: '#58a6ff40',
-      editorCursor: '#58a6ff',
+      background: '13 17 23',
+      backgroundSecondary: '22 27 34',
+      surface: '33 38 45',
+      surfaceHover: '48 54 61',
+      surfaceActive: '72 79 88',
+      textPrimary: '201 209 217',
+      textSecondary: '139 148 158',
+      textMuted: '110 118 129',
+      borderSubtle: '33 38 45',
+      borderStrong: '48 54 61',
+      accent: '88 166 255',
+      accentHover: '121 192 255',
+      accentMuted: '88 166 255',
+      statusSuccess: '63 185 80',
+      statusWarning: '210 153 34',
+      statusError: '248 81 73',
+      statusInfo: '88 166 255',
     },
   },
   {
@@ -112,27 +106,23 @@ export const builtinThemes: Theme[] = [
     type: 'dark',
     monacoTheme: 'vs-dark',
     colors: {
-      background: '#272822',
-      backgroundSecondary: '#2d2e27',
-      surface: '#3e3d32',
-      surfaceHover: '#49483e',
-      surfaceActive: '#75715e',
-      textPrimary: '#f8f8f2',
-      textSecondary: '#cfcfc2',
-      textMuted: '#75715e',
-      borderSubtle: '#3e3d32',
-      borderStrong: '#49483e',
-      accent: '#a6e22e',
-      accentHover: '#b8f339',
-      accentMuted: '#a6e22e20',
-      statusSuccess: '#a6e22e',
-      statusWarning: '#e6db74',
-      statusError: '#f92672',
-      statusInfo: '#66d9ef',
-      editorBackground: '#272822',
-      editorLineHighlight: '#3e3d32',
-      editorSelection: '#49483e',
-      editorCursor: '#f8f8f0',
+      background: '39 40 34',
+      backgroundSecondary: '45 46 39',
+      surface: '62 61 50',
+      surfaceHover: '73 72 62',
+      surfaceActive: '117 113 94',
+      textPrimary: '248 248 242',
+      textSecondary: '207 207 194',
+      textMuted: '117 113 94',
+      borderSubtle: '62 61 50',
+      borderStrong: '73 72 62',
+      accent: '166 226 46',
+      accentHover: '184 243 57',
+      accentMuted: '166 226 46',
+      statusSuccess: '166 226 46',
+      statusWarning: '230 219 116',
+      statusError: '249 38 114',
+      statusInfo: '102 217 239',
     },
   },
   {
@@ -141,27 +131,23 @@ export const builtinThemes: Theme[] = [
     type: 'dark',
     monacoTheme: 'vs-dark',
     colors: {
-      background: '#282c34',
-      backgroundSecondary: '#21252b',
-      surface: '#2c313a',
-      surfaceHover: '#3a3f4b',
-      surfaceActive: '#4b5263',
-      textPrimary: '#abb2bf',
-      textSecondary: '#9da5b4',
-      textMuted: '#5c6370',
-      borderSubtle: '#181a1f',
-      borderStrong: '#3a3f4b',
-      accent: '#61afef',
-      accentHover: '#74b9f0',
-      accentMuted: '#61afef20',
-      statusSuccess: '#98c379',
-      statusWarning: '#e5c07b',
-      statusError: '#e06c75',
-      statusInfo: '#61afef',
-      editorBackground: '#282c34',
-      editorLineHighlight: '#2c313c',
-      editorSelection: '#3e4451',
-      editorCursor: '#528bff',
+      background: '40 44 52',
+      backgroundSecondary: '33 37 43',
+      surface: '44 49 58',
+      surfaceHover: '58 63 75',
+      surfaceActive: '75 82 99',
+      textPrimary: '171 178 191',
+      textSecondary: '157 165 180',
+      textMuted: '92 99 112',
+      borderSubtle: '24 26 31',
+      borderStrong: '58 63 75',
+      accent: '97 175 239',
+      accentHover: '116 185 240',
+      accentMuted: '97 175 239',
+      statusSuccess: '152 195 121',
+      statusWarning: '229 192 123',
+      statusError: '224 108 117',
+      statusInfo: '97 175 239',
     },
   },
   {
@@ -170,27 +156,23 @@ export const builtinThemes: Theme[] = [
     type: 'light',
     monacoTheme: 'vs',
     colors: {
-      background: '#ffffff',
-      backgroundSecondary: '#f4f4f5',
-      surface: '#e4e4e7',
-      surfaceHover: '#d4d4d8',
-      surfaceActive: '#a1a1aa',
-      textPrimary: '#18181b',
-      textSecondary: '#3f3f46',
-      textMuted: '#71717a',
-      borderSubtle: '#e4e4e7',
-      borderStrong: '#d4d4d8',
-      accent: '#7c3aed',
-      accentHover: '#6d28d9',
-      accentMuted: '#7c3aed20',
-      statusSuccess: '#16a34a',
-      statusWarning: '#d97706',
-      statusError: '#dc2626',
-      statusInfo: '#2563eb',
-      editorBackground: '#ffffff',
-      editorLineHighlight: '#f4f4f5',
-      editorSelection: '#7c3aed30',
-      editorCursor: '#7c3aed',
+      background: '255 255 255',
+      backgroundSecondary: '244 244 245',
+      surface: '228 228 231',
+      surfaceHover: '212 212 216',
+      surfaceActive: '161 161 170',
+      textPrimary: '24 24 27',
+      textSecondary: '63 63 70',
+      textMuted: '113 113 122',
+      borderSubtle: '228 228 231',
+      borderStrong: '212 212 216',
+      accent: '124 58 237',
+      accentHover: '109 40 217',
+      accentMuted: '124 58 237',
+      statusSuccess: '22 163 74',
+      statusWarning: '217 119 6',
+      statusError: '220 38 38',
+      statusInfo: '37 99 235',
     },
   },
 ]
@@ -257,7 +239,6 @@ class ThemeManager {
   }
 
   addCustomTheme(theme: Theme) {
-    // 确保 ID 唯一
     if (this.getThemeById(theme.id)) {
       theme.id = `${theme.id}-${Date.now()}`
     }
@@ -277,7 +258,7 @@ class ThemeManager {
     const root = document.documentElement
     const colors = theme.colors
 
-    // 设置 CSS 变量
+    // 设置 CSS 变量 (RGB 格式)
     root.style.setProperty('--color-background', colors.background)
     root.style.setProperty('--color-background-secondary', colors.backgroundSecondary)
     root.style.setProperty('--color-surface', colors.surface)
@@ -298,6 +279,11 @@ class ThemeManager {
 
     // 设置主题类型
     root.setAttribute('data-theme', theme.type)
+    
+    // 更新 color-scheme
+    root.style.colorScheme = theme.type
+    
+    console.log('[Theme] Applied theme:', theme.name)
   }
 
   subscribe(callback: (theme: Theme) => void): () => void {
@@ -309,10 +295,12 @@ class ThemeManager {
     this.listeners.forEach(cb => cb(this.currentTheme))
   }
 
-  // 初始化时应用当前主题
   init() {
     this.applyTheme(this.currentTheme)
   }
 }
 
 export const themeManager = new ThemeManager()
+
+// 导出辅助函数
+export { hexToRgb }

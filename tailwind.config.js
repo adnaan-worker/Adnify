@@ -7,48 +7,49 @@ export default {
 	theme: {
 		extend: {
 			colors: {
-				// 现代深色主题系统 (Inspired by Vercel / Linear / Cursor)
+				// 使用 CSS 变量实现主题切换 (RGB 格式支持透明度)
 				background: {
-					DEFAULT: '#09090b', // 极深背景
-					secondary: '#18181b', // 次级背景 (Sidebar)
-					tertiary: '#27272a', // 悬浮/输入框背景
+					DEFAULT: 'rgb(var(--color-background) / <alpha-value>)',
+					secondary: 'rgb(var(--color-background-secondary) / <alpha-value>)',
+					tertiary: 'rgb(var(--color-surface) / <alpha-value>)',
 				},
 				surface: {
-					DEFAULT: '#121212',
-					hover: '#27272a',
-					active: '#3f3f46',
+					DEFAULT: 'rgb(var(--color-surface) / <alpha-value>)',
+					hover: 'rgb(var(--color-surface-hover) / <alpha-value>)',
+					active: 'rgb(var(--color-surface-active) / <alpha-value>)',
 				},
 				border: {
-					DEFAULT: '#27272a', // 默认边框
-					subtle: '#1f1f22',
-					highlight: '#3f3f46',
+					DEFAULT: 'rgb(var(--color-border-strong) / <alpha-value>)',
+					subtle: 'rgb(var(--color-border-subtle) / <alpha-value>)',
+					highlight: 'rgb(var(--color-border-strong) / <alpha-value>)',
 				},
 				text: {
-					primary: '#e4e4e7', // 主要文字
-					secondary: '#a1a1aa', // 次要文字
-					muted: '#71717a', // 弱化文字
+					primary: 'rgb(var(--color-text-primary) / <alpha-value>)',
+					secondary: 'rgb(var(--color-text-secondary) / <alpha-value>)',
+					muted: 'rgb(var(--color-text-muted) / <alpha-value>)',
 				},
 				accent: {
-					DEFAULT: '#3b82f6', // 主品牌色 (Blue)
-					hover: '#60a5fa',
-					glow: 'rgba(59, 130, 246, 0.5)',
+					DEFAULT: 'rgb(var(--color-accent) / <alpha-value>)',
+					hover: 'rgb(var(--color-accent-hover) / <alpha-value>)',
+					muted: 'rgb(var(--color-accent-muted) / 0.2)',
+					glow: 'rgb(var(--color-accent) / 0.5)',
 				},
 				status: {
-					success: '#22c55e',
-					warning: '#eab308',
-					error: '#ef4444',
-					info: '#3b82f6',
+					success: 'rgb(var(--color-status-success) / <alpha-value>)',
+					warning: 'rgb(var(--color-status-warning) / <alpha-value>)',
+					error: 'rgb(var(--color-status-error) / <alpha-value>)',
+					info: 'rgb(var(--color-status-info) / <alpha-value>)',
 				},
-				// 保留 editor 命名空间以兼容部分旧代码，逐步替换
+				// 保留 editor 命名空间以兼容部分旧代码
 				'editor': {
-					'bg': '#09090b',
-					'sidebar': '#121212', // 更深的侧边栏
-					'border': '#27272a',
-					'hover': '#27272a',
-					'active': '#2563eb',
-					'text': '#e4e4e7',
-					'text-muted': '#a1a1aa',
-					'accent': '#3b82f6',
+					'bg': 'rgb(var(--color-background) / <alpha-value>)',
+					'sidebar': 'rgb(var(--color-background-secondary) / <alpha-value>)',
+					'border': 'rgb(var(--color-border-subtle) / <alpha-value>)',
+					'hover': 'rgb(var(--color-surface-hover) / <alpha-value>)',
+					'active': 'rgb(var(--color-accent) / <alpha-value>)',
+					'text': 'rgb(var(--color-text-primary) / <alpha-value>)',
+					'text-muted': 'rgb(var(--color-text-muted) / <alpha-value>)',
+					'accent': 'rgb(var(--color-accent) / <alpha-value>)',
 				}
 			},
 			fontFamily: {
@@ -57,7 +58,7 @@ export default {
 			},
 			boxShadow: {
 				'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-				'glow': '0 0 20px rgba(59, 130, 246, 0.15)',
+				'glow': '0 0 20px rgb(var(--color-accent) / 0.15)',
 			},
 			animation: {
 				'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
