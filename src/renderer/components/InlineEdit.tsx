@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { X, Sparkles, Check, Loader2, RefreshCw } from 'lucide-react'
 import { useStore } from '../store'
+import { t } from '../i18n'
 import DiffViewer from './DiffViewer'
 
 interface InlineEditProps {
@@ -38,7 +39,7 @@ export default function InlineEdit({
 	const [generatedCode, setGeneratedCode] = useState('')
 	const [error, setError] = useState('')
 	const inputRef = useRef<HTMLInputElement>(null)
-	const { llmConfig } = useStore()
+	const { llmConfig, language } = useStore()
 
 	useEffect(() => {
 		inputRef.current?.focus()
@@ -112,7 +113,7 @@ export default function InlineEdit({
 			<div className="flex items-center justify-between px-3 py-2 bg-surface-hover border-b border-border-subtle shrink-0">
 				<div className="flex items-center gap-2">
 					<Sparkles className="w-4 h-4 text-accent" />
-					<span className="text-xs font-medium text-text-primary">Inline AI Edit</span>
+					<span className="text-xs font-medium text-text-primary">{t('inlineAiEdit', language)}</span>
 					<span className="text-[10px] text-text-muted">
 						{filePath.split('/').pop()}:{lineRange[0]}-{lineRange[1]}
 					</span>
@@ -133,7 +134,7 @@ export default function InlineEdit({
 					value={instruction}
 					onChange={(e) => setInstruction(e.target.value)}
 					onKeyDown={handleKeyDown}
-					placeholder="Describe changes (e.g. 'Fix typo', 'Add error handling')..."
+					placeholder={t('describeChangesInline', language)}
 					disabled={state === 'loading'}
 					className="w-full bg-surface border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-colors shadow-sm"
 				/>
@@ -143,10 +144,10 @@ export default function InlineEdit({
 			{state === 'preview' && generatedCode && (
 				<div className="flex-1 overflow-hidden flex flex-col bg-background/50 border-t border-border-subtle">
 					<div className="px-3 py-1.5 flex justify-between items-center bg-surface/50 border-b border-border-subtle">
-                        <span className="text-[10px] uppercase tracking-wider text-text-muted font-medium">Diff Preview</span>
+                        <span className="text-[10px] uppercase tracking-wider text-text-muted font-medium">{t('diffPreview', language)}</span>
                         <div className="flex gap-2">
-                            <span className="flex items-center gap-1 text-[10px] text-red-400"><span className="w-2 h-2 rounded-full bg-red-400/20 flex items-center justify-center">-</span> Original</span>
-                            <span className="flex items-center gap-1 text-[10px] text-green-400"><span className="w-2 h-2 rounded-full bg-green-400/20 flex items-center justify-center">+</span> Modified</span>
+                            <span className="flex items-center gap-1 text-[10px] text-red-400"><span className="w-2 h-2 rounded-full bg-red-400/20 flex items-center justify-center">-</span> {t('original', language)}</span>
+                            <span className="flex items-center gap-1 text-[10px] text-green-400"><span className="w-2 h-2 rounded-full bg-green-400/20 flex items-center justify-center">+</span> {t('modified', language)}</span>
                         </div>
                     </div>
 					<div className="flex-1 overflow-auto p-0 min-h-[150px]">
@@ -168,7 +169,7 @@ export default function InlineEdit({
 					<div className="p-2 bg-status-error/10 border border-status-error/20 rounded-lg flex items-center gap-2">
                         <X className="w-4 h-4 text-status-error" />
 						<p className="text-xs text-status-error flex-1">{error}</p>
-                        <button onClick={handleRetry} className="text-xs underline text-status-error hover:text-red-400">Retry</button>
+                        <button onClick={handleRetry} className="text-xs underline text-status-error hover:text-red-400">{t('retry', language)}</button>
 					</div>
 				</div>
 			)}
@@ -176,13 +177,13 @@ export default function InlineEdit({
 			{/* Actions */}
 			<div className="flex items-center justify-between px-3 py-2 bg-surface-hover border-t border-border-subtle shrink-0">
 				<span className="text-[10px] text-text-muted">
-					{state === 'preview' ? 'Press ↵ to apply, Esc to cancel' : 'Press ↵ to generate'}
+					{state === 'preview' ? t('pressEnterApply', language) : t('pressEnterGenerate', language)}
 				</span>
 				<div className="flex items-center gap-2">
 					{state === 'loading' && (
 						<div className="flex items-center gap-2 text-xs text-text-muted">
                             <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
-                            Generating...
+                            {t('generating', language)}
                         </div>
 					)}
 					{state === 'preview' && (
@@ -192,14 +193,14 @@ export default function InlineEdit({
                                 className="flex items-center gap-1 px-3 py-1.5 rounded bg-surface border border-border-subtle text-text-secondary text-xs hover:bg-surface-hover transition-colors"
                             >
                                 <RefreshCw className="w-3 h-3" />
-                                Retry
+                                {t('retry', language)}
                             </button>
                             <button
                                 onClick={handleApply}
                                 className="flex items-center gap-1 px-3 py-1.5 rounded bg-accent text-white text-xs hover:bg-accent-hover transition-colors shadow-glow"
                             >
                                 <Check className="w-3 h-3" />
-                                Apply
+                                {t('apply', language)}
                             </button>
                         </>
 					)}
@@ -210,7 +211,7 @@ export default function InlineEdit({
 							className="flex items-center gap-1 px-3 py-1.5 rounded bg-accent text-white text-xs hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-glow"
 						>
 							<Sparkles className="w-3 h-3" />
-							Generate
+							{t('generate', language)}
 						</button>
 					)}
 				</div>

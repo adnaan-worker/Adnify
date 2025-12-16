@@ -9,8 +9,14 @@ export interface FileItem {
 }
 
 export interface LLMStreamChunk {
-	type: 'text' | 'reasoning' | 'error'
+	type: 'text' | 'tool_call' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_end' | 'reasoning' | 'error'
 	content?: string
+	toolCall?: LLMToolCall
+    toolCallDelta?: {
+        id?: string
+        name?: string
+        args?: string
+    }
 	error?: string
 }
 

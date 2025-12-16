@@ -150,6 +150,7 @@ export class OpenAIProvider extends BaseProvider {
 									const finalToolCall = this.finalizeToolCall(currentToolCall)
 									if (finalToolCall) {
 										toolCalls.push(finalToolCall)
+										onStream({ type: 'tool_call_end', toolCall: finalToolCall })
 										onToolCall(finalToolCall)
 									}
 								}
@@ -158,10 +159,41 @@ export class OpenAIProvider extends BaseProvider {
 									name: tc.function?.name,
 									argsString: tc.function?.arguments || ''
 								}
+                                // 发送开始事件
+                                onStream({ 
+                                    type: 'tool_call_start', 
+                                    toolCallDelta: { 
+                                        id: tc.id, 
+                                        name: tc.function?.name 
+                                    } 
+                                })
+                                // 如果有初始参数，也发送 delta
+                                if (tc.function?.arguments) {
+                                    onStream({
+                                        type: 'tool_call_delta',
+                                        toolCallDelta: {
+                                            id: tc.id,
+                                            args: tc.function.arguments
+                                        }
+                                    })
+                                }
 							} else if (currentToolCall) {
 								// 继续累积参数
-								if (tc.function?.name) currentToolCall.name = tc.function.name
-								if (tc.function?.arguments) currentToolCall.argsString += tc.function.arguments
+								if (tc.function?.name) {
+                                    currentToolCall.name = tc.function.name
+                                    // Name 通常在 id 那个 chunk 里，但以防万一
+                                } 
+								if (tc.function?.arguments) {
+                                    currentToolCall.argsString += tc.function.arguments
+                                    // 发送参数增量
+                                    onStream({
+                                        type: 'tool_call_delta',
+                                        toolCallDelta: {
+                                            id: currentToolCall.id,
+                                            args: tc.function.arguments
+                                        }
+                                    })
+                                }
 							}
 						}
 					}
@@ -173,6 +205,7 @@ export class OpenAIProvider extends BaseProvider {
 				const finalToolCall = this.finalizeToolCall(currentToolCall)
 				if (finalToolCall) {
 					toolCalls.push(finalToolCall)
+                    onStream({ type: 'tool_call_end', toolCall: finalToolCall })
 					onToolCall(finalToolCall)
 				}
 			}

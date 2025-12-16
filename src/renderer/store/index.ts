@@ -22,6 +22,7 @@ export interface ToolCall {
 	id: string
 	name: string
 	arguments: Record<string, unknown>
+    argsBuffer?: string
 	status: ToolStatus
 	approvalType?: ToolApprovalType
 	result?: string
@@ -102,7 +103,11 @@ interface EditorState {
 	updateLastMessage: (content: string) => void
     appendTokenToLastMessage: (token: string) => void
     finalizeLastMessage: () => void
+	editMessage: (id: string, content: string) => void
+	deleteMessagesAfter: (id: string) => void
 	setIsStreaming: (streaming: boolean) => void
+    startToolCall: (id: string, name: string) => void
+    appendToolCallArgs: (id: string, delta: string) => void
 	clearMessages: () => void
 	addToolCall: (toolCall: Omit<ToolCall, 'status'>) => void
 	updateToolCall: (id: string, updates: Partial<ToolCall>) => void
@@ -262,7 +267,34 @@ export const useStore = create<EditorState>((set) => ({
         }
         return { messages }
     }),
+	editMessage: (id, content) => set((state) => ({
+		messages: state.messages.map(m => 
+			m.id === id ? { ...m, content } : m
+		)
+	})),
+	deleteMessagesAfter: (id) => set((state) => {
+		const index = state.messages.findIndex(m => m.id === id)
+		if (index === -1) return state
+		return { 
+			messages: state.messages.slice(0, index + 1),
+			currentToolCalls: [] // 清除工具调用
+		}
+	}),
 	setIsStreaming: (streaming) => set({ isStreaming: streaming }),
+    startToolCall: (id, name) => set((state) => ({
+        currentToolCalls: [...state.currentToolCalls, {
+            id,
+            name,
+            arguments: {},
+            argsBuffer: '',
+            status: 'running'
+        }]
+    })),
+    appendToolCallArgs: (id, delta) => set((state) => ({
+        currentToolCalls: state.currentToolCalls.map(tc => 
+            tc.id === id ? { ...tc, argsBuffer: (tc.argsBuffer || '') + delta } : tc
+        )
+    })),
 	clearMessages: () => set({ messages: [], currentToolCalls: [] }),
 	addToolCall: (toolCall) => set((state) => ({
 		currentToolCalls: [...state.currentToolCalls, { ...toolCall, status: 'running' }]

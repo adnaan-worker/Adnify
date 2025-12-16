@@ -10,6 +10,7 @@ import {
   X, Zap, Keyboard
 } from 'lucide-react'
 import { useStore } from '../store'
+import { t } from '../i18n'
 
 interface Command {
   id: string
@@ -72,6 +73,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     workspacePath,
     activeFilePath,
     setInputPrompt,
+    language,
   } = useStore()
 
   const [query, setQuery] = useState('')
@@ -313,7 +315,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a command or search..."
+            placeholder={t('typeCommandOrSearch', language)}
             className="flex-1 bg-transparent text-editor-text placeholder-editor-text-muted focus:outline-none"
           />
           {query && (
@@ -353,7 +355,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
 
           {flatCommands.length === 0 && (
             <div className="px-4 py-8 text-center text-editor-text-muted">
-              No commands found
+              {t('noCommandsFound', language)}
             </div>
           )}
         </div>

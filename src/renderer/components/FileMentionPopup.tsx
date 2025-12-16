@@ -4,8 +4,9 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { FileText, Search, Database, Sparkles } from 'lucide-react'
+import { FileText, Search, Database, Sparkles, Code, GitBranch, Terminal } from 'lucide-react'
 import { useStore } from '../store'
+import { t, Language } from '../i18n'
 
 interface FileMentionPopupProps {
 	position: { x: number; y: number }
@@ -22,13 +23,34 @@ interface FileOption {
 }
 
 // 特殊上下文选项
-const SPECIAL_CONTEXTS = [
+const getSpecialContexts = (lang: Language) => [
 	{
 		id: 'codebase',
 		name: '@codebase',
-		description: '语义搜索整个代码库',
+		description: t('codebaseSearch', lang),
 		icon: Database,
 		color: 'text-purple-400',
+	},
+	{
+		id: 'symbols',
+		name: '@symbols',
+		description: t('currentFileSymbols', lang),
+		icon: Code,
+		color: 'text-blue-400',
+	},
+	{
+		id: 'git',
+		name: '@git',
+		description: t('gitChanges', lang),
+		icon: GitBranch,
+		color: 'text-orange-400',
+	},
+	{
+		id: 'terminal',
+		name: '@terminal',
+		description: t('terminalOutput', lang),
+		icon: Terminal,
+		color: 'text-green-400',
 	},
 ]
 
@@ -42,7 +64,10 @@ export default function FileMentionPopup({
 	const [selectedIndex, setSelectedIndex] = useState(0)
 	const [loading, setLoading] = useState(true)
 	const listRef = useRef<HTMLDivElement>(null)
-	const { workspacePath, openFiles } = useStore()
+	const { workspacePath, openFiles, language } = useStore()
+	
+	// 获取国际化的特殊上下文
+	const SPECIAL_CONTEXTS = getSpecialContexts(language)
 
 	// 加载文件列表
 	useEffect(() => {
@@ -136,12 +161,12 @@ export default function FileMentionPopup({
 	const totalItems = filteredSpecialContexts.length + sortedFiles.length
 
 	// 获取当前选中项
-	const getSelectedItem = () => {
+	const getSelectedItem = (): { type: 'special'; item: typeof SPECIAL_CONTEXTS[0] } | { type: 'file'; item: FileOption } => {
 		if (selectedIndex < filteredSpecialContexts.length) {
-			return { type: 'special', item: filteredSpecialContexts[selectedIndex] }
+			return { type: 'special' as const, item: filteredSpecialContexts[selectedIndex] }
 		}
 		const fileIndex = selectedIndex - filteredSpecialContexts.length
-		return { type: 'file', item: sortedFiles[fileIndex] }
+		return { type: 'file' as const, item: sortedFiles[fileIndex] }
 	}
 
 	// 键盘导航 - 使用 capture 阶段来优先处理
@@ -212,7 +237,7 @@ export default function FileMentionPopup({
 			<div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle bg-surface-hover">
 				<Search className="w-3.5 h-3.5 text-text-muted" />
 				<span className="text-xs text-text-muted">
-					{searchQuery ? `Searching: ${searchQuery}` : 'Select a file to reference'}
+					{searchQuery ? `${t('searching', language)}: ${searchQuery}` : t('selectFileToReference', language)}
 				</span>
 			</div>
 
@@ -224,7 +249,7 @@ export default function FileMentionPopup({
 					</div>
 				) : totalItems === 0 ? (
 					<div className="py-8 text-center text-text-muted text-sm">
-						{searchQuery ? 'No results found' : 'No files in workspace'}
+						{searchQuery ? t('noResultsFound', language) : t('noFilesInWorkspace', language)}
 					</div>
 				) : (
 					<>
@@ -285,9 +310,9 @@ export default function FileMentionPopup({
 
 			{/* Footer */}
 			<div className="px-3 py-1.5 border-t border-border-subtle bg-surface-hover text-[10px] text-text-muted flex items-center justify-between">
-				<span>↑↓ navigate</span>
-				<span>↵ or Tab to select</span>
-				<span>Esc to close</span>
+				<span>↑↓ {t('navigate', language)}</span>
+				<span>↵ {t('selectItem', language)}</span>
+				<span>Esc {t('closeMenu', language)}</span>
 			</div>
 		</div>
 	)

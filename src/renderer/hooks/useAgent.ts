@@ -88,16 +88,24 @@ export function useAgent() {
 			addCheckpoint(checkpoint)
 		}
 
-		// 处理 @file 和 @codebase 引用，收集上下文
-		const { files: contextFiles, semanticResults, cleanedMessage, projectStructure } = await contextService.collectContext(
+		// 处理 @file 和特殊上下文引用，收集上下文
+		const { 
+			files: contextFiles, 
+			semanticResults, 
+			cleanedMessage, 
+			projectStructure,
+			symbolsContext,
+			gitContext,
+			terminalContext
+		} = await contextService.collectContext(
 			textContent,
 			{ includeActiveFile: true, includeOpenFiles: false, includeProjectStructure: true }
 		)
 
 		// 构建带上下文的消息
 		let messageWithContext = cleanedMessage
-		if (contextFiles.length > 0 || projectStructure || semanticResults.length > 0) {
-			messageWithContext += '\n\n' + buildContextString(contextFiles, projectStructure, semanticResults)
+		if (contextFiles.length > 0 || projectStructure || semanticResults.length > 0 || symbolsContext || gitContext || terminalContext) {
+			messageWithContext += '\n\n' + buildContextString(contextFiles, projectStructure, semanticResults, symbolsContext, gitContext, terminalContext)
 		}
 
 		// 添加用户消息（显示原始消息，但发送带上下文的消息）
@@ -147,20 +155,42 @@ export function useAgent() {
 				tools,
 				systemPrompt,
 				onStream: (chunk) => {
+                    const state = useStore.getState()
 					if (chunk.type === 'text' && chunk.content) {
-                        const state = useStore.getState()
-                        // 直接追加到最后一条助手消息
                         state.appendTokenToLastMessage(chunk.content)
-					}
+					} else if (chunk.type === 'tool_call_start' && chunk.toolCallDelta) {
+                        const { id, name } = chunk.toolCallDelta
+                        if (id && name) {
+                            state.startToolCall(id, name)
+                        }
+                    } else if (chunk.type === 'tool_call_delta' && chunk.toolCallDelta) {
+                        const { id, args } = chunk.toolCallDelta
+                        if (id && args) {
+                            state.appendToolCallArgs(id, args)
+                        }
+                    }
 				},
 				onToolCall: (toolCall) => {
+                    const state = useStore.getState()
 					const approvalType = getToolApprovalType(toolCall.name)
-					addToolCall({
-						id: toolCall.id,
-						name: toolCall.name,
-						arguments: toolCall.arguments,
-						approvalType,
-					})
+                    
+                    // Check if it already exists (from streaming)
+                    const exists = state.currentToolCalls.some(tc => tc.id === toolCall.id)
+                    
+                    if (exists) {
+                        // Update with final parsed arguments
+                        updateToolCall(toolCall.id, {
+                            arguments: toolCall.arguments,
+                            approvalType
+                        })
+                    } else {
+                        addToolCall({
+                            id: toolCall.id,
+                            name: toolCall.name,
+                            arguments: toolCall.arguments,
+                            approvalType,
+                        })
+                    }
 				}
 			})
 

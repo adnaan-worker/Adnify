@@ -1,229 +1,220 @@
 /**
  * ToolCallCard - 工具调用卡片组件
  * 参考 Cursor 设计，提供紧凑、流畅的工具调用展示
- * Requirements: 1.1, 1.2, 1.3, 1.4, 1.6, 3.2, 4.1
  */
 
-import { useState, useCallback, memo } from 'react'
+import { useState, memo } from 'react'
 import {
-  FileText, FileEdit, Terminal, Search, FolderOpen,
-  FolderTree, Trash2, AlertTriangle, Check, X,
-  ChevronRight, Loader2, ExternalLink, Eye, EyeOff
+  FileText, Terminal, Search, FolderOpen, Trash2,
+  ChevronRight, Check, X, Loader2, AlertTriangle,
+  Eye, EyeOff, Edit3, FileCode, FolderPlus
 } from 'lucide-react'
-import { ToolCall } from '../store'
-import ToolResultViewer from './ToolResultViewer'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { ToolCall, useStore } from '../store'
+import { extractPartialString } from '../utils/partialJson'
+import { t } from '../i18n'
 
-// 解析 Search/Replace 块 (简易版)
-function parseBlocks(text: string) {
-    const blocks: { search: string; replace: string }[] = []
-    const regex = /<<<SEARCH\n([\s\S]*?)\n===(?:[ \t]*\n)?([\s\S]*?)\n>>>/g
-    let match
-    while ((match = regex.exec(text)) !== null) {
-        blocks.push({ search: match[1], replace: match[2] })
-    }
-    return blocks
+// ============ Types ============
+
+interface ToolCallCardProps {
+  toolCall: ToolCall
+  onApprove?: () => void
+  onReject?: () => void
+  onFileClick?: (filePath: string) => void
 }
 
-function EditBlockDiff({ search, replace }: { search: string; replace: string }) {
-  return (
-    <div className="flex flex-col text-xs font-mono border border-border-subtle rounded bg-black/20 overflow-hidden">
-      <div className="flex bg-red-900/20 border-b border-red-900/30">
-         <div className="w-8 p-2 text-center text-red-500/50 select-none border-r border-red-900/30">-</div>
-         <pre className="p-2 text-red-300/90 whitespace-pre-wrap overflow-x-auto flex-1">{search}</pre>
-      </div>
-      <div className="flex bg-green-900/20">
-         <div className="w-8 p-2 text-center text-green-500/50 select-none border-r border-green-900/30">+</div>
-         <pre className="p-2 text-green-300/90 whitespace-pre-wrap overflow-x-auto flex-1">{replace}</pre>
-      </div>
-    </div>
-  )
-}
-
-// 工具显示配置
-const TOOL_CONFIG: Record<string, {
+interface ToolConfig {
   icon: typeof FileText
   label: string
   color: string
   bgColor: string
   isFileEdit?: boolean
   showResult?: boolean
-}> = {
-  read_file: { 
-    icon: FileText, 
-    label: '读取文件', 
-    color: 'text-blue-400', 
+}
+
+// ============ Tool Configuration ============
+
+const TOOL_CONFIG: Record<string, ToolConfig> = {
+  read_file: {
+    icon: FileText,
+    label: 'Read File',
+    color: 'text-blue-400',
     bgColor: 'bg-blue-500/10',
-    showResult: true 
+    showResult: true,
   },
-  write_file: { 
-    icon: FileEdit, 
-    label: '写入文件', 
-    color: 'text-green-400', 
+  write_file: {
+    icon: Edit3,
+    label: 'Write File',
+    color: 'text-green-400',
     bgColor: 'bg-green-500/10',
-    isFileEdit: true 
+    isFileEdit: true,
   },
-  edit_file: { 
-    icon: FileEdit, 
-    label: '编辑文件', 
-    color: 'text-green-400', 
-    bgColor: 'bg-green-500/10',
-    isFileEdit: true 
+  create_file: {
+    icon: FileCode,
+    label: 'Create File',
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/10',
+    isFileEdit: true,
   },
-  create_file_or_folder: { 
-    icon: FolderOpen, 
-    label: '创建', 
-    color: 'text-yellow-400', 
-    bgColor: 'bg-yellow-500/10',
-    isFileEdit: true 
+  edit_file: {
+    icon: Edit3,
+    label: 'Edit File',
+    color: 'text-amber-400',
+    bgColor: 'bg-amber-500/10',
+    isFileEdit: true,
   },
-  delete_file_or_folder: { 
-    icon: Trash2, 
-    label: '删除', 
+  delete_file: {
+    icon: Trash2,
+    label: 'Delete File',
     color: 'text-red-400',
-    bgColor: 'bg-red-500/10'
+    bgColor: 'bg-red-500/10',
+    isFileEdit: true,
   },
-  search_files: { 
-    icon: Search, 
-    label: '搜索文件', 
-    color: 'text-purple-400', 
+  list_directory: {
+    icon: FolderOpen,
+    label: 'List Directory',
+    color: 'text-purple-400',
     bgColor: 'bg-purple-500/10',
-    showResult: true 
+    showResult: true,
   },
-  search_in_file: { 
-    icon: Search, 
-    label: '文件内搜索', 
-    color: 'text-purple-400', 
+  create_directory: {
+    icon: FolderPlus,
+    label: 'Create Directory',
+    color: 'text-purple-400',
     bgColor: 'bg-purple-500/10',
-    showResult: true 
   },
-  list_directory: { 
-    icon: FolderOpen, 
-    label: '列出目录', 
-    color: 'text-yellow-400', 
-    bgColor: 'bg-yellow-500/10',
-    showResult: true 
-  },
-  get_dir_tree: { 
-    icon: FolderTree, 
-    label: '目录树', 
-    color: 'text-yellow-400', 
-    bgColor: 'bg-yellow-500/10',
-    showResult: true 
-  },
-  run_command: { 
-    icon: Terminal, 
-    label: '执行命令', 
-    color: 'text-cyan-400', 
-    bgColor: 'bg-cyan-500/10',
-    showResult: true 
-  },
-  run_in_terminal: { 
-    icon: Terminal, 
-    label: '终端命令', 
-    color: 'text-cyan-400', 
-    bgColor: 'bg-cyan-500/10',
-    showResult: true 
-  },
-  open_terminal: { 
-    icon: Terminal, 
-    label: '打开终端', 
+  search_files: {
+    icon: Search,
+    label: 'Search Files',
     color: 'text-cyan-400',
-    bgColor: 'bg-cyan-500/10'
-  },
-  get_terminal_output: { 
-    icon: Terminal, 
-    label: '终端输出', 
-    color: 'text-cyan-400', 
     bgColor: 'bg-cyan-500/10',
-    showResult: true 
+    showResult: true,
   },
-  get_lint_errors: { 
-    icon: AlertTriangle, 
-    label: 'Lint 检查', 
-    color: 'text-orange-400', 
+  run_terminal: {
+    icon: Terminal,
+    label: 'Run Command',
+    color: 'text-orange-400',
     bgColor: 'bg-orange-500/10',
-    showResult: true 
+    showResult: true,
+  },
+  execute_command: {
+    icon: Terminal,
+    label: 'Execute Command',
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-500/10',
+    showResult: true,
   },
 }
 
-interface ToolCallCardProps {
-  toolCall: ToolCall
-  onApprove?: () => void
-  onReject?: () => void
-  onFileClick?: (path: string) => void
+// ============ Helper Functions ============
+
+function extractFilePath(args: Record<string, unknown>): string | null {
+  return (args.path || args.file_path || args.filePath || args.directory) as string | null
 }
 
-// 状态指示器组件 - 带脉冲动画
-const StatusIndicator = memo(function StatusIndicator({ 
-  status 
-}: { 
-  status: ToolCall['status'] 
-}) {
+function extractCommand(args: Record<string, unknown>): string | null {
+  return (args.command || args.cmd) as string | null
+}
+
+function getFileName(path: string): string {
+  return path.split(/[\\/]/).pop() || path
+}
+
+// ============ Sub Components ============
+
+function StatusIndicator({ status }: { status: string }) {
   switch (status) {
     case 'running':
-      return (
-        <div className="relative">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
-          <div className="absolute inset-0 animate-ping opacity-30">
-            <Loader2 className="w-3.5 h-3.5 text-accent" />
-          </div>
-        </div>
-      )
+      return <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
     case 'success':
-      return (
-        <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-          <Check className="w-3 h-3 text-green-400" />
-        </div>
-      )
+      return <Check className="w-3.5 h-3.5 text-green-400" />
     case 'error':
-    case 'rejected':
-      return (
-        <div className="w-4 h-4 rounded-full bg-red-500/20 flex items-center justify-center">
-          <X className="w-3 h-3 text-red-400" />
-        </div>
-      )
+      return <X className="w-3.5 h-3.5 text-red-400" />
     case 'awaiting_user':
-      return (
-        <div className="relative">
-          <div className="w-3 h-3 rounded-full bg-yellow-400" />
-          <div className="absolute inset-0 w-3 h-3 rounded-full bg-yellow-400 animate-ping opacity-50" />
-        </div>
-      )
+      return <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
+    case 'rejected':
+      return <X className="w-3.5 h-3.5 text-text-muted" />
     default:
-      return <div className="w-2.5 h-2.5 rounded-full bg-text-muted/40" />
-  }
-})
-
-// 从参数中提取文件路径
-function extractFilePath(args: Record<string, unknown>): string | null {
-  if (typeof args.path === 'string') return args.path
-  if (typeof args.file_path === 'string') return args.file_path
-  if (typeof args.target_file === 'string') return args.target_file
-  return null
-}
-
-// 从参数中提取命令
-function extractCommand(args: Record<string, unknown>): string | null {
-  if (typeof args.command === 'string') return args.command
-  return null
-}
-
-// 获取文件名
-function getFileName(path: string): string {
-  return path.split(/[/\\]/).pop() || path
-}
-
-// 获取状态文本
-function getStatusText(status: ToolCall['status']): string {
-  switch (status) {
-    case 'running': return '执行中...'
-    case 'success': return '完成'
-    case 'error': return '失败'
-    case 'rejected': return '已拒绝'
-    case 'awaiting_user': return '等待确认'
-    default: return '等待中'
+      return <div className="w-3.5 h-3.5 rounded-full bg-text-muted/30" />
   }
 }
+
+function ToolResultViewer({ 
+  toolName, 
+  result, 
+  error 
+}: { 
+  toolName: string
+  result: string
+  error?: string 
+}) {
+  if (error) {
+    return (
+      <div className="text-xs text-red-300">
+        <span className="font-medium">Error: </span>
+        {error}
+      </div>
+    )
+  }
+
+  // 尝试解析 JSON
+  let parsed: unknown = null
+  try {
+    parsed = JSON.parse(result)
+  } catch {
+    // 不是 JSON，显示原始文本
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    return (
+      <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap max-h-48 overflow-auto custom-scrollbar">
+        {JSON.stringify(parsed, null, 2)}
+      </pre>
+    )
+  }
+
+  // 对于文件内容，使用代码高亮
+  if (toolName === 'read_file' && result.length > 0) {
+    return (
+      <div className="max-h-48 overflow-auto custom-scrollbar">
+        <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap">
+          {result.slice(0, 2000)}
+          {result.length > 2000 && '\n... (truncated)'}
+        </pre>
+      </div>
+    )
+  }
+
+  return (
+    <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap max-h-48 overflow-auto custom-scrollbar">
+      {result.slice(0, 1000)}
+      {result.length > 1000 && '... (truncated)'}
+    </pre>
+  )
+}
+
+interface EditBlock {
+  search: string
+  replace: string
+}
+
+function EditBlockDiff({ search, replace }: EditBlock) {
+  return (
+    <div className="rounded border border-border-subtle overflow-hidden text-xs font-mono">
+      <div className="bg-red-500/10 px-2 py-1 border-b border-border-subtle">
+        <span className="text-red-400">- </span>
+        <span className="text-text-secondary whitespace-pre-wrap">{search.slice(0, 200)}</span>
+      </div>
+      <div className="bg-green-500/10 px-2 py-1">
+        <span className="text-green-400">+ </span>
+        <span className="text-text-secondary whitespace-pre-wrap">{replace.slice(0, 200)}</span>
+      </div>
+    </div>
+  )
+}
+
+// ============ Main Component ============
 
 export default memo(function ToolCallCard({
   toolCall,
@@ -233,6 +224,7 @@ export default memo(function ToolCallCard({
 }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [showResult, setShowResult] = useState(false)
+  const { language } = useStore()
   
   const config = TOOL_CONFIG[toolCall.name] || { 
     icon: Terminal, 
@@ -249,114 +241,100 @@ export default memo(function ToolCallCard({
   // 提取关键信息
   const filePath = extractFilePath(toolCall.arguments)
   const command = extractCommand(toolCall.arguments)
+  
+  // 尝试从 buffer 或 arguments 中提取代码内容
+  const rawCode = toolCall.argsBuffer 
+    ? extractPartialString(toolCall.argsBuffer, ['code', 'file_content', 'content', 'text'])
+    : (toolCall.arguments.code || toolCall.arguments.file_content || toolCall.arguments.content) as string | undefined
+
   const fileName = filePath ? getFileName(filePath) : null
   
-  // 对于 edit_file，提取修改块
-  const editBlocks = toolCall.name === 'edit_file' && typeof toolCall.arguments.search_replace_blocks === 'string'
-      ? parseBlocks(toolCall.arguments.search_replace_blocks)
-      : []
+  // 提取编辑块（用于 edit_file）
+  const editBlocks: EditBlock[] = []
+  if (toolCall.name === 'edit_file' && toolCall.arguments.edits) {
+    const edits = toolCall.arguments.edits as Array<{ old_text?: string; new_text?: string }>
+    edits.forEach(edit => {
+      if (edit.old_text && edit.new_text) {
+        editBlocks.push({ search: edit.old_text, replace: edit.new_text })
+      }
+    })
+  }
 
-  // 处理文件点击 - 打开文件并显示 diff
-  const handleFileClick = useCallback((e: React.MouseEvent) => {
+  // 卡片样式
+  const cardStyles = isAwaiting
+    ? 'border-yellow-500/30 bg-yellow-500/5'
+    : toolCall.status === 'error'
+    ? 'border-red-500/20 bg-red-500/5'
+    : toolCall.status === 'success'
+    ? 'border-green-500/20 bg-surface'
+    : 'border-border-subtle bg-surface'
+
+  const toggleExpand = () => setExpanded(!expanded)
+  const toggleResult = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowResult(!showResult)
+  }
+
+  const handleFileClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (filePath && onFileClick) {
       onFileClick(filePath)
     }
-  }, [filePath, onFileClick])
-
-  // 切换展开状态（显示参数详情）
-  const toggleExpand = useCallback(() => {
-    setExpanded(prev => !prev)
-  }, [])
-
-  // 切换结果显示
-  const toggleResult = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setShowResult(prev => !prev)
-  }, [])
-
-  // 计算边框和背景样式
-  const cardStyles = isAwaiting 
-    ? 'border-yellow-500/40 bg-yellow-500/5 shadow-[0_0_15px_rgba(234,179,8,0.1)] backdrop-blur-sm' 
-    : isRunning
-      ? 'border-accent/40 bg-accent/5 shadow-[0_0_15px_rgba(99,102,241,0.1)] backdrop-blur-sm'
-      : toolCall.status === 'error' || toolCall.status === 'rejected'
-        ? 'border-red-500/30 bg-red-500/5 backdrop-blur-sm'
-        : 'border-border-subtle/50 bg-surface/40 hover:bg-surface/60 backdrop-blur-sm'
+  }
 
   return (
     <div className={`
-      group rounded-xl border transition-all duration-300 overflow-hidden
+      group rounded-md border transition-all duration-300 overflow-hidden text-sm my-1
       ${cardStyles}
     `}>
       {/* 主行 - 紧凑显示 */}
       <div 
-        className="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer select-none"
+        className="flex items-center gap-3 px-3 py-2 cursor-pointer select-none min-h-[36px]"
         onClick={toggleExpand}
       >
-        {/* 状态指示器 */}
         <StatusIndicator status={toolCall.status} />
         
-        {/* 工具图标和标签 */}
-        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md ${config.bgColor}`}>
-          <Icon className={`w-3.5 h-3.5 ${config.color}`} />
-          <span className={`text-xs font-medium ${config.color}`}>{config.label}</span>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className={`flex items-center gap-1.5 font-medium ${config.color}`}>
+            <Icon className="w-3.5 h-3.5" />
+            {config.label}
+          </span>
+          
+          {isFileEdit && fileName && (
+            <div className="flex items-center gap-1 text-text-secondary truncate">
+              <span className="opacity-40">/</span>
+              <span 
+                className="hover:text-accent hover:underline cursor-pointer transition-colors truncate"
+                onClick={handleFileClick}
+                title={filePath || ''}
+              >
+                {fileName}
+              </span>
+            </div>
+          )}
+          
+          {!isFileEdit && fileName && (
+            <span className="text-text-secondary truncate opacity-80">
+              {fileName}
+            </span>
+          )}
+          
+          {command && (
+            <code className="text-xs font-mono text-text-muted bg-black/20 px-1.5 py-0.5 rounded truncate max-w-[200px]">
+              {command}
+            </code>
+          )}
         </div>
         
-        {/* 文件编辑：显示可点击的文件名 */}
-        {isFileEdit && fileName && (
-          <button
-            onClick={handleFileClick}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-active/80 hover:bg-accent/20 
-                       text-xs font-mono text-text-primary hover:text-accent transition-all duration-200
-                       border border-transparent hover:border-accent/30"
-            title="点击打开文件并查看 diff"
-          >
-            <FileText className="w-3 h-3 opacity-60" />
-            <span className="max-w-[150px] truncate">{fileName}</span>
-            <ExternalLink className="w-2.5 h-2.5 opacity-40 group-hover:opacity-70" />
-          </button>
-        )}
-        
-        {/* 非文件编辑：显示文件路径 */}
-        {!isFileEdit && fileName && (
-          <span className="text-xs font-mono text-text-secondary truncate max-w-[180px]">
-            {fileName}
-          </span>
-        )}
-        
-        {/* 命令：显示命令内容 */}
-        {command && (
-          <code className="text-xs font-mono text-text-secondary truncate max-w-[180px] px-1.5 py-0.5 bg-black/20 rounded">
-            $ {command}
-          </code>
-        )}
-        
-        {/* 右侧区域 */}
-        <div className="flex items-center gap-2 ml-auto">
-          {/* 结果切换按钮 */}
+        <div className="flex items-center gap-3 ml-auto flex-shrink-0">
           {hasResult && config.showResult && (
             <button
               onClick={toggleResult}
               className={`p-1 rounded hover:bg-surface-active transition-colors ${showResult ? 'text-accent' : 'text-text-muted'}`}
-              title={showResult ? '隐藏结果' : '显示结果'}
             >
               {showResult ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             </button>
           )}
-          
-          {/* 状态文本 */}
-          <span className={`text-[10px] font-medium ${
-            toolCall.status === 'success' ? 'text-green-400' :
-            toolCall.status === 'error' || toolCall.status === 'rejected' ? 'text-red-400' :
-            toolCall.status === 'running' ? 'text-accent' :
-            toolCall.status === 'awaiting_user' ? 'text-yellow-400' :
-            'text-text-muted'
-          }`}>
-            {getStatusText(toolCall.status)}
-          </span>
-          
-          {/* 展开指示器 */}
           <ChevronRight className={`
             w-3.5 h-3.5 text-text-muted transition-transform duration-200
             ${expanded ? 'rotate-90' : ''}
@@ -369,68 +347,89 @@ export default memo(function ToolCallCard({
         <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-yellow-500/20 bg-yellow-500/5">
           <div className="flex items-center gap-2 text-xs text-yellow-400">
             <AlertTriangle className="w-3.5 h-3.5" />
-            <span className="font-medium">需要您的确认</span>
+            <span className="font-medium">{t('needConfirmation', language)}</span>
           </div>
           <div className="flex gap-2">
             <button
               onClick={(e) => { e.stopPropagation(); onReject() }}
-              className="px-3 py-1.5 text-xs rounded-md bg-surface hover:bg-red-500/20 
-                         text-text-muted hover:text-red-400 transition-all duration-200
-                         border border-transparent hover:border-red-500/30"
+              className="px-3 py-1.5 text-xs rounded-md bg-surface hover:bg-red-500/20 text-text-muted hover:text-red-400 transition-all border border-transparent hover:border-red-500/30"
             >
-              拒绝
+              {t('reject', language)}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onApprove() }}
-              className="px-3 py-1.5 text-xs rounded-md bg-accent text-white 
-                         hover:bg-accent-hover transition-all duration-200 font-medium
-                         shadow-sm hover:shadow-glow"
+              className="px-3 py-1.5 text-xs rounded-md bg-accent text-white hover:bg-accent-hover transition-all font-medium shadow-sm hover:shadow-glow"
             >
-              允许执行
+              {t('allowExecute', language)}
             </button>
           </div>
         </div>
       )}
 
-      {/* 展开内容 - 参数详情 */}
+      {/* 展开内容 - 智能预览 */}
       {expanded && (
-        <div className="px-3 py-2.5 border-t border-border-subtle/30 bg-black/20 animate-slide-in">
-          {editBlocks.length > 0 && (
-              <div className="mb-4">
-                  <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 flex items-center gap-2">
-                      <FileEdit className="w-3 h-3" />
-                      Proposed Changes ({editBlocks.length})
+        <div className="px-3 py-2.5 border-t border-border-subtle/30 bg-[#0d0d0d] animate-slide-in">
+          {/* 如果有代码内容，显示高亮代码块 */}
+          {rawCode ? (
+            <div className="relative group/code rounded-md overflow-hidden border border-border-subtle/50">
+              <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/5">
+                <span className="text-[10px] text-text-muted font-mono uppercase">
+                  {fileName ? fileName : t('codePreview', language)}
+                </span>
+                {toolCall.argsBuffer && isRunning && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                    <span className="text-[10px] text-accent font-medium">{t('writing', language)}</span>
                   </div>
-                  <div className="space-y-2">
-                      {editBlocks.map((block, i) => (
-                          <EditBlockDiff key={i} search={block.search} replace={block.replace} />
-                      ))}
-                  </div>
+                )}
               </div>
+              <SyntaxHighlighter
+                style={vscDarkPlus}
+                language={fileName?.split('.').pop() || 'typescript'}
+                PreTag="div"
+                className="!bg-transparent !p-3 !m-0 !text-xs custom-scrollbar"
+                customStyle={{ background: 'transparent', margin: 0 }}
+                wrapLines={true}
+                wrapLongLines={true} 
+                showLineNumbers={true}
+                lineNumberStyle={{ minWidth: '2em', paddingRight: '1em', color: '#555' }}
+              >
+                {rawCode}
+              </SyntaxHighlighter>
+            </div>
+          ) : (
+            // 否则显示原始 JSON
+            <div className="space-y-2">
+              {toolCall.argsBuffer && isRunning && (
+                <div className="flex items-center gap-2 text-[10px] text-accent animate-pulse mb-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>{t('receivingData', language)}</span>
+                </div>
+              )}
+              <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1">{t('rawArguments', language)}</div>
+              <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap max-h-32 overflow-auto custom-scrollbar opacity-70">
+                {toolCall.argsBuffer || JSON.stringify(toolCall.arguments, null, 2)}
+              </pre>
+            </div>
           )}
-          
-          <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">参数 JSON</div>
-          <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap max-h-32 overflow-auto custom-scrollbar">
-            {JSON.stringify(toolCall.arguments, null, 2)}
-          </pre>
+
+          {editBlocks.length > 0 && !rawCode && (
+            <div className="mt-4">
+              <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">{t('proposedChanges', language)}</div>
+              <div className="space-y-2">
+                {editBlocks.map((block, i) => (
+                  <EditBlockDiff key={i} search={block.search} replace={block.replace} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* 内联结果显示 - Requirements 1.6, 3.2 */}
+      {/* 结果显示 */}
       {showResult && hasResult && (
         <div className="border-t border-border-subtle/30 bg-black/10 animate-slide-in">
           <div className="px-3 py-2">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] text-text-muted uppercase tracking-wider">
-                {toolCall.error ? '错误信息' : '执行结果'}
-              </span>
-              <button
-                onClick={toggleResult}
-                className="text-[10px] text-text-muted hover:text-text-primary transition-colors"
-              >
-                收起
-              </button>
-            </div>
             <ToolResultViewer 
               toolName={toolCall.name} 
               result={toolCall.result || ''} 
@@ -439,16 +438,11 @@ export default memo(function ToolCallCard({
           </div>
         </div>
       )}
-
-      {/* 错误显示（始终显示错误，不需要展开） */}
+      
+      {/* 错误简略 */}
       {toolCall.error && !showResult && (
         <div className="px-3 py-2 border-t border-red-500/20 bg-red-500/5">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-red-300 line-clamp-2">
-              {toolCall.error}
-            </p>
-          </div>
+          <p className="text-xs text-red-300 line-clamp-2">{toolCall.error}</p>
         </div>
       )}
     </div>

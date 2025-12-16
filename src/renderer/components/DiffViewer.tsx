@@ -445,11 +445,11 @@ export default function DiffViewer({
             <tr>
               <th className="w-10 px-2 py-1 text-left text-xs text-editor-text-muted border-b border-editor-border">#</th>
               <th className="w-1/2 px-3 py-1 text-left text-xs text-editor-text-muted border-b border-r border-editor-border">
-                Original
+                {t('original', language)}
               </th>
               <th className="w-10 px-2 py-1 text-left text-xs text-editor-text-muted border-b border-editor-border">#</th>
               <th className="w-1/2 px-3 py-1 text-left text-xs text-editor-text-muted border-b border-editor-border">
-                Modified
+                {t('modified', language)}
               </th>
             </tr>
           </thead>
@@ -483,7 +483,7 @@ export default function DiffViewer({
             <span className="text-green-400">+{stats.added}</span>
             <span className="text-red-400">-{stats.removed}</span>
             {isStreaming && (
-              <span className="text-yellow-400 animate-pulse">● Streaming...</span>
+              <span className="text-yellow-400 animate-pulse">● {t('streaming', language)}</span>
             )}
           </div>
         </div>
@@ -493,14 +493,14 @@ export default function DiffViewer({
             <button
               onClick={() => setViewMode('unified')}
               className={`p-1.5 rounded transition-colors ${ viewMode === 'unified' ? 'bg-editor-accent text-white' : 'text-editor-text-muted hover:text-editor-text'}`}
-              title="Unified View"
+              title={t('unifiedView', language)}
             >
               <AlignJustify className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('split')}
               className={`p-1.5 rounded transition-colors ${ viewMode === 'split' ? 'bg-editor-accent text-white' : 'text-editor-text-muted hover:text-editor-text'}`}
-              title="Split View"
+              title={t('splitView', language)}
             >
               <Columns className="w-4 h-4" />
             </button>
@@ -508,7 +508,7 @@ export default function DiffViewer({
           <button
             onClick={copyToClipboard}
             className="p-2 rounded-lg hover:bg-editor-hover transition-colors"
-            title="Copy modified content"
+            title={t('copyModified', language)}
           >
             <Copy className="w-4 h-4 text-editor-text-muted" />
           </button>
@@ -541,7 +541,7 @@ export default function DiffViewer({
       {/* Actions */}
       <div className="flex items-center justify-between px-4 py-3 border-t border-editor-border bg-editor-bg/50">
         <div className="text-xs text-editor-text-muted">
-          {stats.total} lines • {useVirtualization ? 'Virtualized' : 'Full render'}
+          {stats.total} {t('lines', language)} • {useVirtualization ? t('virtualized', language) : t('fullRender', language)}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -550,7 +550,7 @@ export default function DiffViewer({
             disabled={isStreaming}
           >
             <X className="w-4 h-4" />
-            {t('cancel', language)}
+            {t('rejectChanges', language)}
           </button>
           <button
             onClick={onAccept}
@@ -558,7 +558,7 @@ export default function DiffViewer({
             disabled={isStreaming}
           >
             <Check className="w-4 h-4" />
-            Accept Changes
+            {t('acceptChanges', language)}
           </button>
         </div>
       </div>

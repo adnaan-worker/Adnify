@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { GitBranch, AlertCircle, XCircle, Database, Loader2 } from 'lucide-react'
 import { useStore } from '../store'
+import { t } from '../i18n'
 import { IndexStatus } from '../types/electron'
 
 export default function StatusBar() {
-  const { activeFilePath, isStreaming, workspacePath, setShowSettings } = useStore()
+  const { activeFilePath, isStreaming, workspacePath, setShowSettings, language } = useStore()
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null)
 
   // 监听索引状态
@@ -51,24 +52,24 @@ export default function StatusBar() {
           <button 
             onClick={handleIndexClick}
             className="flex items-center gap-1.5 hover:text-text-primary transition-colors"
-            title="Codebase Index"
+            title={t('codebaseIndex', language)}
           >
             {indexStatus?.isIndexing ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin text-accent" />
                 <span className="text-accent">
-                  Indexing {indexStatus.indexedFiles}/{indexStatus.totalFiles}
+                  {t('indexing', language)} {indexStatus.indexedFiles}/{indexStatus.totalFiles}
                 </span>
               </>
             ) : indexStatus?.totalChunks ? (
               <>
                 <Database className="w-3 h-3 text-green-400" />
-                <span>{indexStatus.totalChunks} chunks</span>
+                <span>{indexStatus.totalChunks} {t('chunks', language)}</span>
               </>
             ) : (
               <>
                 <Database className="w-3 h-3 opacity-50" />
-                <span className="opacity-50">Not indexed</span>
+                <span className="opacity-50">{t('notIndexed', language)}</span>
               </>
             )}
           </button>
@@ -79,7 +80,7 @@ export default function StatusBar() {
         {isStreaming && (
             <div className="flex items-center gap-2 text-accent">
                 <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                <span>AI Processing...</span>
+                <span>{t('aiProcessing', language)}</span>
             </div>
         )}
         

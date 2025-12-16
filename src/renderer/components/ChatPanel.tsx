@@ -3,13 +3,15 @@ import {
   Send, Sparkles,
   Trash2, StopCircle,
   FileText, AlertTriangle,
-  History, Image as ImageIcon, X, Plus
+  History, Image as ImageIcon, X,
+  Code, GitBranch, Terminal, Database
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useStore, Message } from '../store'
 import { useAgent } from '../hooks/useAgent'
+import { t } from '../i18n'
 
 import ToolCallCard from './ToolCallCard'
 import SessionList from './SessionList'
@@ -18,8 +20,17 @@ import { sessionService } from '../agent/sessionService'
 import { checkpointService } from '../agent/checkpointService'
 
 
-function ChatMessage({ message }: { message: Message }) {
+interface ChatMessageProps {
+  message: Message
+  onEdit?: (messageId: string, newContent: string) => void
+  onRegenerate?: (messageId: string) => void
+}
+
+function ChatMessage({ message, onEdit, onRegenerate }: ChatMessageProps) {
   const isUser = message.role === 'user'
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const { language } = useStore()
 
   if (message.role === 'tool') {
       return null
@@ -36,9 +47,26 @@ function ChatMessage({ message }: { message: Message }) {
       ? message.content.filter(c => c.type === 'image') 
       : []
 
+  const handleStartEdit = () => {
+    setEditContent(textContent)
+    setIsEditing(true)
+  }
+
+  const handleSaveEdit = () => {
+    if (onEdit && editContent.trim()) {
+      onEdit(message.id, editContent.trim())
+    }
+    setIsEditing(false)
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setEditContent('')
+  }
+
   return (
     <div className={`
-        w-full flex gap-3 px-4 py-4 animate-slide-up
+        w-full flex gap-3 px-4 py-4 animate-slide-up group
         ${isUser ? 'flex-row-reverse' : 'flex-row'}
     `}> 
       {/* Avatar */}
@@ -71,50 +99,106 @@ function ChatMessage({ message }: { message: Message }) {
                 </div>
             )}
 
-            <ReactMarkdown
-              className="prose prose-invert prose-sm max-w-none break-words leading-relaxed"
-              components={{
-                code({ className, children, node, ...props }) {
-                  const match = /language-(\w+)/.exec(className || '')
-                  const content = String(children)
-                  const isCodeBlock = match || (node?.position?.start?.line !== node?.position?.end?.line)
-                  const isInline = !isCodeBlock && !content.includes('\n')
-                  
-                  return isInline ? (
-                    <code className="bg-black/30 border border-white/5 px-1.5 py-0.5 rounded text-accent font-mono text-xs" {...props}>
-                      {children}
-                    </code>
-                  ) : (
-                    <div className="relative group/code my-3 rounded-lg overflow-hidden border border-border-subtle bg-[#0d0d0d] shadow-sm">
-                        <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/5">
-                            <span className="text-[10px] text-text-muted font-mono">{match?.[1] || 'code'}</span>
+            {isEditing ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full bg-background border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary resize-none focus:outline-none focus:border-accent"
+                  rows={3}
+                  autoFocus
+                />
+                <div className="flex items-center gap-2 justify-end">
+                  <button
+                    onClick={handleCancelEdit}
+                    className="px-3 py-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+                  >
+                    {t('cancel', language)}
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    className="px-3 py-1 bg-accent text-white text-xs rounded-lg hover:bg-accent-hover transition-colors"
+                  >
+                    {t('saveAndResend', language)}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <ReactMarkdown
+                  className="prose prose-invert prose-sm max-w-none break-words leading-relaxed"
+                  components={{
+                    code({ className, children, node, ...props }) {
+                      const match = /language-(\w+)/.exec(className || '')
+                      const content = String(children)
+                      const isCodeBlock = match || (node?.position?.start?.line !== node?.position?.end?.line)
+                      const isInline = !isCodeBlock && !content.includes('\n')
+                      
+                      return isInline ? (
+                        <code className="bg-black/30 border border-white/5 px-1.5 py-0.5 rounded text-accent font-mono text-xs" {...props}>
+                          {children}
+                        </code>
+                      ) : (
+                        <div className="relative group/code my-3 rounded-lg overflow-hidden border border-border-subtle bg-[#0d0d0d] shadow-sm">
+                            <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/5">
+                                <span className="text-[10px] text-text-muted font-mono">{match?.[1] || 'code'}</span>
+                            </div>
+                            <SyntaxHighlighter
+                                style={vscDarkPlus}
+                                language={match?.[1]}
+                                PreTag="div"
+                                className="!bg-transparent !p-4 !m-0 !text-xs custom-scrollbar"
+                                customStyle={{ background: 'transparent', margin: 0 }}
+                                wrapLines={true}
+                                wrapLongLines={true} 
+                            >
+                                {String(children).replace(/\n$/, '')}
+                            </SyntaxHighlighter>
                         </div>
-                        <SyntaxHighlighter
-                            style={vscDarkPlus}
-                            language={match?.[1]}
-                            PreTag="div"
-                            className="!bg-transparent !p-4 !m-0 !text-xs custom-scrollbar"
-                            customStyle={{ background: 'transparent', margin: 0 }}
-                            wrapLines={true}
-                            wrapLongLines={true} 
-                        >
-                            {String(children).replace(/\n$/, '')}
-                        </SyntaxHighlighter>
-                    </div>
-                  )
-                },
-                p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
-                ul: ({children}) => <ul className="list-disc pl-4 mb-2 space-y-1 marker:text-text-muted">{children}</ul>,
-                ol: ({children}) => <ol className="list-decimal pl-4 mb-2 space-y-1 marker:text-text-muted">{children}</ol>,
-                a: ({href, children}) => <a href={href} target="_blank" className="text-accent hover:underline font-medium transition-colors">{children}</a>,
-                blockquote: ({children}) => <blockquote className="border-l-2 border-accent/50 pl-4 py-1 my-2 bg-accent/5 italic text-text-muted rounded-r">{children}</blockquote>
-              }}
-            >
-              {textContent}
-            </ReactMarkdown>
-          {message.isStreaming && (
-            <span className="inline-block w-2 h-4 bg-accent animate-pulse ml-1 align-middle rounded-sm" />
-          )}
+                      )
+                    },
+                    p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
+                    ul: ({children}) => <ul className="list-disc pl-4 mb-2 space-y-1 marker:text-text-muted">{children}</ul>,
+                    ol: ({children}) => <ol className="list-decimal pl-4 mb-2 space-y-1 marker:text-text-muted">{children}</ol>,
+                    a: ({href, children}) => <a href={href} target="_blank" className="text-accent hover:underline font-medium transition-colors">{children}</a>,
+                    blockquote: ({children}) => <blockquote className="border-l-2 border-accent/50 pl-4 py-1 my-2 bg-accent/5 italic text-text-muted rounded-r">{children}</blockquote>
+                  }}
+                >
+                  {textContent}
+                </ReactMarkdown>
+                {message.isStreaming && (
+                  <span className="inline-block w-2 h-4 bg-accent animate-pulse ml-1 align-middle rounded-sm" />
+                )}
+                
+                {/* Message Actions */}
+                {!message.isStreaming && (
+                  <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {isUser && onEdit && (
+                      <button
+                        onClick={handleStartEdit}
+                        className="p-1 text-text-muted hover:text-text-primary hover:bg-surface-hover rounded transition-colors"
+                        title={t('editMessage', language)}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    )}
+                    {!isUser && onRegenerate && (
+                      <button
+                        onClick={() => onRegenerate(message.id)}
+                        className="p-1 text-text-muted hover:text-text-primary hover:bg-surface-hover rounded transition-colors"
+                        title={t('regenerateResponse', language)}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
         </div>
       </div>
   )
@@ -132,7 +216,7 @@ export default function ChatPanel() {
     chatMode, setChatMode, messages, isStreaming, currentToolCalls,
     clearMessages, llmConfig, pendingToolCall,
     setCurrentSessionId, addMessage, workspacePath, openFile, setActiveFile,
-    inputPrompt, setInputPrompt
+    inputPrompt, setInputPrompt, editMessage, deleteMessagesAfter, language
   } = useStore()
   const {
     sendMessage,
@@ -220,8 +304,11 @@ export default function ChatPanel() {
     return refs
   }, [input])
 
-  // Codebase reference detection
+  // Special context reference detection
   const hasCodebaseRef = useMemo(() => /@codebase\b/i.test(input), [input])
+  const hasSymbolsRef = useMemo(() => /@symbols\b/i.test(input), [input])
+  const hasGitRef = useMemo(() => /@git\b/i.test(input), [input])
+  const hasTerminalRef = useMemo(() => /@terminal\b/i.test(input), [input])
 
   // Image handling
   const addImage = async (file: File) => {
@@ -393,6 +480,41 @@ export default function ChatPanel() {
     }
   }, [clearMessages, setChatMode, addMessage, setCurrentSessionId])
 
+  // 编辑消息并重新发送
+  const handleEditMessage = useCallback(async (messageId: string, newContent: string) => {
+    // 删除该消息之后的所有消息
+    deleteMessagesAfter(messageId)
+    // 更新消息内容
+    editMessage(messageId, newContent)
+    // 重新发送
+    await sendMessage(newContent)
+  }, [deleteMessagesAfter, editMessage, sendMessage])
+
+  // 重新生成响应
+  const handleRegenerate = useCallback(async (messageId: string) => {
+    // 找到这条消息之前的用户消息
+    const msgIndex = messages.findIndex(m => m.id === messageId)
+    if (msgIndex <= 0) return
+    
+    // 找到最近的用户消息
+    let userMsgIndex = msgIndex - 1
+    while (userMsgIndex >= 0 && messages[userMsgIndex].role !== 'user') {
+      userMsgIndex--
+    }
+    
+    if (userMsgIndex < 0) return
+    
+    const userMsg = messages[userMsgIndex]
+    const userContent = typeof userMsg.content === 'string' 
+      ? userMsg.content 
+      : userMsg.content.filter(c => c.type === 'text').map(c => (c as any).text).join('')
+    
+    // 删除用户消息之后的所有消息
+    deleteMessagesAfter(userMsg.id)
+    // 重新发送
+    await sendMessage(userContent)
+  }, [messages, deleteMessagesAfter, sendMessage])
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (showFileMention) {
       if (e.key === 'Escape') {
@@ -449,14 +571,14 @@ export default function ChatPanel() {
           <button
             onClick={() => setShowSessions(!showSessions)}
             className={`p-1.5 rounded-md hover:bg-surface-hover transition-colors ${showSessions ? 'text-accent' : 'text-text-muted'}`}
-            title="History"
+            title={t('history', language)}
           >
             <History className="w-4 h-4" />
           </button>
            <button
             onClick={clearMessages}
             className="p-1.5 rounded-md hover:bg-surface-hover hover:text-status-error transition-colors"
-            title="Clear chat"
+            title={t('clearChat', language)}
           >
             <Trash2 className="w-4 h-4 text-text-muted" />
           </button>
@@ -479,8 +601,8 @@ export default function ChatPanel() {
           <div className="m-4 p-4 border border-warning/20 bg-warning/5 rounded-lg flex gap-3">
              <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0" />
              <div>
-                <span className="font-medium text-sm text-warning block mb-1">Setup Required</span>
-                <p className="text-xs text-text-muted leading-relaxed">Please configure your LLM provider settings (API Key) to start using the assistant.</p>
+                <span className="font-medium text-sm text-warning block mb-1">{t('setupRequired', language)}</span>
+                <p className="text-xs text-text-muted leading-relaxed">{t('setupRequiredDesc', language)}</p>
              </div>
           </div>
         )}
@@ -492,31 +614,78 @@ export default function ChatPanel() {
              </div>
              <div className="text-center">
                  <p className="text-lg font-semibold text-text-primary mb-1">Adnify Agent</p>
-                 <p className="text-sm text-text-muted">How can I help you build today?</p>
+                 <p className="text-sm text-text-muted">{t('howCanIHelp', language)}</p>
              </div>
           </div>
         )}
 
-        <div className="flex flex-col gap-2 pb-4 px-2">
-            {messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
-            ))}
+        <div className="flex flex-col gap-0 pb-4 px-2">
+            {messages.map((msg, index) => {
+                // 跳过 tool 类型的消息（它们会在 ToolCallCard 中显示结果）
+                if (msg.role === 'tool') {
+                    return null
+                }
+                
+                // 跳过空的 assistant 消息（纯工具调用触发）
+                const textContent = typeof msg.content === 'string' 
+                    ? msg.content 
+                    : Array.isArray(msg.content) 
+                        ? msg.content.filter(c => c.type === 'text').map(c => (c as any).text).join('')
+                        : ''
+                
+                if (msg.role === 'assistant' && !textContent.trim() && !msg.isStreaming) {
+                    return null
+                }
+                
+                // 检查这条消息后面是否紧跟着工具调用
+                // 如果是最后一条 assistant 消息且有 currentToolCalls，则内联显示
+                const isLastAssistant = msg.role === 'assistant' && 
+                    index === messages.length - 1 || 
+                    (index < messages.length - 1 && messages.slice(index + 1).every(m => m.role === 'tool'))
+                
+                const shouldShowToolCalls = isLastAssistant && currentToolCalls.length > 0
+                
+                return (
+                    <div key={msg.id}>
+                        <ChatMessage 
+                            message={msg}
+                            onEdit={handleEditMessage}
+                            onRegenerate={handleRegenerate}
+                        />
+                        
+                        {/* 内联显示工具调用 - 在最后一条 AI 消息下方 */}
+                        {shouldShowToolCalls && (
+                            <div className="ml-11 mr-4 mt-1 space-y-1.5 animate-fade-in">
+                                {currentToolCalls.map((toolCall) => (
+                                    <ToolCallCard
+                                        key={toolCall.id}
+                                        toolCall={toolCall}
+                                        onApprove={pendingToolCall?.id === toolCall.id ? approveCurrentTool : undefined}
+                                        onReject={pendingToolCall?.id === toolCall.id ? rejectCurrentTool : undefined}
+                                        onFileClick={handleToolFileClick}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )
+            })}
+            
+            {/* 如果没有消息但有工具调用（边缘情况） */}
+            {messages.length === 0 && currentToolCalls.length > 0 && (
+                <div className="px-4 py-2 space-y-1.5 animate-fade-in">
+                    {currentToolCalls.map((toolCall) => (
+                        <ToolCallCard
+                            key={toolCall.id}
+                            toolCall={toolCall}
+                            onApprove={pendingToolCall?.id === toolCall.id ? approveCurrentTool : undefined}
+                            onReject={pendingToolCall?.id === toolCall.id ? rejectCurrentTool : undefined}
+                            onFileClick={handleToolFileClick}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
-
-        {/* Current Tool Calls Area */}
-        {currentToolCalls.length > 0 && (
-            <div className="px-4 py-2 space-y-1.5 animate-fade-in">
-                {currentToolCalls.map((toolCall) => (
-                    <ToolCallCard
-                      key={toolCall.id}
-                      toolCall={toolCall}
-                      onApprove={pendingToolCall?.id === toolCall.id ? approveCurrentTool : undefined}
-                      onReject={pendingToolCall?.id === toolCall.id ? rejectCurrentTool : undefined}
-                      onFileClick={handleToolFileClick}
-                    />
-                ))}
-            </div>
-        )}
 
         <div ref={messagesEndRef} />
       </div>
@@ -559,12 +728,30 @@ export default function ChatPanel() {
               )}
 
           {/* Context Chips */}
-          {(fileRefs.length > 0 || hasCodebaseRef) && (
+          {(fileRefs.length > 0 || hasCodebaseRef || hasSymbolsRef || hasGitRef || hasTerminalRef) && (
              <div className="flex flex-wrap gap-1.5 px-3 pt-3">
                 {hasCodebaseRef && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] font-medium rounded-full border border-purple-500/20 animate-fade-in">
-                        <Sparkles className="w-3 h-3" />
+                        <Database className="w-3 h-3" />
                         @codebase
+                    </span>
+                )}
+                {hasSymbolsRef && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] font-medium rounded-full border border-blue-500/20 animate-fade-in">
+                        <Code className="w-3 h-3" />
+                        @symbols
+                    </span>
+                )}
+                {hasGitRef && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500/10 text-orange-400 text-[10px] font-medium rounded-full border border-orange-500/20 animate-fade-in">
+                        <GitBranch className="w-3 h-3" />
+                        @git
+                    </span>
+                )}
+                {hasTerminalRef && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/10 text-green-400 text-[10px] font-medium rounded-full border border-green-500/20 animate-fade-in">
+                        <Terminal className="w-3 h-3" />
+                        @terminal
                     </span>
                 )}
                 {fileRefs.map((ref, i) => (
@@ -582,7 +769,7 @@ export default function ChatPanel() {
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={hasApiKey ? "Ask anything... (Paste images, Type @ to context)" : "Configure API Key..."}
+            placeholder={hasApiKey ? t('pasteImagesHint', language) : t('configureApiKey', language)}
             disabled={!hasApiKey || !!pendingToolCall}
             className="w-full bg-transparent border-none rounded-xl px-4 py-3 pr-12
                      text-sm text-text-primary placeholder-text-muted/60 resize-none
@@ -608,7 +795,7 @@ export default function ChatPanel() {
             <button
                 onClick={() => fileInputRef.current?.click()}
                 className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
-                title="Upload image"
+                title={t('uploadImage', language)}
             >
                 <ImageIcon className="w-4 h-4" />
             </button>
@@ -638,12 +825,12 @@ export default function ChatPanel() {
                 {chatMode === 'agent' && (
                     <span className="flex items-center gap-1 text-accent">
                         <Sparkles className="w-3 h-3" />
-                        Agent Mode
+                        {t('agentMode', language)}
                     </span>
                 )}
             </div>
             <span className="text-[10px] text-text-muted opacity-50 font-mono">
-                RETURN to send
+                {t('returnToSend', language)}
             </span>
         </div>
       </div>

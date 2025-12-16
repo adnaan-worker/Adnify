@@ -60,9 +60,14 @@ export interface ToolCall {
 }
 
 export interface StreamChunk {
-	type: 'text' | 'tool_call' | 'reasoning' | 'error'
+	type: 'text' | 'tool_call' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_end' | 'reasoning' | 'error'
 	content?: string
 	toolCall?: ToolCall
+    toolCallDelta?: {
+        id?: string
+        name?: string
+        args?: string
+    }
 	error?: string
 }
 

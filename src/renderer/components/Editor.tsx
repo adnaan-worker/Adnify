@@ -452,8 +452,8 @@ export default function Editor() {
             <p className="text-text-muted text-sm">{t('welcomeDesc', language)}</p>
             
             <div className="mt-8 flex flex-col gap-2 text-xs text-text-muted opacity-60">
-                 <p>Press <kbd className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border-subtle">Ctrl+P</kbd> {t('searchFile', language)}</p>
-                 <p>Press <kbd className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border-subtle">Ctrl+Shift+P</kbd> Command Palette</p>
+                 <p><kbd className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border-subtle">Ctrl+P</kbd> {t('searchFile', language)}</p>
+                 <p><kbd className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border-subtle">Ctrl+Shift+P</kbd> {t('commandPalette', language)}</p>
             </div>
           </div>
         </div>

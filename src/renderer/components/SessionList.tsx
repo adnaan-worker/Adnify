@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { MessageSquare, Trash2, Download, Upload, Plus, X, Clock, Bot, Zap } from 'lucide-react'
 import { sessionService, SessionSummary } from '../agent/sessionService'
 import { useStore } from '../store'
+import { t } from '../i18n'
 
 interface SessionListProps {
 	onClose: () => void
@@ -16,7 +17,7 @@ interface SessionListProps {
 export default function SessionList({ onClose, onLoadSession }: SessionListProps) {
 	const [sessions, setSessions] = useState<SessionSummary[]>([])
 	const [loading, setLoading] = useState(true)
-	const { messages, chatMode, currentSessionId, setCurrentSessionId, clearMessages } = useStore()
+	const { messages, chatMode, currentSessionId, setCurrentSessionId, clearMessages, language } = useStore()
 
 	useEffect(() => {
 		loadSessions()
@@ -46,7 +47,7 @@ export default function SessionList({ onClose, onLoadSession }: SessionListProps
 
 	const handleDeleteSession = async (id: string, e: React.MouseEvent) => {
 		e.stopPropagation()
-		if (confirm('Delete this session?')) {
+		if (confirm(t('confirmDeleteSession', language))) {
 			await sessionService.deleteSession(id)
 			if (currentSessionId === id) {
 				setCurrentSessionId(null)
@@ -80,10 +81,10 @@ export default function SessionList({ onClose, onLoadSession }: SessionListProps
 		const now = new Date()
 		const diff = now.getTime() - date.getTime()
 		
-		if (diff < 60000) return 'Just now'
-		if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-		if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-		if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`
+		if (diff < 60000) return t('justNow', language)
+		if (diff < 3600000) return t('minutesAgo', language, { count: String(Math.floor(diff / 60000)) })
+		if (diff < 86400000) return t('hoursAgo', language, { count: String(Math.floor(diff / 3600000)) })
+		if (diff < 604800000) return t('daysAgo', language, { count: String(Math.floor(diff / 86400000)) })
 		return date.toLocaleDateString()
 	}
 
@@ -93,7 +94,7 @@ export default function SessionList({ onClose, onLoadSession }: SessionListProps
 			<div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
 				<div className="flex items-center gap-2">
 					<MessageSquare className="w-4 h-4 text-accent" />
-					<span className="font-medium text-sm">Sessions</span>
+					<span className="font-medium text-sm">{t('sessions', language)}</span>
 					<span className="text-xs text-text-muted">({sessions.length})</span>
 				</div>
 				<button
@@ -111,7 +112,7 @@ export default function SessionList({ onClose, onLoadSession }: SessionListProps
 					className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-border-subtle text-sm transition-colors"
 				>
 					<Plus className="w-3.5 h-3.5" />
-					New
+					{t('newSession', language)}
 				</button>
 				<button
 					onClick={handleSaveCurrentSession}
@@ -119,7 +120,7 @@ export default function SessionList({ onClose, onLoadSession }: SessionListProps
 					className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					<Download className="w-3.5 h-3.5" />
-					Save
+					{t('saveSession', language)}
 				</button>
 			</div>
 
@@ -132,7 +133,7 @@ export default function SessionList({ onClose, onLoadSession }: SessionListProps
 				) : sessions.length === 0 ? (
 					<div className="flex flex-col items-center justify-center h-32 text-text-muted">
 						<MessageSquare className="w-8 h-8 mb-2 opacity-30" />
-						<span className="text-sm">No saved sessions</span>
+						<span className="text-sm">{t('noSessions', language)}</span>
 					</div>
 				) : (
 					<div className="p-2 space-y-1">
@@ -160,14 +161,14 @@ export default function SessionList({ onClose, onLoadSession }: SessionListProps
 											</span>
 										</div>
 										<p className="text-xs text-text-muted line-clamp-2">
-											{session.preview || 'Empty session'}
+											{session.preview || t('emptySession', language)}
 										</p>
 										<div className="flex items-center gap-3 mt-2 text-[10px] text-text-muted">
 											<span className="flex items-center gap-1">
 												<Clock className="w-3 h-3" />
 												{formatDate(session.updatedAt)}
 											</span>
-											<span>{session.messageCount} messages</span>
+											<span>{t('messagesCount', language, { count: String(session.messageCount) })}</span>
 										</div>
 									</div>
 									
@@ -175,14 +176,14 @@ export default function SessionList({ onClose, onLoadSession }: SessionListProps
 										<button
 											onClick={(e) => handleExportSession(session.id, e)}
 											className="p-1 rounded hover:bg-surface-active text-text-muted hover:text-text-primary"
-											title="Export"
+											title={t('exportSession', language)}
 										>
 											<Upload className="w-3 h-3" />
 										</button>
 										<button
 											onClick={(e) => handleDeleteSession(session.id, e)}
 											className="p-1 rounded hover:bg-status-error/10 text-text-muted hover:text-status-error"
-											title="Delete"
+											title={t('deleteSession', language)}
 										>
 											<Trash2 className="w-3 h-3" />
 										</button>
