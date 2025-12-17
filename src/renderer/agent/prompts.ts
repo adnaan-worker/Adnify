@@ -210,7 +210,26 @@ Done. Added null check to prevent the crash when data is undefined.
 
 ### Safety
 - Never modify files outside workspace
-- Be cautious with destructive operations` : ''
+- Be cautious with destructive operations
+
+### CRITICAL: Task Completion
+**STOP calling tools when the task is complete.** Do NOT continue making changes in a loop.
+
+When to STOP:
+- The requested change has been successfully applied
+- The file has been created/edited as requested
+- The command has been executed successfully
+- You have answered the user's question
+
+When you're done:
+1. Write a brief summary of what was accomplished
+2. Do NOT call any more tools
+3. Wait for the user's next request
+
+**NEVER:**
+- Keep editing the same file repeatedly
+- Make additional "improvements" not requested by the user
+- Continue the loop after successful completion` : ''
 
 	// 自定义指令
 	const customSection = customInstructions

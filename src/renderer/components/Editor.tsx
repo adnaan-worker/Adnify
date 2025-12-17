@@ -3,6 +3,7 @@ import MonacoEditor, { DiffEditor, OnMount, loader } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { X, Circle, AlertTriangle, AlertCircle, RefreshCw, FileCode, ChevronRight, Home } from 'lucide-react'
 import { useStore } from '../store'
+import { useAgent } from '../hooks/useAgent'
 import { t } from '../i18n'
 import { getFileName, getDirPath, getPathSeparator, joinPath } from '../utils/pathUtils'
 import { toast } from './Toast'
@@ -11,7 +12,7 @@ import InlineEdit from './InlineEdit'
 import EditorContextMenu from './EditorContextMenu'
 import { lintService } from '../agent/lintService'
 import { streamingEditService } from '../agent/streamingEditService'
-import { LintError, StreamingEditState } from '../agent/toolTypes'
+import { LintError, StreamingEditState } from '@/renderer/agent/toolTypes'
 import { completionService } from '../services/completionService'
 import { createGhostTextManager, GhostTextManager } from './GhostTextWidget'
 import { initMonacoTypeService } from '../services/monacoTypeService'
@@ -104,7 +105,8 @@ const getLanguage = (path: string): string => {
 }
 
 export default function Editor() {
-  const { openFiles, activeFilePath, setActiveFile, closeFile, updateFileContent, markFileSaved, language } = useStore()
+  const { openFiles, activeFilePath, setActiveFile, closeFile, updateFileContent, markFileSaved, language, activeDiff, setActiveDiff } = useStore()
+  const { pendingChanges, acceptChange, undoChange } = useAgent()
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
   const ghostTextRef = useRef<GhostTextManager | null>(null)
@@ -899,6 +901,100 @@ export default function Editor() {
           />
         </div>
       )}
+
+      {/* Chat 工具调用 Diff 预览 - 使用 Monaco DiffEditor */}
+      {activeDiff && (() => {
+        // 检查是否在 pendingChanges 中（决定是否显示操作按钮）
+        const isPendingChange = pendingChanges.some(c => c.filePath === activeDiff.filePath)
+        
+        return (
+          <div className="absolute inset-0 z-50 flex flex-col bg-editor-bg">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border-subtle bg-surface/50">
+              <div className="flex items-center gap-2">
+                <FileCode className="w-4 h-4 text-accent" />
+                <span className="text-sm font-medium text-text-primary">
+                  {activeDiff.filePath.split(/[\\/]/).pop()}
+                </span>
+                <span className="text-xs text-text-muted">
+                  {activeDiff.original ? 'Modified' : 'New File'}
+                </span>
+                {isPendingChange && (
+                  <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/20 text-amber-400 rounded">
+                    Pending
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveDiff(null)}
+                  className="px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-active rounded-md transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            
+            {/* Monaco Diff Editor */}
+            <div className="flex-1">
+              <DiffEditor
+                key={`diff-${activeDiff.filePath}-${activeDiff.modified.length}`}
+                height="100%"
+                language={getLanguage(activeDiff.filePath)}
+                original={activeDiff.original}
+                modified={activeDiff.modified}
+                theme="vs-dark"
+                options={{
+                  readOnly: true,
+                  renderSideBySide: true,
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  fontSize: 13,
+                  lineNumbers: 'on',
+                  glyphMargin: false,
+                  folding: true,
+                  lineDecorationsWidth: 0,
+                  lineNumbersMinChars: 3,
+                }}
+              />
+            </div>
+            
+            {/* Footer Actions - 只有待确认的更改才显示接受/拒绝按钮 */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border-subtle bg-surface/50">
+              {isPendingChange ? (
+                <>
+                  <button
+                    onClick={async () => {
+                      await undoChange(activeDiff.filePath)
+                      setActiveDiff(null)
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                  >
+                    {t('rejectChanges', language)}
+                  </button>
+                  <button
+                    onClick={() => {
+                      acceptChange(activeDiff.filePath)
+                      updateFileContent(activeDiff.filePath, activeDiff.modified)
+                      setActiveDiff(null)
+                    }}
+                    className="px-4 py-2 text-sm font-medium bg-green-500 text-white hover:bg-green-600 rounded-md transition-colors"
+                  >
+                    {t('acceptChanges', language)}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setActiveDiff(null)}
+                  className="px-4 py-2 text-sm font-medium text-text-muted hover:text-text-primary hover:bg-surface-active rounded-md transition-colors"
+                >
+                  Close
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* 内联编辑弹窗 (Cmd+K) */}
       {inlineEditState?.show && activeFile && (

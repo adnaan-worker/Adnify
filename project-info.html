@@ -3,9 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Adnify - Project Information</title>
+    <meta name="description" content="Adnify - AI-Powered Development Platform with intelligent features like context-aware assistance, real-time collaboration, and advanced code analysis.">
+    <meta name="keywords" content="Adnify, AI development, code analysis, developer tools, Electron, TypeScript, React">
+    <meta name="author" content="adnaan">
+    <title>Adnify - AI-Powered Development Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="canonical" href="https://adnify.dev/project-info">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -13,15 +18,19 @@
         .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
         .card-hover:hover {
             transform: translateY(-4px);
-            transition: all 0.3s ease;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
         }
         .code-block {
             background: #1e293b;
             border-radius: 8px;
             padding: 1.5rem;
             overflow-x: auto;
+            position: relative;
         }
         .stat-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -36,12 +45,47 @@
             align-items: center;
             justify-content: center;
         }
+        .arch-diagram {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 2rem;
+            color: white;
+        }
+        .timeline-item {
+            position: relative;
+            padding-left: 3rem;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 1.5rem;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e2e8f0;
+        }
+        .timeline-dot {
+            position: absolute;
+            left: 0;
+            top: 0.5rem;
+            width: 1rem;
+            height: 1rem;
+            background: #667eea;
+            border-radius: 50%;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .card-hover,
+            .card-hover:hover {
+                transition: none !important;
+                transform: none !important;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
     
     <!-- Header -->
-    <header class="gradient-bg text-white">
+    <header class="gradient-bg text-white" role="banner">
         <div class="container mx-auto px-6 py-12">
             <div class="flex flex-col lg:flex-row items-center justify-between">
                 <div class="mb-6 lg:mb-0">
@@ -49,12 +93,12 @@
                     <p class="text-xl opacity-90">AI-Powered Development Platform</p>
                 </div>
                 <div class="flex space-x-4">
-                    <button class="bg-white text-indigo-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-100 transition">
+                    <a href="#get-started" class="bg-white text-indigo-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-100 transition no-underline">
                         Get Started
-                    </button>
-                    <button class="border border-white text-white px-6 py-2 rounded-lg font-semibold hover:bg-white hover:text-indigo-600 transition">
+                    </a>
+                    <a href="#documentation" class="border border-white text-white px-6 py-2 rounded-lg font-semibold hover:bg-white hover:text-indigo-600 transition no-underline">
                         Documentation
-                    </button>
+                    </a>
                 </div>
             </div>
         </div>
@@ -84,6 +128,10 @@
                         <div class="text-3xl font-bold">50+</div>
                         <div class="opacity-90">Components</div>
                     </div>
+                    <div class="stat-card rounded-lg p-6">
+                        <div class="text-3xl font-bold">10+</div>
+                        <div class="opacity-90">Agent Services</div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -110,6 +158,15 @@
                 <div class="tech-icon mx-auto">
                     <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg" alt="Node.js" class="w-8 h-8">
                 </div>
+                <div class="tech-icon mx-auto">
+                    <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/git/git-original.svg" alt="Git" class="w-8 h-8">
+                </div>
+                <div class="tech-icon mx-auto">
+                    <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/webpack/webpack-original.svg" alt="Webpack" class="w-8 h-8">
+                </div>
+                <div class="tech-icon mx-auto">
+                    <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vitejs/vitejs-original.svg" alt="Vite" class="w-8 h-8">
+                </div>
             </div>
         </section>
 
@@ -118,26 +175,32 @@
             <h2 class="text-3xl font-bold mb-8 text-gray-800">Key Features</h2>
             <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
                 <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
+                    <div class="text-indigo-600 text-3xl mb-3"><i class="fas fa-robot"></i></div>
                     <h3 class="text-xl font-bold mb-3 text-indigo-600">AI-Powered Assistance</h3>
                     <p class="text-gray-600 mb-4">Context-aware code suggestions and intelligent completions.</p>
                 </div>
                 <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
+                    <div class="text-indigo-600 text-3xl mb-3"><i class="fas fa-users"></i></div>
                     <h3 class="text-xl font-bold mb-3 text-indigo-600">Real-time Collaboration</h3>
                     <p class="text-gray-600 mb-4">Seamless team collaboration with shared workspaces.</p>
                 </div>
                 <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
+                    <div class="text-indigo-600 text-3xl mb-3"><i class="fas fa-search"></i></div>
                     <h3 class="text-xl font-bold mb-3 text-indigo-600">Advanced Code Analysis</h3>
                     <p class="text-gray-600 mb-4">Deep code inspection and quality metrics.</p>
                 </div>
                 <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
+                    <div class="text-indigo-600 text-3xl mb-3"><i class="fas fa-code"></i></div>
                     <h3 class="text-xl font-bold mb-3 text-indigo-600">Multi-language Support</h3>
                     <p class="text-gray-600 mb-4">Support for 50+ programming languages.</p>
                 </div>
                 <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
+                    <div class="text-indigo-600 text-3xl mb-3"><i class="fas fa-laptop"></i></div>
                     <h3 class="text-xl font-bold mb-3 text-indigo-600">Cross-platform</h3>
                     <p class="text-gray-600 mb-4">Windows, macOS, and Linux support.</p>
                 </div>
                 <div class="bg-white rounded-lg shadow-lg p-6 card-hover">
+                    <div class="text-indigo-600 text-3xl mb-3"><i class="fas fa-puzzle-piece"></i></div>
                     <h3 class="text-xl font-bold mb-3 text-indigo-600">Extensible Architecture</h3>
                     <p class="text-gray-600 mb-4">Plugin system for custom extensions.</p>
                 </div>
@@ -152,20 +215,196 @@
                 <div class="ml-4">├── .kiro/</div>
                 <div class="ml-8">├── specs/</div>
                 <div class="ml-12">├── adnify-enhancement/</div>
+                <div class="ml-16">├── design.md</div>
+                <div class="ml-16">├── requirements.md</div>
+                <div class="ml-16">└── tasks.md</div>
                 <div class="ml-12">└── ux-improvements/</div>
+                <div class="ml-16">├── design.md</div>
+                <div class="ml-16">├── requirements.md</div>
+                <div class="ml-16">└── tasks.md</div>
                 <div class="ml-4">├── public/</div>
                 <div class="ml-4">├── release/</div>
+                <div class="ml-8">├── win-unpacked/</div>
+                <div class="ml-12">├── locales/</div>
+                <div class="ml-16">├── af.pak</div>
+                <div class="ml-16">├── am.pak</div>
+                <div class="ml-16">├── ar.pak</div>
+                <div class="ml-16">├── bg.pak</div>
+                <div class="ml-16">├── bn.pak</div>
+                <div class="ml-16">├── ca.pak</div>
+                <div class="ml-16">├── cs.pak</div>
+                <div class="ml-16">├── da.pak</div>
+                <div class="ml-16">├── de.pak</div>
+                <div class="ml-16">├── el.pak</div>
+                <div class="ml-16">├── en-GB.pak</div>
+                <div class="ml-16">├── en-US.pak</div>
+                <div class="ml-16">├── es-419.pak</div>
+                <div class="ml-16">├── es.pak</div>
+                <div class="ml-16">├── et.pak</div>
+                <div class="ml-16">├── fa.pak</div>
+                <div class="ml-16">├── fi.pak</div>
+                <div class="ml-16">├── fil.pak</div>
+                <div class="ml-16">├── fr.pak</div>
+                <div class="ml-16">├── gu.pak</div>
+                <div class="ml-16">├── he.pak</div>
+                <div class="ml-16">├── hi.pak</div>
+                <div class="ml-16">├── hr.pak</div>
+                <div class="ml-16">├── hu.pak</div>
+                <div class="ml-16">├── id.pak</div>
+                <div class="ml-16">├── it.pak</div>
+                <div class="ml-16">├── ja.pak</div>
+                <div class="ml-16">├── kn.pak</div>
+                <div class="ml-16">├── ko.pak</div>
+                <div class="ml-16">├── lt.pak</div>
+                <div class="ml-16">├── lv.pak</div>
+                <div class="ml-16">├── ml.pak</div>
+                <div class="ml-16">├── mr.pak</div>
+                <div class="ml-16">├── ms.pak</div>
+                <div class="ml-16">├── nb.pak</div>
+                <div class="ml-16">├── nl.pak</div>
+                <div class="ml-16">├── pl.pak</div>
+                <div class="ml-16">├── pt-BR.pak</div>
+                <div class="ml-16">├── pt-PT.pak</div>
+                <div class="ml-16">├── ro.pak</div>
+                <div class="ml-16">├── ru.pak</div>
+                <div class="ml-16">├── sk.pak</div>
+                <div class="ml-16">├── sl.pak</div>
+                <div class="ml-16">├── sr.pak</div>
+                <div class="ml-16">├── sv.pak</div>
+                <div class="ml-16">├── sw.pak</div>
+                <div class="ml-16">├── ta.pak</div>
+                <div class="ml-16">├── te.pak</div>
+                <div class="ml-16">├── th.pak</div>
+                <div class="ml-16">├── tr.pak</div>
+                <div class="ml-16">├── uk.pak</div>
+                <div class="ml-16">├── ur.pak</div>
+                <div class="ml-16">├── vi.pak</div>
+                <div class="ml-16">├── zh-CN.pak</div>
+                <div class="ml-16">└── zh-TW.pak</div>
+                <div class="ml-12">├── resources/</div>
+                <div class="ml-12">├── app.asar.unpacked/</div>
+                <div class="ml-12">└── app.asar</div>
+                <div class="ml-8">├── Adnify Setup 1.0.0.exe.blockmap</div>
+                <div class="ml-8">├── builder-debug.yml</div>
+                <div class="ml-8">└── builder-effective-config.yaml</div>
                 <div class="ml-4">├── resources/</div>
+                <div class="ml-8">└── icon.icns</div>
                 <div class="ml-4">├── scripts/</div>
+                <div class="ml-8">└── generate-icons.js</div>
                 <div class="ml-4">├── src/</div>
                 <div class="ml-8">├── main/</div>
+                <div class="ml-12">├── indexing/</div>
+                <div class="ml-16">├── chunker.ts</div>
+                <div class="ml-16">├── embedder.ts</div>
+                <div class="ml-16">├── index.ts</div>
+                <div class="ml-16">├── indexService.ts</div>
+                <div class="ml-16">├── types.ts</div>
+                <div class="ml-16">└── vectorStore.ts</div>
+                <div class="ml-12">├── llm/</div>
+                <div class="ml-16">├── providers/</div>
+                <div class="ml-16">├── llmService.ts</div>
+                <div class="ml-16">└── types.ts</div>
+                <div class="ml-12">├── types/</div>
+                <div class="ml-16">└── native-modules.d.ts</div>
+                <div class="ml-12">├── lspServer.ts</div>
+                <div class="ml-12">├── main.ts</div>
+                <div class="ml-12">└── preload.ts</div>
                 <div class="ml-8">└── renderer/</div>
+                <div class="ml-12">├── agent/</div>
+                <div class="ml-16">├── types/</div>
+                <div class="ml-16">├── chatThreadService.ts</div>
+                <div class="ml-16">├── checkpointService.ts</div>
+                <div class="ml-16">├── codeApplyService.ts</div>
+                <div class="ml-16">├── composerService.ts</div>
+                <div class="ml-16">├── contextService.ts</div>
+                <div class="ml-16">├── gitService.ts</div>
+                <div class="ml-16">├── index.ts</div>
+                <div class="ml-16">├── lintService.ts</div>
+                <div class="ml-16">├── messageSummaryService.ts</div>
+                <div class="ml-16">├── prompts.ts</div>
+                <div class="ml-16">├── promptTemplates.ts</div>
+                <div class="ml-16">├── rulesService.ts</div>
+                <div class="ml-16">├── sessionService.ts</div>
+                <div class="ml-16">├── streamingEditService.ts</div>
+                <div class="ml-16">├── terminalService.ts</div>
+                <div class="ml-16">├── toolsService.ts</div>
+                <div class="ml-16">└── toolTypes.ts</div>
+                <div class="ml-12">├── assets/</div>
+                <div class="ml-16">└── icon/</div>
+                <div class="ml-12">├── components/</div>
+                <div class="ml-16">├── chat/</div>
+                <div class="ml-16">├── ActivityBar.tsx</div>
+                <div class="ml-16">├── ChatPanel.tsx</div>
+                <div class="ml-16">├── CheckpointPanel.tsx</div>
+                <div class="ml-16">├── CodePreview.tsx</div>
+                <div class="ml-16">├── CommandPalette.tsx</div>
+                <div class="ml-16">├── ComposerPanel.tsx</div>
+                <div class="ml-16">├── DiffViewer.tsx</div>
+                <div class="ml-16">├── Editor.tsx</div>
+                <div class="ml-16">├── EditorContextMenu.tsx</div>
+                <div class="ml-16">├── ErrorBoundary.tsx</div>
+                <div class="ml-16">├── FileMentionPopup.tsx</div>
+                <div class="ml-16">├── GhostTextWidget.ts</div>
+                <div class="ml-16">├── InlineEdit.tsx</div>
+                <div class="ml-16">├── KeyboardShortcuts.tsx</div>
+                <div class="ml-16">├── Logo.tsx</div>
+                <div class="ml-16">├── OnboardingWizard.tsx</div>
+                <div class="ml-16">├── QuickOpen.tsx</div>
+                <div class="ml-16">├── SessionList.tsx</div>
+                <div class="ml-16">├── SettingsModal.tsx</div>
+                <div class="ml-16">├── Sidebar.tsx</div>
+                <div class="ml-16">├── StatusBar.tsx</div>
+                <div class="ml-16">├── TerminalPanel.tsx</div>
+                <div class="ml-16">├── TitleBar.tsx</div>
+                <div class="ml-16">└── Toast.tsx</div>
+                <div class="ml-12">├── config/</div>
+                <div class="ml-16">├── editorConfig.ts</div>
+                <div class="ml-16">├── pluginSystem.ts</div>
+                <div class="ml-16">└── themeConfig.ts</div>
+                <div class="ml-12">├── hooks/</div>
+                <div class="ml-16">├── agent/</div>
+                <div class="ml-16">├── useAgent.ts</div>
+                <div class="ml-16">└── useChatThread.ts</div>
+                <div class="ml-12">├── i18n/</div>
+                <div class="ml-16">└── index.ts</div>
+                <div class="ml-12">├── services/</div>
+                <div class="ml-16">├── auth/</div>
+                <div class="ml-16">├── aiEnhancedService.ts</div>
+                <div class="ml-16">├── completionService.ts</div>
+                <div class="ml-16">├── largeFileService.ts</div>
+                <div class="ml-16">├── lspProviders.ts</div>
+                <div class="ml-16">├── lspService.ts</div>
+                <div class="ml-16">├── monacoTypeService.ts</div>
+                <div class="ml-16">└── workspaceStateService.ts</div>
+                <div class="ml-12">├── store/</div>
+                <div class="ml-16">├── slices/</div>
+                <div class="ml-16">└── index.ts</div>
+                <div class="ml-12">├── styles/</div>
+                <div class="ml-16">└── globals.css</div>
+                <div class="ml-12">├── types/</div>
+                <div class="ml-16">├── electron.d.ts</div>
+                <div class="ml-16">├── images.d.ts</div>
+                <div class="ml-16">├── index.ts</div>
+                <div class="ml-16">├── monaco-workers.d.ts</div>
+                <div class="ml-16">└── provider.ts</div>
+                <div class="ml-12">├── utils/</div>
+                <div class="ml-16">├── partialJson.ts</div>
+                <div class="ml-16">└── pathUtils.ts</div>
+                <div class="ml-12">├── App.tsx</div>
+                <div class="ml-12">├── main.tsx</div>
+                <div class="ml-12">└── monacoWorker.ts</div>
                 <div class="ml-4">├── tests/</div>
-                <div class="ml-4">├── void/</div>
+                <div class="ml-8">├── components/</div>
+                <div class="ml-12">└── GhostTextWidget.property.test.ts</div>
+                <div class="ml-8">└── services/</div>
+                <div class="ml-12">└── completionService.property.test.ts</div>
+                <div class="ml-4">└── void/</div>
                 <div class="ml-4">├── .editorconfig</div>
                 <div class="ml-4">├── package.json</div>
                 <div class="ml-4">├── tailwind.config.js</div>
                 <div class="ml-4">├── tsconfig.json</div>
+                <div class="ml-4">├── tsconfig.main.json</div>
+                <div class="ml-4">├── tsconfig.node.json</div>
                 <div class="ml-4">└── vite.config.ts</div>
             </div>
         </section>
@@ -247,15 +486,81 @@ pnpm run dev
             </div>
         </section>
 
-        <!-- Architecture Diagram -->
+        <!-- System Architecture -->
         <section class="mb-16">
             <h2 class="text-3xl font-bold mb-8 text-gray-800">System Architecture</h2>
-            <div class="bg-white rounded-lg shadow-lg p-8">
-                <div class="flex justify-center items-center h-64">
+            <div class="arch-diagram">
+                <div class="text-center mb-8">
+                    <h3 class="text-2xl font-bold mb-4">Electron-based Architecture</h3>
+                    <p class="opacity-90">Main Process ↔ Renderer Process ↔ Native Modules</p>
+                </div>
+                <div class="flex justify-center items-center space-x-12 mb-8">
                     <div class="text-center">
-                        <div class="text-6xl font-bold text-indigo-300 mb-4">🏗️</div>
-                        <p class="text-gray-600 text-lg">Electron-based Architecture</p>
-                        <p class="text-gray-600 mt-2">Main Process ↔ Renderer Process ↔ Native Modules</p>
+                        <div class="w-16 h-16 bg-white rounded-lg flex items-center justify-center mb-2">
+                            <i class="fas fa-microchip text-indigo-600 text-2xl"></i>
+                        </div>
+                        <p class="font-semibold">Main Process</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-16 h-16 bg-white rounded-lg flex items-center justify-center mb-2">
+                            <i class="fas fa-browser text-indigo-600 text-2xl"></i>
+                        </div>
+                        <p class="font-semibold">Renderer Process</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-16 h-16 bg-white rounded-lg flex items-center justify-center mb-2">
+                            <i class="fas fa-cog text-indigo-600 text-2xl"></i>
+                        </div>
+                        <p class="font-semibold">Native Modules</p>
+                    </div>
+                </div>
+                <div class="flex justify-center space-x-8">
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center mb-2">
+                            <i class="fas fa-database text-indigo-600 text-xl"></i>
+                        </div>
+                        <p class="font-semibold text-sm">Indexing Service</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center mb-2">
+                            <i class="fas fa-robot text-indigo-600 text-xl"></i>
+                        </div>
+                        <p class="font-semibold text-sm">LLM Service</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center mb-2">
+                            <i class="fas fa-code text-indigo-600 text-xl"></i>
+                        </div>
+                        <p class="font-semibold text-sm">Agent Services</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Author Information -->
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold mb-8 text-gray-800">Author Information</h2>
+            <div class="bg-white rounded-lg shadow-lg p-8">
+                <div class="flex items-center mb-6">
+                    <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mr-6">
+                        <i class="fas fa-user text-indigo-600 text-3xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold text-indigo-600">adnaan</h3>
+                        <p class="text-gray-600">Project Creator & Maintainer</p>
+                    </div>
+                </div>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="font-semibold text-gray-800 mb-2">About</h4>
+                        <p class="text-gray-600">Passionate developer and AI enthusiast dedicated to creating innovative tools for developers.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-800 mb-2">Contact</h4>
+                        <div class="space-y-1 text-gray-600">
+                            <div>Email: adnaan@example.com</div>
+                            <div>GitHub: github.com/adnaan</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -314,6 +619,80 @@ pnpm run dev
                         <li>• Team Management</li>
                     </ul>
                 </div>
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-xl font-bold text-indigo-600">Q3 2025</h3>
+                        <span class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm">Future</span>
+                    </div>
+                    <ul class="text-gray-600 ml-4 space-y-1">
+                        <li>• Cloud Integration</li>
+                        <li>• AI Code Review</li>
+                        <li>• Advanced Security</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Project Timeline -->
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold mb-8 text-gray-800">Project Timeline</h2>
+            <div class="space-y-6">
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="bg-white rounded-lg shadow-lg p-6">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-xl font-bold text-indigo-600">Initial Development</h3>
+                            <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">2024 Q1</span>
+                        </div>
+                        <ul class="text-gray-600 ml-4 space-y-1">
+                            <li>• Project initialization</li>
+                            <li>• Core architecture design</li>
+                            <li>• Basic AI integration</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="bg-white rounded-lg shadow-lg p-6">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-xl font-bold text-indigo-600">Alpha Release</h3>
+                            <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">2024 Q3</span>
+                        </div>
+                        <ul class="text-gray-600 ml-4 space-y-1">
+                            <li>• First alpha version</li>
+                            <li>• Basic functionality testing</li>
+                            <li>• Initial user feedback</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="bg-white rounded-lg shadow-lg p-6">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-xl font-bold text-indigo-600">Beta Release</h3>
+                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">2024 Q4</span>
+                        </div>
+                        <ul class="text-gray-600 ml-4 space-y-1">
+                            <li>• Beta testing phase</li>
+                            <li>• Feature refinements</li>
+                            <li>• Performance optimizations</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="bg-white rounded-lg shadow-lg p-6">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-xl font-bold text-indigo-600">Current Development</h3>
+                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">2025 Q1</span>
+                        </div>
+                        <ul class="text-gray-600 ml-4 space-y-1">
+                            <li>• Advanced AI features</li>
+                            <li>• Collaboration improvements</li>
+                            <li>• Plugin system development</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -359,6 +738,16 @@ pnpm run dev
                 setTimeout(() => copyBtn.textContent = 'Copy', 2000);
             });
             block.parentNode.insertBefore(copyBtn, block);
+        });
+
+        // Add hover effects to cards
+        document.querySelectorAll('.card-hover').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                card.style.transform = 'translateY(-4px)';
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'translateY(0)';
+            });
         });
     </script>
 </body>

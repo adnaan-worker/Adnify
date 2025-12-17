@@ -5,11 +5,19 @@
 
 import { useState, useCallback, memo } from 'react'
 import { History, RotateCcw, ChevronDown, ChevronUp, FileText, MessageSquare, Wrench, X } from 'lucide-react'
-import { useStore } from '../store'
-import { useChatThreads } from '../hooks/useChatThread'
-import { Checkpoint } from '../agent/toolTypes'
-import { checkpointService } from '../agent/checkpointService'
-import { getFileName } from '../utils/pathUtils'
+import { useStore } from '@/renderer/store'
+import { useAgentStore } from '@/renderer/agent/core/AgentStore'
+import { checkpointService } from '@/renderer/agent/checkpointService'
+import { getFileName } from '@/renderer/utils/pathUtils'
+
+// Checkpoint 类型定义
+interface Checkpoint {
+  id: string
+  type: 'user_message' | 'tool_edit'
+  description: string
+  timestamp: number
+  snapshots: Record<string, { content: string }>
+}
 
 interface CheckpointItemProps {
   checkpoint: Checkpoint
@@ -105,8 +113,19 @@ interface CheckpointPanelProps {
 
 export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
   const { checkpoints, currentCheckpointIdx, setCurrentCheckpointIdx } = useStore()
-  const { addAssistantMessage } = useChatThreads()
+  const addAssistantMessage = useAgentStore(state => state.addAssistantMessage)
+  const appendToAssistant = useAgentStore(state => state.appendToAssistant)
+  const finalizeAssistant = useAgentStore(state => state.finalizeAssistant)
   const [isRollingBack, setIsRollingBack] = useState(false)
+  
+  // 辅助函数：添加完整的助手消息
+  const showMessage = (text: string) => {
+    const id = addAssistantMessage()
+    if (id) {
+      appendToAssistant(id, text)
+      finalizeAssistant(id)
+    }
+  }
 
   const handleRollback = useCallback(async (checkpoint: Checkpoint) => {
     if (isRollingBack) return
@@ -116,7 +135,7 @@ export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
       const result = await checkpointService.rollbackTo(checkpoint.id)
 
       if (result.success) {
-        addAssistantMessage(
+        showMessage(
           `✅ Rolled back to checkpoint: "${checkpoint.description}"\nRestored ${result.restoredFiles.length} file(s).`
         )
 
@@ -126,13 +145,13 @@ export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
           setCurrentCheckpointIdx(idx)
         }
       } else {
-        addAssistantMessage(
+        showMessage(
           `⚠️ Rollback completed with errors:\n${result.errors.join('\n')}`
         )
       }
     } catch (error: unknown) {
       const err = error as { message?: string }
-      addAssistantMessage(
+      showMessage(
         `❌ Rollback failed: ${err.message}`
       )
     } finally {

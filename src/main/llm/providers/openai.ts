@@ -62,61 +62,52 @@ export class OpenAIProvider extends BaseProvider {
 				openaiMessages.push({ role: 'system', content: systemPrompt })
 			}
 
-			// 按照 void 的方式处理消息：遇到 tool 消息时，修改前一个 assistant 消息添加 tool_calls
-			for (let i = 0; i < messages.length; i++) {
-				const msg = messages[i]
-				
-				if (msg.role === 'tool') {
-					// 找到最近的 assistant 消息并添加 tool_calls
-					let foundAssistant = false
-					for (let j = openaiMessages.length - 1; j >= 0; j--) {
-						const prevMsg = openaiMessages[j]
-						if (prevMsg?.role === 'assistant' && msg.toolCallId && msg.toolName) {
-							// 如果还没有 tool_calls，初始化
-							if (!prevMsg.tool_calls) {
-								prevMsg.tool_calls = []
-							}
-							// 检查是否已经添加过这个 tool_call
-							const alreadyExists = prevMsg.tool_calls.some(tc => tc.id === msg.toolCallId)
-							if (!alreadyExists) {
-								// 添加 tool_call 到 assistant 消息
-								prevMsg.tool_calls.push({
-									id: msg.toolCallId,
-									type: 'function',
-									function: {
-										name: msg.toolName,
-										arguments: JSON.stringify(msg.rawParams || {}),
-									}
-								})
-							}
-							foundAssistant = true
-							break
-						}
-					}
-					
-					if (!foundAssistant) {
-						this.log('warn', 'No assistant message found for tool message, skipping', { 
-							toolCallId: msg.toolCallId,
-							toolName: msg.toolName 
-						})
-						continue
-					}
-					
-					// 添加 tool 消息
-					openaiMessages.push({
-						role: 'tool',
-						content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-						tool_call_id: msg.toolCallId!,
-					})
-				} else if (msg.role === 'user') {
+			// 处理消息：直接转换格式，AgentService 已经确保了正确的消息顺序
+			for (const msg of messages) {
+				if (msg.role === 'user') {
 					openaiMessages.push({
 						role: 'user',
 						content: this.convertContent(msg.content),
 					})
 				} else if (msg.role === 'assistant') {
+					// 处理 assistant 消息，content 可能是 string、array 或 null
+					let assistantContent: string | null = null
+					if (typeof msg.content === 'string') {
+						assistantContent = msg.content
+					} else if (Array.isArray(msg.content)) {
+						assistantContent = msg.content.map(p => p.type === 'text' ? p.text : '').join('')
+					}
+					
+					// 如果有 tool_calls，添加到消息中
+					if (msg.tool_calls && msg.tool_calls.length > 0) {
+						openaiMessages.push({
+							role: 'assistant',
+							content: assistantContent,
+							tool_calls: msg.tool_calls,
+						})
+					} else {
+						openaiMessages.push({
+							role: 'assistant',
+							content: assistantContent || '',
+						})
+					}
+				} else if (msg.role === 'tool') {
+					// tool 消息必须有 toolCallId（支持两种命名风格）
+					const toolCallId = msg.tool_call_id || msg.toolCallId
+					if (!toolCallId) {
+						this.log('warn', 'Tool message missing toolCallId, skipping', { content: String(msg.content).slice(0, 50) })
+						continue
+					}
 					openaiMessages.push({
-						role: 'assistant',
-						content: typeof msg.content === 'string' ? msg.content : msg.content.map(p => p.type === 'text' ? p.text : '').join(''),
+						role: 'tool',
+						content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+						tool_call_id: toolCallId,
+					})
+				} else if (msg.role === 'system') {
+					// system 消息通常在开头，但也支持中间插入
+					openaiMessages.push({
+						role: 'system',
+						content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
 					})
 				}
 			}

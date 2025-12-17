@@ -35,9 +35,20 @@ export type MessageContent = string | Array<TextContent | ImageContent>
 export interface LLMMessage {
 	role: 'user' | 'assistant' | 'system' | 'tool'
 	content: MessageContent
-	toolCallId?: string
+	// For tool messages (支持两种命名风格)
+	toolCallId?: string      // camelCase (内部使用)
+	tool_call_id?: string    // snake_case (OpenAI API 格式)
 	toolName?: string
 	rawParams?: Record<string, unknown>  // 工具调用的原始参数
+	// For assistant messages with tool calls
+	tool_calls?: Array<{
+		id: string
+		type: 'function'
+		function: {
+			name: string
+			arguments: string
+		}
+	}>
 }
 
 export interface ToolDefinition {

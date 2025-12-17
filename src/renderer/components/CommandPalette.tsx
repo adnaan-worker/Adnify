@@ -9,9 +9,9 @@ import {
   MessageSquare, History, Trash2, RefreshCw, Save,
   X, Zap, Keyboard
 } from 'lucide-react'
-import { useStore } from '../store'
-import { useChatThreads } from '../hooks/useChatThread'
-import { t } from '../i18n'
+import { useStore } from '@/renderer/store'
+import { useAgent } from '@/renderer/hooks/useAgent'
+import { t } from '@/renderer/i18n'
 
 interface Command {
   id: string
@@ -76,7 +76,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     language,
   } = useStore()
   
-  const { clearMessages } = useChatThreads()
+  const { clearMessages } = useAgent()
 
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)

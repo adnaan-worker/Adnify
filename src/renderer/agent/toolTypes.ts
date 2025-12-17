@@ -1,51 +1,72 @@
 /**
- * 工具系统类型定义（兼容层）
- * 新代码请使用 ./types/chatTypes.ts 和 ./types/toolTypes.ts
+ * 工具相关类型定义
  */
 
-// 从新类型文件重新导出
-export { ToolApprovalType } from './types/chatTypes'
+// ===== Lint 相关类型 =====
 
-// 保留旧的类型定义供兼容使用
-export type ToolStatus =
-	| 'pending'      // 等待执行
-	| 'awaiting_user' // 等待用户审批
-	| 'running'      // 正在执行
-	| 'success'      // 执行成功
-	| 'error'        // 执行失败
-	| 'rejected'     // 用户拒绝
-
-// Lint 错误类型
 export interface LintError {
-	code: string
-	message: string
-	severity: 'error' | 'warning'
-	startLine: number
-	endLine: number
-	file: string
+  file: string
+  line: number
+  column: number
+  message: string
+  severity: 'error' | 'warning' | 'info'
+  rule?: string
 }
 
-// 文件快照（用于检查点）- 旧格式
-export interface FileSnapshot {
-	path: string
-	content: string
-	timestamp: number
-}
+// ===== 流式编辑相关类型 =====
 
-// 检查点 - 旧格式
-export interface Checkpoint {
-	id: string
-	type: 'user_message' | 'tool_edit'
-	timestamp: number
-	snapshots: Record<string, FileSnapshot>
-	description: string
-}
-
-// 流式编辑状态
 export interface StreamingEditState {
-	filePath: string
-	originalContent: string
-	currentContent: string
-	isComplete: boolean
-	startTime: number
+  editId: string
+  filePath: string
+  originalContent: string
+  currentContent: string
+  isComplete: boolean
+  startTime: number
+  endTime?: number
 }
+
+// ===== 终端相关类型 =====
+
+export interface PersistentTerminal {
+  id: string
+  name: string
+  cwd: string
+  isRunning: boolean
+  lastOutput: string
+  createdAt: number
+}
+
+export interface TerminalCommandResult {
+  success: boolean
+  output: string
+  exitCode: number
+  duration: number
+}
+
+// ===== Checkpoint 相关类型 =====
+
+export interface FileSnapshot {
+  path: string
+  content: string | null
+  timestamp: number
+}
+
+export interface Checkpoint {
+  id: string
+  type: 'user_message' | 'tool_edit'
+  timestamp: number
+  snapshots: Record<string, FileSnapshot>
+  description: string
+}
+
+// ===== 工具状态类型 =====
+
+export type ToolStatus =
+  | 'pending'
+  | 'running'
+  | 'success'
+  | 'error'
+  | 'rejected'
+  | 'awaiting'
+
+export type ToolApprovalType = 'edits' | 'terminal' | 'dangerous'
