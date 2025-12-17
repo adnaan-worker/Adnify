@@ -376,7 +376,13 @@ export function registerFileHandlers(
 // 清理资源
 export async function cleanupFileWatcher() {
   if (watcherSubscription) {
-    await watcherSubscription.unsubscribe()
+    try {
+      await watcherSubscription.unsubscribe()
+    } catch (e) {
+      // 忽略 "Object has been destroyed" 错误
+      // 这在 Electron 退出时是正常的，因为 native 对象可能已被销毁
+      console.log('[Watcher] Cleanup skipped (already destroyed)')
+    }
     watcherSubscription = null
   }
 }

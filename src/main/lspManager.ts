@@ -80,17 +80,19 @@ function getTypeScriptServerCommand(): { command: string; args: string[] } | nul
  * 获取 HTML 语言服务器命令
  */
 function getHtmlServerCommand(): { command: string; args: string[] } | null {
+  // 优先查找 .js 文件（跨平台兼容）
+  const jsPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-html-language-server.js')
+  if (jsPath) {
+    return { command: process.execPath, args: [jsPath, '--stdio'] }
+  }
+
   const serverPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-html-language-server')
-  
   if (serverPath) {
-    // Windows 上使用 .cmd 文件
+    // Windows 上使用 node 执行
     if (process.platform === 'win32') {
-      const cmdPath = serverPath + '.cmd'
-      if (fs.existsSync(cmdPath)) {
-        return { command: cmdPath, args: ['--stdio'] }
-      }
+      return { command: process.execPath, args: [serverPath, '--stdio'] }
     }
-    return { command: process.execPath, args: [serverPath, '--stdio'] }
+    return { command: serverPath, args: ['--stdio'] }
   }
 
   console.error('[LSP] vscode-html-language-server not found')
@@ -101,16 +103,17 @@ function getHtmlServerCommand(): { command: string; args: string[] } | null {
  * 获取 CSS 语言服务器命令
  */
 function getCssServerCommand(): { command: string; args: string[] } | null {
+  const jsPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-css-language-server.js')
+  if (jsPath) {
+    return { command: process.execPath, args: [jsPath, '--stdio'] }
+  }
+
   const serverPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-css-language-server')
-  
   if (serverPath) {
     if (process.platform === 'win32') {
-      const cmdPath = serverPath + '.cmd'
-      if (fs.existsSync(cmdPath)) {
-        return { command: cmdPath, args: ['--stdio'] }
-      }
+      return { command: process.execPath, args: [serverPath, '--stdio'] }
     }
-    return { command: process.execPath, args: [serverPath, '--stdio'] }
+    return { command: serverPath, args: ['--stdio'] }
   }
 
   console.error('[LSP] vscode-css-language-server not found')
@@ -121,16 +124,17 @@ function getCssServerCommand(): { command: string; args: string[] } | null {
  * 获取 JSON 语言服务器命令
  */
 function getJsonServerCommand(): { command: string; args: string[] } | null {
+  const jsPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-json-language-server.js')
+  if (jsPath) {
+    return { command: process.execPath, args: [jsPath, '--stdio'] }
+  }
+
   const serverPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-json-language-server')
-  
   if (serverPath) {
     if (process.platform === 'win32') {
-      const cmdPath = serverPath + '.cmd'
-      if (fs.existsSync(cmdPath)) {
-        return { command: cmdPath, args: ['--stdio'] }
-      }
+      return { command: process.execPath, args: [serverPath, '--stdio'] }
     }
-    return { command: process.execPath, args: [serverPath, '--stdio'] }
+    return { command: serverPath, args: ['--stdio'] }
   }
 
   console.error('[LSP] vscode-json-language-server not found')
@@ -281,6 +285,23 @@ class LspManager {
       this.servers.delete(config.name)
     })
 
+    // 等待进程 stdout 可用
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Process stdout not ready')), 5000)
+      if (proc.stdout?.readable) {
+        clearTimeout(timeout)
+        resolve()
+      } else {
+        proc.stdout?.once('readable', () => {
+          clearTimeout(timeout)
+          resolve()
+        })
+      }
+    }).catch(() => {
+      // 即使 stdout 检查失败也继续尝试初始化
+      console.warn(`[LSP ${config.name}] stdout ready check skipped`)
+    })
+
     try {
       await this.initializeServer(config.name, workspacePath)
       instance.initialized = true
@@ -416,12 +437,18 @@ class LspManager {
       ? `file:///${normalizedPath}`
       : `file://${normalizedPath}`
 
+    // 等待进程就绪（给进程一点启动时间）
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // 使用更长的超时时间进行初始化（TypeScript 服务器可能需要较长时间）
+    const initTimeout = serverName === 'typescript' ? 60000 : 45000
+    
     await this.sendRequest(serverName, 'initialize', {
       processId: process.pid,
       rootUri,
       capabilities: this.getClientCapabilities(),
       workspaceFolders: [{ uri: rootUri, name: path.basename(workspacePath) }],
-    })
+    }, initTimeout)
 
     this.sendNotification(serverName, 'initialized', {})
   }

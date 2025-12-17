@@ -103,10 +103,51 @@ export default function ChatPanel() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputContainerRef = useRef<HTMLDivElement>(null)
 
-  // Auto scroll
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const messagesListRef = useRef<HTMLDivElement>(null)
+  const isAtBottomRef = useRef(true) // 默认在底部
+
+  // 滚动到底部辅助函数
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    if (scrollContainerRef.current) {
+      const { scrollHeight, clientHeight } = scrollContainerRef.current
+      // 使用 scrollTo 代替 scrollIntoView，控制更精确
+      scrollContainerRef.current.scrollTo({
+        top: scrollHeight - clientHeight,
+        behavior
+      })
+    }
+  }, [])
+
+  // 监听滚动事件，更新 isAtBottomRef
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current) return
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current
+    // 容差设为 50px
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight
+    isAtBottomRef.current = distanceToBottom < 50
+  }, [])
+
+  // 监听消息列表高度变化 (处理工具卡片展开等情况)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (!messagesListRef.current) return
+
+    const observer = new ResizeObserver(() => {
+      if (isAtBottomRef.current) {
+        scrollToBottom(isStreaming ? 'auto' : 'smooth')
+      }
+    })
+
+    observer.observe(messagesListRef.current)
+    return () => observer.disconnect()
+  }, [isStreaming, scrollToBottom])
+
+  // 消息更新时的滚动逻辑
+  useEffect(() => {
+    if (isAtBottomRef.current) {
+      scrollToBottom(isStreaming ? 'auto' : 'smooth')
+    }
+  }, [messages, isStreaming, scrollToBottom])
 
   // 处理文件点击 - 用于打开文件
   const handleFileClick = useCallback(async (filePath: string) => {
@@ -520,7 +561,11 @@ export default function ChatPanel() {
       )}
 
       {/* Messages Area */}
-      <div className="absolute inset-0 overflow-y-auto custom-scrollbar bg-background pt-16 pb-48 z-0">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="absolute inset-0 overflow-y-auto custom-scrollbar bg-background pt-16 pb-48 z-0"
+      >
         {/* API Key Warning */}
         {!hasApiKey && (
           <div className="m-4 p-4 border border-warning/20 bg-warning/5 rounded-lg flex gap-3">
@@ -546,7 +591,7 @@ export default function ChatPanel() {
         )}
 
         {/* Messages List */}
-        <div className="flex flex-col pb-32">
+        <div ref={messagesListRef} className="flex flex-col pb-32">
           {messages.map((msg: ChatMessageType) => renderMessage(msg))}
         </div>
 

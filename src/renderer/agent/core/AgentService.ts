@@ -383,10 +383,21 @@ class AgentServiceClass {
             }
           }
 
+          // 验证工具名称是否合法 (防止 LLM 幻觉生成带空格的工具名)
+          const isValidToolName = (name: string) => {
+            return /^[a-zA-Z0-9_]+$/.test(name)
+          }
+
           // 流式工具调用开始 - 立即显示工具卡片
           if (chunk.type === 'tool_call_start' && chunk.toolCallDelta) {
             const toolId = chunk.toolCallDelta.id || `tool_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
             const toolName = chunk.toolCallDelta.name || 'unknown'
+
+            // 过滤无效的工具名称
+            if (!isValidToolName(toolName)) {
+              console.warn('[Agent] Ignoring invalid tool name:', toolName)
+              return
+            }
 
             console.log('[Agent] Tool call start:', toolId, toolName)
 
@@ -413,6 +424,7 @@ class AgentServiceClass {
 
               // 尝试解析部分参数用于预览
               const partialArgs = this.parsePartialArgs(currentToolCall.argsString, currentToolCall.name)
+
               if (this.currentAssistantId && Object.keys(partialArgs).length > 0) {
                 store.updateToolCall(this.currentAssistantId, currentToolCall.id, {
                   arguments: { ...partialArgs, _streaming: true },
@@ -453,6 +465,12 @@ class AgentServiceClass {
           // 处理完整的工具调用（非流式，某些 API 直接返回完整工具调用）
           if (chunk.type === 'tool_call' && chunk.toolCall) {
             console.log('[Agent] Complete tool call:', chunk.toolCall.id, chunk.toolCall.name)
+
+            if (!isValidToolName(chunk.toolCall.name)) {
+              console.warn('[Agent] Ignoring invalid tool name:', chunk.toolCall.name)
+              return
+            }
+
             if (!toolCalls.find(tc => tc.id === chunk.toolCall!.id)) {
               toolCalls.push(chunk.toolCall)
               if (this.currentAssistantId) {
@@ -470,6 +488,12 @@ class AgentServiceClass {
       // 监听非流式工具调用
       unsubscribers.push(
         window.electronAPI.onLLMToolCall((toolCall: LLMToolCall) => {
+          // 验证工具名称
+          if (!/^[a-zA-Z0-9_]+$/.test(toolCall.name)) {
+            console.warn('[Agent] Ignoring invalid tool name:', toolCall.name)
+            return
+          }
+
           // 避免重复添加
           if (!toolCalls.find(tc => tc.id === toolCall.id)) {
             toolCalls.push(toolCall)
@@ -787,11 +811,19 @@ class AgentServiceClass {
 
     // 提取通用代码参数
     const extractCodeParam = (paramName: string) => {
-      const match = argsString.match(new RegExp(`"${paramName}"\\s*:\\s*"([\\s\\S]*?)(?:"|$)`))
+      // 匹配 JSON 字符串值：允许非引号字符或转义字符
+      const regex = new RegExp(`"${paramName}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*?)(?:"|$)`)
+      const match = argsString.match(regex)
+
+      // DEBUG LOG
+      if (paramName === 'search_replace_blocks' && match) {
+        console.log('[Agent] extractCodeParam match:', match[1].slice(0, 50))
+      }
+
       if (match) {
         try {
           // 尝试处理转义字符
-          return match[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"')
+          return match[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
         } catch {
           return match[1]
         }

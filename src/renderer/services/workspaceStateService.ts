@@ -1,21 +1,12 @@
 /**
  * 工作区状态持久化服务
  * 保存和恢复打开的文件、活动文件等状态
- * 数据存储在 .adnify/workspace-state.json
  * 
- * 注意：此服务依赖 adnifyDirService 进行目录管理
- * 请确保在使用前已调用 adnifyDir.initialize()
+ * 数据通过 adnifyDir 服务统一管理
  */
 
 import { useStore } from '../store'
-import { adnifyDir, ADNIFY_FILES } from './adnifyDirService'
-
-interface WorkspaceState {
-  openFiles: string[] // 打开的文件路径列表
-  activeFilePath: string | null
-  expandedFolders: string[]
-  savedAt: number
-}
+import { adnifyDir, WorkspaceStateData } from './adnifyDirService'
 
 /**
  * 保存工作区状态
@@ -25,19 +16,16 @@ export async function saveWorkspaceState(): Promise<void> {
   
   if (!adnifyDir.isInitialized()) return
   
-  const state: WorkspaceState = {
+  const state: WorkspaceStateData = {
     openFiles: openFiles.map((f: { path: string }) => f.path),
-    activeFilePath,
+    activeFile: activeFilePath,
     expandedFolders: Array.from(expandedFolders),
-    savedAt: Date.now(),
+    scrollPositions: {},
+    cursorPositions: {},
   }
   
-  const success = await adnifyDir.writeJson(ADNIFY_FILES.WORKSPACE_STATE, state)
-  if (success) {
-    console.log('[WorkspaceState] Saved:', state.openFiles.length, 'files')
-  } else {
-    console.error('[WorkspaceState] Failed to save')
-  }
+  await adnifyDir.saveWorkspaceState(state)
+  console.log('[WorkspaceState] Saved:', state.openFiles.length, 'files')
 }
 
 /**
@@ -48,8 +36,8 @@ export async function restoreWorkspaceState(): Promise<void> {
   
   if (!adnifyDir.isInitialized()) return
   
-  const state = await adnifyDir.readJson<WorkspaceState>(ADNIFY_FILES.WORKSPACE_STATE)
-  if (!state) {
+  const state = await adnifyDir.getWorkspaceState()
+  if (!state.openFiles.length) {
     console.log('[WorkspaceState] No saved state')
     return
   }
@@ -74,8 +62,8 @@ export async function restoreWorkspaceState(): Promise<void> {
   }
   
   // 恢复活动文件
-  if (state.activeFilePath) {
-    setActiveFile(state.activeFilePath)
+  if (state.activeFile) {
+    setActiveFile(state.activeFile)
   }
   
   console.log('[WorkspaceState] Restored successfully')
@@ -103,7 +91,6 @@ export function initWorkspaceStateSync(): () => void {
   // 订阅 store 变化
   const unsubscribe = useStore.subscribe(
     (state, prevState) => {
-      // 检测打开文件或活动文件变化
       if (
         state.openFiles !== prevState.openFiles ||
         state.activeFilePath !== prevState.activeFilePath ||
@@ -114,9 +101,9 @@ export function initWorkspaceStateSync(): () => void {
     }
   )
   
-  // 窗口关闭前保存
-  const handleBeforeUnload = () => {
-    saveWorkspaceState()
+  // 窗口关闭前保存所有数据
+  const handleBeforeUnload = async () => {
+    await adnifyDir.flush()
   }
   window.addEventListener('beforeunload', handleBeforeUnload)
   

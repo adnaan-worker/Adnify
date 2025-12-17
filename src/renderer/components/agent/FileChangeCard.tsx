@@ -2,7 +2,7 @@
  * 文件变更卡片 - 简洁扁平化设计
  */
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Check, X, ChevronDown, ChevronRight, ExternalLink, Loader2 } from 'lucide-react'
 import { ToolCall } from '../../agent/core/types'
 
@@ -29,12 +29,24 @@ export default function FileChangeCard({
   const fileName = filePath.split(/[\\/]/).pop() || filePath
   const linesAdded = (meta?.linesAdded as number) || 0
   const linesRemoved = (meta?.linesRemoved as number) || 0
-  const oldContent = (meta?.oldContent as string) || ''
-  const newContent = (meta?.newContent as string) || (args.content as string) || ''
 
+  const isStreaming = args._streaming === true
   const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
   const isSuccess = toolCall.status === 'success'
   const isError = toolCall.status === 'error'
+
+  // 自动展开 logic
+  useEffect(() => {
+    if (isRunning || isStreaming || isSuccess) {
+      setIsExpanded(true)
+    }
+  }, [isRunning, isStreaming, isSuccess])
+
+  // 获取显示内容
+  const displayContent = useMemo(() => {
+    if (meta?.newContent) return meta.newContent as string
+    return (args.code || args.content || args.search_replace_blocks || args.replacement || args.source) as string || ''
+  }, [args, meta])
 
   return (
     <div className="my-1 rounded border border-white/5 overflow-hidden hover:bg-white/[0.02] transition-colors">
@@ -61,7 +73,13 @@ export default function FileChangeCard({
         )}
 
         {/* 状态指示 */}
-        {isRunning && <Loader2 className="w-3 h-3 text-accent animate-spin" />}
+        {isStreaming && (
+          <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-accent/10 rounded-full border border-accent/20">
+            <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+            <span className="text-[9px] font-medium text-accent uppercase tracking-wider">Generating...</span>
+          </div>
+        )}
+        {isRunning && !isStreaming && <Loader2 className="w-3 h-3 text-accent animate-spin" />}
         {isSuccess && <span className="px-1 py-0.5 text-[9px] bg-green-500/10 text-green-400 rounded border border-green-500/20">Applied</span>}
         {isError && <span className="px-1 py-0.5 text-[9px] bg-red-500/10 text-red-400 rounded border border-red-500/20">Failed</span>}
 
@@ -70,7 +88,7 @@ export default function FileChangeCard({
           <button
             onClick={(e) => {
               e.stopPropagation()
-              onOpenInEditor(filePath, oldContent, newContent)
+              onOpenInEditor(filePath, (meta?.oldContent as string) || '', (meta?.newContent as string) || '')
             }}
             className="p-0.5 text-text-muted hover:text-accent rounded transition-colors"
           >
@@ -80,11 +98,14 @@ export default function FileChangeCard({
       </div>
 
       {/* 展开的代码预览 */}
-      {isExpanded && newContent && (
+      {isExpanded && displayContent && (
         <div className="border-t border-white/5 max-h-48 overflow-auto custom-scrollbar bg-black/5">
           <pre className="p-2 text-[10px] font-mono text-text-secondary whitespace-pre-wrap pl-3 border-l border-white/5 ml-2 my-1.5">
-            {newContent.slice(0, 500)}
-            {newContent.length > 500 && '\n... (truncated)'}
+            {displayContent.slice(0, 500)}
+            {displayContent.length > 500 && '\n... (truncated)'}
+            {(isStreaming || isRunning) && (
+              <span className="inline-block w-1.5 h-3 bg-accent ml-1 animate-pulse align-middle" />
+            )}
           </pre>
         </div>
       )}

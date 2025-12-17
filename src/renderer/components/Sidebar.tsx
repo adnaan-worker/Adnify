@@ -298,6 +298,9 @@ function ExplorerView() {
     const handleOpenFolder = async () => {
         const path = await window.electronAPI.openFolder()
         if (path) {
+            // 保存当前工作区数据
+            await adnifyDir.flush()
+            
             // 重置服务（切换项目）
             const { checkpointService } = await import('../agent/checkpointService')
             checkpointService.reset()
@@ -305,13 +308,13 @@ function ExplorerView() {
             
             setWorkspacePath(path)
             
-            // 初始化 .adnify 目录（统一管理项目数据）
+            // 初始化 .adnify 目录（统一管理项目数据，会自动加载缓存）
             await adnifyDir.initialize(path)
             
             const items = await window.electronAPI.readDir(path)
             setFiles(items)
             
-            // 初始化新项目的检查点
+            // 初始化检查点服务
             await checkpointService.init()
         }
     }

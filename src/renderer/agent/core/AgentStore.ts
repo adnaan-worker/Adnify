@@ -4,7 +4,8 @@
  */
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
+import { agentStorage } from './agentStorage'
 import {
   ChatThread,
   ChatMessage,
@@ -911,6 +912,7 @@ export const useAgentStore = create<AgentStore>()(
     }),
     {
       name: 'adnify-agent-store',
+      storage: createJSONStorage(() => agentStorage),
       partialize: (state) => ({
         threads: state.threads,
         currentThreadId: state.currentThreadId,

@@ -21,6 +21,7 @@ import {
 } from '../../agent/core/types'
 import FileChangeCard from './FileChangeCard'
 import ToolCallCard from './ToolCallCard'
+import ToolCallGroup from './ToolCallGroup'
 import { WRITE_TOOLS } from '../../agent/core/ToolExecutor'
 import { getEditorConfig } from '../../config/editorConfig'
 
@@ -289,18 +290,77 @@ export default function ChatMessage({
               {/* Assistant message */}
               {isAssistantMessage(message) && message.parts && message.parts.length > 0 && (
                 <>
-                  {message.parts.map((part, index) => (
-                    <RenderPart
-                      key={`part-${index}`}
-                      part={part}
-                      index={index}
-                      pendingToolId={pendingToolId}
-                      onApproveTool={onApproveTool}
-                      onRejectTool={onRejectTool}
-                      onOpenDiff={onOpenDiff}
-                      fontSize={fontSize}
-                    />
-                  ))}
+                  {(() => {
+                    // Group consecutive tool calls
+                    const groups: Array<
+                      | { type: 'part'; part: AssistantPart; index: number }
+                      | { type: 'tool_group'; toolCalls: import('../../agent/core/types').ToolCall[]; startIndex: number }
+                    > = []
+
+                    let currentToolCalls: import('../../agent/core/types').ToolCall[] = []
+                    let startIndex = -1
+
+                    message.parts.forEach((part, index) => {
+                      if (isToolCallPart(part)) {
+                        if (currentToolCalls.length === 0) startIndex = index
+                        currentToolCalls.push(part.toolCall)
+                      } else {
+                        if (currentToolCalls.length > 0) {
+                          groups.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
+                          currentToolCalls = []
+                        }
+                        groups.push({ type: 'part', part, index })
+                      }
+                    })
+
+                    if (currentToolCalls.length > 0) {
+                      groups.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
+                    }
+
+                    return groups.map((group) => {
+                      if (group.type === 'part') {
+                        return (
+                          <RenderPart
+                            key={`part-${group.index}`}
+                            part={group.part}
+                            index={group.index}
+                            pendingToolId={pendingToolId}
+                            onApproveTool={onApproveTool}
+                            onRejectTool={onRejectTool}
+                            onOpenDiff={onOpenDiff}
+                            fontSize={fontSize}
+                          />
+                        )
+                      } else {
+                        // If only 1 tool call, render individually
+                        if (group.toolCalls.length === 1) {
+                          return (
+                            <RenderPart
+                              key={`part-${group.startIndex}`}
+                              part={message.parts![group.startIndex]}
+                              index={group.startIndex}
+                              pendingToolId={pendingToolId}
+                              onApproveTool={onApproveTool}
+                              onRejectTool={onRejectTool}
+                              onOpenDiff={onOpenDiff}
+                              fontSize={fontSize}
+                            />
+                          )
+                        }
+
+                        return (
+                          <ToolCallGroup
+                            key={`group-${group.startIndex}`}
+                            toolCalls={group.toolCalls}
+                            pendingToolId={pendingToolId}
+                            onApproveTool={onApproveTool}
+                            onRejectTool={onRejectTool}
+                            onOpenDiff={onOpenDiff}
+                          />
+                        )
+                      }
+                    })
+                  })()}
                 </>
               )}
 
@@ -309,34 +369,46 @@ export default function ChatMessage({
                 <>
                   {textContent && <MarkdownContent content={textContent} fontSize={fontSize} />}
                   {message.toolCalls && message.toolCalls.length > 0 && (
-                    <div className="space-y-2 mt-3">
-                      {message.toolCalls.map((tc, index) => {
-                        const isFileOp = WRITE_TOOLS.includes(tc.name)
-                        const isPending = tc.id === pendingToolId
+                    <div className="mt-3">
+                      {/* 如果有多个工具调用，使用分组显示 */}
+                      {message.toolCalls.length > 1 ? (
+                        <ToolCallGroup
+                          toolCalls={message.toolCalls}
+                          pendingToolId={pendingToolId}
+                          onApproveTool={onApproveTool}
+                          onRejectTool={onRejectTool}
+                          onOpenDiff={onOpenDiff}
+                        />
+                      ) : (
+                        // 单个工具调用直接显示
+                        message.toolCalls.map((tc, index) => {
+                          const isFileOp = WRITE_TOOLS.includes(tc.name)
+                          const isPending = tc.id === pendingToolId
 
-                        if (isFileOp) {
+                          if (isFileOp) {
+                            return (
+                              <FileChangeCard
+                                key={`tool-${tc.id}-${index}`}
+                                toolCall={tc}
+                                isAwaitingApproval={isPending}
+                                onApprove={isPending ? onApproveTool : undefined}
+                                onReject={isPending ? onRejectTool : undefined}
+                                onOpenInEditor={onOpenDiff}
+                              />
+                            )
+                          }
+
                           return (
-                            <FileChangeCard
+                            <ToolCallCard
                               key={`tool-${tc.id}-${index}`}
                               toolCall={tc}
                               isAwaitingApproval={isPending}
                               onApprove={isPending ? onApproveTool : undefined}
                               onReject={isPending ? onRejectTool : undefined}
-                              onOpenInEditor={onOpenDiff}
                             />
                           )
-                        }
-
-                        return (
-                          <ToolCallCard
-                            key={`tool-${tc.id}-${index}`}
-                            toolCall={tc}
-                            isAwaitingApproval={isPending}
-                            onApprove={isPending ? onApproveTool : undefined}
-                            onReject={isPending ? onRejectTool : undefined}
-                          />
-                        )
-                      })}
+                        })
+                      )}
                     </div>
                   )}
                 </>

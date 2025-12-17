@@ -3,18 +3,14 @@
  */
 import { useRef, useCallback, useMemo, useState } from 'react'
 import {
-  Send,
   Sparkles,
-  StopCircle,
   FileText,
-  Image as ImageIcon,
   X,
   Code,
   GitBranch,
   Terminal,
   Database,
   Paperclip,
-  Mic,
   ArrowUp
 } from 'lucide-react'
 import { useStore, ChatMode } from '../../store'

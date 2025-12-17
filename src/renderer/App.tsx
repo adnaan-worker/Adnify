@@ -21,6 +21,8 @@ import { themeManager } from './config/themeConfig'
 import { restoreWorkspaceState, initWorkspaceStateSync } from './services/workspaceStateService'
 import { ThemeManager } from './components/ThemeManager'
 import { adnifyDir } from './services/adnifyDirService'
+import { checkpointService } from './agent/checkpointService'
+import { useAgentStore } from './agent/core/AgentStore'
 
   // 暴露 store 给插件系统
   ; (window as any).__ADNIFY_STORE__ = { getState: () => useStore.getState() }
@@ -80,8 +82,8 @@ function AppContent() {
         await themeManager.init()
 
         // 检查是否首次使用（兼容老用户：如果已有配置但没有 onboardingCompleted 字段，视为已完成）
-        const onboardingCompleted = await window.electronAPI.getSetting('onboardingCompleted')
-        const hasExistingConfig = await window.electronAPI.getSetting('llmConfig')
+        const onboardingCompleted = await window.electronAPI.getSetting('onboardingCompleted') as boolean | undefined
+        const hasExistingConfig = await window.electronAPI.getSetting('llmConfig') as object | undefined
 
         updateLoaderStatus('Loading settings...')
         const savedConfig = await window.electronAPI.getSetting('llmConfig')
@@ -106,10 +108,16 @@ function AppContent() {
         const lastWorkspace = await window.electronAPI.restoreWorkspace()
         if (lastWorkspace) {
           setWorkspacePath(lastWorkspace)
-          
+
           // 初始化 .adnify 目录（统一管理项目数据）
           await adnifyDir.initialize(lastWorkspace)
-          
+
+          // 初始化检查点服务
+          await checkpointService.init()
+
+          // 重新加载 Agent Store（确保从 .adnify 读取最新数据）
+          await useAgentStore.persist.rehydrate()
+
           updateLoaderStatus('Loading files...')
           const items = await window.electronAPI.readDir(lastWorkspace)
           setFiles(items)
@@ -127,8 +135,9 @@ function AppContent() {
           // 显示引导的条件：
           // 1. onboardingCompleted 明确为 false（用户主动要求重新体验）
           // 2. 或者 onboardingCompleted 未设置且没有现有配置（真正的新用户）
+          // 注意：electron-store 返回 undefined 而不是 null
           const shouldShowOnboarding = onboardingCompleted === false ||
-            (onboardingCompleted === null && !hasExistingConfig)
+            (onboardingCompleted === undefined && !hasExistingConfig)
           if (shouldShowOnboarding) {
             setShowOnboarding(true)
           }

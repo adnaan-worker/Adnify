@@ -72,12 +72,12 @@ export default function ToolCallCard({
   const isError = toolCall.status === 'error'
   const isRejected = toolCall.status === 'rejected'
 
-  // 自动展开 logic: 当工具正在运行或刚成功，且是编辑类操作时，自动展开
+  // 自动展开 logic: 当工具正在运行、流式传输中或刚成功，且是编辑类操作时，自动展开
   useEffect(() => {
-    if ((isRunning || isSuccess) && (toolCall.name === 'edit_file' || toolCall.name === 'write_file' || toolCall.name === 'create_file')) {
+    if ((isRunning || isStreaming || isSuccess) && (toolCall.name === 'edit_file' || toolCall.name === 'write_file' || toolCall.name === 'create_file')) {
       setIsExpanded(true)
     }
-  }, [isRunning, isSuccess, toolCall.name])
+  }, [isRunning, isStreaming, isSuccess, toolCall.name])
 
   // 获取主要的代码内容参数
   const codeContent = useMemo(() => {

@@ -5,7 +5,7 @@ import { X, Circle, AlertTriangle, AlertCircle, RefreshCw, FileCode, ChevronRigh
 import { useStore } from '../store'
 import { useAgent } from '../hooks/useAgent'
 import { t } from '../i18n'
-import { getFileName, getDirPath, getPathSeparator, joinPath } from '../utils/pathUtils'
+import { getFileName, getPathSeparator } from '../utils/pathUtils'
 import { toast } from './Toast'
 import DiffViewer from './DiffViewer'
 import InlineEdit from './InlineEdit'
@@ -26,6 +26,7 @@ import {
 } from '../services/lspService'
 import { registerLspProviders } from '../services/lspProviders'
 import { getFileInfo, getLargeFileEditorOptions, getLargeFileWarning } from '../services/largeFileService'
+import { pathLinkService } from '../services/pathLinkService'
 // 导入 Monaco worker 配置
 import { monaco } from '../monacoWorker'
 // 导入编辑器配置
@@ -330,65 +331,17 @@ export default function Editor() {
       }
     )
 
-    // 注册链接提供者 - 处理 import 语句的 Ctrl+Click（作为备用）
-    monaco.languages.registerLinkProvider(['typescript', 'typescriptreact', 'javascript', 'javascriptreact'], {
-      provideLinks: (model) => {
-        const links: { range: import('monaco-editor').IRange; url?: string; tooltip?: string }[] = []
-        const lineCount = model.getLineCount()
-
-        for (let lineNumber = 1; lineNumber <= lineCount; lineNumber++) {
-          const lineContent = model.getLineContent(lineNumber)
-
-          // 匹配 import 语句中的路径
-          const importMatch = lineContent.match(/(?:import|from|require\()\s*['"]([^'"]+)['"]/g)
-          if (importMatch) {
-            importMatch.forEach(match => {
-              const pathMatch = match.match(/['"]([^'"]+)['"]/)
-              if (pathMatch) {
-                const importPath = pathMatch[1]
-                const startCol = lineContent.indexOf(pathMatch[0]) + 2
-                const endCol = startCol + importPath.length
-
-                links.push({
-                  range: {
-                    startLineNumber: lineNumber,
-                    startColumn: startCol,
-                    endLineNumber: lineNumber,
-                    endColumn: endCol,
-                  },
-                  // 使用自定义协议，在 resolveLink 中处理
-                  url: `adnify-import://${encodeURIComponent(importPath)}`,
-                  tooltip: `Ctrl+Click to open ${importPath}`,
-                })
-              }
-            })
-          }
-        }
-
-        return { links }
-      },
-      resolveLink: async (link) => {
-        if (!link.url) return link
-
-        // 处理自定义协议
-        const urlStr = typeof link.url === 'string' ? link.url : link.url.toString()
-        if (urlStr.startsWith('adnify-import://')) {
-          const importPath = decodeURIComponent(urlStr.replace('adnify-import://', ''))
-          const { activeFilePath: currentFilePath } = useStore.getState()
-          if (currentFilePath) {
-            await handleImportClick(importPath, currentFilePath)
-          }
-          // 返回 undefined 阻止默认行为
-          return undefined as any
-        }
-
-        return link
-      }
-    })
+    // 注册统一的路径链接提供者（支持 JS/TS import、HTML href/src、CSS url() 等）
+    const supportedLanguages = [
+      'typescript', 'typescriptreact', 'javascript', 'javascriptreact',
+      'html', 'htm', 'vue', 'svelte',
+      'css', 'scss', 'less',
+      'markdown'
+    ]
+    monaco.languages.registerLinkProvider(supportedLanguages, pathLinkService.createLinkProvider())
 
     // 监听 Ctrl+Click 事件来处理链接跳转
     editor.onMouseDown((e) => {
-      // 检查是否按住 Ctrl 键
       if (!e.event.ctrlKey && !e.event.metaKey) return
 
       const model = editor.getModel()
@@ -397,28 +350,17 @@ export default function Editor() {
       const position = e.target.position
       if (!position) return
 
-      const lineContent = model.getLineContent(position.lineNumber)
-
-      // 检查点击位置是否在 import 路径上
-      const importRegex = /(?:import|from|require\()\s*['"]([^'"]+)['"]/g
-      let match
-      while ((match = importRegex.exec(lineContent)) !== null) {
-        const pathMatch = match[0].match(/['"]([^'"]+)['"]/)
-        if (pathMatch) {
-          const importPath = pathMatch[1]
-          const startCol = lineContent.indexOf(pathMatch[0]) + 2
-          const endCol = startCol + importPath.length
-
-          // 检查点击位置是否在路径范围内
-          if (position.column >= startCol && position.column <= endCol) {
-            const { activeFilePath: currentFilePath } = useStore.getState()
-            if (currentFilePath) {
-              e.event.preventDefault()
-              e.event.stopPropagation()
-              handleImportClick(importPath, currentFilePath)
-            }
-            return
-          }
+      const language = model.getLanguageId()
+      const content = model.getValue()
+      
+      // 使用 pathLinkService 检查点击位置是否在链接上
+      const linkPath = pathLinkService.getLinkAtPosition(content, language, position.lineNumber, position.column)
+      if (linkPath) {
+        const { activeFilePath } = useStore.getState()
+        if (activeFilePath) {
+          e.event.preventDefault()
+          e.event.stopPropagation()
+          pathLinkService.handlePathClick(linkPath, activeFilePath)
         }
       }
     })
@@ -599,61 +541,6 @@ export default function Editor() {
     )
 
     completionService.requestCompletion(context)
-  }, [activeFilePath])
-
-  // 处理 import 路径点击
-  const handleImportClick = useCallback(async (importPath: string, currentFilePath?: string) => {
-    const filePath = currentFilePath || activeFilePath
-    if (!filePath) return
-
-    const { workspacePath, openFile, setActiveFile } = useStore.getState()
-    if (!workspacePath) return
-
-    // 获取当前文件的目录
-    const sep = getPathSeparator(filePath)
-    const currentDir = getDirPath(filePath)
-
-    // 解析 import 路径
-    let targetPath = importPath
-
-    // 相对路径
-    if (importPath.startsWith('./') || importPath.startsWith('../')) {
-      targetPath = joinPath(currentDir, importPath)
-      // 规范化路径
-      targetPath = targetPath.split(sep === '\\' ? /\\/ : /\//).reduce((acc: string[], part) => {
-        if (part === '..') acc.pop()
-        else if (part !== '.') acc.push(part)
-        return acc
-      }, []).join(sep)
-    }
-    // 绝对路径（从项目根目录）
-    else if (importPath.startsWith('@/') || importPath.startsWith('~/')) {
-      targetPath = joinPath(workspacePath, importPath.slice(2))
-    }
-    // node_modules 或别名路径 - 暂不处理
-    else if (!importPath.startsWith('/')) {
-      // 尝试从 src 目录查找
-      targetPath = joinPath(workspacePath, 'src', importPath)
-    }
-
-    // 尝试不同的扩展名
-    const extensions = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx']
-
-    for (const ext of extensions) {
-      const fullPath = targetPath + ext
-      try {
-        const content = await window.electronAPI.readFile(fullPath)
-        if (content !== null) {
-          openFile(fullPath, content)
-          setActiveFile(fullPath)
-          return
-        }
-      } catch {
-        // 继续尝试下一个扩展名
-      }
-    }
-
-    console.warn('Could not resolve import path:', importPath)
   }, [activeFilePath])
 
   // 监听流式编辑
