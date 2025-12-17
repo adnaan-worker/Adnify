@@ -13,12 +13,12 @@ export default function StatusBar() {
   // 初始化 Worker 并监听进度
   useEffect(() => {
     indexWorkerService.initialize()
-    
+
     const unsubProgress = indexWorkerService.onProgress(setWorkerProgress)
     const unsubError = indexWorkerService.onError((error) => {
       console.error('[StatusBar] Worker error:', error)
     })
-    
+
     return () => {
       unsubProgress()
       unsubError()
@@ -45,23 +45,23 @@ export default function StatusBar() {
   }
 
   return (
-    <div className="h-6 bg-background-secondary border-t border-border-subtle flex items-center justify-between px-3 text-[11px] select-none text-text-muted">
+    <div className="h-6 bg-transparent border-t border-white/5 flex items-center justify-between px-3 text-[11px] select-none text-text-muted backdrop-blur-sm">
       <div className="flex items-center gap-4">
         <button className="flex items-center gap-1.5 hover:text-text-primary transition-colors">
           <GitBranch className="w-3 h-3" />
           <span>main</span>
         </button>
-        
+
         {/* Diagnostics */}
         <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 hover:text-text-primary transition-colors cursor-pointer">
-                <XCircle className="w-3 h-3" />
-                <span>0</span>
-            </div>
-             <div className="flex items-center gap-1 hover:text-text-primary transition-colors cursor-pointer">
-                <AlertCircle className="w-3 h-3" />
-                <span>0</span>
-            </div>
+          <div className="flex items-center gap-1 hover:text-text-primary transition-colors cursor-pointer">
+            <XCircle className="w-3 h-3" />
+            <span>0</span>
+          </div>
+          <div className="flex items-center gap-1 hover:text-text-primary transition-colors cursor-pointer">
+            <AlertCircle className="w-3 h-3" />
+            <span>0</span>
+          </div>
         </div>
 
         {/* Worker 状态 */}
@@ -76,7 +76,7 @@ export default function StatusBar() {
 
         {/* 索引状态 */}
         {workspacePath && (
-          <button 
+          <button
             onClick={handleIndexClick}
             className="flex items-center gap-1.5 hover:text-text-primary transition-colors"
             title={t('codebaseIndex', language)}
@@ -105,20 +105,20 @@ export default function StatusBar() {
 
       <div className="flex items-center gap-4">
         {isStreaming && (
-            <div className="flex items-center gap-2 text-accent">
-                <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                <span>{t('aiProcessing', language)}</span>
-            </div>
+          <div className="flex items-center gap-2 text-accent">
+            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            <span>{t('aiProcessing', language)}</span>
+          </div>
         )}
-        
+
         <div className="flex items-center gap-4">
-             {activeFilePath && (
-                <span>{activeFilePath.split('.').pop()?.toUpperCase() || 'TXT'}</span>
-             )}
-            <span className="cursor-pointer hover:text-text-primary">UTF-8</span>
-            <div className="flex items-center gap-2 cursor-pointer hover:text-text-primary">
-                <span>Ln 1, Col 1</span>
-            </div>
+          {activeFilePath && (
+            <span>{activeFilePath.split('.').pop()?.toUpperCase() || 'TXT'}</span>
+          )}
+          <span className="cursor-pointer hover:text-text-primary">UTF-8</span>
+          <div className="flex items-center gap-2 cursor-pointer hover:text-text-primary">
+            <span>Ln 1, Col 1</span>
+          </div>
         </div>
       </div>
     </div>

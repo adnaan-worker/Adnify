@@ -12,7 +12,7 @@ import { useStore, LLMConfig } from '../store'
 import { t, Language } from '../i18n'
 import { BUILTIN_PROVIDERS, BuiltinProviderName, ProviderModelConfig } from '../types/provider'
 import { getEditorConfig, saveEditorConfig, EditorConfig } from '../config/editorConfig'
-import { themeManager } from '../config/themeConfig'
+import { themes } from './ThemeManager'
 import { toast } from './Toast'
 import { getPromptTemplates, PromptTemplate } from '../agent/promptTemplates'
 
@@ -24,8 +24,8 @@ const LANGUAGES: { id: Language; name: string }[] = [
 ]
 
 export default function SettingsModal() {
-  const { 
-    llmConfig, setLLMConfig, setShowSettings, language, setLanguage, 
+  const {
+    llmConfig, setLLMConfig, setShowSettings, language, setLanguage,
     autoApprove, setAutoApprove, providerConfigs, setProviderConfig,
     promptTemplateId, setPromptTemplateId
   } = useStore()
@@ -40,7 +40,7 @@ export default function SettingsModal() {
 
   // 编辑器设置 - 使用集中配置
   const [editorConfig] = useState<EditorConfig>(getEditorConfig())
-  
+
   // 兼容旧的 editorSettings 格式
   const [editorSettings, setEditorSettings] = useState({
     fontSize: editorConfig.fontSize,
@@ -74,11 +74,11 @@ export default function SettingsModal() {
       if (s) setAiInstructions(s as string)
     })
     window.electronAPI.getSetting('providerConfigs').then(s => {
-        if (s) {
-            Object.entries(s as Record<string, ProviderModelConfig>).forEach(([id, config]) => {
-                setProviderConfig(id, config)
-            })
-        }
+      if (s) {
+        Object.entries(s as Record<string, ProviderModelConfig>).forEach(([id, config]) => {
+          setProviderConfig(id, config)
+        })
+      }
     })
   }, [llmConfig, language, autoApprove, promptTemplateId]) // 注意：这里不依赖 setProviderConfig 以避免循环，虽然它通常是稳定的
 
@@ -98,7 +98,7 @@ export default function SettingsModal() {
     // 是的，我们将把 addModel/removeModel 传递给子组件，它们会直接修改 Store。
     // 所以这里我们需要把 Store 中的 providerConfigs 保存到后端。
     await window.electronAPI.setSetting('providerConfigs', providerConfigs)
-    
+
     // 保存编辑器配置（localStorage + 文件双重存储）
     saveEditorConfig({
       fontSize: editorSettings.fontSize,
@@ -114,23 +114,23 @@ export default function SettingsModal() {
         completionMaxTokens: editorSettings.completionMaxTokens,
       },
     })
-    
+
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
   // 计算当前的 PROVIDERS 列表
   const currentProviders = [
-      ...Object.values(BUILTIN_PROVIDERS).map(p => ({
-          id: p.name,
-          name: p.displayName,
-          models: [...p.defaultModels, ...(providerConfigs[p.name]?.customModels || [])]
-      })),
-      { 
-          id: 'custom', 
-          name: 'Custom', 
-          models: providerConfigs['custom']?.customModels || [] 
-      }
+    ...Object.values(BUILTIN_PROVIDERS).map(p => ({
+      id: p.name,
+      name: p.displayName,
+      models: [...p.defaultModels, ...(providerConfigs[p.name]?.customModels || [])]
+    })),
+    {
+      id: 'custom',
+      name: 'Custom',
+      models: providerConfigs['custom']?.customModels || []
+    }
   ]
 
   const selectedProvider = currentProviders.find(p => p.id === localConfig.provider)
@@ -181,11 +181,10 @@ export default function SettingsModal() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${
-                  activeTab === tab.id
-                    ? 'bg-accent/10 text-accent font-medium shadow-sm'
-                    : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'
-                }`}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${activeTab === tab.id
+                  ? 'bg-accent/10 text-accent font-medium shadow-sm'
+                  : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'
+                  }`}
               >
                 <tab.icon className="w-4 h-4" />
                 {tab.label}
@@ -244,9 +243,8 @@ export default function SettingsModal() {
           </button>
           <button
             onClick={handleSave}
-            className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium transition-all shadow-glow ${
-              saved ? 'bg-status-success text-white' : 'bg-accent hover:bg-accent-hover text-white'
-            }`}
+            className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium transition-all shadow-glow ${saved ? 'bg-status-success text-white' : 'bg-accent hover:bg-accent-hover text-white'
+              }`}
           >
             {saved ? <><Check className="w-4 h-4" />{t('saved', localLanguage)}</> : t('saveSettings', localLanguage)}
           </button>
@@ -275,10 +273,10 @@ function ProviderSettings({
   const [newModelName, setNewModelName] = useState('')
 
   const handleAddModel = () => {
-      if (newModelName.trim()) {
-          addCustomModel(localConfig.provider, newModelName.trim())
-          setNewModelName('')
-      }
+    if (newModelName.trim()) {
+      addCustomModel(localConfig.provider, newModelName.trim())
+      setNewModelName('')
+    }
   }
 
   return (
@@ -291,11 +289,10 @@ function ProviderSettings({
             <button
               key={p.id}
               onClick={() => setLocalConfig({ ...localConfig, provider: p.id as any, model: p.models[0] || '' })}
-              className={`px-3 py-2.5 rounded-lg border text-sm transition-all ${
-                localConfig.provider === p.id
-                  ? 'border-accent bg-accent/10 text-accent shadow-sm'
-                  : 'border-border-subtle hover:border-text-muted text-text-muted hover:text-text-primary bg-surface'
-              }`}
+              className={`px-3 py-2.5 rounded-lg border text-sm transition-all ${localConfig.provider === p.id
+                ? 'border-accent bg-accent/10 text-accent shadow-sm'
+                : 'border-border-subtle hover:border-text-muted text-text-muted hover:text-text-primary bg-surface'
+                }`}
             >
               {p.name}
             </button>
@@ -307,54 +304,54 @@ function ProviderSettings({
       <div>
         <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '模型' : 'Model'}</label>
         <div className="space-y-3">
-            <select
+          <select
             value={localConfig.model}
             onChange={(e) => setLocalConfig({ ...localConfig, model: e.target.value })}
             className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
-            >
+          >
             {selectedProvider?.models.map(m => (
-                <option key={m} value={m}>{m}</option>
+              <option key={m} value={m}>{m}</option>
             ))}
-            </select>
-            
-            {/* Add Model UI */}
-            <div className="flex gap-2">
-                <input
-                    type="text"
-                    value={newModelName}
-                    onChange={(e) => setNewModelName(e.target.value)}
-                    placeholder={language === 'zh' ? '输入新模型名称' : 'Enter new model name'}
-                    className="flex-1 bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
-                />
-                <button
-                    onClick={handleAddModel}
-                    disabled={!newModelName.trim()}
-                    className="px-3 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg disabled:opacity-50"
-                >
-                    <Plus className="w-4 h-4 text-accent" />
-                </button>
-            </div>
+          </select>
 
-            {/* Custom Model List */}
-            {providerConfigs[localConfig.provider]?.customModels?.length > 0 && (
-                <div className="space-y-2 mt-2">
-                    <p className="text-xs text-text-muted">{language === 'zh' ? '自定义模型列表:' : 'Custom Models:'}</p>
-                    <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                        {providerConfigs[localConfig.provider]?.customModels.map(model => (
-                            <div key={model} className="flex items-center justify-between px-3 py-2 bg-surface/50 rounded-lg border border-border-subtle/50 text-xs">
-                                <span className="font-mono text-text-secondary">{model}</span>
-                                <button
-                                    onClick={() => removeCustomModel(localConfig.provider, model)}
-                                    className="p-1 hover:text-red-400 text-text-muted transition-colors"
-                                >
-                                    <Trash className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+          {/* Add Model UI */}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newModelName}
+              onChange={(e) => setNewModelName(e.target.value)}
+              placeholder={language === 'zh' ? '输入新模型名称' : 'Enter new model name'}
+              className="flex-1 bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+              onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
+            />
+            <button
+              onClick={handleAddModel}
+              disabled={!newModelName.trim()}
+              className="px-3 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4 text-accent" />
+            </button>
+          </div>
+
+          {/* Custom Model List */}
+          {providerConfigs[localConfig.provider]?.customModels?.length > 0 && (
+            <div className="space-y-2 mt-2">
+              <p className="text-xs text-text-muted">{language === 'zh' ? '自定义模型列表:' : 'Custom Models:'}</p>
+              <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+                {providerConfigs[localConfig.provider]?.customModels.map(model => (
+                  <div key={model} className="flex items-center justify-between px-3 py-2 bg-surface/50 rounded-lg border border-border-subtle/50 text-xs">
+                    <span className="font-mono text-text-secondary">{model}</span>
+                    <button
+                      onClick={() => removeCustomModel(localConfig.provider, model)}
+                      className="p-1 hover:text-red-400 text-text-muted transition-colors"
+                    >
+                      <Trash className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -378,14 +375,14 @@ function ProviderSettings({
         </div>
         <p className="text-xs text-text-muted mt-2">
           {localConfig.provider !== 'custom' && localConfig.provider !== 'ollama' && (
-             <a
-               href={BUILTIN_PROVIDERS[localConfig.provider as BuiltinProviderName]?.apiKeyUrl}
-               target="_blank"
-               rel="noreferrer"
-               className="hover:text-accent underline decoration-dotted"
-             >
-               {language === 'zh' ? '获取 API Key' : 'Get API Key'}
-             </a>
+            <a
+              href={BUILTIN_PROVIDERS[localConfig.provider as BuiltinProviderName]?.apiKeyUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-accent underline decoration-dotted"
+            >
+              {language === 'zh' ? '获取 API Key' : 'Get API Key'}
+            </a>
           )}
         </p>
       </div>
@@ -399,15 +396,15 @@ function ProviderSettings({
           onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
           placeholder={
             localConfig.provider === 'openai' ? 'https://api.openai.com/v1' :
-            localConfig.provider === 'anthropic' ? 'https://api.anthropic.com' :
-            localConfig.provider === 'gemini' ? 'https://generativelanguage.googleapis.com' :
-            'https://api.example.com/v1'
+              localConfig.provider === 'anthropic' ? 'https://api.anthropic.com' :
+                localConfig.provider === 'gemini' ? 'https://generativelanguage.googleapis.com' :
+                  'https://api.example.com/v1'
           }
           className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
         />
         <p className="text-xs text-text-muted mt-2">
-          {language === 'zh' 
-            ? '留空使用官方 API，或填写代理/兼容 API 地址' 
+          {language === 'zh'
+            ? '留空使用官方 API，或填写代理/兼容 API 地址'
             : 'Leave empty for official API, or enter proxy/compatible API URL'}
         </p>
       </div>
@@ -463,12 +460,11 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
   // 获取完整配置用于显示高级选项
   const [advancedConfig, setAdvancedConfig] = useState(getEditorConfig())
   const [showAdvanced, setShowAdvanced] = useState(false)
-  const [currentTheme, setCurrentTheme] = useState(themeManager.getCurrentTheme())
-  const allThemes = themeManager.getAllThemes()
+  const { currentTheme, setTheme } = useStore()
+  const allThemes = Object.keys(themes)
 
   const handleThemeChange = (themeId: string) => {
-    themeManager.setTheme(themeId)
-    setCurrentTheme(themeManager.getCurrentTheme())
+    setTheme(themeId as any)
   }
 
   const handleAdvancedChange = (key: string, value: number) => {
@@ -490,40 +486,41 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
       <div>
         <label className="text-sm font-medium mb-3 block">{language === 'zh' ? '主题' : 'Theme'}</label>
         <div className="grid grid-cols-3 gap-2">
-          {allThemes.map(theme => (
-            <button
-              key={theme.id}
-              onClick={() => handleThemeChange(theme.id)}
-              className={`relative p-3 rounded-lg border text-left transition-all ${
-                currentTheme.id === theme.id
+          {allThemes.map(themeId => {
+            const themeVars = themes[themeId as keyof typeof themes]
+            return (
+              <button
+                key={themeId}
+                onClick={() => handleThemeChange(themeId)}
+                className={`relative p-3 rounded-lg border text-left transition-all ${currentTheme === themeId
                   ? 'border-accent bg-accent/10 shadow-sm'
                   : 'border-border-subtle hover:border-text-muted bg-surface'
-              }`}
-            >
-              {/* 主题预览色块 */}
-              <div className="flex gap-1 mb-2">
-                <div 
-                  className="w-4 h-4 rounded" 
-                  style={{ backgroundColor: `rgb(${theme.colors.background})` }}
-                />
-                <div 
-                  className="w-4 h-4 rounded" 
-                  style={{ backgroundColor: `rgb(${theme.colors.accent})` }}
-                />
-                <div 
-                  className="w-4 h-4 rounded" 
-                  style={{ backgroundColor: `rgb(${theme.colors.textPrimary})` }}
-                />
-              </div>
-              <span className="text-xs font-medium">{theme.name}</span>
-              <span className="text-[10px] text-text-muted ml-1">({theme.type})</span>
-              {currentTheme.id === theme.id && (
-                <div className="absolute top-1 right-1">
-                  <Check className="w-3 h-3 text-accent" />
+                  }`}
+              >
+                {/* 主题预览色块 */}
+                <div className="flex gap-1 mb-2">
+                  <div
+                    className="w-4 h-4 rounded"
+                    style={{ backgroundColor: `rgb(${themeVars['--color-background']})` }}
+                  />
+                  <div
+                    className="w-4 h-4 rounded"
+                    style={{ backgroundColor: `rgb(${themeVars['--color-accent']})` }}
+                  />
+                  <div
+                    className="w-4 h-4 rounded"
+                    style={{ backgroundColor: `rgb(${themeVars['--color-text-primary']})` }}
+                  />
                 </div>
-              )}
-            </button>
-          ))}
+                <span className="text-xs font-medium capitalize">{themeId.replace('-', ' ')}</span>
+                {currentTheme === themeId && (
+                  <div className="absolute top-1 right-1">
+                    <Check className="w-3 h-3 text-accent" />
+                  </div>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -627,7 +624,7 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
       {/* AI 代码补全设置 */}
       <div className="pt-4 border-t border-border-subtle">
         <h3 className="text-sm font-medium mb-3">{language === 'zh' ? 'AI 代码补全' : 'AI Code Completion'}</h3>
-        
+
         <div className="space-y-3">
           <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors">
             <input
@@ -678,13 +675,13 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
           <span>{showAdvanced ? '▼' : '▶'}</span>
           {language === 'zh' ? '高级性能设置' : 'Advanced Performance Settings'}
         </button>
-        
+
         {showAdvanced && (
           <div className="mt-4 space-y-4 animate-slide-in">
             <p className="text-xs text-text-muted">
               {language === 'zh' ? '这些设置会影响编辑器性能，请谨慎修改' : 'These settings affect editor performance, modify with caution'}
             </p>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '最大项目文件数' : 'Max Project Files'}</label>
@@ -762,7 +759,7 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
               <p className="text-xs text-text-muted mb-3">
                 {language === 'zh' ? '控制发送给 AI 的上下文大小，避免超出模型限制' : 'Control context size sent to AI to avoid exceeding model limits'}
               </p>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '最大上下文字符数' : 'Max Context Chars'}</label>
@@ -869,7 +866,7 @@ interface AgentSettingsProps {
 
 function AgentSettings({ autoApprove, setAutoApprove, aiInstructions, setAiInstructions, promptTemplateId, setPromptTemplateId, language }: AgentSettingsProps) {
   const templates = getPromptTemplates()
-  
+
   return (
     <div className="space-y-6 text-text-primary">
       {/* 提示词模板选择 */}
@@ -883,11 +880,10 @@ function AgentSettings({ autoApprove, setAutoApprove, aiInstructions, setAiInstr
             <button
               key={t.id}
               onClick={() => setPromptTemplateId(t.id)}
-              className={`p-3 rounded-lg border text-left transition-all ${
-                promptTemplateId === t.id
-                  ? 'border-accent bg-accent/10 shadow-sm'
-                  : 'border-border-subtle hover:border-text-muted bg-surface'
-              }`}
+              className={`p-3 rounded-lg border text-left transition-all ${promptTemplateId === t.id
+                ? 'border-accent bg-accent/10 shadow-sm'
+                : 'border-border-subtle hover:border-text-muted bg-surface'
+                }`}
             >
               <div className="text-sm font-medium">{language === 'zh' ? t.nameZh : t.name}</div>
               <div className="text-xs text-text-muted mt-1">{language === 'zh' ? t.descriptionZh : t.description}</div>
@@ -987,9 +983,9 @@ function SystemSettings({ language }: { language: Language }) {
   const { workspacePath } = useStore()
   const [dataPath, setDataPath] = useState<string>('')
   const [loading, setLoading] = useState(false)
-  
+
   // Embedding 配置状态
-  const [embeddingProviders, setEmbeddingProviders] = useState<{id: string; name: string; description: string; free: boolean}[]>([])
+  const [embeddingProviders, setEmbeddingProviders] = useState<{ id: string; name: string; description: string; free: boolean }[]>([])
   const [embeddingConfig, setEmbeddingConfig] = useState<{
     provider: 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama'
     apiKey: string
@@ -1002,8 +998,8 @@ function SystemSettings({ language }: { language: Language }) {
     baseUrl: ''
   })
   const [testingConnection, setTestingConnection] = useState(false)
-  const [connectionStatus, setConnectionStatus] = useState<{success: boolean; latency?: number; error?: string} | null>(null)
-  const [indexStatus, setIndexStatus] = useState<{isIndexing: boolean; totalFiles: number; indexedFiles: number; totalChunks: number} | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<{ success: boolean; latency?: number; error?: string } | null>(null)
+  const [indexStatus, setIndexStatus] = useState<{ isIndexing: boolean; totalFiles: number; indexedFiles: number; totalChunks: number } | null>(null)
 
   useEffect(() => {
     window.electronAPI.getDataPath().then(setDataPath)
@@ -1018,10 +1014,10 @@ function SystemSettings({ language }: { language: Language }) {
   // 监听索引进度
   useEffect(() => {
     if (!workspacePath) return
-    
+
     // 获取初始状态
     window.electronAPI.indexStatus(workspacePath).then(setIndexStatus)
-    
+
     // 监听进度更新
     const unsubscribe = window.electronAPI.onIndexProgress(setIndexStatus)
     return unsubscribe
@@ -1030,19 +1026,19 @@ function SystemSettings({ language }: { language: Language }) {
   const handleChangePath = async () => {
     const newPath = await window.electronAPI.openFolder()
     if (newPath && newPath !== dataPath) {
-        if (confirm(language === 'zh' 
-            ? '更改配置目录将把当前配置移动到新位置，并可能需要重启应用。确定继续吗？' 
-            : 'Changing the data directory will move your current configuration to the new location and may require a restart. Continue?')) {
-            setLoading(true)
-            const success = await window.electronAPI.setDataPath(newPath)
-            setLoading(false)
-            if (success) {
-                setDataPath(newPath)
-                toast.success(language === 'zh' ? '配置目录已更改' : 'Data directory changed successfully')
-            } else {
-                toast.error(language === 'zh' ? '更改失败' : 'Failed to change data directory')
-            }
+      if (confirm(language === 'zh'
+        ? '更改配置目录将把当前配置移动到新位置，并可能需要重启应用。确定继续吗？'
+        : 'Changing the data directory will move your current configuration to the new location and may require a restart. Continue?')) {
+        setLoading(true)
+        const success = await window.electronAPI.setDataPath(newPath)
+        setLoading(false)
+        if (success) {
+          setDataPath(newPath)
+          toast.success(language === 'zh' ? '配置目录已更改' : 'Data directory changed successfully')
+        } else {
+          toast.error(language === 'zh' ? '更改失败' : 'Failed to change data directory')
         }
+      }
     }
   }
 
@@ -1050,7 +1046,7 @@ function SystemSettings({ language }: { language: Language }) {
     if (!workspacePath) return
     setTestingConnection(true)
     setConnectionStatus(null)
-    
+
     // 先更新配置
     await window.electronAPI.indexUpdateEmbeddingConfig(workspacePath, embeddingConfig)
     // 测试连接
@@ -1071,7 +1067,7 @@ function SystemSettings({ language }: { language: Language }) {
       toast.warning(language === 'zh' ? '请先打开一个工作区' : 'Please open a workspace first')
       return
     }
-    
+
     // 保存配置
     await handleSaveEmbeddingConfig()
     // 开始索引
@@ -1094,24 +1090,24 @@ function SystemSettings({ language }: { language: Language }) {
       <div>
         <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '数据存储' : 'Data Storage'}</h3>
         <p className="text-xs text-text-muted mb-3">
-          {language === 'zh' 
-            ? '选择保存应用程序配置和数据的目录。' 
+          {language === 'zh'
+            ? '选择保存应用程序配置和数据的目录。'
             : 'Choose the directory where application configuration and data are saved.'}
         </p>
-        
+
         <div className="flex gap-3">
-            <div className="flex-1 bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-secondary font-mono truncate">
-                {dataPath || (language === 'zh' ? '加载中...' : 'Loading...')}
-            </div>
-            <button 
-                onClick={handleChangePath}
-                disabled={loading}
-                className="px-4 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg text-sm text-text-primary transition-colors disabled:opacity-50"
-            >
-                {loading 
-                    ? (language === 'zh' ? '移动中...' : 'Moving...') 
-                    : (language === 'zh' ? '更改目录' : 'Change Directory')}
-            </button>
+          <div className="flex-1 bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-secondary font-mono truncate">
+            {dataPath || (language === 'zh' ? '加载中...' : 'Loading...')}
+          </div>
+          <button
+            onClick={handleChangePath}
+            disabled={loading}
+            className="px-4 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg text-sm text-text-primary transition-colors disabled:opacity-50"
+          >
+            {loading
+              ? (language === 'zh' ? '移动中...' : 'Moving...')
+              : (language === 'zh' ? '更改目录' : 'Change Directory')}
+          </button>
         </div>
       </div>
 
@@ -1119,8 +1115,8 @@ function SystemSettings({ language }: { language: Language }) {
       <div className="pt-4 border-t border-border-subtle">
         <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '代码库索引 (Codebase Index)' : 'Codebase Index'}</h3>
         <p className="text-xs text-text-muted mb-4">
-          {language === 'zh' 
-            ? '索引你的代码库以启用 @codebase 语义搜索功能。' 
+          {language === 'zh'
+            ? '索引你的代码库以启用 @codebase 语义搜索功能。'
             : 'Index your codebase to enable @codebase semantic search.'}
         </p>
 
@@ -1132,11 +1128,10 @@ function SystemSettings({ language }: { language: Language }) {
               <button
                 key={p.id}
                 onClick={() => setEmbeddingConfig({ ...embeddingConfig, provider: p.id as typeof embeddingConfig.provider })}
-                className={`px-3 py-2 rounded-lg border text-xs transition-all text-left ${
-                  embeddingConfig.provider === p.id
-                    ? 'border-accent bg-accent/10 text-accent'
-                    : 'border-border-subtle hover:border-text-muted text-text-muted hover:text-text-primary bg-surface'
-                }`}
+                className={`px-3 py-2 rounded-lg border text-xs transition-all text-left ${embeddingConfig.provider === p.id
+                  ? 'border-accent bg-accent/10 text-accent'
+                  : 'border-border-subtle hover:border-text-muted text-text-muted hover:text-text-primary bg-surface'
+                  }`}
               >
                 <div className="font-medium">{p.name}</div>
                 {p.free && <span className="text-green-400 text-[10px]">FREE</span>}
@@ -1195,8 +1190,8 @@ function SystemSettings({ language }: { language: Language }) {
           </button>
           {connectionStatus && (
             <span className={`text-xs ${connectionStatus.success ? 'text-green-400' : 'text-red-400'}`}>
-              {connectionStatus.success 
-                ? `✓ ${language === 'zh' ? '连接成功' : 'Connected'} (${connectionStatus.latency}ms)` 
+              {connectionStatus.success
+                ? `✓ ${language === 'zh' ? '连接成功' : 'Connected'} (${connectionStatus.latency}ms)`
                 : `✗ ${connectionStatus.error}`}
             </span>
           )}
@@ -1210,7 +1205,7 @@ function SystemSettings({ language }: { language: Language }) {
               <span className="text-xs text-accent animate-pulse">{language === 'zh' ? '索引中...' : 'Indexing...'}</span>
             )}
           </div>
-          
+
           {indexStatus?.isIndexing ? (
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-text-muted">
@@ -1218,7 +1213,7 @@ function SystemSettings({ language }: { language: Language }) {
                 <span>{indexStatus.indexedFiles} / {indexStatus.totalFiles} {language === 'zh' ? '文件' : 'files'}</span>
               </div>
               <div className="w-full h-2 bg-surface rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-accent transition-all duration-300"
                   style={{ width: `${indexStatus.totalFiles > 0 ? (indexStatus.indexedFiles / indexStatus.totalFiles) * 100 : 0}%` }}
                 />
@@ -1240,8 +1235,8 @@ function SystemSettings({ language }: { language: Language }) {
               disabled={indexStatus?.isIndexing || !workspacePath}
               className="flex-1 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
-              {indexStatus?.totalChunks 
-                ? (language === 'zh' ? '重新索引' : 'Re-index') 
+              {indexStatus?.totalChunks
+                ? (language === 'zh' ? '重新索引' : 'Re-index')
                 : (language === 'zh' ? '开始索引' : 'Start Indexing')}
             </button>
             {indexStatus?.totalChunks ? (
@@ -1261,8 +1256,8 @@ function SystemSettings({ language }: { language: Language }) {
       <div className="pt-4 border-t border-border-subtle">
         <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '引导向导' : 'Setup Wizard'}</h3>
         <p className="text-xs text-text-muted mb-3">
-          {language === 'zh' 
-            ? '重新运行首次使用引导，帮助你配置基本设置。' 
+          {language === 'zh'
+            ? '重新运行首次使用引导，帮助你配置基本设置。'
             : 'Re-run the first-time setup wizard to configure basic settings.'}
         </p>
         <button

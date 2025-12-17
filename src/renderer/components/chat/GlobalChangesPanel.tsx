@@ -58,14 +58,14 @@ export default function GlobalChangesPanel({
       for (const tc of assistantMsg.toolCalls) {
         // 只处理写入类工具
         if (!writeTools.includes(tc.name)) continue
-        
+
         const path = tc.rawParams?.path ? String(tc.rawParams.path) : undefined
         if (!path) continue
 
         // 检查状态 - 只处理待审批或进行中的
         const status = tc.status as string
         const isPending = status === 'tool_request' || status === 'pending' || status === 'running_now'
-        
+
         if (!isPending) {
           // 如果这个文件之前有待审批的，现在完成了，从 map 中移除
           if (fileMap.has(path)) {
@@ -74,10 +74,10 @@ export default function GlobalChangesPanel({
           continue
         }
 
-        const newStatus: 'pending' | 'running' | 'awaiting' = 
-          status === 'tool_request' ? 'awaiting' : 
-          status === 'running_now' ? 'running' : 'pending'
-        
+        const newStatus: 'pending' | 'running' | 'awaiting' =
+          status === 'tool_request' ? 'awaiting' :
+            status === 'running_now' ? 'running' : 'pending'
+
         // 按文件路径合并，保留最新的状态
         fileMap.set(path, {
           path,
@@ -111,16 +111,16 @@ export default function GlobalChangesPanel({
             <span>{streamingStatus || 'Thinking...'}</span>
           </div>
         )}
-        
+
         {/* 文件变更计数 */}
         {totalPending > 0 && (
           <div className="flex items-center gap-1.5 text-text-secondary">
-            <FileText className="w-4 h-4" />
-            <span>
+            <FileText className="w-4 h-4 opacity-70" />
+            <span className="opacity-90">
               {totalPending} File{totalPending !== 1 ? 's' : ''}
             </span>
             {runningCount > 0 && (
-              <span className="text-accent text-xs">
+              <span className="text-accent text-xs opacity-80">
                 ({runningCount} writing)
               </span>
             )}
@@ -134,7 +134,7 @@ export default function GlobalChangesPanel({
         {isStreaming && (
           <button
             onClick={onAbort}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface hover:bg-surface-active border border-border-subtle rounded-md transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-white/10 border border-white/5 rounded-md transition-colors"
           >
             <Square className="w-3 h-3" />
             Stop
@@ -146,14 +146,14 @@ export default function GlobalChangesPanel({
           <>
             <button
               onClick={onReject}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-muted hover:text-red-400 hover:bg-red-500/10 border border-border-subtle rounded-md transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-muted hover:text-red-400 hover:bg-red-500/10 border border-white/5 rounded-md transition-colors"
             >
               <X className="w-3 h-3" />
               Reject
             </button>
             <button
               onClick={onApprove}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-accent/20 text-accent hover:bg-accent/30 border border-accent/30 rounded-md transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-accent/80 text-white hover:bg-accent border border-transparent rounded-md transition-colors shadow-sm shadow-accent/20"
             >
               <Check className="w-3 h-3" />
               Accept

@@ -19,9 +19,8 @@ export default {
 					active: 'rgb(var(--color-surface-active) / <alpha-value>)',
 				},
 				border: {
-					DEFAULT: 'rgb(var(--color-border-strong) / <alpha-value>)',
+					DEFAULT: 'rgb(var(--color-border) / <alpha-value>)',
 					subtle: 'rgb(var(--color-border-subtle) / <alpha-value>)',
-					highlight: 'rgb(var(--color-border-strong) / <alpha-value>)',
 				},
 				text: {
 					primary: 'rgb(var(--color-text-primary) / <alpha-value>)',
@@ -31,8 +30,7 @@ export default {
 				accent: {
 					DEFAULT: 'rgb(var(--color-accent) / <alpha-value>)',
 					hover: 'rgb(var(--color-accent-hover) / <alpha-value>)',
-					muted: 'rgb(var(--color-accent-muted) / 0.2)',
-					glow: 'rgb(var(--color-accent) / 0.5)',
+					foreground: 'rgb(var(--color-accent-foreground) / <alpha-value>)',
 				},
 				status: {
 					success: 'rgb(var(--color-status-success) / <alpha-value>)',

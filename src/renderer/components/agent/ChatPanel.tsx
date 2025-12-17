@@ -1,6 +1,6 @@
 /**
  * Chat Panel
- * Agent 聊天面板
+ * Agent 聊天面板 - 沉浸式设计
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react'
@@ -18,6 +18,7 @@ import {
   Code,
   Folder,
   X,
+  MessageSquare
 } from 'lucide-react'
 import { Logo } from '@/renderer/components/Logo'
 import { useStore } from '@/renderer/store'
@@ -410,28 +411,27 @@ export default function ChatPanel() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 bg-background/80 backdrop-blur-md border-b border-white/5">
-        <div className="flex items-center gap-1 bg-surface/50 rounded-lg p-0.5 border border-white/5">
+      {/* Header - Glassmorphism */}
+      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 bg-background/60 backdrop-blur-xl border-b border-white/5">
+        <div className="flex items-center gap-1 bg-black/20 rounded-lg p-0.5 border border-white/5">
           <button
             onClick={() => setChatMode('chat')}
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-              chatMode === 'chat'
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${chatMode === 'chat'
                 ? 'bg-white/10 text-white shadow-sm'
                 : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
-            }`}
+              }`}
           >
+            <MessageSquare className="w-3.5 h-3.5" />
             Chat
           </button>
           <button
             onClick={() => setChatMode('agent')}
-            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
-              chatMode === 'agent'
-                ? 'bg-accent/20 text-accent shadow-sm'
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${chatMode === 'agent'
+                ? 'bg-accent/20 text-accent shadow-sm shadow-accent/10'
                 : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
-            }`}
+              }`}
           >
-            <Sparkles className="w-3 h-3" />
+            <Sparkles className="w-3.5 h-3.5" />
             Agent
           </button>
         </div>
@@ -464,7 +464,7 @@ export default function ChatPanel() {
 
       {/* Thread list overlay */}
       {showThreads && (
-        <div className="absolute top-[53px] right-0 left-0 bottom-0 bg-background/95 backdrop-blur-md z-30 overflow-hidden p-4">
+        <div className="absolute top-[60px] right-0 left-0 bottom-0 bg-background/95 backdrop-blur-md z-30 overflow-hidden p-4 animate-fade-in">
           <div className="flex flex-col gap-2 max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-medium text-text-primary">Chat History</h3>
@@ -479,11 +479,10 @@ export default function ChatPanel() {
               return (
                 <div
                   key={thread.id}
-                  className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors border ${
-                    currentThreadId === thread.id
+                  className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors border ${currentThreadId === thread.id
                       ? 'bg-accent/10 border-accent/20 text-accent'
-                      : 'bg-surface border-border-subtle hover:border-accent/30 text-text-secondary'
-                  }`}
+                      : 'bg-surface/30 border-white/5 hover:border-white/10 text-text-secondary'
+                    }`}
                   onClick={() => { switchThread(thread.id); setShowThreads(false) }}
                 >
                   <div className="flex-1 min-w-0">
@@ -507,7 +506,7 @@ export default function ChatPanel() {
 
       {/* Drag Overlay */}
       {isDragging && (
-        <div className="absolute inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center pointer-events-none animate-fade-in">
           <div className="flex flex-col items-center gap-4 p-12 rounded-2xl border-2 border-dashed border-accent bg-accent/5">
             <Upload className="w-12 h-12 text-accent animate-bounce" />
             <p className="text-lg font-semibold text-text-primary">Drop files here</p>
@@ -516,7 +515,7 @@ export default function ChatPanel() {
       )}
 
       {/* Messages Area */}
-      <div className="absolute inset-0 overflow-y-auto custom-scrollbar bg-background pt-14 pb-48 z-0">
+      <div className="absolute inset-0 overflow-y-auto custom-scrollbar bg-background pt-16 pb-48 z-0">
         {/* API Key Warning */}
         {!hasApiKey && (
           <div className="m-4 p-4 border border-warning/20 bg-warning/5 rounded-lg flex gap-3">
@@ -530,8 +529,8 @@ export default function ChatPanel() {
 
         {/* Empty State */}
         {messages.length === 0 && hasApiKey && (
-          <div className="h-full flex flex-col items-center justify-center gap-6 pb-20">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-surface to-surface-active border border-border-subtle flex items-center justify-center shadow-xl">
+          <div className="h-full flex flex-col items-center justify-center gap-6 pb-20 opacity-50">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-surface to-surface-active border border-white/5 flex items-center justify-center shadow-2xl">
               <Logo className="w-12 h-12 text-text-primary" glow />
             </div>
             <div className="text-center">
@@ -559,9 +558,8 @@ export default function ChatPanel() {
         />
       )}
 
-      {/* Bottom Input Area */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 bg-background">
-        <div className="h-8 bg-gradient-to-t from-background to-transparent pointer-events-none -mt-8" />
+      {/* Bottom Input Area - Glassmorphism */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 bg-background/80 backdrop-blur-xl border-t border-white/5">
 
         {/* Status Bar */}
         <AgentStatusBar
@@ -573,7 +571,7 @@ export default function ChatPanel() {
           onReviewFile={async (filePath) => {
             const change = pendingChanges.find(c => c.filePath === filePath)
             if (!change) return
-            
+
             const currentContent = await window.electronAPI.readFile(filePath)
             if (currentContent !== null) {
               openFile(filePath, currentContent)
@@ -653,7 +651,7 @@ export default function ChatPanel() {
               return (
                 <div
                   key={`${item.type}-${index}`}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface rounded-full border border-border-subtle text-xs group hover:border-border-highlight transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface/50 rounded-full border border-white/10 text-xs group hover:border-white/20 transition-colors"
                 >
                   {icon}
                   <span className="text-text-secondary truncate max-w-[150px] font-medium">{label}</span>

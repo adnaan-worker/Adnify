@@ -19,9 +19,10 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { initEditorConfig } from './config/editorConfig'
 import { themeManager } from './config/themeConfig'
 import { restoreWorkspaceState, initWorkspaceStateSync } from './services/workspaceStateService'
+import { ThemeManager } from './components/ThemeManager'
 
-// 暴露 store 给插件系统
-;(window as any).__ADNIFY_STORE__ = { getState: () => useStore.getState() }
+  // 暴露 store 给插件系统
+  ; (window as any).__ADNIFY_STORE__ = { getState: () => useStore.getState() }
 
 // 初始化全局 Toast 的组件
 function ToastInitializer() {
@@ -34,15 +35,15 @@ function ToastInitializer() {
 
 // 主应用内容
 function AppContent() {
-  const { 
-    showSettings, setLLMConfig, setLanguage, setAutoApprove, setPromptTemplateId, setShowSettings, 
+  const {
+    showSettings, setLLMConfig, setLanguage, setAutoApprove, setPromptTemplateId, setShowSettings,
     setTerminalVisible, terminalVisible, setWorkspacePath, setFiles,
     activeSidePanel, showComposer, setShowComposer
   } = useStore()
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showQuickOpen, setShowQuickOpen] = useState(false)
-  
+
   // 引导状态
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
@@ -76,11 +77,11 @@ function AppContent() {
         updateLoaderStatus('Loading configuration...')
         await initEditorConfig()
         await themeManager.init()
-        
+
         // 检查是否首次使用（兼容老用户：如果已有配置但没有 onboardingCompleted 字段，视为已完成）
         const onboardingCompleted = await window.electronAPI.getSetting('onboardingCompleted')
         const hasExistingConfig = await window.electronAPI.getSetting('llmConfig')
-        
+
         updateLoaderStatus('Loading settings...')
         const savedConfig = await window.electronAPI.getSetting('llmConfig')
         if (savedConfig) {
@@ -98,7 +99,7 @@ function AppContent() {
         if (savedPromptTemplateId) {
           setPromptTemplateId(savedPromptTemplateId as string)
         }
-        
+
         // Auto-restore workspace
         updateLoaderStatus('Restoring workspace...')
         const lastWorkspace = await window.electronAPI.restoreWorkspace()
@@ -107,12 +108,12 @@ function AppContent() {
           updateLoaderStatus('Loading files...')
           const items = await window.electronAPI.readDir(lastWorkspace)
           setFiles(items)
-          
+
           // 恢复工作区状态（打开的文件等）
           updateLoaderStatus('Restoring editor state...')
           await restoreWorkspaceState()
         }
-        
+
         updateLoaderStatus('Ready!')
         // 短暂延迟后移除 loader
         setTimeout(() => {
@@ -121,7 +122,7 @@ function AppContent() {
           // 显示引导的条件：
           // 1. onboardingCompleted 明确为 false（用户主动要求重新体验）
           // 2. 或者 onboardingCompleted 未设置且没有现有配置（真正的新用户）
-          const shouldShowOnboarding = onboardingCompleted === false || 
+          const shouldShowOnboarding = onboardingCompleted === false ||
             (onboardingCompleted === null && !hasExistingConfig)
           if (shouldShowOnboarding) {
             setShowOnboarding(true)
@@ -147,29 +148,29 @@ function AppContent() {
     if (!isResizingSidebar && !isResizingChat) return
 
     const handleMouseMove = (e: MouseEvent) => {
-        if (isResizingSidebar) {
-            const newWidth = e.clientX - 48 // 48 is ActivityBar width
-            if (newWidth > 150 && newWidth < 600) {
-                setSidebarWidth(newWidth)
-            }
+      if (isResizingSidebar) {
+        const newWidth = e.clientX - 48 // 48 is ActivityBar width
+        if (newWidth > 150 && newWidth < 600) {
+          setSidebarWidth(newWidth)
         }
-        if (isResizingChat) {
-            const newWidth = window.innerWidth - e.clientX
-            if (newWidth > 300 && newWidth < 800) {
-                setChatWidth(newWidth)
-            }
+      }
+      if (isResizingChat) {
+        const newWidth = window.innerWidth - e.clientX
+        if (newWidth > 300 && newWidth < 800) {
+          setChatWidth(newWidth)
         }
+      }
     }
 
     const handleMouseUp = () => {
-        setIsResizingSidebar(false)
-        setIsResizingChat(false)
-        document.body.style.cursor = 'default'
+      setIsResizingSidebar(false)
+      setIsResizingChat(false)
+      document.body.style.cursor = 'default'
     }
 
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
-    
+
     // Add overlay to prevent iframe stealing mouse events (if any)
     const overlay = document.createElement('div')
     overlay.style.position = 'fixed'
@@ -182,9 +183,9 @@ function AppContent() {
     document.body.appendChild(overlay)
 
     return () => {
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
-        document.body.removeChild(overlay)
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      document.body.removeChild(overlay)
     }
   }, [isResizingSidebar, isResizingChat])
 
@@ -238,86 +239,102 @@ function AppContent() {
   }, [handleGlobalKeyDown])
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden text-text-primary">
-      <TitleBar />
-      
-      {/* Main Workspace */}
-      <div className="flex-1 flex overflow-hidden">
-        <ActivityBar />
-        
-        {/* Sidebar Container */}
-        {activeSidePanel && (
+    <div className="h-screen flex flex-col bg-background overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative">
+      {/* Global Background Gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-black pointer-events-none z-0" />
+      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none z-0 mix-blend-overlay" />
+
+      <div className="relative z-10 flex flex-col h-full">
+        <TitleBar />
+
+        {/* Main Workspace */}
+        <div className="flex-1 flex overflow-hidden">
+          <ActivityBar />
+
+          {/* Sidebar Container */}
+          {activeSidePanel && (
             <div style={{ width: sidebarWidth }} className="flex-shrink-0 relative">
-                <Sidebar />
-                {/* Sidebar Resize Handle */}
-                <div 
-                    className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/50 transition-colors z-50 translate-x-[2px]"
-                    onMouseDown={(e) => { e.preventDefault(); setIsResizingSidebar(true) }}
-                />
+              <Sidebar />
+              {/* Sidebar Resize Handle */}
+              <div
+                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/50 transition-colors z-50 translate-x-[2px]"
+                onMouseDown={(e) => { e.preventDefault(); setIsResizingSidebar(true) }}
+              />
             </div>
-        )}
-        
-        {/* Editor & Chat Area */}
-        <div className="flex-1 flex min-w-0 bg-background relative">
-          
-          {/* Editor Column */}
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-             <div className="flex-1 flex flex-col relative">
+          )}
+
+          {/* Editor & Chat Area */}
+          <div className="flex-1 flex min-w-0 bg-background relative">
+
+            {/* Editor Column */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+              <div className="flex-1 flex flex-col relative">
                 <ErrorBoundary>
                   <Editor />
                 </ErrorBoundary>
-             </div>
-             <ErrorBoundary>
-               <TerminalPanel />
-             </ErrorBoundary>
-          </div>
+              </div>
+              <ErrorBoundary>
+                <TerminalPanel />
+              </ErrorBoundary>
+            </div>
 
-          {/* Chat Panel Container */}
-          <div style={{ width: chatWidth }} className="flex-shrink-0 relative border-l border-border-subtle">
+            {/* Chat Panel Container */}
+            <div style={{ width: chatWidth }} className="flex-shrink-0 relative border-l border-border-subtle">
               {/* Chat Resize Handle */}
-              <div 
-                  className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-accent/50 transition-colors z-50 -translate-x-[2px]"
-                  onMouseDown={(e) => { e.preventDefault(); setIsResizingChat(true) }}
+              <div
+                className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-accent/50 transition-colors z-50 -translate-x-[2px]"
+                onMouseDown={(e) => { e.preventDefault(); setIsResizingChat(true) }}
               />
               <ErrorBoundary>
                 <ChatPanel />
               </ErrorBoundary>
+            </div>
+
           </div>
-
         </div>
-      </div>
 
-      <StatusBar />
+        <StatusBar />
+      </div>
 
       {/* Overlays */}
       {showSettings && <SettingsModal />}
-      {showCommandPalette && (
-        <CommandPalette
-          onClose={() => setShowCommandPalette(false)}
-          onShowKeyboardShortcuts={() => {
-            setShowCommandPalette(false)
-            setShowKeyboardShortcuts(true)
-          }}
-        />
-      )}
-      {showKeyboardShortcuts && (
-        <KeyboardShortcuts onClose={() => setShowKeyboardShortcuts(false)} />
-      )}
-      {showQuickOpen && (
-        <QuickOpen onClose={() => setShowQuickOpen(false)} />
-      )}
-      {showComposer && (
-        <ComposerPanel onClose={() => setShowComposer(false)} />
-      )}
-      
+      {
+        showCommandPalette && (
+          <CommandPalette
+            onClose={() => setShowCommandPalette(false)}
+            onShowKeyboardShortcuts={() => {
+              setShowCommandPalette(false)
+              setShowKeyboardShortcuts(true)
+            }}
+          />
+        )
+      }
+      {
+        showKeyboardShortcuts && (
+          <KeyboardShortcuts onClose={() => setShowKeyboardShortcuts(false)} />
+        )
+      }
+      {
+        showQuickOpen && (
+          <QuickOpen onClose={() => setShowQuickOpen(false)} />
+        )
+      }
+      {
+        showComposer && (
+          <ComposerPanel onClose={() => setShowComposer(false)} />
+        )
+      }
+
       {/* 首次使用引导 */}
-      {showOnboarding && isInitialized && (
-        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
-      )}
-      
+      {
+        showOnboarding && isInitialized && (
+          <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
+        )
+      }
+
       {/* 全局确认对话框 */}
       <GlobalConfirmDialog />
-    </div>
+    </div >
   )
 }
 
@@ -326,6 +343,7 @@ export default function App() {
   return (
     <ToastProvider>
       <ToastInitializer />
+      <ThemeManager />
       <AppContent />
     </ToastProvider>
   )

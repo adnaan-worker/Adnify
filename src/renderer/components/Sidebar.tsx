@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
-  FolderOpen, File, ChevronRight, ChevronDown,
-  Plus, RefreshCw, FolderPlus, GitBranch,
-  MoreHorizontal, Trash2,
-  FileText, ArrowRight, Edit2, FilePlus, Loader2, Check,
-  AlertCircle, AlertTriangle, Info, Code, Hash, Braces, Box
+    FolderOpen, File, ChevronRight, ChevronDown,
+    Plus, RefreshCw, FolderPlus, GitBranch,
+    MoreHorizontal, Trash2,
+    FileText, ArrowRight, Edit2, FilePlus, Loader2, Check,
+    AlertCircle, AlertTriangle, Info, Code, Hash, Braces, Box
 } from 'lucide-react'
 import { useStore } from '../store'
 import { FileItem, LspDiagnostic, LspDocumentSymbol } from '../types/electron'
@@ -16,210 +16,210 @@ import { toast } from './Toast'
 import { onDiagnostics, getDocumentSymbols } from '../services/lspService'
 
 const getFileIcon = (name: string) => {
-  const ext = name.split('.').pop()?.toLowerCase()
-  const iconColors: Record<string, string> = {
-    ts: 'text-blue-400',
-    tsx: 'text-blue-400',
-    js: 'text-yellow-400',
-    jsx: 'text-yellow-400',
-    py: 'text-green-400',
-    json: 'text-yellow-300',
-    md: 'text-gray-400',
-    css: 'text-pink-400',
-    html: 'text-orange-400',
-    gitignore: 'text-gray-500',
-  }
-  return iconColors[ext || ''] || 'text-text-muted'
+    const ext = name.split('.').pop()?.toLowerCase()
+    const iconColors: Record<string, string> = {
+        ts: 'text-blue-400',
+        tsx: 'text-blue-400',
+        js: 'text-yellow-400',
+        jsx: 'text-yellow-400',
+        py: 'text-green-400',
+        json: 'text-yellow-300',
+        md: 'text-gray-400',
+        css: 'text-pink-400',
+        html: 'text-orange-400',
+        gitignore: 'text-gray-500',
+    }
+    return iconColors[ext || ''] || 'text-text-muted'
 }
 
 function FileTreeItem({
     item,
     depth = 0,
     onRefresh
-}: { 
-    item: FileItem; 
-    depth?: number; 
-    onRefresh: () => void 
+}: {
+    item: FileItem;
+    depth?: number;
+    onRefresh: () => void
 }) {
-  const { expandedFolders, toggleFolder, openFile, setActiveFile, activeFilePath, language } = useStore()
-  const [children, setChildren] = useState<FileItem[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [showMenu, setShowMenu] = useState(false)
-  const [isRenaming, setIsRenaming] = useState(false)
-  const [renameValue, setRenameValue] = useState(item.name)
-  const renameInputRef = useRef<HTMLInputElement>(null)
-  
-  const isExpanded = expandedFolders.has(item.path)
-  const isActive = activeFilePath === item.path
+    const { expandedFolders, toggleFolder, openFile, setActiveFile, activeFilePath, language } = useStore()
+    const [children, setChildren] = useState<FileItem[]>([])
+    const [isLoading, setIsLoading] = useState(false)
+    const [showMenu, setShowMenu] = useState(false)
+    const [isRenaming, setIsRenaming] = useState(false)
+    const [renameValue, setRenameValue] = useState(item.name)
+    const renameInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (item.isDirectory && isExpanded) {
-      setIsLoading(true)
-      window.electronAPI.readDir(item.path).then((items) => {
-        setChildren(items)
-        setIsLoading(false)
-      })
-    }
-  }, [item.path, item.isDirectory, isExpanded])
+    const isExpanded = expandedFolders.has(item.path)
+    const isActive = activeFilePath === item.path
 
-  useEffect(() => {
-      if (isRenaming && renameInputRef.current) {
-          renameInputRef.current.focus()
-          renameInputRef.current.select()
-      }
-  }, [isRenaming])
-
-  const handleClick = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (isRenaming) return 
-
-    if (item.isDirectory) {
-      toggleFolder(item.path)
-    } else {
-      const content = await window.electronAPI.readFile(item.path)
-      if (content !== null) {
-        openFile(item.path, content)
-        setActiveFile(item.path)
-      }
-    }
-  }
-
-  const handleDelete = async (e: React.MouseEvent) => {
-      e.stopPropagation()
-      if (confirm(t('confirmDelete', language, { name: item.name }))) {
-          await window.electronAPI.deleteFile(item.path)
-          onRefresh()
-      }
-      setShowMenu(false)
-  }
-
-  const handleRenameStart = (e: React.MouseEvent) => {
-      e.stopPropagation()
-      setIsRenaming(true)
-      setShowMenu(false)
-  }
-
-  const handleRenameSubmit = async () => {
-      if (!renameValue.trim() || renameValue === item.name) {
-          setIsRenaming(false)
-          return
-      }
-      const newPath = joinPath(getDirPath(item.path), renameValue)
-
-      const success = await window.electronAPI.renameFile(item.path, newPath)
-      if (success) {
-          onRefresh()
-      }
-      setIsRenaming(false)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') handleRenameSubmit()
-      if (e.key === 'Escape') setIsRenaming(false)
-  }
-
-  const handleDragStart = (e: React.DragEvent) => {
-      e.dataTransfer.setData('text/plain', item.path)
-      e.dataTransfer.setData('application/adnify-file-path', item.path)
-      e.dataTransfer.effectAllowed = 'copy'
-  }
-
-  return (
-    <div>
-      <div
-        draggable={true}
-        onDragStart={handleDragStart}
-        onClick={handleClick}
-        onMouseEnter={() => setShowMenu(true)}
-        onMouseLeave={() => setShowMenu(false)}
-        className={`
-            group flex items-center gap-1.5 py-1.5 pr-2 cursor-pointer transition-all duration-200 relative select-none
-            ${isActive 
-                ? 'bg-accent/10 text-text-primary' 
-                : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'}
-        `}
-        style={{ paddingLeft: `${depth * 12 + 12}px` }}
-      >
-        {/* Active Indicator Line */}
-        {isActive && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-accent" />}
-
-        {/* Indent Guide */}
-        {depth > 0 && (
-             <div className="absolute left-0 top-0 bottom-0 border-l border-border-subtle group-hover:border-white/10" 
-                  style={{ left: `${depth * 12}px` }} 
-             />
-        )}
-
-        {item.isDirectory ? (
-          <>
-             <span className={`transition-transform duration-200 flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}>
-                 <ChevronRight className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
-             </span>
-            {isLoading ? (
-                <div className="w-3.5 h-3.5 border-2 border-text-muted border-t-transparent rounded-full animate-spin flex-shrink-0" />
-            ) : (
-                <FolderOpen className={`w-3.5 h-3.5 flex-shrink-0 ${isExpanded ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`} />
-            )}
-          </>
-        ) : (
-          <>
-            <span className="w-3.5 flex-shrink-0" /> 
-            <File className={`w-3.5 h-3.5 flex-shrink-0 ${getFileIcon(item.name)}`} />
-          </>
-        )}
-        
-        {isRenaming ? (
-            <input
-                ref={renameInputRef}
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onBlur={handleRenameSubmit}
-                onKeyDown={handleKeyDown}
-                onClick={(e) => e.stopPropagation()}
-                className="flex-1 bg-surface-active border-none rounded px-1 py-0 text-[13px] h-5 focus:outline-none focus:ring-1 focus:ring-accent min-w-0 text-text-primary"
-            />
-        ) : (
-            <span className="text-[13px] truncate leading-normal flex-1 opacity-90 group-hover:opacity-100">{item.name}</span>
-        )}
-
-        {/* Context Menu Button */}
-        {showMenu && !isRenaming && (
-            <div className="flex items-center absolute right-1 bg-background shadow-sm rounded border border-border-subtle p-0.5 animate-fade-in z-10 gap-0.5">
-                 <button 
-                    onClick={handleRenameStart}
-                    className="p-1 hover:bg-surface-active hover:text-text-primary rounded transition-colors text-text-muted"
-                    title={t('rename', language)}
-                 >
-                     <Edit2 className="w-3 h-3" />
-                 </button>
-                 <button 
-                    onClick={handleDelete}
-                    className="p-1 hover:bg-status-error/10 hover:text-status-error rounded transition-colors text-text-muted"
-                    title={t('delete', language)}
-                 >
-                     <Trash2 className="w-3 h-3" />
-                 </button>
-            </div>
-        )}
-      </div>
-      
-      {item.isDirectory && isExpanded && (
-        <div className="relative">
-             <div className="absolute left-0 top-0 bottom-0 border-l border-border-subtle/30" 
-                  style={{ left: `${(depth + 1) * 12}px` }} 
-             />
-          {children
-            .sort((a, b) => {
-              if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name)
-              return a.isDirectory ? -1 : 1
+    useEffect(() => {
+        if (item.isDirectory && isExpanded) {
+            setIsLoading(true)
+            window.electronAPI.readDir(item.path).then((items) => {
+                setChildren(items)
+                setIsLoading(false)
             })
-            .map((child) => (
-              <FileTreeItem key={child.path} item={child} depth={depth + 1} onRefresh={onRefresh} />
-            ))}
+        }
+    }, [item.path, item.isDirectory, isExpanded])
+
+    useEffect(() => {
+        if (isRenaming && renameInputRef.current) {
+            renameInputRef.current.focus()
+            renameInputRef.current.select()
+        }
+    }, [isRenaming])
+
+    const handleClick = async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (isRenaming) return
+
+        if (item.isDirectory) {
+            toggleFolder(item.path)
+        } else {
+            const content = await window.electronAPI.readFile(item.path)
+            if (content !== null) {
+                openFile(item.path, content)
+                setActiveFile(item.path)
+            }
+        }
+    }
+
+    const handleDelete = async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (confirm(t('confirmDelete', language, { name: item.name }))) {
+            await window.electronAPI.deleteFile(item.path)
+            onRefresh()
+        }
+        setShowMenu(false)
+    }
+
+    const handleRenameStart = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        setIsRenaming(true)
+        setShowMenu(false)
+    }
+
+    const handleRenameSubmit = async () => {
+        if (!renameValue.trim() || renameValue === item.name) {
+            setIsRenaming(false)
+            return
+        }
+        const newPath = joinPath(getDirPath(item.path), renameValue)
+
+        const success = await window.electronAPI.renameFile(item.path, newPath)
+        if (success) {
+            onRefresh()
+        }
+        setIsRenaming(false)
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') handleRenameSubmit()
+        if (e.key === 'Escape') setIsRenaming(false)
+    }
+
+    const handleDragStart = (e: React.DragEvent) => {
+        e.dataTransfer.setData('text/plain', item.path)
+        e.dataTransfer.setData('application/adnify-file-path', item.path)
+        e.dataTransfer.effectAllowed = 'copy'
+    }
+
+    return (
+        <div>
+            <div
+                draggable={true}
+                onDragStart={handleDragStart}
+                onClick={handleClick}
+                onMouseEnter={() => setShowMenu(true)}
+                onMouseLeave={() => setShowMenu(false)}
+                className={`
+            group flex items-center gap-1.5 py-1 pr-2 cursor-pointer transition-all duration-200 relative select-none
+            ${isActive
+                        ? 'bg-accent/10 text-text-primary'
+                        : 'text-text-muted hover:text-text-primary hover:bg-white/5'}
+        `}
+                style={{ paddingLeft: `${depth * 12 + 12}px` }}
+            >
+                {/* Active Indicator Line */}
+                {isActive && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-accent" />}
+
+                {/* Indent Guide */}
+                {depth > 0 && (
+                    <div className="absolute left-0 top-0 bottom-0 border-l border-border-subtle group-hover:border-white/10"
+                        style={{ left: `${depth * 12}px` }}
+                    />
+                )}
+
+                {item.isDirectory ? (
+                    <>
+                        <span className={`transition-transform duration-200 flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}>
+                            <ChevronRight className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
+                        </span>
+                        {isLoading ? (
+                            <div className="w-3.5 h-3.5 border-2 border-text-muted border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        ) : (
+                            <FolderOpen className={`w-3.5 h-3.5 flex-shrink-0 ${isExpanded ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`} />
+                        )}
+                    </>
+                ) : (
+                    <>
+                        <span className="w-3.5 flex-shrink-0" />
+                        <File className={`w-3.5 h-3.5 flex-shrink-0 ${getFileIcon(item.name)}`} />
+                    </>
+                )}
+
+                {isRenaming ? (
+                    <input
+                        ref={renameInputRef}
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={handleRenameSubmit}
+                        onKeyDown={handleKeyDown}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex-1 bg-surface-active border-none rounded px-1 py-0 text-[13px] h-5 focus:outline-none focus:ring-1 focus:ring-accent min-w-0 text-text-primary"
+                    />
+                ) : (
+                    <span className="text-[13px] truncate leading-normal flex-1 opacity-90 group-hover:opacity-100">{item.name}</span>
+                )}
+
+                {/* Context Menu Button */}
+                {showMenu && !isRenaming && (
+                    <div className="flex items-center absolute right-1 bg-background shadow-sm rounded border border-border-subtle p-0.5 animate-fade-in z-10 gap-0.5">
+                        <button
+                            onClick={handleRenameStart}
+                            className="p-1 hover:bg-surface-active hover:text-text-primary rounded transition-colors text-text-muted"
+                            title={t('rename', language)}
+                        >
+                            <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                            onClick={handleDelete}
+                            className="p-1 hover:bg-status-error/10 hover:text-status-error rounded transition-colors text-text-muted"
+                            title={t('delete', language)}
+                        >
+                            <Trash2 className="w-3 h-3" />
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {item.isDirectory && isExpanded && (
+                <div className="relative">
+                    <div className="absolute left-0 top-0 bottom-0 border-l border-border-subtle/30"
+                        style={{ left: `${(depth + 1) * 12}px` }}
+                    />
+                    {children
+                        .sort((a, b) => {
+                            if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name)
+                            return a.isDirectory ? -1 : 1
+                        })
+                        .map((child) => (
+                            <FileTreeItem key={child.path} item={child} depth={depth + 1} onRefresh={onRefresh} />
+                        ))}
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  )
+    )
 }
 
 function ExplorerView() {
@@ -233,9 +233,9 @@ function ExplorerView() {
     // 更新 Git 状态
     const updateGitStatus = useCallback(async () => {
         if (!workspacePath) {
-        setGitStatus(null)
-        setIsGitRepo(false)
-        return
+            setGitStatus(null)
+            setIsGitRepo(false)
+            return
         }
 
         gitService.setWorkspace(workspacePath)
@@ -243,8 +243,8 @@ function ExplorerView() {
         setIsGitRepo(isRepo)
 
         if (isRepo) {
-        const status = await gitService.getStatus()
-        setGitStatus(status)
+            const status = await gitService.getStatus()
+            setGitStatus(status)
         }
     }, [workspacePath])
 
@@ -309,9 +309,9 @@ function ExplorerView() {
             setNewItemName('')
             return
         }
-        
+
         const fullPath = joinPath(workspacePath, newItemName)
-        
+
         let success = false
         if (isCreating === 'file') {
             success = await window.electronAPI.writeFile(fullPath, '')
@@ -335,13 +335,13 @@ function ExplorerView() {
     }
 
     return (
-        <div className="h-full flex flex-col bg-background-secondary">
-            <div className="h-10 px-3 flex items-center justify-between group border-b border-border-subtle bg-background-secondary sticky top-0 z-10">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+        <div className="h-full flex flex-col bg-transparent">
+            <div className="h-10 px-3 flex items-center justify-between group border-b border-white/5 bg-transparent sticky top-0 z-10">
+                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
                     {t('explorer', language)}
                 </span>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                     <button onClick={() => setIsCreating('file')} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('newFile', language)}>
+                    <button onClick={() => setIsCreating('file')} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('newFile', language)}>
                         <FilePlus className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
                     </button>
                     <button onClick={() => setIsCreating('folder')} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('newFolder', language)}>
@@ -350,7 +350,7 @@ function ExplorerView() {
                     <button onClick={refreshFiles} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('refresh', language)}>
                         <RefreshCw className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
                     </button>
-                     <button onClick={handleOpenFolder} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('openFolder', language)}>
+                    <button onClick={handleOpenFolder} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('openFolder', language)}>
                         <FolderOpen className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
                     </button>
                 </div>
@@ -360,8 +360,8 @@ function ExplorerView() {
             {isCreating && (
                 <div className="p-2 border-b border-border-subtle bg-surface/30 animate-slide-in">
                     <div className="flex items-center gap-2 mb-1 text-[10px] text-text-muted uppercase font-semibold">
-                         {isCreating === 'file' ? <FilePlus className="w-3 h-3" /> : <FolderPlus className="w-3 h-3" />}
-                         {isCreating === 'file' ? t('newFile', language) : t('newFolder', language)}
+                        {isCreating === 'file' ? <FilePlus className="w-3 h-3" /> : <FolderPlus className="w-3 h-3" />}
+                        {isCreating === 'file' ? t('newFile', language) : t('newFolder', language)}
                     </div>
                     <input
                         ref={newItemInputRef}
@@ -375,35 +375,35 @@ function ExplorerView() {
                 </div>
             )}
 
-             <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar py-1">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar py-1">
                 {workspacePath ? (
-                files
-                    .sort((a: FileItem, b: FileItem) => {
-                    if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name)
-                    return a.isDirectory ? -1 : 1
-                    })
-                    .map((item: FileItem) => (
-                    <FileTreeItem key={item.path} item={item} onRefresh={refreshFiles} />
-                    ))
+                    files
+                        .sort((a: FileItem, b: FileItem) => {
+                            if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name)
+                            return a.isDirectory ? -1 : 1
+                        })
+                        .map((item: FileItem) => (
+                            <FileTreeItem key={item.path} item={item} onRefresh={refreshFiles} />
+                        ))
                 ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center px-6">
-                    <div className="w-12 h-12 bg-surface-hover rounded-xl flex items-center justify-center mb-4 border border-white/5">
-                        <FolderOpen className="w-6 h-6 text-text-muted" />
+                    <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                        <div className="w-12 h-12 bg-surface-hover rounded-xl flex items-center justify-center mb-4 border border-white/5">
+                            <FolderOpen className="w-6 h-6 text-text-muted" />
+                        </div>
+                        <p className="text-sm text-text-muted mb-4 font-medium">{t('noFolderOpened', language)}</p>
+                        <button
+                            onClick={handleOpenFolder}
+                            className="flex items-center gap-2 px-4 py-2 bg-accent text-white text-xs font-medium rounded-lg hover:bg-accent-hover transition-colors shadow-glow"
+                        >
+                            <Plus className="w-3.5 h-3.5" />
+                            {t('openFolder', language)}
+                        </button>
                     </div>
-                    <p className="text-sm text-text-muted mb-4 font-medium">{t('noFolderOpened', language)}</p>
-                    <button
-                    onClick={handleOpenFolder}
-                    className="flex items-center gap-2 px-4 py-2 bg-accent text-white text-xs font-medium rounded-lg hover:bg-accent-hover transition-colors shadow-glow"
-                    >
-                    <Plus className="w-3.5 h-3.5" />
-                    {t('openFolder', language)}
-                    </button>
-                </div>
                 )}
             </div>
 
-             {/* Git Status Mini-Bar (Pinned to bottom of explorer) */}
-             {isGitRepo && gitStatus && (
+            {/* Git Status Mini-Bar (Pinned to bottom of explorer) */}
+            {isGitRepo && gitStatus && (
                 <div className="px-3 py-2 border-t border-border-subtle bg-surface/50">
                     <div className="flex items-center gap-2 text-xs text-text-secondary">
                         <GitBranch className="w-3.5 h-3.5" />
@@ -416,7 +416,7 @@ function ExplorerView() {
                         )}
                     </div>
                 </div>
-             )}
+            )}
         </div>
     )
 }
@@ -430,11 +430,11 @@ function SearchView() {
     const [excludePattern, setExcludePattern] = useState('')
     const [showDetails, setShowDetails] = useState(false)
     const [showReplace, setShowReplace] = useState(false)
-    
+
     const [searchResults, setSearchResults] = useState<{ path: string; line: number; text: string }[]>([])
     const [isSearching, setIsSearching] = useState(false)
     const [collapsedFiles, setCollapsedFiles] = useState<Set<string>>(new Set())
-    
+
     // 搜索历史
     const [searchHistory, setSearchHistory] = useState<string[]>(() => {
         try {
@@ -447,7 +447,7 @@ function SearchView() {
     const [showHistory, setShowHistory] = useState(false)
 
     const { workspacePath, openFile, setActiveFile, language } = useStore()
-    
+
     // 保存搜索历史
     const addToHistory = useCallback((searchQuery: string) => {
         if (!searchQuery.trim()) return
@@ -470,8 +470,8 @@ function SearchView() {
     }, [searchResults])
 
     const handleSearch = async () => {
-        if(!query.trim()) return
-        
+        if (!query.trim()) return
+
         setIsSearching(true)
         setSearchResults([])
         addToHistory(query)
@@ -514,14 +514,14 @@ function SearchView() {
     // 替换单个文件中的匹配
     const handleReplaceInFile = async () => {
         if (!replaceQuery || searchResults.length === 0) return
-        
+
         // 获取当前选中的文件（第一个结果的文件）
         const firstResult = searchResults[0]
         if (!firstResult) return
-        
+
         const content = await window.electronAPI.readFile(firstResult.path)
         if (content === null) return
-        
+
         let newContent = content
         if (isRegex) {
             try {
@@ -533,12 +533,12 @@ function SearchView() {
         } else {
             const flags = isCaseSensitive ? 'g' : 'gi'
             const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-            const regex = isWholeWord 
+            const regex = isWholeWord
                 ? new RegExp(`\\b${escapedQuery}\\b`, flags)
                 : new RegExp(escapedQuery, flags)
             newContent = content.replace(regex, replaceQuery)
         }
-        
+
         if (newContent !== content) {
             await window.electronAPI.writeFile(firstResult.path, newContent)
             handleSearch() // 刷新搜索结果
@@ -548,13 +548,13 @@ function SearchView() {
     // 替换所有文件中的匹配
     const handleReplaceAll = async () => {
         if (!replaceQuery || searchResults.length === 0) return
-        
+
         const filePaths = [...new Set(searchResults.map(r => r.path))]
-        
+
         for (const filePath of filePaths) {
             const content = await window.electronAPI.readFile(filePath)
             if (content === null) continue
-            
+
             let newContent = content
             if (isRegex) {
                 try {
@@ -566,38 +566,38 @@ function SearchView() {
             } else {
                 const flags = isCaseSensitive ? 'g' : 'gi'
                 const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-                const regex = isWholeWord 
+                const regex = isWholeWord
                     ? new RegExp(`\\b${escapedQuery}\\b`, flags)
                     : new RegExp(escapedQuery, flags)
                 newContent = content.replace(regex, replaceQuery)
             }
-            
+
             if (newContent !== content) {
                 await window.electronAPI.writeFile(filePath, newContent)
             }
         }
-        
+
         handleSearch() // 刷新搜索结果
     }
 
     return (
-        <div className="flex flex-col h-full bg-background-secondary text-sm">
-             <div className="h-10 px-3 flex items-center border-b border-border-subtle sticky top-0 z-10 bg-background-secondary">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+        <div className="flex flex-col h-full bg-transparent text-sm">
+            <div className="h-10 px-3 flex items-center border-b border-white/5 sticky top-0 z-10 bg-transparent">
+                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
                     {t('search', language)}
                 </span>
             </div>
-            
-            <div className="p-3 border-b border-border-subtle flex flex-col gap-2 bg-background-secondary">
+
+            <div className="p-3 border-b border-white/5 flex flex-col gap-2 bg-transparent">
                 {/* Search Input Box */}
                 <div className="relative flex items-center">
-                     <div className="absolute left-0 z-10 p-1">
-                         <button onClick={() => setShowReplace(!showReplace)} className="p-0.5 hover:bg-surface-active rounded transition-colors">
-                             <ChevronRight className={`w-3.5 h-3.5 text-text-muted transition-transform ${showReplace ? 'rotate-90' : ''}`} />
-                         </button>
-                     </div>
+                    <div className="absolute left-0 z-10 p-1">
+                        <button onClick={() => setShowReplace(!showReplace)} className="p-0.5 hover:bg-white/5 rounded transition-colors">
+                            <ChevronRight className={`w-3.5 h-3.5 text-text-muted transition-transform ${showReplace ? 'rotate-90' : ''}`} />
+                        </button>
+                    </div>
                     <div className="relative flex-1 ml-5">
-                        <input 
+                        <input
                             type="text"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
@@ -605,9 +605,9 @@ function SearchView() {
                             onFocus={() => searchHistory.length > 0 && setShowHistory(true)}
                             onBlur={() => setTimeout(() => setShowHistory(false), 200)}
                             placeholder={t('searchPlaceholder', language)}
-                            className="w-full bg-surface/50 border border-transparent rounded-md py-1.5 pl-2 pr-20 text-xs text-text-primary focus:border-accent focus:bg-surface focus:ring-1 focus:ring-accent focus:outline-none transition-all placeholder:text-text-muted/50"
+                            className="w-full bg-black/20 border border-white/5 rounded-md py-1.5 pl-2 pr-20 text-xs text-text-primary focus:border-accent/50 focus:bg-black/40 focus:ring-1 focus:ring-accent/50 focus:outline-none transition-all placeholder:text-text-muted/50"
                         />
-                        
+
                         {/* Search History Dropdown */}
                         {showHistory && searchHistory.length > 0 && (
                             <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border-subtle rounded-md shadow-lg z-20 max-h-48 overflow-y-auto animate-slide-in">
@@ -630,27 +630,27 @@ function SearchView() {
                         )}
                         {/* Toggles */}
                         <div className="absolute right-1 top-1 flex gap-0.5">
-                             <button 
+                            <button
                                 onClick={() => setIsCaseSensitive(!isCaseSensitive)}
                                 title={t('matchCase', language)}
                                 className={`p-0.5 rounded transition-colors ${isCaseSensitive ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-surface-active'}`}
-                             >
-                                 <span className="text-[10px] font-bold px-1">Aa</span>
-                             </button>
-                             <button 
+                            >
+                                <span className="text-[10px] font-bold px-1">Aa</span>
+                            </button>
+                            <button
                                 onClick={() => setIsWholeWord(!isWholeWord)}
                                 title={t('matchWholeWord', language)}
                                 className={`p-0.5 rounded transition-colors ${isWholeWord ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-surface-active'}`}
-                             >
-                                 <span className="text-[10px] font-bold px-0.5 border border-current rounded-[2px]">ab</span>
-                             </button>
-                             <button 
+                            >
+                                <span className="text-[10px] font-bold px-0.5 border border-current rounded-[2px]">ab</span>
+                            </button>
+                            <button
                                 onClick={() => setIsRegex(!isRegex)}
                                 title={t('useRegex', language)}
                                 className={`p-0.5 rounded transition-colors ${isRegex ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-surface-active'}`}
-                             >
-                                 <span className="text-[10px] font-bold px-1">.*</span>
-                             </button>
+                            >
+                                <span className="text-[10px] font-bold px-1">.*</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -658,25 +658,25 @@ function SearchView() {
                 {/* Replace Input Box */}
                 {showReplace && (
                     <div className="relative flex items-center ml-5 animate-slide-in gap-1">
-                        <input 
+                        <input
                             type="text"
                             value={replaceQuery}
                             onChange={(e) => setReplaceQuery(e.target.value)}
                             placeholder={t('replacePlaceholder', language)}
                             className="flex-1 bg-surface/50 border border-transparent rounded-md py-1.5 pl-2 pr-2 text-xs text-text-primary focus:border-accent focus:bg-surface focus:ring-1 focus:ring-accent focus:outline-none transition-all placeholder:text-text-muted/50"
                         />
-                        <button 
+                        <button
                             onClick={handleReplaceInFile}
                             disabled={!replaceQuery || searchResults.length === 0}
-                            className="p-1.5 hover:bg-surface-active rounded transition-colors disabled:opacity-30" 
+                            className="p-1.5 hover:bg-surface-active rounded transition-colors disabled:opacity-30"
                             title={t('replace', language)}
                         >
                             <Edit2 className="w-3 h-3 text-text-muted" />
                         </button>
-                        <button 
+                        <button
                             onClick={handleReplaceAll}
                             disabled={!replaceQuery || searchResults.length === 0}
-                            className="p-1.5 hover:bg-surface-active rounded transition-colors disabled:opacity-30" 
+                            className="p-1.5 hover:bg-surface-active rounded transition-colors disabled:opacity-30"
                             title={t('replaceAll', language)}
                         >
                             <span className="text-[10px] font-bold text-text-muted">All</span>
@@ -686,17 +686,17 @@ function SearchView() {
 
                 {/* Details Toggle */}
                 <div className="ml-5">
-                    <button 
+                    <button
                         onClick={() => setShowDetails(!showDetails)}
                         className="flex items-center gap-1 text-[10px] text-text-muted hover:text-text-primary mb-1 transition-colors"
                     >
                         <MoreHorizontal className="w-3 h-3" />
                         {t('filesToExclude', language)}
                     </button>
-                    
+
                     {showDetails && (
                         <div className="flex flex-col gap-2 animate-slide-in">
-                            <input 
+                            <input
                                 type="text"
                                 value={excludePattern}
                                 onChange={(e) => setExcludePattern(e.target.value)}
@@ -721,15 +721,15 @@ function SearchView() {
                         <div className="px-3 py-1.5 text-[10px] text-text-muted font-semibold bg-background-secondary border-b border-border-subtle sticky top-0 z-10">
                             {t('searchResultsCount', language, { results: String(searchResults.length), files: String(Object.keys(resultsByFile).length) })}
                         </div>
-                        
+
                         {Object.entries(resultsByFile).map(([filePath, results]) => {
                             const fileName = getFileName(filePath)
                             const isCollapsed = collapsedFiles.has(filePath)
-                            
+
                             return (
                                 <div key={filePath} className="flex flex-col">
                                     {/* File Header */}
-                                    <div 
+                                    <div
                                         onClick={() => toggleFileCollapse(filePath)}
                                         className="flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-surface-hover text-text-secondary sticky top-0 bg-background-secondary/95 backdrop-blur-sm z-0"
                                     >
@@ -743,7 +743,7 @@ function SearchView() {
                                     {!isCollapsed && (
                                         <div className="flex flex-col">
                                             {results.map((res, idx) => (
-                                                <div 
+                                                <div
                                                     key={idx}
                                                     onClick={() => handleResultClick(res)}
                                                     className="pl-8 pr-2 py-0.5 cursor-pointer hover:bg-accent/10 hover:text-text-primary group flex gap-2 text-[11px] font-mono text-text-muted border-l-2 border-transparent hover:border-accent transition-colors"
@@ -759,11 +759,11 @@ function SearchView() {
                         })}
                     </div>
                 )}
-                
+
                 {!isSearching && query && searchResults.length === 0 && (
-                     <div className="p-6 text-center text-xs text-text-muted opacity-60">
-                         {t('noResults', language)}
-                     </div>
+                    <div className="p-6 text-center text-xs text-text-muted opacity-60">
+                        {t('noResults', language)}
+                    </div>
                 )}
             </div>
         </div>
@@ -779,7 +779,7 @@ function GitView() {
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [showCommits, setShowCommits] = useState(true)
-    
+
     // 新增状态
     const [branches, setBranches] = useState<{ name: string; current: boolean; remote: boolean }[]>([])
     const [showBranches, setShowBranches] = useState(false)
@@ -797,7 +797,7 @@ function GitView() {
         try {
             // Ensure workspace is set
             gitService.setWorkspace(workspacePath)
-            
+
             const [s, c, b, st] = await Promise.all([
                 gitService.getStatus(),
                 gitService.getRecentCommits(),
@@ -818,7 +818,7 @@ function GitView() {
 
     useEffect(() => {
         refreshStatus()
-        const interval = setInterval(refreshStatus, getEditorConfig().performance.indexStatusIntervalMs) 
+        const interval = setInterval(refreshStatus, getEditorConfig().performance.indexStatusIntervalMs)
         return () => clearInterval(interval)
     }, [refreshStatus])
 
@@ -922,64 +922,64 @@ function GitView() {
 
     const handleFileClick = async (path: string, fileStatus: string) => {
         const content = await window.electronAPI.readFile(path) || ''
-        
+
         // If modified, try to show diff
         if (fileStatus === 'modified' || fileStatus === 'renamed') {
-             const original = await gitService.getHeadFileContent(path)
-             if (original !== null) {
-                 openFile(path, content, original)
-                 setActiveFile(path)
-                 return
-             }
+            const original = await gitService.getHeadFileContent(path)
+            if (original !== null) {
+                openFile(path, content, original)
+                setActiveFile(path)
+                return
+            }
         }
-        
+
         openFile(path, content)
         setActiveFile(path)
     }
 
     if (!workspacePath) return <div className="p-4 text-xs text-text-muted text-center">{t('noFolderOpened', language)}</div>
-    
+
     // Not a repo state
     if (!status && !isRefreshing) {
-         return (
-             <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                 <div className="w-12 h-12 bg-surface-hover rounded-full flex items-center justify-center mb-3">
+        return (
+            <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                <div className="w-12 h-12 bg-surface-hover rounded-full flex items-center justify-center mb-3">
                     <GitBranch className="w-6 h-6 text-text-muted opacity-50" />
-                 </div>
-                 <p className="text-xs text-text-muted mb-4">No source control active.</p>
-                 <button 
+                </div>
+                <p className="text-xs text-text-muted mb-4">No source control active.</p>
+                <button
                     onClick={handleInit}
                     className="px-4 py-2 bg-accent text-white text-xs font-medium rounded hover:bg-accent-hover transition-colors shadow-glow"
-                 >
-                     Initialize Repository
-                 </button>
-                 {error && <p className="text-[10px] text-status-error mt-2">{error}</p>}
-             </div>
-         )
+                >
+                    Initialize Repository
+                </button>
+                {error && <p className="text-[10px] text-status-error mt-2">{error}</p>}
+            </div>
+        )
     }
 
     // Repo loaded but maybe empty
     const hasChanges = status ? (status.staged.length > 0 || status.unstaged.length > 0 || status.untracked.length > 0) : false
 
     return (
-        <div className="flex flex-col h-full bg-background-secondary text-sm">
-            <div className="h-10 px-3 flex items-center justify-between border-b border-border-subtle sticky top-0 z-10 bg-background-secondary">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+        <div className="flex flex-col h-full bg-transparent text-sm">
+            <div className="h-10 px-3 flex items-center justify-between border-b border-white/5 sticky top-0 z-10 bg-transparent">
+                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
                     Source Control
                 </span>
                 <div className="flex items-center gap-0.5">
-                    <button 
-                        onClick={handlePull} 
+                    <button
+                        onClick={handlePull}
                         disabled={isPulling}
-                        className="p-1 hover:bg-surface-active rounded transition-colors disabled:opacity-50" 
+                        className="p-1 hover:bg-surface-active rounded transition-colors disabled:opacity-50"
                         title="Pull"
                     >
                         <ArrowRight className={`w-3.5 h-3.5 text-text-muted hover:text-text-primary rotate-90 ${isPulling ? 'animate-pulse' : ''}`} />
                     </button>
-                    <button 
-                        onClick={handlePush} 
+                    <button
+                        onClick={handlePush}
                         disabled={isPushing}
-                        className="p-1 hover:bg-surface-active rounded transition-colors disabled:opacity-50" 
+                        className="p-1 hover:bg-surface-active rounded transition-colors disabled:opacity-50"
                         title="Push"
                     >
                         <ArrowRight className={`w-3.5 h-3.5 text-text-muted hover:text-text-primary -rotate-90 ${isPushing ? 'animate-pulse' : ''}`} />
@@ -994,7 +994,7 @@ function GitView() {
                 {/* Branch Selector */}
                 {status && (
                     <div className="px-3 py-2 border-b border-border-subtle bg-surface/30">
-                        <div 
+                        <div
                             className="flex items-center gap-2 cursor-pointer hover:bg-surface-hover rounded px-2 py-1 transition-colors"
                             onClick={() => setShowBranches(!showBranches)}
                         >
@@ -1002,7 +1002,7 @@ function GitView() {
                             <span className="text-xs font-medium text-text-primary flex-1">{status.branch}</span>
                             <ChevronDown className={`w-3.5 h-3.5 text-text-muted transition-transform ${showBranches ? 'rotate-180' : ''}`} />
                         </div>
-                        
+
                         {showBranches && (
                             <div className="mt-2 bg-background rounded border border-border-subtle max-h-48 overflow-y-auto animate-slide-in">
                                 {/* New Branch */}
@@ -1014,7 +1014,7 @@ function GitView() {
                                                 value={newBranchName}
                                                 onChange={(e) => setNewBranchName(e.target.value)}
                                                 placeholder="Branch name"
-                                                className="flex-1 bg-surface border border-border-subtle rounded px-2 py-1 text-xs focus:outline-none focus:border-accent"
+                                                className="flex-1 bg-black/20 border border-white/5 rounded px-2 py-1 text-xs focus:outline-none focus:border-accent/50 focus:bg-black/40 text-text-primary"
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') handleCreateBranch()
                                                     if (e.key === 'Escape') setShowNewBranch(false)
@@ -1026,7 +1026,7 @@ function GitView() {
                                             </button>
                                         </div>
                                     ) : (
-                                        <button 
+                                        <button
                                             onClick={() => setShowNewBranch(true)}
                                             className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary w-full px-2 py-1 hover:bg-surface-hover rounded"
                                         >
@@ -1035,23 +1035,22 @@ function GitView() {
                                         </button>
                                     )}
                                 </div>
-                                
+
                                 {/* Local Branches */}
                                 {branches.filter(b => !b.remote).map(branch => (
-                                    <div 
+                                    <div
                                         key={branch.name}
                                         onClick={() => !branch.current && handleCheckoutBranch(branch.name)}
-                                        className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors ${
-                                            branch.current 
-                                                ? 'bg-accent/10 text-accent' 
-                                                : 'text-text-secondary hover:bg-surface-hover'
-                                        }`}
+                                        className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors ${branch.current
+                                            ? 'bg-accent/10 text-accent'
+                                            : 'text-text-secondary hover:bg-surface-hover'
+                                            }`}
                                     >
                                         {branch.current && <Check className="w-3 h-3" />}
                                         <span className={branch.current ? '' : 'ml-5'}>{branch.name}</span>
                                     </div>
                                 ))}
-                                
+
                                 {/* Remote Branches */}
                                 {branches.filter(b => b.remote).length > 0 && (
                                     <>
@@ -1059,7 +1058,7 @@ function GitView() {
                                             REMOTE
                                         </div>
                                         {branches.filter(b => b.remote).map(branch => (
-                                            <div 
+                                            <div
                                                 key={branch.name}
                                                 onClick={() => handleCheckoutBranch(branch.name)}
                                                 className="flex items-center gap-2 px-3 py-1.5 text-xs text-text-muted hover:bg-surface-hover cursor-pointer"
@@ -1075,22 +1074,22 @@ function GitView() {
                 )}
 
                 {/* Commit Area */}
-                <div className="p-3 border-b border-border-subtle bg-surface/30">
+                <div className="p-3 border-b border-white/5 bg-transparent">
                     <div className="relative">
-                        <textarea 
+                        <textarea
                             value={commitMessage}
                             onChange={(e) => setCommitMessage(e.target.value)}
                             placeholder="Message (Ctrl+Enter to commit)"
-                            className="w-full bg-background border border-border-subtle rounded-md p-2 text-xs text-text-primary focus:border-accent focus:outline-none resize-none min-h-[60px] block"
+                            className="w-full bg-black/20 border border-white/5 rounded-md p-2 text-xs text-text-primary focus:border-accent/50 focus:bg-black/40 focus:outline-none resize-none min-h-[60px] block placeholder:text-text-muted/50"
                             onKeyDown={(e) => {
                                 if (e.ctrlKey && e.key === 'Enter') handleCommit()
                             }}
                         />
                     </div>
-                    <button 
+                    <button
                         onClick={handleCommit}
                         disabled={isCommitting || (status?.staged.length === 0)}
-                        className="w-full mt-2 py-1.5 bg-accent text-white text-xs font-medium rounded hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center gap-2"
+                        className="w-full mt-2 py-1.5 bg-accent/90 text-white text-xs font-medium rounded hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center gap-2"
                     >
                         {isCommitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
                         {isCommitting ? 'Committing...' : 'Commit'}
@@ -1115,12 +1114,12 @@ function GitView() {
                                 <span className="text-[10px] font-mono text-accent w-4 text-center flex-shrink-0">{file.status[0].toUpperCase()}</span>
                                 <span className="text-xs text-text-secondary truncate flex-1">{file.path}</span>
                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button 
+                                    <button
                                         onClick={(e) => { e.stopPropagation(); handleUnstage(file.path) }}
                                         className="p-1 hover:bg-surface-active rounded text-text-muted hover:text-text-primary"
                                         title="Unstage"
                                     >
-                                        <Trash2 className="w-3 h-3" /> 
+                                        <Trash2 className="w-3 h-3" />
                                     </button>
                                 </div>
                             </div>
@@ -1141,7 +1140,7 @@ function GitView() {
                                 <span className="text-[10px] font-mono text-warning w-4 text-center flex-shrink-0">{file.status[0].toUpperCase()}</span>
                                 <span className="text-xs text-text-secondary truncate flex-1">{file.path}</span>
                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button 
+                                    <button
                                         onClick={(e) => { e.stopPropagation(); handleStage(file.path) }}
                                         className="p-1 hover:bg-surface-active rounded text-text-muted hover:text-text-primary"
                                         title="Stage"
@@ -1157,7 +1156,7 @@ function GitView() {
                                 <span className="text-[10px] font-mono text-status-success w-4 text-center flex-shrink-0">U</span>
                                 <span className="text-xs text-text-secondary truncate flex-1">{path}</span>
                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button 
+                                    <button
                                         onClick={(e) => { e.stopPropagation(); handleStage(path) }}
                                         className="p-1 hover:bg-surface-active rounded text-text-muted hover:text-text-primary"
                                         title="Stage"
@@ -1172,7 +1171,7 @@ function GitView() {
 
                 {/* Stash Section */}
                 <div className="flex flex-col mt-2 border-t border-border-subtle">
-                    <div 
+                    <div
                         className="px-3 py-2 flex items-center gap-2 cursor-pointer hover:bg-surface-hover select-none group"
                         onClick={() => setShowStash(!showStash)}
                     >
@@ -1181,7 +1180,7 @@ function GitView() {
                         {stashList.length > 0 && (
                             <span className="text-[10px] text-text-muted bg-surface-active px-1.5 rounded-full">{stashList.length}</span>
                         )}
-                        <button 
+                        <button
                             onClick={(e) => { e.stopPropagation(); handleStash() }}
                             className="p-1 hover:bg-surface-active rounded opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Stash changes"
@@ -1189,7 +1188,7 @@ function GitView() {
                             <Plus className="w-3 h-3 text-text-muted" />
                         </button>
                     </div>
-                    
+
                     {showStash && (
                         <div className="pb-2">
                             {stashList.length === 0 ? (
@@ -1201,7 +1200,7 @@ function GitView() {
                                             <div className="text-xs text-text-primary truncate">{stash.message}</div>
                                             <div className="text-[10px] text-text-muted">stash@{`{${stash.index}}`} on {stash.branch}</div>
                                         </div>
-                                        <button 
+                                        <button
                                             onClick={() => handleStashPop(stash.index)}
                                             className="p-1 hover:bg-surface-active rounded opacity-0 group-hover:opacity-100 transition-opacity"
                                             title="Pop stash"
@@ -1218,14 +1217,14 @@ function GitView() {
                 {/* Commits List */}
                 {commits.length > 0 && (
                     <div className="flex flex-col border-t border-border-subtle">
-                        <div 
+                        <div
                             className="px-3 py-2 flex items-center gap-2 cursor-pointer hover:bg-surface-hover select-none"
                             onClick={() => setShowCommits(!showCommits)}
                         >
                             <ChevronDown className={`w-3.5 h-3.5 text-text-muted transition-transform ${showCommits ? '' : '-rotate-90'}`} />
                             <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">COMMITS</span>
                         </div>
-                        
+
                         {showCommits && (
                             <div className="pb-2">
                                 {commits.map((commit) => (
@@ -1233,7 +1232,7 @@ function GitView() {
                                         <div className="text-xs text-text-primary truncate font-medium">{commit.message}</div>
                                         <div className="flex items-center justify-between mt-0.5">
                                             <span className="text-[10px] text-text-muted flex items-center gap-1">
-                                                <GitBranch className="w-3 h-3" /> 
+                                                <GitBranch className="w-3 h-3" />
                                                 {commit.shortHash}
                                             </span>
                                             <span className="text-[10px] text-text-muted opacity-60">
@@ -1297,15 +1296,15 @@ function ProblemsView() {
                 filePath = filePath.replace(/\//g, '\\')
             }
         }
-        
+
         const content = await window.electronAPI.readFile(filePath)
         if (content !== null) {
             openFile(filePath, content)
             setActiveFile(filePath)
-            
+
             // 发送跳转到行的事件（编辑器会监听）
             window.dispatchEvent(new CustomEvent('editor:goto-line', {
-                detail: { 
+                detail: {
                     line: diag.range.start.line + 1,
                     column: diag.range.start.character + 1
                 }
@@ -1347,9 +1346,9 @@ function ProblemsView() {
     }
 
     return (
-        <div className="flex flex-col h-full bg-background-secondary">
-            <div className="h-10 px-3 flex items-center justify-between border-b border-border-subtle bg-background-secondary sticky top-0 z-10">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+        <div className="flex flex-col h-full bg-transparent">
+            <div className="h-10 px-3 flex items-center justify-between border-b border-white/5 bg-transparent sticky top-0 z-10">
+                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
                     {language === 'zh' ? '问题' : 'Problems'}
                 </span>
                 <div className="flex items-center gap-2 text-[10px]">
@@ -1372,15 +1371,14 @@ function ProblemsView() {
                     <button
                         key={f}
                         onClick={() => setFilter(f)}
-                        className={`px-2 py-1 text-[10px] rounded transition-colors ${
-                            filter === f 
-                                ? 'bg-accent/20 text-accent' 
-                                : 'text-text-muted hover:bg-surface-hover'
-                        }`}
+                        className={`px-2 py-1 text-[10px] rounded transition-colors ${filter === f
+                            ? 'bg-accent/20 text-accent'
+                            : 'text-text-muted hover:bg-surface-hover'
+                            }`}
                     >
-                        {f === 'all' ? (language === 'zh' ? '全部' : 'All') : 
-                         f === 'errors' ? (language === 'zh' ? '错误' : 'Errors') : 
-                         (language === 'zh' ? '警告' : 'Warnings')}
+                        {f === 'all' ? (language === 'zh' ? '全部' : 'All') :
+                            f === 'errors' ? (language === 'zh' ? '错误' : 'Errors') :
+                                (language === 'zh' ? '警告' : 'Warnings')}
                     </button>
                 ))}
             </div>
@@ -1394,7 +1392,7 @@ function ProblemsView() {
                     Array.from(filteredDiagnostics.entries()).map(([uri, diags]) => {
                         const fileName = uri.split(/[\\/]/).pop() || uri
                         const isExpanded = expandedFiles.has(uri)
-                        
+
                         return (
                             <div key={uri} className="border-b border-border-subtle/50">
                                 <div
@@ -1406,7 +1404,7 @@ function ProblemsView() {
                                     <span className="text-xs text-text-secondary flex-1 truncate">{fileName}</span>
                                     <span className="text-[10px] text-text-muted bg-surface-active px-1.5 rounded">{diags.length}</span>
                                 </div>
-                                
+
                                 {isExpanded && (
                                     <div className="pb-1">
                                         {diags.map((diag, idx) => (
@@ -1484,10 +1482,10 @@ function OutlineView() {
     // 点击符号跳转到对应行
     const handleSymbolClick = useCallback((symbol: LspDocumentSymbol) => {
         if (!activeFilePath) return
-        
+
         // 发送跳转到行的事件
         window.dispatchEvent(new CustomEvent('editor:goto-line', {
-            detail: { 
+            detail: {
                 line: symbol.range.start.line + 1,
                 column: symbol.range.start.character + 1
             }
@@ -1529,7 +1527,7 @@ function OutlineView() {
                     style={{ paddingLeft: `${depth * 12 + 8}px` }}
                 >
                     {hasChildren ? (
-                        <button 
+                        <button
                             onClick={(e) => toggleSymbol(symbol.name, e)}
                             className="p-0.5 hover:bg-surface-active rounded"
                         >
@@ -1544,7 +1542,7 @@ function OutlineView() {
                         {symbol.range.start.line + 1}
                     </span>
                 </div>
-                
+
                 {hasChildren && isExpanded && (
                     <div>
                         {symbol.children!.map(child => renderSymbol(child, depth + 1))}
@@ -1557,9 +1555,9 @@ function OutlineView() {
     const fileName = activeFilePath ? getFileName(activeFilePath) : ''
 
     return (
-        <div className="flex flex-col h-full bg-background-secondary">
-            <div className="h-10 px-3 flex items-center justify-between border-b border-border-subtle bg-background-secondary sticky top-0 z-10">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+        <div className="flex flex-col h-full bg-transparent">
+            <div className="h-10 px-3 flex items-center justify-between border-b border-white/5 bg-transparent sticky top-0 z-10">
+                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
                     {language === 'zh' ? '大纲' : 'Outline'}
                 </span>
                 {isLoading && <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />}
@@ -1604,17 +1602,17 @@ function OutlineView() {
 }
 
 export default function Sidebar() {
-  const { activeSidePanel } = useStore()
+    const { activeSidePanel } = useStore()
 
-  if (!activeSidePanel) return null
+    if (!activeSidePanel) return null
 
-  return (
-    <div className="w-full bg-background-secondary border-r border-border-subtle flex flex-col h-full animate-slide-in relative z-0">
-      {activeSidePanel === 'explorer' && <ExplorerView />}
-      {activeSidePanel === 'search' && <SearchView />}
-      {activeSidePanel === 'git' && <GitView />}
-      {activeSidePanel === 'problems' && <ProblemsView />}
-      {activeSidePanel === 'outline' && <OutlineView />}
-    </div>
-  )
+    return (
+        <div className="w-full bg-background/60 backdrop-blur-xl border-r border-white/5 flex flex-col h-full animate-slide-in relative z-10 shadow-2xl shadow-black/50">
+            {activeSidePanel === 'explorer' && <ExplorerView />}
+            {activeSidePanel === 'search' && <SearchView />}
+            {activeSidePanel === 'git' && <GitView />}
+            {activeSidePanel === 'problems' && <ProblemsView />}
+            {activeSidePanel === 'outline' && <OutlineView />}
+        </div>
+    )
 }

@@ -109,33 +109,32 @@ export default function ChatInput({
   )
 
   return (
-    <div ref={inputContainerRef} className="p-4 pt-0 z-20 bg-transparent">
+    <div ref={inputContainerRef} className="p-3 pt-0 z-20 bg-transparent">
       <div
         className={`
-            relative group rounded-2xl border transition-all duration-300 ease-out
-            ${
-              isStreaming
-                ? 'border-accent/30 bg-accent/5 shadow-[0_0_20px_rgba(var(--color-accent),0.1)]'
-                : isFocused 
-                  ? 'border-accent/40 bg-background shadow-2xl shadow-accent/5'
-                  : 'border-white/10 bg-background/80 backdrop-blur-xl hover:border-white/20 shadow-xl'
-            }
+            relative group rounded-xl border transition-all duration-300 ease-out
+            ${isStreaming
+            ? 'border-accent/30 bg-accent/5 shadow-[0_0_20px_rgba(var(--color-accent),0.1)]'
+            : isFocused
+              ? 'border-accent/40 bg-background shadow-2xl shadow-accent/5'
+              : 'border-white/10 bg-background/80 backdrop-blur-xl hover:border-white/20 shadow-xl'
+          }
         `}
       >
         {/* Image Previews */}
         {images.length > 0 && (
-          <div className="flex gap-2 p-3 pb-0 overflow-x-auto custom-scrollbar">
+          <div className="flex gap-2 p-2 pb-0 overflow-x-auto custom-scrollbar">
             {images.map((img) => (
               <div
                 key={img.id}
-                className="relative group/img flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-border-subtle shadow-sm"
+                className="relative group/img flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border border-border-subtle shadow-sm"
               >
                 <img src={img.previewUrl} alt="preview" className="w-full h-full object-cover" />
                 <button
                   onClick={() => removeImage(img.id)}
-                  className="absolute top-1 right-1 p-1 bg-black/50 backdrop-blur rounded-full text-white hover:bg-red-500 transition-colors opacity-0 group-hover/img:opacity-100"
+                  className="absolute top-0.5 right-0.5 p-0.5 bg-black/50 backdrop-blur rounded-full text-white hover:bg-red-500 transition-colors opacity-0 group-hover/img:opacity-100"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-2.5 h-2.5" />
                 </button>
               </div>
             ))}
@@ -144,45 +143,45 @@ export default function ChatInput({
 
         {/* Context Chips */}
         {(fileRefs.length > 0 || hasCodebaseRef || hasSymbolsRef || hasGitRef || hasTerminalRef) && (
-          <div className="flex flex-wrap gap-1.5 px-3 pt-2.5 pb-0.5">
+          <div className="flex flex-wrap gap-1.5 px-2.5 pt-2 pb-0.5">
             {hasCodebaseRef && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] font-medium rounded-md border border-purple-500/20 animate-fade-in select-none">
-                <Database className="w-3 h-3" />
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-purple-500/5 text-purple-400 text-[10px] font-medium rounded border border-purple-500/10 animate-fade-in select-none">
+                <Database className="w-2.5 h-2.5" />
                 Codebase
               </span>
             )}
             {hasSymbolsRef && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] font-medium rounded-md border border-blue-500/20 animate-fade-in select-none">
-                <Code className="w-3 h-3" />
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/5 text-blue-400 text-[10px] font-medium rounded border border-blue-500/10 animate-fade-in select-none">
+                <Code className="w-2.5 h-2.5" />
                 Symbols
               </span>
             )}
             {hasGitRef && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500/10 text-orange-400 text-[10px] font-medium rounded-md border border-orange-500/20 animate-fade-in select-none">
-                <GitBranch className="w-3 h-3" />
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-500/5 text-orange-400 text-[10px] font-medium rounded border border-orange-500/10 animate-fade-in select-none">
+                <GitBranch className="w-2.5 h-2.5" />
                 Git
               </span>
             )}
             {hasTerminalRef && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/10 text-green-400 text-[10px] font-medium rounded-md border border-green-500/20 animate-fade-in select-none">
-                <Terminal className="w-3 h-3" />
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-500/5 text-green-400 text-[10px] font-medium rounded border border-green-500/10 animate-fade-in select-none">
+                <Terminal className="w-2.5 h-2.5" />
                 Terminal
               </span>
             )}
             {fileRefs.map((ref, i) => (
               <span
                 key={i}
-                className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent/10 text-accent text-[10px] font-medium rounded-md border border-accent/20 animate-fade-in select-none"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white/5 text-text-secondary text-[10px] font-medium rounded border border-white/5 animate-fade-in select-none"
               >
-                <FileText className="w-3 h-3" />
+                <FileText className="w-2.5 h-2.5 opacity-70" />
                 {ref}
               </span>
             ))}
           </div>
         )}
 
-        <div className="flex items-end gap-2 pl-3 pr-2 py-2">
-           <textarea
+        <div className="flex items-end gap-2 pl-2.5 pr-1.5 py-1.5">
+          <textarea
             ref={textareaRef}
             value={input}
             onChange={onInputChange}
@@ -192,15 +191,15 @@ export default function ChatInput({
             onBlur={() => setIsFocused(false)}
             placeholder={hasApiKey ? t('pasteImagesHint', language) : t('configureApiKey', language)}
             disabled={!hasApiKey || hasPendingToolCall}
-            className="flex-1 bg-transparent border-none p-0 py-2
+            className="flex-1 bg-transparent border-none p-0 py-1.5
                        text-sm text-text-primary placeholder-text-muted/60 resize-none
                        focus:ring-0 focus:outline-none leading-relaxed custom-scrollbar max-h-[200px] caret-accent"
             rows={1}
-            style={{ minHeight: '40px' }}
+            style={{ minHeight: '36px' }}
           />
-          
-          <div className="flex items-center gap-1 pb-1">
-             <input
+
+          <div className="flex items-center gap-1 pb-0.5">
+            <input
               type="file"
               ref={fileInputRef}
               className="hidden"
@@ -215,10 +214,10 @@ export default function ChatInput({
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-2 rounded-xl text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
+              className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
               title={t('uploadImage', language)}
             >
-              <Paperclip className="w-4 h-4" />
+              <Paperclip className="w-3.5 h-3.5" />
             </button>
 
             <button
@@ -226,31 +225,30 @@ export default function ChatInput({
               disabled={
                 !hasApiKey || ((!input.trim() && images.length === 0) && !isStreaming) || hasPendingToolCall
               }
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200
-                  ${
-                    isStreaming
-                      ? 'bg-transparent border border-status-error text-status-error hover:bg-status-error/10'
-                      : input.trim() || images.length > 0
-                        ? 'bg-accent text-white shadow-lg shadow-accent/20 hover:scale-105 hover:bg-accent-hover'
-                        : 'bg-surface-active text-text-muted cursor-not-allowed'
-                  }
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200
+                  ${isStreaming
+                  ? 'bg-transparent border border-status-error text-status-error hover:bg-status-error/10'
+                  : input.trim() || images.length > 0
+                    ? 'bg-accent text-white shadow-lg shadow-accent/20 hover:scale-105 hover:bg-accent-hover'
+                    : 'bg-surface-active text-text-muted cursor-not-allowed'
+                }
                   `}
             >
               {isStreaming ? (
-                <div className="w-2.5 h-2.5 bg-current rounded-[2px]" />
+                <div className="w-2 h-2 bg-current rounded-[1px]" />
               ) : (
-                <ArrowUp className="w-4 h-4 stroke-[3]" />
+                <ArrowUp className="w-3.5 h-3.5 stroke-[3]" />
               )}
             </button>
           </div>
         </div>
       </div>
 
-      <div className="mt-2 flex items-center justify-between px-3">
+      <div className="mt-1.5 flex items-center justify-between px-2">
         <div className="flex items-center gap-2 text-[10px] text-text-muted">
           {chatMode === 'agent' && (
-            <span className="flex items-center gap-1 text-accent font-medium bg-accent/5 px-2 py-0.5 rounded-full">
-              <Sparkles className="w-3 h-3" />
+            <span className="flex items-center gap-1 text-accent font-medium bg-accent/5 px-1.5 py-0.5 rounded-full">
+              <Sparkles className="w-2.5 h-2.5" />
               {t('agentMode', language)}
             </span>
           )}

@@ -132,15 +132,62 @@ export default function Editor() {
 
   // 自定义右键菜单状态
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
-  
+
   // Tab 右键菜单状态
   const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; filePath: string } | null>(null)
 
   const activeFile = openFiles.find((f: { path: string }) => f.path === activeFilePath)
   const activeLanguage = activeFile ? getLanguage(activeFile.path) : 'plaintext'
-  
+
   // 检测大文件
   const activeFileInfo = activeFile ? getFileInfo(activeFile.path, activeFile.content) : null
+
+  // 监听主题变化并更新 Monaco 主题
+  const { currentTheme } = useStore()
+
+  useEffect(() => {
+    if (monacoRef.current && currentTheme) {
+      const monaco = monacoRef.current
+      // 动态导入主题定义（避免循环依赖，或者直接在这里处理）
+      import('./ThemeManager').then(({ themes }) => {
+        const themeVars = themes[currentTheme]
+        if (!themeVars) return
+
+        // 辅助函数：RGB "r g b" 转 Hex
+        const rgbToHex = (rgbStr: string) => {
+          const [r, g, b] = rgbStr.split(' ').map(Number)
+          return '#' + [r, g, b].map(x => {
+            const hex = x.toString(16)
+            return hex.length === 1 ? '0' + hex : hex
+          }).join('')
+        }
+
+        const bg = rgbToHex(themeVars['--color-background'])
+        const surface = rgbToHex(themeVars['--color-surface'])
+        const text = rgbToHex(themeVars['--color-text-primary'])
+        const border = rgbToHex(themeVars['--color-border'])
+        const selection = rgbToHex(themeVars['--color-accent']) + '40' // 25% opacity
+
+        monaco.editor.defineTheme('adnify-dynamic', {
+          base: currentTheme === 'dawn' ? 'vs' : 'vs-dark',
+          inherit: true,
+          rules: [],
+          colors: {
+            'editor.background': bg,
+            'editor.foreground': text,
+            'editor.lineHighlightBackground': surface,
+            'editorCursor.foreground': text,
+            'editorWhitespace.foreground': border,
+            'editorIndentGuide.background': border,
+            'editor.selectionBackground': selection,
+            'editorLineNumber.foreground': rgbToHex(themeVars['--color-text-muted']),
+            // 更多颜色适配...
+          }
+        })
+        monaco.editor.setTheme('adnify-dynamic')
+      })
+    }
+  }, [currentTheme])
 
   const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
@@ -148,6 +195,10 @@ export default function Editor() {
 
     // 注册所有 LSP 提供者（hover、completion、signature help 等）
     registerLspProviders(monaco)
+
+    // 初始设置主题
+    // 触发上面的 useEffect
+
 
     // 启动 LSP 服务器（异步）
     const { workspacePath } = useStore.getState()
@@ -173,8 +224,8 @@ export default function Editor() {
         const markers = diagnostics.map(d => ({
           severity: d.severity === 1 ? monaco.MarkerSeverity.Error
             : d.severity === 2 ? monaco.MarkerSeverity.Warning
-            : d.severity === 3 ? monaco.MarkerSeverity.Info
-            : monaco.MarkerSeverity.Hint,
+              : d.severity === 3 ? monaco.MarkerSeverity.Info
+                : monaco.MarkerSeverity.Hint,
           message: d.message,
           startLineNumber: d.range.start.line + 1,
           startColumn: d.range.start.character + 1,
@@ -217,7 +268,7 @@ export default function Editor() {
                 // 处理 Location 和 LocationLink 两种格式
                 const uri = loc.uri || loc.targetUri
                 const range = loc.range || loc.targetSelectionRange || loc.targetRange
-                
+
                 if (!uri || !range || !range.start) return null
 
                 return {
@@ -244,10 +295,10 @@ export default function Editor() {
       provideLinks: (model) => {
         const links: { range: import('monaco-editor').IRange; url?: string; tooltip?: string }[] = []
         const lineCount = model.getLineCount()
-        
+
         for (let lineNumber = 1; lineNumber <= lineCount; lineNumber++) {
           const lineContent = model.getLineContent(lineNumber)
-          
+
           // 匹配 import 语句中的路径
           const importMatch = lineContent.match(/(?:import|from|require\()\s*['"]([^'"]+)['"]/g)
           if (importMatch) {
@@ -257,7 +308,7 @@ export default function Editor() {
                 const importPath = pathMatch[1]
                 const startCol = lineContent.indexOf(pathMatch[0]) + 2
                 const endCol = startCol + importPath.length
-                
+
                 links.push({
                   range: {
                     startLineNumber: lineNumber,
@@ -273,12 +324,12 @@ export default function Editor() {
             })
           }
         }
-        
+
         return { links }
       },
       resolveLink: async (link) => {
         if (!link.url) return link
-        
+
         // 处理自定义协议
         const urlStr = typeof link.url === 'string' ? link.url : link.url.toString()
         if (urlStr.startsWith('adnify-import://')) {
@@ -290,7 +341,7 @@ export default function Editor() {
           // 返回 undefined 阻止默认行为
           return undefined as any
         }
-        
+
         return link
       }
     })
@@ -299,15 +350,15 @@ export default function Editor() {
     editor.onMouseDown((e) => {
       // 检查是否按住 Ctrl 键
       if (!e.event.ctrlKey && !e.event.metaKey) return
-      
+
       const model = editor.getModel()
       if (!model) return
-      
+
       const position = e.target.position
       if (!position) return
-      
+
       const lineContent = model.getLineContent(position.lineNumber)
-      
+
       // 检查点击位置是否在 import 路径上
       const importRegex = /(?:import|from|require\()\s*['"]([^'"]+)['"]/g
       let match
@@ -317,7 +368,7 @@ export default function Editor() {
           const importPath = pathMatch[1]
           const startCol = lineContent.indexOf(pathMatch[0]) + 2
           const endCol = startCol + importPath.length
-          
+
           // 检查点击位置是否在路径范围内
           if (position.column >= startCol && position.column <= endCol) {
             const { activeFilePath: currentFilePath } = useStore.getState()
@@ -383,7 +434,7 @@ export default function Editor() {
             })
           }
         }
-        
+
         const newSelection = ed.getSelection()
         if (newSelection && !newSelection.isEmpty()) {
           const model = ed.getModel()
@@ -391,7 +442,7 @@ export default function Editor() {
             const selectedText = model.getValueInRange(newSelection)
             const editorDomNode = ed.getDomNode()
             const coords = ed.getScrolledVisiblePosition(newSelection.getStartPosition())
-            
+
             if (editorDomNode && coords) {
               const rect = editorDomNode.getBoundingClientRect()
               setInlineEditState({
@@ -410,7 +461,7 @@ export default function Editor() {
     })
 
     // ============ AI Code Completion Integration ============
-    
+
     // Initialize ghost text manager
     ghostTextRef.current = createGhostTextManager(editor)
 
@@ -449,13 +500,13 @@ export default function Editor() {
     // 监听内容变化，自动触发补全
     editor.onDidChangeModelContent((e) => {
       if (!completionEnabled) return
-      
+
       // 检查是否应该触发补全
       const changes = e.changes
       if (changes.length > 0) {
         const lastChange = changes[changes.length - 1]
         const insertedText = lastChange.text
-        
+
         // 如果是单字符输入且是触发字符
         if (insertedText.length === 1 && completionService.shouldTrigger(insertedText)) {
           triggerCompletion(editor)
@@ -482,7 +533,7 @@ export default function Editor() {
     // 设置补全回调
     completionService.onCompletion((result) => {
       if (!result || result.suggestions.length === 0) return
-      
+
       const suggestion = result.suggestions[0]
       const position = editor.getPosition()
       if (position && ghostTextRef.current) {
@@ -514,17 +565,17 @@ export default function Editor() {
   const handleImportClick = useCallback(async (importPath: string, currentFilePath?: string) => {
     const filePath = currentFilePath || activeFilePath
     if (!filePath) return
-    
+
     const { workspacePath, openFile, setActiveFile } = useStore.getState()
     if (!workspacePath) return
-    
+
     // 获取当前文件的目录
     const sep = getPathSeparator(filePath)
     const currentDir = getDirPath(filePath)
-    
+
     // 解析 import 路径
     let targetPath = importPath
-    
+
     // 相对路径
     if (importPath.startsWith('./') || importPath.startsWith('../')) {
       targetPath = joinPath(currentDir, importPath)
@@ -534,7 +585,7 @@ export default function Editor() {
         else if (part !== '.') acc.push(part)
         return acc
       }, []).join(sep)
-    } 
+    }
     // 绝对路径（从项目根目录）
     else if (importPath.startsWith('@/') || importPath.startsWith('~/')) {
       targetPath = joinPath(workspacePath, importPath.slice(2))
@@ -544,10 +595,10 @@ export default function Editor() {
       // 尝试从 src 目录查找
       targetPath = joinPath(workspacePath, 'src', importPath)
     }
-    
+
     // 尝试不同的扩展名
     const extensions = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx']
-    
+
     for (const ext of extensions) {
       const fullPath = targetPath + ext
       try {
@@ -561,7 +612,7 @@ export default function Editor() {
         // 继续尝试下一个扩展名
       }
     }
-    
+
     console.warn('Could not resolve import path:', importPath)
   }, [activeFilePath])
 
@@ -627,11 +678,11 @@ export default function Editor() {
   // 文件切换时的处理
   useEffect(() => {
     setLintErrors([])
-    
+
     // 清除补全状态
     ghostTextRef.current?.hide()
     completionService.cancel()
-    
+
     // 通知 LSP 服务器当前文件已打开
     if (activeFile) {
       didOpenDocument(activeFile.path, activeFile.content)
@@ -774,11 +825,11 @@ export default function Editor() {
 
   // Breadcrumb path generation
   const getBreadcrumbs = (path: string) => {
-      // 使用 pathUtils 分割路径
-      const sep = getPathSeparator(path)
-      const parts = path.split(sep === '\\' ? /\\/ : /\//)
-      // Show last 3 parts max to avoid clutter
-      return parts.slice(-4)
+    // 使用 pathUtils 分割路径
+    const sep = getPathSeparator(path)
+    const parts = path.split(sep === '\\' ? /\\/ : /\//)
+    // Show last 3 parts max to avoid clutter
+    return parts.slice(-4)
   }
 
   if (openFiles.length === 0) {
@@ -786,18 +837,18 @@ export default function Editor() {
       <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
         {/* Background Decoration */}
         <div className="absolute inset-0 bg-gradient-to-br from-purple-900/10 via-background to-background pointer-events-none" />
-        
+
         <div className="flex-1 flex items-center justify-center relative z-10">
           <div className="text-center">
             <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 border border-white/5 flex items-center justify-center backdrop-blur-sm shadow-glow">
-               <FileCode className="w-10 h-10 text-accent opacity-80" />
+              <FileCode className="w-10 h-10 text-accent opacity-80" />
             </div>
             <h2 className="text-xl font-medium text-text-primary mb-2 tracking-tight">{t('welcome', language)}</h2>
             <p className="text-text-muted text-sm">{t('welcomeDesc', language)}</p>
-            
+
             <div className="mt-8 flex flex-col gap-2 text-xs text-text-muted opacity-60">
-                 <p><kbd className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border-subtle">Ctrl+P</kbd> {t('searchFile', language)}</p>
-                 <p><kbd className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border-subtle">Ctrl+Shift+P</kbd> {t('commandPalette', language)}</p>
+              <p><kbd className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border-subtle">Ctrl+P</kbd> {t('searchFile', language)}</p>
+              <p><kbd className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border-subtle">Ctrl+Shift+P</kbd> {t('commandPalette', language)}</p>
             </div>
           </div>
         </div>
@@ -824,24 +875,24 @@ export default function Editor() {
                 className={`
                   flex items-center gap-2 px-4 h-full cursor-pointer
                   transition-all group min-w-[120px] max-w-[200px] border-r border-border-subtle/30
-                  ${isActive 
-                    ? 'bg-background text-text-primary border-t-2 border-t-accent' 
+                  ${isActive
+                    ? 'bg-background text-text-primary border-t-2 border-t-accent'
                     : 'bg-transparent text-text-muted hover:bg-surface-hover hover:text-text-primary border-t-2 border-t-transparent'}
                 `}
               >
                 <FileCode className={`w-3.5 h-3.5 opacity-70 ${isActive ? 'text-accent' : ''}`} />
                 <span className="truncate text-xs flex-1">{fileName}</span>
                 {file.isDirty && (
-                   <Circle className="w-2 h-2 fill-accent text-transparent mr-1" />
+                  <Circle className="w-2 h-2 fill-accent text-transparent mr-1" />
                 )}
                 <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleCloseFile(file.path)
-                    }}
-                    className={`p-0.5 rounded hover:bg-surface-active opacity-0 group-hover:opacity-100 transition-opacity ${isActive ? 'opacity-100' : ''}`}
-                  >
-                    <X className="w-3 h-3 text-text-muted" />
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleCloseFile(file.path)
+                  }}
+                  className={`p-0.5 rounded hover:bg-surface-active opacity-0 group-hover:opacity-100 transition-opacity ${isActive ? 'opacity-100' : ''}`}
+                >
+                  <X className="w-3 h-3 text-text-muted" />
                 </button>
               </div>
             )
@@ -881,25 +932,25 @@ export default function Editor() {
 
       {/* Breadcrumbs */}
       {activeFile && (
-          <div className="h-6 flex items-center px-4 bg-background border-b border-border-subtle/50 text-[11px] text-text-muted select-none">
-              <div className="flex items-center gap-1 opacity-70 flex-1">
-                  <Home className="w-3 h-3" />
-                  <span className="mx-1 opacity-30">/</span>
-                  {getBreadcrumbs(activeFile.path).map((part, i, arr) => (
-                      <div key={i} className="flex items-center">
-                          <span className={i === arr.length - 1 ? 'text-text-primary font-medium' : ''}>{part}</span>
-                          {i < arr.length - 1 && <ChevronRight className="w-3 h-3 mx-1 opacity-30" />}
-                      </div>
-                  ))}
+        <div className="h-6 flex items-center px-4 bg-background border-b border-border-subtle/50 text-[11px] text-text-muted select-none">
+          <div className="flex items-center gap-1 opacity-70 flex-1">
+            <Home className="w-3 h-3" />
+            <span className="mx-1 opacity-30">/</span>
+            {getBreadcrumbs(activeFile.path).map((part, i, arr) => (
+              <div key={i} className="flex items-center">
+                <span className={i === arr.length - 1 ? 'text-text-primary font-medium' : ''}>{part}</span>
+                {i < arr.length - 1 && <ChevronRight className="w-3 h-3 mx-1 opacity-30" />}
               </div>
-              {/* 大文件警告 */}
-              {activeFileInfo?.isLarge && (
-                <div className="flex items-center gap-1 text-status-warning">
-                  <AlertTriangle className="w-3 h-3" />
-                  <span>{getLargeFileWarning(activeFileInfo, language)}</span>
-                </div>
-              )}
+            ))}
           </div>
+          {/* 大文件警告 */}
+          {activeFileInfo?.isLarge && (
+            <div className="flex items-center gap-1 text-status-warning">
+              <AlertTriangle className="w-3 h-3" />
+              <span>{getLargeFileWarning(activeFileInfo, language)}</span>
+            </div>
+          )}
+        </div>
       )}
 
       {/* 流式编辑预览 */}
@@ -926,12 +977,12 @@ export default function Editor() {
       {activeDiff && (() => {
         // 检查是否在 pendingChanges 中（决定是否显示操作按钮）
         const isPendingChange = pendingChanges.some(c => c.filePath === activeDiff.filePath)
-        
+
         // 安全关闭 Diff 预览（延迟执行避免模型销毁问题）
         const closeDiff = () => {
           setTimeout(() => setActiveDiff(null), 0)
         }
-        
+
         return (
           <div className="absolute inset-0 z-50 flex flex-col bg-editor-bg">
             {/* Header */}
@@ -959,7 +1010,7 @@ export default function Editor() {
                 </button>
               </div>
             </div>
-            
+
             {/* Monaco Diff Editor */}
             <div className="flex-1">
               <DiffEditor
@@ -982,7 +1033,7 @@ export default function Editor() {
                 }}
               />
             </div>
-            
+
             {/* Footer Actions - 只有待确认的更改才显示接受/拒绝按钮 */}
             <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border-subtle bg-surface/50">
               {isPendingChange ? (
@@ -1050,117 +1101,117 @@ export default function Editor() {
         {activeFile && (
           activeFile.originalContent ? (
             <DiffEditor
-                height="100%"
-                language={activeLanguage}
-                original={activeFile.originalContent}
-                modified={activeFile.content}
-                theme="vs-dark"
-                onMount={(editor, monaco) => {
-                    // Hook up the modified editor to our existing refs so commands work
-                    const modifiedEditor = editor.getModifiedEditor()
-                    editorRef.current = modifiedEditor
-                    monacoRef.current = monaco
-                    
-                    // Listen for changes
-                    modifiedEditor.onDidChangeModelContent(() => {
-                        const value = modifiedEditor.getValue()
-                        updateFileContent(activeFile.path, value)
-                    })
-                }}
-                options={{
-                    fontSize: getEditorConfig().fontSize,
-                    fontFamily: getEditorConfig().fontFamily,
-                    fontLigatures: true,
-                    renderSideBySide: true,
-                    readOnly: false,
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                }}
+              height="100%"
+              language={activeLanguage}
+              original={activeFile.originalContent}
+              modified={activeFile.content}
+              theme="vs-dark"
+              onMount={(editor, monaco) => {
+                // Hook up the modified editor to our existing refs so commands work
+                const modifiedEditor = editor.getModifiedEditor()
+                editorRef.current = modifiedEditor
+                monacoRef.current = monaco
+
+                // Listen for changes
+                modifiedEditor.onDidChangeModelContent(() => {
+                  const value = modifiedEditor.getValue()
+                  updateFileContent(activeFile.path, value)
+                })
+              }}
+              options={{
+                fontSize: getEditorConfig().fontSize,
+                fontFamily: getEditorConfig().fontFamily,
+                fontLigatures: true,
+                renderSideBySide: true,
+                readOnly: false,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+              }}
             />
           ) : (
-          <MonacoEditor
-            height="100%"
-            // 使用 key 强制在文件切换时重新创建编辑器实例
-            key={activeFile.path}
-            // 使用 monaco.Uri.file() 生成的 URI 字符串
-            // 这确保与 TypeScript 语言服务内部使用的格式一致
-            path={monaco.Uri.file(activeFile.path).toString()}
-            language={activeLanguage}
-            value={activeFile.content}
-            theme="vs-dark"
-            beforeMount={(monacoInstance) => {
-              // 初始化 TypeScript 语言服务
-              initMonacoTypeService(monacoInstance)
-            }}
-            onMount={handleEditorMount}
-            onChange={(value) => {
-              if (value !== undefined) {
-                updateFileContent(activeFile.path, value)
-                // 通知 LSP 文档变更
-                didChangeDocument(activeFile.path, value)
+            <MonacoEditor
+              height="100%"
+              // 使用 key 强制在文件切换时重新创建编辑器实例
+              key={activeFile.path}
+              // 使用 monaco.Uri.file() 生成的 URI 字符串
+              // 这确保与 TypeScript 语言服务内部使用的格式一致
+              path={monaco.Uri.file(activeFile.path).toString()}
+              language={activeLanguage}
+              value={activeFile.content}
+              theme="vs-dark"
+              beforeMount={(monacoInstance) => {
+                // 初始化 TypeScript 语言服务
+                initMonacoTypeService(monacoInstance)
+              }}
+              onMount={handleEditorMount}
+              onChange={(value) => {
+                if (value !== undefined) {
+                  updateFileContent(activeFile.path, value)
+                  // 通知 LSP 文档变更
+                  didChangeDocument(activeFile.path, value)
+                }
+              }}
+              loading={
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-text-muted text-sm">{t('loading', language)}</div>
+                </div>
               }
-            }}
-            loading={
-              <div className="flex items-center justify-center h-full">
-                <div className="text-text-muted text-sm">{t('loading', language)}</div>
-              </div>
-            }
-            options={{
-              fontSize: getEditorConfig().fontSize,
-              fontFamily: getEditorConfig().fontFamily,
-              fontLigatures: true,
-              minimap: { enabled: getEditorConfig().minimap, scale: getEditorConfig().minimapScale, renderCharacters: false },
-              scrollBeyondLastLine: false,
-              smoothScrolling: true,
-              cursorBlinking: 'smooth',
-              cursorSmoothCaretAnimation: 'on',
-              padding: { top: 16 },
-              lineNumbers: 'on',
-              renderLineHighlight: 'all',
-              bracketPairColorization: { enabled: true },
-              automaticLayout: true,
-              suggest: {
-                showKeywords: true,
-                showSnippets: true,
-                showClasses: true,
-                showFunctions: true,
-                showVariables: true,
-                showModules: true,
-              },
-              quickSuggestions: {
-                other: true,
-                comments: false,
-                strings: true,
-              },
-              parameterHints: { enabled: true },
-              folding: true,
-              foldingStrategy: 'indentation',
-              showFoldingControls: 'mouseover',
-              matchBrackets: 'always',
-              renderWhitespace: 'selection',
-              guides: {
-                bracketPairs: true,
-                indentation: true,
-              },
-              stickyScroll: { enabled: true },
-              inlayHints: { enabled: 'on' },
-              // 链接点击支持
-              links: true,
-              // 跳转到定义
-              gotoLocation: {
-                multiple: 'goto',
-                multipleDefinitions: 'goto',
-                multipleTypeDefinitions: 'goto',
-                multipleDeclarations: 'goto',
-                multipleImplementations: 'goto',
-                multipleReferences: 'goto',
-              },
-              // 禁用 Monaco 内置右键菜单，使用自定义国际化菜单
-              contextmenu: false,
-              // 大文件优化
-              ...(activeFileInfo ? getLargeFileEditorOptions(activeFileInfo) : {}),
-            }}
-          />
+              options={{
+                fontSize: getEditorConfig().fontSize,
+                fontFamily: getEditorConfig().fontFamily,
+                fontLigatures: true,
+                minimap: { enabled: getEditorConfig().minimap, scale: getEditorConfig().minimapScale, renderCharacters: false },
+                scrollBeyondLastLine: false,
+                smoothScrolling: true,
+                cursorBlinking: 'smooth',
+                cursorSmoothCaretAnimation: 'on',
+                padding: { top: 16 },
+                lineNumbers: 'on',
+                renderLineHighlight: 'all',
+                bracketPairColorization: { enabled: true },
+                automaticLayout: true,
+                suggest: {
+                  showKeywords: true,
+                  showSnippets: true,
+                  showClasses: true,
+                  showFunctions: true,
+                  showVariables: true,
+                  showModules: true,
+                },
+                quickSuggestions: {
+                  other: true,
+                  comments: false,
+                  strings: true,
+                },
+                parameterHints: { enabled: true },
+                folding: true,
+                foldingStrategy: 'indentation',
+                showFoldingControls: 'mouseover',
+                matchBrackets: 'always',
+                renderWhitespace: 'selection',
+                guides: {
+                  bracketPairs: true,
+                  indentation: true,
+                },
+                stickyScroll: { enabled: true },
+                inlayHints: { enabled: 'on' },
+                // 链接点击支持
+                links: true,
+                // 跳转到定义
+                gotoLocation: {
+                  multiple: 'goto',
+                  multipleDefinitions: 'goto',
+                  multipleTypeDefinitions: 'goto',
+                  multipleDeclarations: 'goto',
+                  multipleImplementations: 'goto',
+                  multipleReferences: 'goto',
+                },
+                // 禁用 Monaco 内置右键菜单，使用自定义国际化菜单
+                contextmenu: false,
+                // 大文件优化
+                ...(activeFileInfo ? getLargeFileEditorOptions(activeFileInfo) : {}),
+              }}
+            />
           )
         )}
 
@@ -1241,10 +1292,12 @@ function TabContextMenu({
     { type: 'separator' as const },
     { label: isZh ? '保存' : 'Save', action: () => onSave(filePath), shortcut: 'Ctrl+S', disabled: !isDirty },
     { type: 'separator' as const },
-    { label: isZh ? '复制路径' : 'Copy Path', action: () => {
-      navigator.clipboard.writeText(filePath)
-      toast.success(isZh ? '已复制路径' : 'Path Copied')
-    }},
+    {
+      label: isZh ? '复制路径' : 'Copy Path', action: () => {
+        navigator.clipboard.writeText(filePath)
+        toast.success(isZh ? '已复制路径' : 'Path Copied')
+      }
+    },
     { label: isZh ? '在资源管理器中显示' : 'Reveal in Explorer', action: () => window.electronAPI.showItemInFolder(filePath) },
   ]
 
@@ -1254,7 +1307,7 @@ function TabContextMenu({
       className="fixed bg-background-secondary border border-border-subtle rounded-lg shadow-xl py-1 z-[9999] min-w-[180px]"
       style={{ left: x, top: y }}
     >
-      {menuItems.map((item, index) => 
+      {menuItems.map((item, index) =>
         item.type === 'separator' ? (
           <div key={index} className="h-px bg-border-subtle my-1" />
         ) : (
