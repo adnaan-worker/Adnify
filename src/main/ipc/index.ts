@@ -1,19 +1,26 @@
 /**
- * IPC handlers 统一导出
+ * 安全的 IPC handlers 统一导出
+ * 所有高危操作都已经过安全重构
  */
 
 import { BrowserWindow } from 'electron'
 import Store from 'electron-store'
 
 import { registerWindowHandlers } from './window'
-import { registerFileHandlers, cleanupFileWatcher } from './file'
 import { registerSettingsHandlers } from './settings'
-import { registerTerminalHandlers, cleanupTerminals } from './terminal'
 import { registerSearchHandlers } from './search'
-import { registerGitHandlers } from './git'
 import { registerLLMHandlers, updateLLMServiceWindow } from './llm'
 import { registerIndexingHandlers } from './indexing'
 import { registerLspHandlers } from './lsp'
+
+// 安全模块
+import {
+  securityManager,
+  registerSecureTerminalHandlers,
+  registerSecureFileHandlers,
+  cleanupSecureFileWatcher,
+} from '../security'
+
 export interface IPCContext {
   getMainWindow: () => BrowserWindow | null
   mainStore: Store
@@ -22,28 +29,32 @@ export interface IPCContext {
 }
 
 /**
- * 注册所有 IPC handlers
+ * 注册所有安全的 IPC handlers
  */
 export function registerAllHandlers(context: IPCContext) {
   const { getMainWindow, mainStore, bootstrapStore, setMainStore } = context
 
+  // 初始化安全模块
+  securityManager.setMainWindow(getMainWindow())
+
   // 窗口控制
   registerWindowHandlers(getMainWindow)
 
-  // 文件操作
-  registerFileHandlers(getMainWindow, mainStore)
+  // 文件操作（安全版）
+  registerSecureFileHandlers(getMainWindow, mainStore, () => {
+    return mainStore.get('lastWorkspacePath') as string | null
+  })
 
   // 设置
   registerSettingsHandlers(mainStore, bootstrapStore, setMainStore)
 
-  // 终端
-  registerTerminalHandlers(getMainWindow)
+  // 终端（安全版）
+  registerSecureTerminalHandlers(getMainWindow, () => {
+    return mainStore.get('lastWorkspacePath') as string | null
+  })
 
   // 搜索
   registerSearchHandlers()
-
-  // Git
-  registerGitHandlers()
 
   // LLM
   registerLLMHandlers(getMainWindow)
@@ -53,6 +64,8 @@ export function registerAllHandlers(context: IPCContext) {
 
   // LSP 语言服务
   registerLspHandlers()
+
+  console.log('[Security] 所有安全IPC处理器已注册')
 }
 
 /**
@@ -60,8 +73,7 @@ export function registerAllHandlers(context: IPCContext) {
  */
 export function cleanupAllHandlers() {
   console.log('[IPC] Cleaning up all handlers...')
-  cleanupTerminals()
-  cleanupFileWatcher() // 改为同步调用
+  cleanupSecureFileWatcher()
   console.log('[IPC] All handlers cleaned up')
 }
 

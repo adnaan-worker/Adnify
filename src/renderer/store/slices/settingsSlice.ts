@@ -25,12 +25,22 @@ export interface ProviderModelConfig {
   customModels: string[]
 }
 
+// 安全设置
+export interface SecuritySettings {
+  enablePermissionConfirm: boolean
+  enableAuditLog: boolean
+  strictWorkspaceMode: boolean
+  allowedShellCommands?: string[]
+  showSecurityWarnings?: boolean
+}
+
 export interface SettingsSlice {
   llmConfig: LLMConfig
   language: 'en' | 'zh'
   autoApprove: AutoApproveSettings
   promptTemplateId: string
   providerConfigs: Record<string, ProviderModelConfig>
+  securitySettings: SecuritySettings
 
   setLLMConfig: (config: Partial<LLMConfig>) => void
   setLanguage: (lang: 'en' | 'zh') => void
@@ -39,6 +49,7 @@ export interface SettingsSlice {
   setProviderConfig: (providerId: string, config: ProviderModelConfig) => void
   addCustomModel: (providerId: string, model: string) => void
   removeCustomModel: (providerId: string, model: string) => void
+  setSecuritySettings: (settings: Partial<SecuritySettings>) => void
 }
 
 const defaultLLMConfig: LLMConfig = {
@@ -65,12 +76,21 @@ const defaultProviderConfigs: Record<string, ProviderModelConfig> = {
   custom: { customModels: [] },
 }
 
+const defaultSecuritySettings: SecuritySettings = {
+  enablePermissionConfirm: true,
+  enableAuditLog: true,
+  strictWorkspaceMode: true,
+  allowedShellCommands: ['npm', 'yarn', 'pnpm', 'node', 'npx', 'git', 'ls', 'cat', 'echo', 'pwd'],
+  showSecurityWarnings: true,
+}
+
 export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSlice> = (set) => ({
   llmConfig: defaultLLMConfig,
   language: 'en',
   autoApprove: defaultAutoApprove,
   promptTemplateId: 'default',
   providerConfigs: defaultProviderConfigs,
+  securitySettings: defaultSecuritySettings,
 
   setLLMConfig: (config) =>
     set((state) => ({
@@ -122,4 +142,9 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
         },
       }
     }),
+
+  setSecuritySettings: (settings) =>
+    set((state) => ({
+      securitySettings: { ...state.securitySettings, ...settings },
+    })),
 })

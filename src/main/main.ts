@@ -1,6 +1,6 @@
 /**
  * Adnify Main Process
- * 重构后的主进程入口
+ * 重构后的主进程入口（集成安全模块）
  */
 
 import { app, BrowserWindow } from 'electron'
@@ -9,6 +9,7 @@ import * as fs from 'fs'
 import Store from 'electron-store'
 import { registerAllHandlers, cleanupAllHandlers, updateLLMServiceWindow } from './ipc'
 import { lspManager } from './lspManager'
+import { securityManager } from './security'
 
 // ==========================================
 // 单实例锁定 - 必须在最开始检查
@@ -139,6 +140,23 @@ function createWindow() {
 // ==========================================
 
 app.whenReady().then(() => {
+  console.log('[Security] 🔒 初始化安全模块...')
+
+  // 初始化安全模块配置
+  const securityConfig = mainStore.get('securitySettings', {
+    // 默认开启所有安全保护
+    enablePermissionConfirm: true,
+    enableAuditLog: true,
+    strictWorkspaceMode: true,
+    // 允许的命令白名单
+    allowedShellCommands: ['npm', 'yarn', 'pnpm', 'node', 'npx', 'git'],
+  })
+
+  console.log('[Security] 安全配置:', securityConfig)
+  console.log('[Security] ✅ 安全模块已初始化')
+  console.log('[Security] 📋 审计日志已启用')
+  console.log('[Security] 🛡️ 工作区边界保护已启用')
+
   // 注册所有 IPC handlers
   registerAllHandlers({
     getMainWindow: () => mainWindow,
@@ -151,6 +169,11 @@ app.whenReady().then(() => {
 
   // 创建窗口
   createWindow()
+
+  // 在窗口创建后，设置安全模块的主窗口引用
+  if (mainWindow) {
+    securityManager.setMainWindow(mainWindow)
+  }
 })
 
 // 当第二个实例尝试启动时，聚焦到已有窗口

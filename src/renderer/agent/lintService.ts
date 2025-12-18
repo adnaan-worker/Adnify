@@ -172,9 +172,16 @@ class LintService {
 		}
 
 		try {
-			const command = `${lintConfig.command} "${filePath}"`
-			const result = await window.electronAPI.executeCommand(command)
+			// 解析命令和参数，保持命令在当前目录执行
+			const [baseCommand, ...commandArgs] = lintConfig.command.split(' ')
+			const allArgs = [...commandArgs, `"${filePath}"`]
 
+			const result = await window.electronAPI.executeSecureCommand({
+				command: baseCommand,
+				args: allArgs,
+				timeout: 60000,
+				requireConfirm: false
+			})
 			const output = (result.output || '') + (result.errorOutput || '')
 			const errors = lintConfig.parser(output, filePath)
 

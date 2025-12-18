@@ -260,10 +260,10 @@ const APPROVAL_TYPE_MAP: Record<string, ToolApprovalType> = {
   // edit_file: 不需要审批
   // write_file: 不需要审批
   // create_file_or_folder: 不需要审批
-  
+
   // 危险操作需要审批
   delete_file_or_folder: 'dangerous',
-  
+
   // 终端命令需要审批
   run_command: 'terminal',
 }
@@ -404,7 +404,7 @@ function formatDirTree(nodes: DirTreeNode[], prefix = ''): string {
     const connector = isLast ? '└── ' : '├── '
     const icon = node.isDirectory ? '📁 ' : '📄 '
 
-    result += `${prefix}${connector}${icon}${node.name}\n`
+    result += `${prefix}${connector}${icon}${node.name}\\n`
 
     if (node.children?.length) {
       const childPrefix = prefix + (isLast ? '    ' : '│   ')
@@ -449,22 +449,22 @@ export async function executeTool(
      */
     const resolvePath = (p: unknown, allowRead = false) => {
       if (typeof p !== 'string') throw new Error('Invalid path: not a string')
-      
+
       // 使用安全验证
       const validation = validatePath(p, workspacePath ?? null, {
         allowSensitive: false,
         allowOutsideWorkspace: false,
       })
-      
+
       if (!validation.valid) {
         throw new Error(`Security: ${validation.error}`)
       }
-      
+
       // 额外检查敏感文件（即使在工作区内）
       if (!allowRead && isSensitivePath(validation.sanitizedPath!)) {
         throw new Error('Security: Cannot modify sensitive files')
       }
-      
+
       return validation.sanitizedPath!
     }
 
@@ -487,7 +487,7 @@ export async function executeTool(
 
         return {
           success: true,
-          result: `File: ${path}\nLines ${startLine}-${endLine} of ${lines.length}\n\n${numberedContent}`,
+          result: `File: ${path}\\nLines ${startLine}-${endLine} of ${lines.length}\\n\\n${numberedContent}`,
         }
       }
 
@@ -501,11 +501,11 @@ export async function executeTool(
         const formatted = items
           .slice(0, 100)
           .map(item => `${item.isDirectory ? '📁' : '📄'} ${item.name}`)
-          .join('\n')
+          .join('\\n')
 
         return {
           success: true,
-          result: `Contents of ${path} (${items.length} items):\n${formatted}${items.length > 100 ? '\n...(truncated)' : ''}`,
+          result: `Contents of ${path} (${items.length} items):\\n${formatted}${items.length > 100 ? '\\n...(truncated)' : ''}`,
         }
       }
 
@@ -513,14 +513,14 @@ export async function executeTool(
         const path = resolvePath(args.path)
         const maxDepth = Math.min(typeof args.max_depth === 'number' ? args.max_depth : 3, 5)
         const tree = await buildDirTree(path, maxDepth)
-        
+
         if (!tree.length) {
           return { success: true, result: `Directory empty or not found: ${path}` }
         }
 
         return {
           success: true,
-          result: `Directory tree of ${path}:\n${formatDirTree(tree)}`,
+          result: `Directory tree of ${path}:\\n${formatDirTree(tree)}`,
         }
       }
 
@@ -556,20 +556,20 @@ export async function executeTool(
           }
 
           // 格式化输出
-          let output = `Found matches in ${fileGroups.size} files (${searchResults.length} total matches):\n\n`
+          let output = `Found matches in ${fileGroups.size} files (${searchResults.length} total matches):\\n\\n`
           let fileCount = 0
-          
+
           for (const [file, matches] of fileGroups) {
             if (fileCount >= 30) { // 最多显示 30 个文件
-              output += `\n... and ${fileGroups.size - 30} more files`
+              output += `\\n... and ${fileGroups.size - 30} more files`
               break
             }
-            
-            output += `📄 ${file}:\n`
+
+            output += `📄 ${file}:\\n`
             for (const m of matches) {
-              output += `  Line ${m.line}: ${m.text}\n`
+              output += `  Line ${m.line}: ${m.text}\\n`
             }
-            output += '\n'
+            output += '\\n'
             fileCount++
           }
 
@@ -600,12 +600,12 @@ export async function executeTool(
         }
 
         const { newContent, appliedCount, errors } = applySearchReplaceBlocks(content, blocks)
-        
+
         if (appliedCount === 0) {
           return {
             success: false,
             result: '',
-            error: `No changes applied. Errors:\n${errors.join('\n')}`,
+            error: `No changes applied. Errors:\\n${errors.join('\\n')}`,
           }
         }
 
@@ -616,7 +616,6 @@ export async function executeTool(
         }
 
         // 计算行数变化
-        // 计算实际的行数变化
         const lineChanges = calculateLineChanges(content, newContent)
 
         return {
@@ -647,7 +646,7 @@ export async function executeTool(
 
         // Checkpoint 现在在 AgentService 中创建
         const success = await window.electronAPI.writeFile(path, content)
-        
+
         if (!success) {
           return { success: false, result: '', error: `Failed to write: ${path}` }
         }
@@ -722,32 +721,44 @@ export async function executeTool(
         const cwd = typeof args.cwd === 'string' ? resolvePath(args.cwd) : workspacePath
         const timeout = (typeof args.timeout === 'number' ? args.timeout : 30) * 1000
 
-        const result = await window.electronAPI.executeCommand(command, cwd || undefined, timeout)
+        // 解析命令和参数
+        const parts = command.trim().split(/\s+/)
+        const baseCommand = parts[0]
+        const commandArgs = parts.slice(1)
 
-        let output = `$ ${command}\n`
-        if (cwd) output += `(cwd: ${cwd})\n`
-        output += `Exit code: ${result.exitCode}\n\n`
+        const result = await window.electronAPI.executeSecureCommand({
+          command: baseCommand,
+          args: commandArgs,
+          cwd: cwd || undefined,
+          timeout: timeout,
+          requireConfirm: true
+        })
+
+        let output = `$ ${command}\\n`
+        if (cwd) output += `(cwd: ${cwd})\\n`
+        output += `Exit code: ${result.exitCode || 0}\\n\\n`
         if (result.output) output += result.output
-        if (result.errorOutput) output += `\nStderr:\n${result.errorOutput}`
-        if (!result.output && !result.errorOutput) output += '(No output)'
+        if (result.errorOutput) output += `\\nStderr:\\n${result.errorOutput}`
+        if (result.error) output += `\\nError: ${result.error}`
+        if (!result.output && !result.errorOutput && !result.error) output += '(No output)'
 
         return {
-          success: result.exitCode === 0,
+          success: result.success && (result.exitCode === 0),
           result: output,
-          error: result.exitCode !== 0 ? `Command failed with exit code ${result.exitCode}` : undefined,
+          error: result.error || (result.exitCode !== 0 ? `Command failed with exit code ${result.exitCode}` : undefined),
         }
       }
 
       case 'get_lint_errors': {
         const lintPath = resolvePath(args.path)
-        
+
         try {
           // 动态导入 lintService 避免循环依赖
           const { lintService } = await import('../lintService')
-          
+
           // 首先尝试从 LSP 获取诊断信息
           const lspDiagnostics = await window.electronAPI.getLspDiagnostics?.(lintPath)
-          
+
           if (lspDiagnostics && lspDiagnostics.length > 0) {
             // 格式化 LSP 诊断结果
             const errors = lspDiagnostics.map((d: any) => ({
@@ -758,16 +769,16 @@ export async function executeTool(
               endLine: (d.range?.end?.line || 0) + 1,
               file: lintPath,
             }))
-            
+
             return {
               success: true,
               result: lintService.formatErrors(errors),
             }
           }
-          
+
           // 如果 LSP 没有结果，尝试运行 lint 命令
           const errors = await lintService.getLintErrors(lintPath, true)
-          
+
           if (errors.length === 0) {
             // 最后尝试快速语法检查
             const content = await window.electronAPI.readFile(lintPath)
@@ -775,7 +786,7 @@ export async function executeTool(
               const ext = lintPath.split('.').pop()?.toLowerCase() || ''
               const lang = ['ts', 'tsx', 'js', 'jsx'].includes(ext) ? 'typescript' : ext
               const syntaxErrors = lintService.quickSyntaxCheck(content, lang)
-              
+
               if (syntaxErrors.length > 0) {
                 return {
                   success: true,
@@ -784,7 +795,7 @@ export async function executeTool(
               }
             }
           }
-          
+
           return {
             success: true,
             result: lintService.formatErrors(errors),
@@ -812,15 +823,15 @@ export async function executeTool(
             return { success: true, result: `No semantic matches found for: "${query}"` }
           }
 
-          let output = `Found ${results.length} semantic matches for "${query}":\n\n`
+          let output = `Found ${results.length} semantic matches for "${query}":\\n\\n`
 
           for (const result of results) {
             const score = (result.score * 100).toFixed(1)
-            output += `📄 ${result.relativePath} (${score}% match)\n`
-            output += `   Lines ${result.startLine}-${result.endLine} | ${result.type}\n`
+            output += `📄 ${result.relativePath} (${score}% match)\\n`
+            output += `   Lines ${result.startLine}-${result.endLine} | ${result.type}\\n`
             // 显示代码片段（限制长度）
-            const snippet = result.content.slice(0, 200).replace(/\n/g, '\n   ')
-            output += `   ${snippet}${result.content.length > 200 ? '...' : ''}\n\n`
+            const snippet = result.content.slice(0, 200).replace(/\\n/g, '\\n   ')
+            output += `   ${snippet}${result.content.length > 200 ? '...' : ''}\\n\\n`
           }
 
           return { success: true, result: output }
@@ -845,19 +856,19 @@ export async function executeTool(
             return { success: true, result: 'No references found' }
           }
 
-          let output = `Found ${results.length} references:\n\n`
+          let output = `Found ${results.length} references:\\n\\n`
 
           for (const ref of results.slice(0, 30)) {
             const filePath = lspUriToPath(ref.uri)
-            const relativePath = workspacePath 
+            const relativePath = workspacePath
               ? filePath.replace(workspacePath, '').replace(/^[\\/]/, '')
               : filePath
             const startLine = (ref.range?.start?.line || 0) + 1
-            output += `📍 ${relativePath}:${startLine}\n`
+            output += `📍 ${relativePath}:${startLine}\\n`
           }
 
           if (results.length > 30) {
-            output += `\n... and ${results.length - 30} more references`
+            output += `\\n... and ${results.length - 30} more references`
           }
 
           return { success: true, result: output }
@@ -883,7 +894,7 @@ export async function executeTool(
           }
 
           const definitions = Array.isArray(results) ? results : [results]
-          let output = `Found ${definitions.length} definition(s):\n\n`
+          let output = `Found ${definitions.length} definition(s):\\n\\n`
 
           for (const def of definitions) {
             // LSP 可能返回 Location 或 LocationLink 格式
@@ -893,12 +904,12 @@ export async function executeTool(
             if (!uri) continue
 
             const filePath = lspUriToPath(uri)
-            const relativePath = workspacePath 
+            const relativePath = workspacePath
               ? filePath.replace(workspacePath, '').replace(/^[\\/]/, '')
               : filePath
             const startLine = (range?.start?.line || 0) + 1
 
-            output += `📍 ${relativePath}:${startLine}\n`
+            output += `📍 ${relativePath}:${startLine}\\n`
 
             // 尝试读取定义处的代码
             try {
@@ -910,7 +921,7 @@ export async function executeTool(
                 const snippet = lines.slice(contextStart, contextEnd)
                   .map((l, i) => `${contextStart + i + 1}: ${l}`)
                   .join('\n')
-                output += `\`\`\`\n${snippet}\n\`\`\`\n\n`
+                output += `\`\`\`\\n${snippet}\\n\`\`\`\\n\\n`
               }
             } catch {
               // 忽略读取错误
@@ -939,7 +950,7 @@ export async function executeTool(
             return { success: true, result: 'No hover information available' }
           }
 
-          let output = '📝 Type Information:\n\n'
+          let output = '📝 Type Information:\\n\\n'
 
           // 处理不同格式的 contents
           const contents = result.contents as any
@@ -948,15 +959,15 @@ export async function executeTool(
           } else if (Array.isArray(contents)) {
             for (const item of contents) {
               if (typeof item === 'string') {
-                output += item + '\n'
+                output += item + '\\n'
               } else if (item.value) {
                 const lang = item.language || item.kind || ''
-                output += `\`\`\`${lang}\n${item.value}\n\`\`\`\n`
+                output += `\`\`\`${lang}\\n${item.value}\\n\`\`\`\\n`
               }
             }
           } else if (contents.value) {
             const lang = contents.language || contents.kind || ''
-            output += `\`\`\`${lang}\n${contents.value}\n\`\`\`\n`
+            output += `\`\`\`${lang}\\n${contents.value}\\n\`\`\`\\n`
           }
 
           return { success: true, result: output }
@@ -987,13 +998,13 @@ export async function executeTool(
             25: 'Operator', 26: 'TypeParameter',
           }
 
-          let output = `Symbols in ${args.path}:\n\n`
+          let output = `Symbols in ${args.path}:\\n\\n`
 
           const formatSymbol = (symbol: any, indent = 0): string => {
             const prefix = '  '.repeat(indent)
             const kind = symbolKindNames[symbol.kind] || 'Unknown'
             const line = (symbol.range?.start?.line || symbol.location?.range?.start?.line || 0) + 1
-            let result = `${prefix}${kind}: ${symbol.name} (line ${line})\n`
+            let result = `${prefix}${kind}: ${symbol.name} (line ${line})\\n`
 
             if (symbol.children) {
               for (const child of symbol.children) {
@@ -1031,7 +1042,7 @@ export async function executeTool(
               const numberedContent = lines
                 .map((line, i) => `${i + 1}: ${line}`)
                 .join('\n')
-              results.push(`\n### File: ${p}\nLines: ${lines.length}\n\`\`\`\n${numberedContent}\n\`\`\`\n`)
+              results.push(`\\n### File: ${p}\\nLines: ${lines.length}\\n\`\`\`\\n${numberedContent}\\n\`\`\`\\n`)
             } else {
               errors.push(`File not found: ${p}`)
             }
@@ -1040,15 +1051,15 @@ export async function executeTool(
           }
         }
 
-        let output = `Read ${results.length} file(s):\n`
-        output += results.join('\n')
+        let output = `Read ${results.length} file(s):\\n`
+        output += results.join('\\n')
 
         if (errors.length > 0) {
-          output += `\n\n⚠️ Errors:\n${errors.join('\n')}`
+          output += `\\n\\n⚠️ Errors:\\n${errors.join('\\n')}`
         }
 
         if (paths.length > 10) {
-          output += `\n\n⚠️ Only first 10 files were read (${paths.length} requested)`
+          output += `\\n\\n⚠️ Only first 10 files were read (${paths.length} requested)`
         }
 
         return { success: true, result: output }

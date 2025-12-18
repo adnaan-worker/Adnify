@@ -1,6 +1,5 @@
 /**
- * Git 服务 (原生增强版)
- * 优先使用 dugite 原生绑定，回退到 CLI
+ * Git 服务 (使用安全的 Git API)
  */
 
 export interface GitStatus {
@@ -40,27 +39,27 @@ class GitService {
     }
 
     /**
-     * 执行 Git 命令 (优先使用原生 dugite)
+     * 执行 Git 命令 (使用安全的 gitExecSecure API)
      */
     private async exec(args: string[]): Promise<GitExecResult> {
         if (!this.workspacePath) {
             return { stdout: '', stderr: 'No workspace', exitCode: 1 }
         }
 
-        // 尝试使用原生 git:exec API
-        if ((window as any).electronAPI?.gitExec) {
-            return await (window as any).electronAPI.gitExec(args, this.workspacePath)
-        }
-
-        // 回退到 shell 执行
-        const result = await window.electronAPI.executeCommand(
-            `git ${args.join(' ')}`,
-            this.workspacePath
-        )
-        return {
-            stdout: result.output,
-            stderr: result.errorOutput,
-            exitCode: result.exitCode
+        // 使用安全的 git:execSecure API
+        try {
+            const result = await window.electronAPI.gitExecSecure(args, this.workspacePath)
+            return {
+                stdout: result.stdout || '',
+                stderr: result.stderr || '',
+                exitCode: result.exitCode || 0
+            }
+        } catch (error: any) {
+            return {
+                stdout: '',
+                stderr: error?.message || 'Git execution failed',
+                exitCode: 1
+            }
         }
     }
 
@@ -349,7 +348,7 @@ class GitService {
      */
     async pushTo(remote: string, branch: string, setUpstream: boolean = false): Promise<{ success: boolean; error?: string }> {
         try {
-            const args = setUpstream 
+            const args = setUpstream
                 ? ['push', '-u', remote, branch]
                 : ['push', remote, branch]
             const result = await this.exec(args)
@@ -379,7 +378,7 @@ class GitService {
                 const trimmed = line.replace(/^\*?\s+/, '')
                 const parts = trimmed.split(/\s+/)
                 const name = parts[0]
-                
+
                 // 检查是否是远程分支
                 const remote = name.startsWith('remotes/')
                 const cleanName = remote ? name.replace('remotes/', '') : name
@@ -453,7 +452,7 @@ class GitService {
     async mergeBranch(name: string): Promise<{ success: boolean; error?: string; conflicts?: string[] }> {
         try {
             const result = await this.exec(['merge', name])
-            
+
             if (result.exitCode !== 0) {
                 // 检查是否有冲突
                 const statusResult = await this.exec(['status', '--porcelain'])
@@ -488,7 +487,7 @@ class GitService {
             const lines = result.stdout.trim().split('\n').filter(Boolean)
 
             for (const line of lines) {
-                const match = line.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/)
+                const match = line.match(/^(\\S+)\\s+(\\S+)\\s+\\((fetch|push)\\)$/)
                 if (match) {
                     remotes.push({
                         name: match[1],
@@ -529,7 +528,7 @@ class GitService {
             if (result.exitCode !== 0 || !result.stdout) return []
 
             return result.stdout.trim().split('\n').filter(Boolean).map((line, index) => {
-                const match = line.match(/^stash@\{(\d+)\}:\s+(?:On\s+(\S+):\s+)?(.+)$/)
+                const match = line.match(/^stash@{(\\d+)}:\\s+(?:On\\s+(\\S+):\\s+)?(.+)$/)
                 return {
                     index: match ? parseInt(match[1]) : index,
                     branch: match?.[2] || 'unknown',
@@ -590,10 +589,10 @@ class GitService {
             for (let i = 0; i < chunks.length; i += 2) {
                 const hash = chunks[i]
                 const info = chunks[i + 1] || ''
-                
+
                 const authorMatch = info.match(/^author (.+)$/m)
-                const timeMatch = info.match(/^author-time (\d+)$/m)
-                const contentMatch = info.match(/^\t(.*)$/m)
+                const timeMatch = info.match(/^author-time (\\d+)$/m)
+                const contentMatch = info.match(/^\\t(.*)$/m)
 
                 if (authorMatch && timeMatch && contentMatch) {
                     lineNum++
@@ -665,7 +664,7 @@ class GitService {
      */
     async amendCommit(message?: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const args = message 
+            const args = message
                 ? ['commit', '--amend', '-m', message]
                 : ['commit', '--amend', '--no-edit']
             const result = await this.exec(args)
@@ -701,7 +700,7 @@ class GitService {
      */
     async createTag(name: string, message?: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const args = message 
+            const args = message
                 ? ['tag', '-a', name, '-m', message]
                 : ['tag', name]
             const result = await this.exec(args)
@@ -723,7 +722,7 @@ class GitService {
             const args = ['fetch']
             if (prune) args.push('--prune')
             if (remote) args.push(remote)
-            
+
             const result = await this.exec(args)
             return {
                 success: result.exitCode === 0,

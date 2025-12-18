@@ -1,6 +1,6 @@
 /**
- * 持久化终端服务
- * 参考 void 编辑器的 run_persistent_command 功能
+ * 持久化终端服�?
+ * 参�?void 编辑器的 run_persistent_command 功能
  */
 
 import { PersistentTerminal, TerminalCommandResult } from './toolTypes'
@@ -26,7 +26,7 @@ class TerminalService {
 
 		// 限制终端数量
 		if (this.terminals.size >= MAX_TERMINALS) {
-			// 关闭最旧的非运行终端
+			// 关闭最旧的非运行终�?
 			let oldestId: string | null = null
 			let oldestTime = Infinity
 
@@ -50,9 +50,9 @@ class TerminalService {
 			name,
 			cwd: cwd || '.',
 			isRunning: false,
-			output: [],
-			maxOutputLines: MAX_OUTPUT_LINES,
+			lastOutput: '',
 			createdAt: Date.now(),
+			output: [],
 		}
 
 		this.terminals.set(id, terminal)
@@ -80,13 +80,22 @@ class TerminalService {
 
 		try {
 			if (waitForCompletion) {
-				// 同步执行，等待完成
+				// 同步执行，等待完�?
 				const result = await Promise.race([
-					window.electronAPI.executeCommand(command, terminal.cwd),
+					window.electronAPI.executeSecureCommand({
+						command: command.split(' ')[0],
+						args: command.split(' ').slice(1),
+						cwd: terminal.cwd,
+						timeout,
+						requireConfirm: false
+					}),
 					new Promise<never>((_, reject) =>
 						setTimeout(() => reject(new Error(`Command timed out after ${timeout}ms`)), timeout)
 					),
 				])
+				if (!result.success) {
+					throw new Error(result.error || 'Command execution failed')
+				}
 
 				const output = (result.output || '') + (result.errorOutput ? `\nStderr: ${result.errorOutput}` : '')
 				this.appendOutput(terminalId, output + '\n')
@@ -96,12 +105,20 @@ class TerminalService {
 				return {
 					terminalId,
 					output,
-					exitCode: result.exitCode,
+					exitCode: result.exitCode ?? 0,
 					isComplete: true,
+					success: true,
+					duration: 0
 				}
 			} else {
-				// 异步执行，立即返回
-				window.electronAPI.executeCommand(command, terminal.cwd).then((result) => {
+				// 异步执行，立即返�?
+				window.electronAPI.executeSecureCommand({
+					command: command.split(' ')[0],
+					args: command.split(' ').slice(1),
+					cwd: terminal.cwd,
+					timeout,
+					requireConfirm: false
+				}).then((result) => {
 					const output = (result.output || '') + (result.errorOutput ? `\nStderr: ${result.errorOutput}` : '')
 					this.appendOutput(terminalId, output + '\n')
 					terminal.isRunning = false
@@ -113,7 +130,10 @@ class TerminalService {
 				return {
 					terminalId,
 					output: 'Command started in background...',
+					exitCode: 0,
 					isComplete: false,
+					success: true,
+					duration: 0
 				}
 			}
 		} catch (error: unknown) {
@@ -125,7 +145,7 @@ class TerminalService {
 	}
 
 	/**
-	 * 追加输出到终端
+	 * 追加输出到终�?
 	 */
 	private appendOutput(terminalId: string, text: string): void {
 		const terminal = this.terminals.get(terminalId)
@@ -134,12 +154,12 @@ class TerminalService {
 		const lines = text.split('\n')
 		terminal.output.push(...lines)
 
-		// 内存管理：超过阈值时清理旧输出
+		// 内存管理：超过阈值时清理旧输�?
 		if (terminal.output.length > OUTPUT_CLEANUP_THRESHOLD) {
 			terminal.output = terminal.output.slice(-MAX_OUTPUT_LINES)
 		}
 
-		// 通知监听器
+		// 通知监听�?
 		const listeners = this.outputListeners.get(terminalId)
 		if (listeners) {
 			for (const listener of listeners) {
@@ -192,7 +212,7 @@ class TerminalService {
 	}
 
 	/**
-	 * 获取所有终端
+	 * 获取所有终�?
 	 */
 	getAllTerminals(): PersistentTerminal[] {
 		return Array.from(this.terminals.values())
@@ -206,7 +226,7 @@ class TerminalService {
 	}
 
 	/**
-	 * 按名称获取终端
+	 * 按名称获取终�?
 	 */
 	getTerminalByName(name: string): PersistentTerminal | undefined {
 		for (const terminal of this.terminals.values()) {
@@ -228,7 +248,7 @@ class TerminalService {
 	}
 
 	/**
-	 * 清除所有终端
+	 * 清除所有终�?
 	 */
 	clearAll(): void {
 		this.terminals.clear()

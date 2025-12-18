@@ -5,6 +5,7 @@
 
 import { useStore } from '../store'
 import { getEditorConfig } from '../config/editorConfig'
+import { terminalService } from './terminalService'
 
 export interface FileContext {
 	path: string
@@ -322,18 +323,18 @@ export function extractSymbols(content: string, language: string): string {
  */
 export async function getGitContext(workspacePath: string): Promise<string> {
 	try {
-		// 使用 gitExec API
-		const statusResult = await window.electronAPI.gitExec(['status', '--short'], workspacePath)
-		const status = statusResult.exitCode === 0 ? statusResult.stdout : ''
+		// 使用 gitExecSecure API
+		const statusResult = await window.electronAPI.gitExecSecure(['status', '--short'], workspacePath)
+		const status = statusResult.success ? statusResult.stdout || '' : ''
 		
-		const logResult = await window.electronAPI.gitExec(['log', '--oneline', '-5', '--no-decorate'], workspacePath)
-		const log = logResult.exitCode === 0 ? logResult.stdout : ''
+		const logResult = await window.electronAPI.gitExecSecure(['log', '--oneline', '-5', '--no-decorate'], workspacePath)
+		const log = logResult.success ? logResult.stdout || '' : ''
 		
-		const branchResult = await window.electronAPI.gitExec(['branch', '--show-current'], workspacePath)
-		const branch = branchResult.exitCode === 0 ? branchResult.stdout : ''
+		const branchResult = await window.electronAPI.gitExecSecure(['branch', '--show-current'], workspacePath)
+		const branch = branchResult.success ? branchResult.stdout || '' : ''
 		
-		const diffResult = await window.electronAPI.gitExec(['diff', '--stat', 'HEAD'], workspacePath)
-		const diff = diffResult.exitCode === 0 ? diffResult.stdout : ''
+		const diffResult = await window.electronAPI.gitExecSecure(['diff', '--stat', 'HEAD'], workspacePath)
+		const diff = diffResult.success ? diffResult.stdout || '' : ''
 		
 		let context = '**Git Context:**\n\n'
 		
@@ -366,23 +367,34 @@ export async function getGitContext(workspacePath: string): Promise<string> {
  * 获取终端输出内容
  */
 export function getTerminalContext(): string {
-	const state = useStore.getState()
-	const terminalOutputArr = state.terminalOutput || []
-	
-	if (terminalOutputArr.length === 0) {
-		return '**Terminal:** No recent output.'
+	// 从 terminalService 获取所有终端的输出
+	const terminals = terminalService.getAllTerminals()
+
+	if (terminals.length === 0) {
+		return '**Terminal:** No active terminals.'
 	}
-	
-	// 合并数组为字符串
-	let output = terminalOutputArr.join('\n')
-	
+
+	// 收集所有终端的输出
+	let output = ''
+	terminals.forEach((terminal) => {
+		if (terminal.output.length > 0) {
+			output += `**Terminal [${terminal.name}]:**\n\`\`\`\n`
+			output += terminal.output.slice(-50).join('\n') // 只取最近50行
+			output += '\n\`\`\`\n\n'
+		}
+	})
+
+	if (!output) {
+		return '**Terminal:** All terminals have empty output.'
+	}
+
 	// 限制输出长度
 	const { maxTerminalChars } = getContextLimits()
 	if (output.length > maxTerminalChars) {
 		output = '...(truncated)\n' + output.slice(-maxTerminalChars)
 	}
-	
-	return `**Terminal Output:**\n\`\`\`\n${output}\n\`\`\``
+
+	return `**Terminal Output:**\n${output}`
 }
 
 // 上下文项类型（统一的上下文系统）

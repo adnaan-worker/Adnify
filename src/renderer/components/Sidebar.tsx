@@ -1050,7 +1050,7 @@ function GitView() {
 
     const handleInit = async () => {
         if (!workspacePath) return
-        await window.electronAPI.executeCommand('git init', workspacePath)
+        await gitService.init()
         refreshStatus()
     }
 
