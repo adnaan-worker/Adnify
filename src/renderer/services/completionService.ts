@@ -85,7 +85,7 @@ const FIM_MODELS = [
 function getDefaultOptions(): CompletionOptions {
   const config = getEditorConfig()
   return {
-    enabled: true,
+    enabled: config.ai?.completionEnabled ?? true,
     debounceMs: config.performance.completionDebounceMs,
     maxTokens: config.ai.completionMaxTokens,
     temperature: config.ai.completionTemperature,
@@ -131,31 +131,31 @@ class CompletionCache {
   get(context: CompletionContext): CompletionResult | null {
     const key = this.generateKey(context)
     const entry = this.cache.get(key)
-    
+
     if (!entry) return null
-    
+
     // Check TTL
     if (Date.now() - entry.timestamp > this.ttl) {
       this.cache.delete(key)
       return null
     }
-    
+
     // Move to end (LRU)
     this.cache.delete(key)
     this.cache.set(key, entry)
-    
+
     return { ...entry.result, cached: true }
   }
 
   set(context: CompletionContext, result: CompletionResult): void {
     const key = this.generateKey(context)
-    
+
     // Evict oldest if at capacity
     if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value
       if (firstKey) this.cache.delete(firstKey)
     }
-    
+
     this.cache.set(key, {
       result,
       timestamp: Date.now(),
@@ -169,17 +169,17 @@ class CompletionCache {
   // Prefix-based lookup for predictive matching
   getByPrefix(context: CompletionContext, minPrefixLength = 50): CompletionResult | null {
     const currentPrefix = context.prefix.slice(-100)
-    
+
     for (const [key, entry] of this.cache) {
       if (Date.now() - entry.timestamp > this.ttl) continue
-      
+
       // Check if cached prefix is a prefix of current prefix
       const cachedPrefix = key.split(':')[2] || ''
       if (currentPrefix.startsWith(cachedPrefix) && cachedPrefix.length >= minPrefixLength) {
         return { ...entry.result, cached: true }
       }
     }
-    
+
     return null
   }
 }
@@ -201,7 +201,9 @@ function debounce<T extends (...args: Parameters<T>) => ReturnType<T>>(
     if (timeoutId) {
       clearTimeout(timeoutId)
     }
+    console.log(`[Debounce] Scheduling execution in ${delay}ms`)
     timeoutId = setTimeout(() => {
+      console.log('[Debounce] Timer fired, executing callback')
       fn(...args)
       timeoutId = null
     }, delay)
@@ -246,7 +248,7 @@ const IMPORT_PATTERNS = [
 
 function analyzeImports(content: string): string[] {
   const imports: Set<string> = new Set()
-  
+
   for (const pattern of IMPORT_PATTERNS) {
     let match
     const regex = new RegExp(pattern.source, pattern.flags)
@@ -258,7 +260,7 @@ function analyzeImports(content: string): string[] {
       }
     }
   }
-  
+
   return Array.from(imports)
 }
 
@@ -276,7 +278,7 @@ class CompletionService {
   private onErrorCallback: ErrorCallback | null = null
   private recentEditedFiles: Array<{ path: string; timestamp: number }> = []
   private maxRecentFiles = 5
-  
+
   // Cursor-style enhancements
   private cache: CompletionCache
   private currentCandidates: CompletionSuggestion[] = []
@@ -338,10 +340,10 @@ class CompletionService {
    */
   nextCandidate(): CompletionSuggestion | null {
     if (this.currentCandidates.length === 0) return null
-    
+
     this.currentCandidateIndex = (this.currentCandidateIndex + 1) % this.currentCandidates.length
     const candidate = this.currentCandidates[this.currentCandidateIndex]
-    
+
     // Update index info
     return {
       ...candidate,
@@ -355,10 +357,10 @@ class CompletionService {
    */
   prevCandidate(): CompletionSuggestion | null {
     if (this.currentCandidates.length === 0) return null
-    
+
     this.currentCandidateIndex = (this.currentCandidateIndex - 1 + this.currentCandidates.length) % this.currentCandidates.length
     const candidate = this.currentCandidates[this.currentCandidateIndex]
-    
+
     return {
       ...candidate,
       index: this.currentCandidateIndex,
@@ -424,8 +426,10 @@ class CompletionService {
    */
   requestCompletion(context: CompletionContext): void {
     if (!this.options.enabled) {
+      console.log('[Completion] Skipped: disabled')
       return
     }
+    console.log('[Completion] Request queued', context.cursorPosition)
     this.debouncedRequest?.(context)
   }
 
@@ -433,6 +437,7 @@ class CompletionService {
    * Cancel current request
    */
   cancel(): void {
+    console.log('[Completion] Cancel called')
     this.debouncedRequest?.cancel()
     if (this.currentAbortController) {
       this.currentAbortController.abort()
@@ -444,9 +449,10 @@ class CompletionService {
    * Check if a character should trigger completion
    */
   shouldTrigger(char: string): boolean {
-    return this.options.enabled && this.options.triggerCharacters.includes(char)
+    const should = this.options.enabled && this.options.triggerCharacters.includes(char)
+    if (should) console.log('[Completion] Triggered by char:', char)
+    return should
   }
-
 
   /**
    * Build completion context from editor state
@@ -460,33 +466,33 @@ class CompletionService {
   ): CompletionContext {
     const actualPrefixLines = prefixLines ?? this.options.contextLines
     const actualSuffixLines = suffixLines ?? Math.floor(this.options.contextLines / 2)
-    
+
     const lines = fileContent.split('\n')
     const { line, column } = cursorPosition
-    
+
     // Calculate prefix (text before cursor)
     const startLine = Math.max(0, line - actualPrefixLines)
     const prefixLineArray = lines.slice(startLine, line)
     const currentLinePrefix = lines[line]?.substring(0, column) || ''
     const prefix = [...prefixLineArray, currentLinePrefix].join('\n')
-    
+
     // Calculate suffix (text after cursor)
     const currentLineSuffix = lines[line]?.substring(column) || ''
     const endLine = Math.min(lines.length, line + actualSuffixLines)
     const suffixLineArray = lines.slice(line + 1, endLine)
     const suffix = [currentLineSuffix, ...suffixLineArray].join('\n')
-    
+
     // Get open files from store
     const state = useStore.getState()
     const openFiles = state.openFiles
       .filter((f: { path: string; content: string }) => f.path !== filePath)
       .slice(0, 3)  // Reduced for faster completions
       .map((f: { path: string; content: string }) => ({ path: f.path, content: f.content }))
-    
+
     // Extract enhanced context
     const currentFunction = this.extractCurrentFunction(fileContent, line)
     const imports = this.extractImports(fileContent)
-    
+
     return {
       filePath,
       fileContent,
@@ -511,12 +517,12 @@ class CompletionService {
       .filter((f): f is { path: string; content: string } => f !== null)
   }
 
-
   /**
    * Execute the actual completion request
    * Enhanced with caching and multi-candidate support
    */
   private async executeRequest(context: CompletionContext): Promise<void> {
+    console.log('[Completion] Executing request...')
     // Check cache first (Cursor-style optimization)
     if (this.options.cacheEnabled) {
       const cached = this.cache.get(context)
@@ -528,7 +534,7 @@ class CompletionService {
         this.onCompletionCallback?.(cached)
         return
       }
-      
+
       // Try prefix-based cache lookup
       const prefixCached = this.cache.getByPrefix(context)
       if (prefixCached) {
@@ -549,20 +555,20 @@ class CompletionService {
 
     try {
       const result = await this.fetchCompletion(context, this.currentAbortController.signal)
-      
+
       // Store candidates for Tab cycling
       this.currentCandidates = result.suggestions
       this.currentCandidateIndex = 0
       this.lastContext = context
-      
+
       // Cache the result
       if (this.options.cacheEnabled && result.suggestions.length > 0) {
         this.cache.set(context, result)
       }
-      
+
       this.onCompletionCallback?.(result)
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+    } catch (error: any) {
+      if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
         // Request was cancelled, ignore
         return
       }
@@ -570,6 +576,16 @@ class CompletionService {
     } finally {
       this.currentAbortController = null
     }
+  }
+
+  /**
+   * Get completions directly (Promise-based)
+   */
+  public async getCompletions(
+    context: CompletionContext,
+    signal?: AbortSignal
+  ): Promise<CompletionResult> {
+    return this.fetchCompletion(context, signal ?? new AbortController().signal)
   }
 
   /**
@@ -619,6 +635,8 @@ class CompletionService {
       const unsubDone = window.electronAPI.onLLMDone(() => {
         cleanup()
         if (isAborted) return
+
+        console.log('[Completion] LLM Done. Text:', completionText)
 
         if (!completionText) {
           resolve({ suggestions: [], cached: false })
@@ -672,7 +690,7 @@ class CompletionService {
     const { prefix, suffix, language, openFiles, currentFunction, imports } = context
     const state = useStore.getState()
     const model = state.llmConfig.model || ''
-    
+
     // Check if model supports native FIM format
     if (this.options.fimEnabled && this.isFIMModel(model)) {
       // DeepSeek Coder FIM format
@@ -682,20 +700,20 @@ class CompletionService {
       // CodeLlama/StarCoder FIM format
       return `<PRE>${prefix}<SUF>${suffix}<MID>`
     }
-    
+
     // Build enhanced context for non-FIM models
     let contextStr = ''
-    
+
     // Add imports context
     if (imports && imports.length > 0) {
       contextStr += `// Imports in this file:\n${imports.slice(0, 10).join('\n')}\n\n`
     }
-    
+
     // Add current function context
     if (currentFunction) {
       contextStr += `// Currently editing function: ${currentFunction}\n\n`
     }
-    
+
     // Add related files context (minimal)
     if (openFiles.length > 0) {
       const relatedSnippets = openFiles
@@ -721,11 +739,11 @@ ${prefix}<CURSOR>${suffix}`
    */
   private extractCurrentFunction(content: string, line: number): string | undefined {
     const lines = content.split('\n')
-    
+
     // Search backwards for function definition
     for (let i = line; i >= 0 && i > line - 50; i--) {
       const lineContent = lines[i]
-      
+
       // Match various function patterns
       const patterns = [
         /function\s+(\w+)/,
@@ -735,7 +753,7 @@ ${prefix}<CURSOR>${suffix}`
         /def\s+(\w+)/,  // Python
         /fn\s+(\w+)/,   // Rust
       ]
-      
+
       for (const pattern of patterns) {
         const match = lineContent.match(pattern)
         if (match) {
@@ -743,7 +761,7 @@ ${prefix}<CURSOR>${suffix}`
         }
       }
     }
-    
+
     return undefined
   }
 
@@ -753,13 +771,13 @@ ${prefix}<CURSOR>${suffix}`
   private extractImports(content: string): string[] {
     const imports: string[] = []
     const lines = content.split('\n')
-    
+
     for (const line of lines.slice(0, 50)) {  // Only check first 50 lines
       if (line.match(/^import\s+/) || line.match(/^from\s+/) || line.match(/^const\s+.*=\s*require/)) {
         imports.push(line.trim())
       }
     }
-    
+
     return imports
   }
 

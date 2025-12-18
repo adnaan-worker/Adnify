@@ -15,6 +15,7 @@ import { getEditorConfig, saveEditorConfig, EditorConfig } from '../config/edito
 import { themes } from './ThemeManager'
 import { toast } from './Toast'
 import { getPromptTemplates, PromptTemplate } from '../agent/promptTemplates'
+import { completionService } from '../services/completionService'
 
 type SettingsTab = 'provider' | 'editor' | 'agent' | 'keybindings' | 'system'
 
@@ -111,8 +112,16 @@ export default function SettingsModal() {
       },
       ai: {
         ...editorConfig.ai,
+        completionEnabled: editorSettings.completionEnabled,
         completionMaxTokens: editorSettings.completionMaxTokens,
       },
+    })
+
+    // 立即应用补全设置
+    completionService.configure({
+      enabled: editorSettings.completionEnabled,
+      debounceMs: editorSettings.completionDebounceMs,
+      maxTokens: editorSettings.completionMaxTokens,
     })
 
     setSaved(true)

@@ -285,6 +285,11 @@ class LspManager {
       this.servers.delete(config.name)
     })
 
+    // 监听 stdin 错误，防止 EPIPE 导致崩溃
+    proc.stdin.on('error', (err) => {
+      console.warn(`[LSP ${config.name}] stdin error:`, err.message)
+    })
+
     // 等待进程 stdout 可用
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('Process stdout not ready')), 5000)
@@ -420,7 +425,15 @@ class LspManager {
       const message = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`
 
       try {
-        const canWrite = instance.process.stdin.write(message)
+        const canWrite = instance.process.stdin.write(message, (err) => {
+          if (err) {
+            console.error(`[LSP ${serverName}] Write callback error:`, err.message)
+            instance.pendingRequests.delete(id)
+            clearTimeout(timeout)
+            reject(err)
+          }
+        })
+
         if (!canWrite) {
           // 如果缓冲区已满，等待 drain 事件
           instance.process.stdin.once('drain', () => {
@@ -428,7 +441,7 @@ class LspManager {
           })
         }
       } catch (err: any) {
-        // 处理写入错误（如 EPIPE）
+        // 处理同步写入错误
         instance.pendingRequests.delete(id)
         clearTimeout(timeout)
         console.error(`[LSP ${serverName}] Write error:`, err.message)

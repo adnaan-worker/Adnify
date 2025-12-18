@@ -49,6 +49,7 @@ export interface EditorConfig {
 
   // AI 相关
   ai: {
+    completionEnabled: boolean // 是否启用 AI 代码补全
     maxToolLoops: number // 最大工具调用循环次数
     completionMaxTokens: number // 补全最大 token 数
     completionTemperature: number // 补全温度
@@ -103,6 +104,7 @@ export const defaultEditorConfig: EditorConfig = {
 
   // AI 相关
   ai: {
+    completionEnabled: true,
     maxToolLoops: 15,
     completionMaxTokens: 256,
     completionTemperature: 0.1,
@@ -151,12 +153,12 @@ function deepMerge<T extends object>(target: T, source: Partial<T>): T {
         typeof target[key] === 'object' &&
         target[key] !== null
       ) {
-        ;(result as Record<string, unknown>)[key] = deepMerge(
+        ; (result as Record<string, unknown>)[key] = deepMerge(
           target[key] as object,
           source[key] as object
         )
       } else {
-        ;(result as Record<string, unknown>)[key] = source[key]
+        ; (result as Record<string, unknown>)[key] = source[key]
       }
     }
   }

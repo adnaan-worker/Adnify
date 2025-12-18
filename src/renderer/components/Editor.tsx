@@ -14,7 +14,7 @@ import { lintService } from '../agent/lintService'
 import { streamingEditService } from '../agent/streamingEditService'
 import { LintError, StreamingEditState } from '@/renderer/agent/toolTypes'
 import { completionService } from '../services/completionService'
-import { createGhostTextManager, GhostTextManager } from './GhostTextWidget'
+
 import { initMonacoTypeService } from '../services/monacoTypeService'
 import {
   startLspServer,
@@ -27,10 +27,10 @@ import {
 import { registerLspProviders } from '../services/lspProviders'
 import { getFileInfo, getLargeFileEditorOptions, getLargeFileWarning } from '../services/largeFileService'
 import { pathLinkService } from '../services/pathLinkService'
+import { getEditorConfig } from '../config/editorConfig'
 // 导入 Monaco worker 配置
 import { monaco } from '../monacoWorker'
 // 导入编辑器配置
-import { getEditorConfig } from '../config/editorConfig'
 import type { ThemeName } from '../store/slices/themeSlice'
 
 // 配置 Monaco 使用本地安装的版本（支持国际化）
@@ -111,7 +111,7 @@ export default function Editor() {
   const { pendingChanges, acceptChange, undoChange } = useAgent()
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
-  const ghostTextRef = useRef<GhostTextManager | null>(null)
+
 
   // Lint 错误状态
   const [lintErrors, setLintErrors] = useState<LintError[]>([])
@@ -129,8 +129,8 @@ export default function Editor() {
     lineRange: [number, number]
   } | null>(null)
 
-  // AI 代码补全状态
-  const [completionEnabled] = useState(true)
+  // AI 代码补全状态 - 从配置读取
+
 
   // 自定义右键菜单状态
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
@@ -191,9 +191,13 @@ export default function Editor() {
     }
   }, [currentTheme])
 
+
+
   const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
     monacoRef.current = monaco
+
+
 
     // 注册所有 LSP 提供者（hover、completion、signature help 等）
     registerLspProviders(monaco)
@@ -243,7 +247,7 @@ export default function Editor() {
       import('../services/lspService').then(({ setWorkspacePath }) => {
         setWorkspacePath(workspacePath)
       })
-      
+
       startLspServer(workspacePath).then((success) => {
         if (success) {
           console.log('[Editor] LSP server started')
@@ -352,7 +356,7 @@ export default function Editor() {
 
       const language = model.getLanguageId()
       const content = model.getValue()
-      
+
       // 使用 pathLinkService 检查点击位置是否在链接上
       const linkPath = pathLinkService.getLinkAtPosition(content, language, position.lineNumber, position.column)
       if (linkPath) {
@@ -444,104 +448,53 @@ export default function Editor() {
 
     // ============ AI Code Completion Integration ============
 
-    // Initialize ghost text manager
-    ghostTextRef.current = createGhostTextManager(editor)
+    // 注册 Inline Completions Provider (Monaco 原生支持)
+    const providerDispose = monaco.languages.registerInlineCompletionsProvider(
+      ['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'html', 'css', 'json', 'python', 'java', 'go', 'rust'],
+      {
+        provideInlineCompletions: async (model, position, context, token) => {
+          if (!getEditorConfig().ai?.completionEnabled) return { items: [] }
 
-    // Ctrl+Space: 手动触发补全
-    editor.addAction({
-      id: 'trigger-ai-completion',
-      label: 'Trigger AI Completion',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space],
-      run: () => {
-        if (!completionEnabled) return
-        triggerCompletion(editor)
+          // Debounce: wait 300ms
+          await new Promise(resolve => setTimeout(resolve, 300))
+          if (token.isCancellationRequested) return { items: [] }
+
+          const completionContext = completionService.buildContext(
+            activeFilePath || model.uri.fsPath,
+            model.getValue(),
+            { line: position.lineNumber - 1, column: position.column - 1 }
+          )
+
+          // Create AbortController linked to token
+          const abortController = new AbortController()
+          token.onCancellationRequested(() => abortController.abort())
+
+          try {
+            const result = await completionService.getCompletions(completionContext, abortController.signal)
+            if (!result || result.suggestions.length === 0) return { items: [] }
+
+            return {
+              items: result.suggestions.map(s => ({
+                insertText: s.text,
+                range: new monaco.Range(
+                  position.lineNumber, position.column,
+                  position.lineNumber, position.column
+                )
+              }))
+            }
+          } catch (e) {
+            return { items: [] }
+          }
+        },
+        freeInlineCompletions(completions) { }
       }
-    })
-
-    // Tab: 接受补全建议
-    editor.addCommand(monaco.KeyCode.Tab, () => {
-      if (ghostTextRef.current?.isShowing()) {
-        ghostTextRef.current.accept()
-      } else {
-        // 默认 Tab 行为
-        editor.trigger('keyboard', 'tab', {})
-      }
-    })
-
-    // Escape: 取消补全建议
-    editor.addCommand(monaco.KeyCode.Escape, () => {
-      if (ghostTextRef.current?.isShowing()) {
-        ghostTextRef.current.hide()
-        completionService.cancel()
-      } else {
-        // 默认 Escape 行为
-        editor.trigger('keyboard', 'escape', {})
-      }
-    })
-
-    // 监听内容变化，自动触发补全
-    editor.onDidChangeModelContent((e) => {
-      if (!completionEnabled) return
-
-      // 检查是否应该触发补全
-      const changes = e.changes
-      if (changes.length > 0) {
-        const lastChange = changes[changes.length - 1]
-        const insertedText = lastChange.text
-
-        // 如果是单字符输入且是触发字符
-        if (insertedText.length === 1 && completionService.shouldTrigger(insertedText)) {
-          triggerCompletion(editor)
-        } else if (insertedText.length > 0 && !insertedText.includes('\n')) {
-          // 普通输入也触发（带 debounce）
-          triggerCompletion(editor)
-        } else {
-          // 换行或删除时隐藏补全
-          ghostTextRef.current?.hide()
-          completionService.cancel()
-        }
-      }
-    })
-
-    // 光标移动时隐藏补全
-    editor.onDidChangeCursorPosition(() => {
-      // 只在有补全显示时隐藏
-      if (ghostTextRef.current?.isShowing()) {
-        ghostTextRef.current.hide()
-        completionService.cancel()
-      }
-    })
-
-    // 设置补全回调
-    completionService.onCompletion((result) => {
-      if (!result || result.suggestions.length === 0) return
-
-      const suggestion = result.suggestions[0]
-      const position = editor.getPosition()
-      if (position && ghostTextRef.current) {
-        ghostTextRef.current.show(suggestion.text, position)
-      }
-    })
-
-    completionService.onError((error) => {
-      console.error('Completion error:', error)
-    })
-  }
-
-  // 触发补全的辅助函数
-  const triggerCompletion = useCallback((ed: editor.IStandaloneCodeEditor) => {
-    const model = ed.getModel()
-    const position = ed.getPosition()
-    if (!model || !position || !activeFilePath) return
-
-    const context = completionService.buildContext(
-      activeFilePath,
-      model.getValue(),
-      { line: position.lineNumber - 1, column: position.column - 1 }
     )
 
-    completionService.requestCompletion(context)
-  }, [activeFilePath])
+    // Dispose provider on unmount
+    editor.onDidDispose(() => {
+      providerDispose.dispose()
+    })
+  }
 
   // 监听流式编辑
   useEffect(() => {
@@ -607,7 +560,6 @@ export default function Editor() {
     setLintErrors([])
 
     // 清除补全状态
-    ghostTextRef.current?.hide()
     completionService.cancel()
 
     // 通知 LSP 服务器当前文件已打开
@@ -619,7 +571,6 @@ export default function Editor() {
   // 清理 ghost text manager
   useEffect(() => {
     return () => {
-      ghostTextRef.current?.dispose()
       completionService.cancel()
     }
   }, [])
@@ -1097,6 +1048,7 @@ export default function Editor() {
                 renderLineHighlight: 'all',
                 bracketPairColorization: { enabled: true },
                 automaticLayout: true,
+                inlineSuggest: { enabled: true },
                 suggest: {
                   showKeywords: true,
                   showSnippets: true,
