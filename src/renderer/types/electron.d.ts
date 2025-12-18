@@ -102,6 +102,9 @@ export interface LLMConfig {
 }
 
 export interface ElectronAPI {
+	// App lifecycle
+	appReady: () => void
+
 	// Window controls
 	minimize: () => void
 	maximize: () => void

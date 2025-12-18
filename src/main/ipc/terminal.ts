@@ -9,10 +9,25 @@ import * as fs from 'fs'
 
 // 延迟加载 node-pty
 let pty: typeof import('node-pty') | null = null
+let ptyLoadError: Error | null = null
 
 function getPty() {
+  if (ptyLoadError) {
+    return null
+  }
   if (!pty) {
-    pty = require('node-pty')
+    try {
+      // 在 Windows 上，设置环境变量以避免 ConPTY 的某些问题
+      if (process.platform === 'win32') {
+        // 禁用 ConPTY 的控制台进程列表功能（这是导致 AttachConsole 错误的原因）
+        process.env.CONPTY_DISABLE_CONSOLE_LIST = '1'
+      }
+      pty = require('node-pty')
+    } catch (e) {
+      console.error('[Terminal] Failed to load node-pty:', e)
+      ptyLoadError = e as Error
+      return null
+    }
   }
   return pty
 }
@@ -36,14 +51,27 @@ export function registerTerminalHandlers(getMainWindow: () => BrowserWindow | nu
     const workingDir = cwd || process.cwd()
 
     try {
-      const nodePty = getPty()!
-      const ptyProcess = nodePty.spawn(shellToUse, [], {
+      const nodePty = getPty()
+      if (!nodePty) {
+        console.error('[Terminal] node-pty not available')
+        return false
+      }
+      
+      // Windows 上的 ConPTY 配置
+      const ptyOptions: import('node-pty').IPtyForkOptions = {
         name: 'xterm-256color',
         cols: 80,
         rows: 24,
         cwd: workingDir,
-        env: process.env as any,
-      })
+        env: process.env as { [key: string]: string },
+      }
+
+      // Windows 特定配置 - 使用 ConPTY
+      if (isWindows) {
+        (ptyOptions as any).useConpty = true
+      }
+
+      const ptyProcess = nodePty.spawn(shellToUse, [], ptyOptions)
 
       terminals.set(id, ptyProcess)
 
@@ -166,6 +194,30 @@ export function registerTerminalHandlers(getMainWindow: () => BrowserWindow | nu
 
 // 清理所有终端
 export function cleanupTerminals() {
-  terminals.forEach(term => term.kill())
-  terminals.clear()
+  // 在 Windows 上，先尝试优雅关闭，避免 ConPTY 错误
+  terminals.forEach((term, id) => {
+    try {
+      // 发送退出信号
+      if (process.platform === 'win32') {
+        // Windows: 发送 Ctrl+C 然后 exit
+        term.write('\x03') // Ctrl+C
+        term.write('exit\r')
+      }
+      // 给一点时间让进程退出
+      setTimeout(() => {
+        try {
+          term.kill()
+        } catch {
+          // 忽略已经退出的进程
+        }
+      }, 100)
+    } catch (e) {
+      console.error(`[Terminal] Error cleaning up terminal ${id}:`, e)
+    }
+  })
+  
+  // 延迟清理 map
+  setTimeout(() => {
+    terminals.clear()
+  }, 200)
 }

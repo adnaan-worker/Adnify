@@ -35,10 +35,14 @@ export interface FileSlice {
   expandedFolders: Set<string>
   openFiles: OpenFile[]
   activeFilePath: string | null
+  /** 当前选中的文件夹路径（用于在指定位置创建文件） */
+  selectedFolderPath: string | null
 
   setWorkspacePath: (path: string | null) => void
   setFiles: (files: FileItem[]) => void
   toggleFolder: (path: string) => void
+  setSelectedFolder: (path: string | null) => void
+  expandFolder: (path: string) => void
   openFile: (path: string, content: string, originalContent?: string, options?: {
     largeFileInfo?: LargeFileInfo
     encoding?: string
@@ -55,9 +59,17 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
   expandedFolders: new Set(),
   openFiles: [],
   activeFilePath: null,
+  selectedFolderPath: null,
 
   setWorkspacePath: (path) => set({ workspacePath: path }),
   setFiles: (files) => set({ files }),
+  setSelectedFolder: (path) => set({ selectedFolderPath: path }),
+  expandFolder: (path) =>
+    set((state) => {
+      const newExpanded = new Set(state.expandedFolders)
+      newExpanded.add(path)
+      return { expandedFolders: newExpanded }
+    }),
   toggleFolder: (path) =>
     set((state) => {
       const newExpanded = new Set(state.expandedFolders)

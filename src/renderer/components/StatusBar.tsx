@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { GitBranch, AlertCircle, XCircle, Database, Loader2, Cpu } from 'lucide-react'
+import { GitBranch, AlertCircle, XCircle, Database, Loader2, Cpu, Terminal } from 'lucide-react'
 import { useStore } from '../store'
 import { t } from '../i18n'
 import { IndexStatus } from '../types/electron'
 import { indexWorkerService, IndexProgress } from '../services/indexWorkerService'
 
 export default function StatusBar() {
-  const { activeFilePath, isStreaming, workspacePath, setShowSettings, language } = useStore()
+  const { activeFilePath, isStreaming, workspacePath, setShowSettings, language, terminalVisible, setTerminalVisible } = useStore()
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null)
   const [workerProgress, setWorkerProgress] = useState<IndexProgress | null>(null)
 
@@ -112,6 +112,16 @@ export default function StatusBar() {
         )}
 
         <div className="flex items-center gap-4">
+          {/* 终端切换按钮 */}
+          <button
+            onClick={() => setTerminalVisible(!terminalVisible)}
+            className={`flex items-center gap-1.5 transition-colors ${terminalVisible ? 'text-accent' : 'hover:text-text-primary'}`}
+            title={`${t('terminal', language)} (Ctrl+\`)`}
+          >
+            <Terminal className="w-3 h-3" />
+            <span>{t('terminal', language)}</span>
+          </button>
+
           {activeFilePath && (
             <span>{activeFilePath.split('.').pop()?.toUpperCase() || 'TXT'}</span>
           )}

@@ -761,7 +761,7 @@ export default function Editor() {
 
   if (openFiles.length === 0) {
     return (
-      <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
+      <div className="h-full flex flex-col bg-background relative overflow-hidden">
         {/* Background Decoration */}
         <div className="absolute inset-0 bg-gradient-to-br from-purple-900/10 via-background to-background pointer-events-none" />
 
@@ -784,7 +784,7 @@ export default function Editor() {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-background" onKeyDown={handleKeyDown}>
+    <div className="h-full flex flex-col bg-background" onKeyDown={handleKeyDown}>
       {/* Tabs */}
       <div className="h-10 flex items-center bg-background-secondary border-b border-border-subtle overflow-hidden select-none">
         <div className="flex items-center flex-1 overflow-x-auto no-scrollbar h-full">

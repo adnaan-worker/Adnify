@@ -128,6 +128,9 @@ interface EmbeddingProvider {
 
 // 定义 API 类型
 export interface ElectronAPI {
+	// App lifecycle
+	appReady: () => void
+
 	// Window controls
 	minimize: () => void
 	maximize: () => void
@@ -218,6 +221,9 @@ export interface ElectronAPI {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
+	// App lifecycle
+	appReady: () => ipcRenderer.send('app:ready'),
+
 	// Window controls
 	minimize: () => ipcRenderer.send('window:minimize'),
 	maximize: () => ipcRenderer.send('window:maximize'),

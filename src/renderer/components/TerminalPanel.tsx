@@ -106,11 +106,12 @@ export default function TerminalPanel() {
   }, [])
 
   // Create initial terminal if none exist and visible
+  // 等待 shells 加载完成后再创建
   useEffect(() => {
-      if (terminalVisible && terminals.length === 0) {
+      if (terminalVisible && terminals.length === 0 && availableShells.length > 0) {
           createTerminal()
       }
-  }, [terminalVisible])
+  }, [terminalVisible, availableShells.length])
 
   // Resize observer for active terminal
   useEffect(() => {

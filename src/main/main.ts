@@ -67,8 +67,8 @@ function createWindow() {
     titleBarStyle: 'hidden',
     icon: iconPath,
     trafficLightPosition: { x: 15, y: 15 },
-    backgroundColor: '#0d1117',
-    show: false, // 先隐藏，等 ready-to-show 再显示，避免闪烁
+    backgroundColor: '#09090b', // 与 loader 背景色一致，避免闪烁
+    show: false, // 先隐藏，等内容准备好再显示
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
@@ -76,9 +76,31 @@ function createWindow() {
     },
   })
 
-  // 窗口准备好后再显示，避免白屏闪烁
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show()
+  // 监听渲染进程发来的"准备好了"信号，而不是 ready-to-show
+  // 这样可以等 React 完全渲染后再显示窗口
+  const { ipcMain } = require('electron')
+  ipcMain.once('app:ready', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show()
+      // 开发模式下延迟打开 DevTools，避免影响首屏
+      if (!app.isPackaged) {
+        setTimeout(() => {
+          mainWindow?.webContents.openDevTools({ mode: 'detach' })
+        }, 1000)
+      }
+    }
+  })
+
+  // 备用：如果 5 秒内没收到 ready 信号，强制显示（防止卡住）
+  const showTimeout = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      console.warn('[Main] Timeout waiting for app:ready, forcing show')
+      mainWindow.show()
+    }
+  }, 5000)
+
+  mainWindow.once('closed', () => {
+    clearTimeout(showTimeout)
   })
 
   // 窗口关闭前清理资源
@@ -87,29 +109,28 @@ function createWindow() {
       isQuitting = true
       e.preventDefault()
       
-      // 同步清理资源
+      // 清理资源（带超时保护）
       try {
         await Promise.race([
           (async () => {
             await cleanupAllHandlers()
             await lspManager.stopAllServers()
           })(),
-          // 最多等待 2 秒
           new Promise(resolve => setTimeout(resolve, 2000))
         ])
-      } catch {
-        // 忽略清理错误
+      } catch (err) {
+        console.error('[Main] Cleanup error:', err)
       }
       
-      // 强制关闭窗口
+      // 销毁窗口并退出
       mainWindow?.destroy()
       app.quit()
     }
   })
 
+  // 加载页面
   if (!app.isPackaged) {
     mainWindow.loadURL('http://localhost:5173')
-    mainWindow.webContents.openDevTools()
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }

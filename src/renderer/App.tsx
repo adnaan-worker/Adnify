@@ -128,24 +128,29 @@ function AppContent() {
         }
 
         updateLoaderStatus('Ready!')
-        // 短暂延迟后移除 loader
+        // 短暂延迟后移除 loader 并通知主进程显示窗口
         setTimeout(() => {
           removeInitialLoader()
           setIsInitialized(true)
+          
+          // 通知主进程：渲染完成，可以显示窗口了
+          window.electronAPI.appReady()
+          
           // 显示引导的条件：
           // 1. onboardingCompleted 明确为 false（用户主动要求重新体验）
           // 2. 或者 onboardingCompleted 未设置且没有现有配置（真正的新用户）
-          // 注意：electron-store 返回 undefined 而不是 null
           const shouldShowOnboarding = onboardingCompleted === false ||
             (onboardingCompleted === undefined && !hasExistingConfig)
           if (shouldShowOnboarding) {
             setShowOnboarding(true)
           }
-        }, 200)
+        }, 100) // 减少延迟，因为现在由主进程控制显示时机
       } catch (error) {
         console.error('Failed to load settings:', error)
         removeInitialLoader()
         setIsInitialized(true)
+        // 即使出错也要通知主进程显示窗口
+        window.electronAPI.appReady()
       }
     }
     loadSettings()
@@ -281,7 +286,7 @@ function AppContent() {
 
             {/* Editor Column */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-              <div className="flex-1 flex flex-col relative">
+              <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
                 <ErrorBoundary>
                   <Editor />
                 </ErrorBoundary>

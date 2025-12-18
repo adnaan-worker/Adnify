@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
     FolderOpen, File, ChevronRight, ChevronDown,
     Plus, RefreshCw, FolderPlus, GitBranch,
-    MoreHorizontal, Trash2,
+    MoreHorizontal, Trash2, Copy, Clipboard,
     FileText, ArrowRight, Edit2, FilePlus, Loader2, Check,
-    AlertCircle, AlertTriangle, Info, Code, Hash, Braces, Box
+    AlertCircle, AlertTriangle, Info, Code, Hash, Braces, Box,
+    ExternalLink
 } from 'lucide-react'
 import { useStore } from '../store'
 import { FileItem, LspDiagnostic, LspDocumentSymbol } from '../types/electron'
@@ -15,6 +16,12 @@ import { getEditorConfig } from '../config/editorConfig'
 import { toast } from './Toast'
 import { onDiagnostics, getDocumentSymbols } from '../services/lspService'
 import { adnifyDir } from '../services/adnifyDirService'
+import { ContextMenu, ContextMenuItem } from './ContextMenu'
+import { directoryCacheService } from '../services/directoryCacheService'
+import { VirtualFileTree } from './VirtualFileTree'
+
+// 超过此数量的文件时启用虚拟滚动
+const VIRTUAL_SCROLL_THRESHOLD = 100
 
 const getFileIcon = (name: string) => {
     const ext = name.split('.').pop()?.toLowerCase()
@@ -33,33 +40,110 @@ const getFileIcon = (name: string) => {
     return iconColors[ext || ''] || 'text-text-muted'
 }
 
+/** 内联创建输入框 */
+function InlineCreateInput({
+    type,
+    depth,
+    onSubmit,
+    onCancel
+}: {
+    type: 'file' | 'folder'
+    depth: number
+    onSubmit: (name: string) => void
+    onCancel: () => void
+}) {
+    const [value, setValue] = useState('')
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    useEffect(() => {
+        inputRef.current?.focus()
+    }, [])
+
+    const handleSubmit = () => {
+        if (value.trim()) {
+            onSubmit(value.trim())
+        } else {
+            onCancel()
+        }
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') handleSubmit()
+        if (e.key === 'Escape') onCancel()
+    }
+
+    return (
+        <div
+            className="flex items-center gap-1.5 py-1 pr-2"
+            style={{ paddingLeft: `${depth * 12 + 12}px` }}
+        >
+            <span className="w-3.5 flex-shrink-0" />
+            {type === 'folder' ? (
+                <FolderPlus className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+            ) : (
+                <FilePlus className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+            )}
+            <input
+                ref={inputRef}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onBlur={handleSubmit}
+                onKeyDown={handleKeyDown}
+                placeholder={type === 'file' ? 'filename.ext' : 'folder name'}
+                className="flex-1 bg-surface-active border border-accent rounded px-1.5 py-0.5 text-[13px] focus:outline-none focus:ring-1 focus:ring-accent min-w-0 text-text-primary"
+            />
+        </div>
+    )
+}
+
 function FileTreeItem({
     item,
     depth = 0,
-    onRefresh
+    onRefresh,
+    creatingIn,
+    onStartCreate,
+    onCancelCreate,
+    onCreateSubmit
 }: {
-    item: FileItem;
-    depth?: number;
+    item: FileItem
+    depth?: number
     onRefresh: () => void
+    creatingIn: { path: string; type: 'file' | 'folder' } | null
+    onStartCreate: (path: string, type: 'file' | 'folder') => void
+    onCancelCreate: () => void
+    onCreateSubmit: (parentPath: string, name: string, type: 'file' | 'folder') => void
 }) {
-    const { expandedFolders, toggleFolder, openFile, setActiveFile, activeFilePath, language } = useStore()
+    const { expandedFolders, toggleFolder, expandFolder, openFile, setActiveFile, activeFilePath, language } = useStore()
     const [children, setChildren] = useState<FileItem[]>([])
     const [isLoading, setIsLoading] = useState(false)
-    const [showMenu, setShowMenu] = useState(false)
     const [isRenaming, setIsRenaming] = useState(false)
     const [renameValue, setRenameValue] = useState(item.name)
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
     const renameInputRef = useRef<HTMLInputElement>(null)
 
     const isExpanded = expandedFolders.has(item.path)
     const isActive = activeFilePath === item.path
+    const isCreatingHere = creatingIn?.path === item.path
 
     useEffect(() => {
         if (item.isDirectory && isExpanded) {
-            setIsLoading(true)
-            window.electronAPI.readDir(item.path).then((items) => {
-                setChildren(items)
-                setIsLoading(false)
-            })
+            // 先检查缓存，如果有缓存则不显示 loading
+            const loadChildren = async () => {
+                setIsLoading(true)
+                try {
+                    const items = await directoryCacheService.getDirectory(item.path)
+                    setChildren(items)
+                    
+                    // 预加载下一层子目录（提升展开速度）
+                    const subDirs = items.filter(i => i.isDirectory).slice(0, 5)
+                    if (subDirs.length > 0) {
+                        directoryCacheService.preload(subDirs.map(d => d.path))
+                    }
+                } finally {
+                    setIsLoading(false)
+                }
+            }
+            loadChildren()
         }
     }, [item.path, item.isDirectory, isExpanded])
 
@@ -85,19 +169,22 @@ function FileTreeItem({
         }
     }
 
-    const handleDelete = async (e: React.MouseEvent) => {
+    const handleContextMenu = (e: React.MouseEvent) => {
+        e.preventDefault()
         e.stopPropagation()
+        setContextMenu({ x: e.clientX, y: e.clientY })
+    }
+
+    const handleDelete = async () => {
         if (confirm(t('confirmDelete', language, { name: item.name }))) {
             await window.electronAPI.deleteFile(item.path)
             onRefresh()
         }
-        setShowMenu(false)
     }
 
-    const handleRenameStart = (e: React.MouseEvent) => {
-        e.stopPropagation()
+    const handleRenameStart = () => {
+        setRenameValue(item.name)
         setIsRenaming(true)
-        setShowMenu(false)
     }
 
     const handleRenameSubmit = async () => {
@@ -106,7 +193,6 @@ function FileTreeItem({
             return
         }
         const newPath = joinPath(getDirPath(item.path), renameValue)
-
         const success = await window.electronAPI.renameFile(item.path, newPath)
         if (success) {
             onRefresh()
@@ -125,20 +211,73 @@ function FileTreeItem({
         e.dataTransfer.effectAllowed = 'copy'
     }
 
+    const handleCopyPath = () => {
+        navigator.clipboard.writeText(item.path)
+        toast.success('Path copied')
+    }
+
+    const handleCopyRelativePath = () => {
+        const { workspacePath } = useStore.getState()
+        if (workspacePath) {
+            const relativePath = item.path.replace(workspacePath, '').replace(/^[\\/]/, '')
+            navigator.clipboard.writeText(relativePath)
+            toast.success('Path copied')
+        }
+    }
+
+    const handleRevealInExplorer = () => {
+        window.electronAPI.showItemInFolder(item.path)
+    }
+
+    const handleNewFile = () => {
+        if (item.isDirectory) {
+            expandFolder(item.path)
+            onStartCreate(item.path, 'file')
+        }
+    }
+
+    const handleNewFolder = () => {
+        if (item.isDirectory) {
+            expandFolder(item.path)
+            onStartCreate(item.path, 'folder')
+        }
+    }
+
+    // 构建右键菜单项
+    const contextMenuItems: ContextMenuItem[] = item.isDirectory
+        ? [
+            { id: 'newFile', label: t('newFile', language), icon: FilePlus, onClick: handleNewFile },
+            { id: 'newFolder', label: t('newFolder', language), icon: FolderPlus, onClick: handleNewFolder },
+            { id: 'sep1', label: '', separator: true },
+            { id: 'rename', label: t('rename', language), icon: Edit2, onClick: handleRenameStart },
+            { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: handleDelete },
+            { id: 'sep2', label: '', separator: true },
+            { id: 'copyPath', label: 'Copy Path', icon: Copy, onClick: handleCopyPath },
+            { id: 'copyRelPath', label: 'Copy Relative Path', icon: Clipboard, onClick: handleCopyRelativePath },
+            { id: 'reveal', label: 'Reveal in Explorer', icon: ExternalLink, onClick: handleRevealInExplorer },
+        ]
+        : [
+            { id: 'rename', label: t('rename', language), icon: Edit2, onClick: handleRenameStart },
+            { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: handleDelete },
+            { id: 'sep1', label: '', separator: true },
+            { id: 'copyPath', label: 'Copy Path', icon: Copy, onClick: handleCopyPath },
+            { id: 'copyRelPath', label: 'Copy Relative Path', icon: Clipboard, onClick: handleCopyRelativePath },
+            { id: 'reveal', label: 'Reveal in Explorer', icon: ExternalLink, onClick: handleRevealInExplorer },
+        ]
+
     return (
         <div>
             <div
-                draggable={true}
+                draggable={!isRenaming}
                 onDragStart={handleDragStart}
                 onClick={handleClick}
-                onMouseEnter={() => setShowMenu(true)}
-                onMouseLeave={() => setShowMenu(false)}
+                onContextMenu={handleContextMenu}
                 className={`
-            group flex items-center gap-1.5 py-1 pr-2 cursor-pointer transition-all duration-200 relative select-none
-            ${isActive
+                    group flex items-center gap-1.5 py-1 pr-2 cursor-pointer transition-all duration-200 relative select-none
+                    ${isActive
                         ? 'bg-accent/10 text-text-primary'
                         : 'text-text-muted hover:text-text-primary hover:bg-white/5'}
-        `}
+                `}
                 style={{ paddingLeft: `${depth * 12 + 12}px` }}
             >
                 {/* Active Indicator Line */}
@@ -182,40 +321,51 @@ function FileTreeItem({
                 ) : (
                     <span className="text-[13px] truncate leading-normal flex-1 opacity-90 group-hover:opacity-100">{item.name}</span>
                 )}
-
-                {/* Context Menu Button */}
-                {showMenu && !isRenaming && (
-                    <div className="flex items-center absolute right-1 bg-background shadow-sm rounded border border-border-subtle p-0.5 animate-fade-in z-10 gap-0.5">
-                        <button
-                            onClick={handleRenameStart}
-                            className="p-1 hover:bg-surface-active hover:text-text-primary rounded transition-colors text-text-muted"
-                            title={t('rename', language)}
-                        >
-                            <Edit2 className="w-3 h-3" />
-                        </button>
-                        <button
-                            onClick={handleDelete}
-                            className="p-1 hover:bg-status-error/10 hover:text-status-error rounded transition-colors text-text-muted"
-                            title={t('delete', language)}
-                        >
-                            <Trash2 className="w-3 h-3" />
-                        </button>
-                    </div>
-                )}
             </div>
 
+            {/* 右键菜单 */}
+            {contextMenu && (
+                <ContextMenu
+                    x={contextMenu.x}
+                    y={contextMenu.y}
+                    items={contextMenuItems}
+                    onClose={() => setContextMenu(null)}
+                />
+            )}
+
+            {/* 文件夹展开内容 */}
             {item.isDirectory && isExpanded && (
                 <div className="relative">
                     <div className="absolute left-0 top-0 bottom-0 border-l border-border-subtle/30"
                         style={{ left: `${(depth + 1) * 12}px` }}
                     />
+                    
+                    {/* 内联创建输入框 */}
+                    {isCreatingHere && (
+                        <InlineCreateInput
+                            type={creatingIn!.type}
+                            depth={depth + 1}
+                            onSubmit={(name) => onCreateSubmit(item.path, name, creatingIn!.type)}
+                            onCancel={onCancelCreate}
+                        />
+                    )}
+                    
                     {children
                         .sort((a, b) => {
                             if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name)
                             return a.isDirectory ? -1 : 1
                         })
                         .map((child) => (
-                            <FileTreeItem key={child.path} item={child} depth={depth + 1} onRefresh={onRefresh} />
+                            <FileTreeItem
+                                key={child.path}
+                                item={child}
+                                depth={depth + 1}
+                                onRefresh={onRefresh}
+                                creatingIn={creatingIn}
+                                onStartCreate={onStartCreate}
+                                onCancelCreate={onCancelCreate}
+                                onCreateSubmit={onCreateSubmit}
+                            />
                         ))}
                 </div>
             )}
@@ -227,9 +377,10 @@ function ExplorerView() {
     const { workspacePath, files, setWorkspacePath, setFiles, language } = useStore()
     const [gitStatus, setGitStatus] = useState<GitStatus | null>(null)
     const [isGitRepo, setIsGitRepo] = useState(false)
-    const [isCreating, setIsCreating] = useState<'file' | 'folder' | null>(null)
-    const [newItemName, setNewItemName] = useState('')
-    const newItemInputRef = useRef<HTMLInputElement>(null)
+    // 内联创建状态：记录在哪个文件夹创建什么类型
+    const [creatingIn, setCreatingIn] = useState<{ path: string; type: 'file' | 'folder' } | null>(null)
+    // 根目录右键菜单
+    const [rootContextMenu, setRootContextMenu] = useState<{ x: number; y: number } | null>(null)
 
     // 更新 Git 状态
     const updateGitStatus = useCallback(async () => {
@@ -252,7 +403,8 @@ function ExplorerView() {
     // 刷新文件列表
     const refreshFiles = useCallback(async () => {
         if (workspacePath) {
-            const items = await window.electronAPI.readDir(workspacePath)
+            // 强制刷新根目录缓存
+            const items = await directoryCacheService.getDirectory(workspacePath, true)
             setFiles(items)
             updateGitStatus()
         }
@@ -266,18 +418,32 @@ function ExplorerView() {
         return () => clearInterval(interval)
     }, [updateGitStatus])
 
-    // 监听文件变化事件，自动刷新文件树（带防抖）
+    // 监听文件变化事件，智能失效缓存并刷新
     useEffect(() => {
         if (!workspacePath) return
 
         let debounceTimer: ReturnType<typeof setTimeout> | null = null
+        let pendingChanges: Array<{ path: string; event: string }> = []
 
         const unsubscribe = window.electronAPI.onFileChanged((event) => {
             // 只处理当前工作区内的文件变化
             if (event.path.startsWith(workspacePath)) {
-                // 防抖：fileChangeDebounceMs 内的多次变化只触发一次刷新
+                // 收集变化事件
+                pendingChanges.push({ path: event.path, event: event.event })
+                
+                // 防抖处理
                 if (debounceTimer) clearTimeout(debounceTimer)
                 debounceTimer = setTimeout(() => {
+                    // 智能失效缓存
+                    pendingChanges.forEach(change => {
+                        const eventType = change.event === 'create' ? 'create' 
+                            : change.event === 'delete' ? 'delete' 
+                            : 'update'
+                        directoryCacheService.handleFileChange(change.path, eventType)
+                    })
+                    pendingChanges = []
+                    
+                    // 刷新根目录
                     refreshFiles()
                 }, getEditorConfig().performance.fileChangeDebounceMs)
             }
@@ -289,12 +455,6 @@ function ExplorerView() {
         }
     }, [workspacePath, refreshFiles])
 
-    useEffect(() => {
-        if (isCreating && newItemInputRef.current) {
-            newItemInputRef.current.focus()
-        }
-    }, [isCreating])
-
     const handleOpenFolder = async () => {
         const path = await window.electronAPI.openFolder()
         if (path) {
@@ -305,13 +465,15 @@ function ExplorerView() {
             const { checkpointService } = await import('../agent/checkpointService')
             checkpointService.reset()
             adnifyDir.reset()
+            directoryCacheService.clear() // 清空目录缓存
             
             setWorkspacePath(path)
             
             // 初始化 .adnify 目录（统一管理项目数据，会自动加载缓存）
             await adnifyDir.initialize(path)
             
-            const items = await window.electronAPI.readDir(path)
+            // 使用缓存服务加载根目录
+            const items = await directoryCacheService.getDirectory(path, true)
             setFiles(items)
             
             // 初始化检查点服务
@@ -319,36 +481,58 @@ function ExplorerView() {
         }
     }
 
-    const handleCreateSubmit = async () => {
-        if (!newItemName.trim() || !workspacePath) {
-            setIsCreating(null)
-            setNewItemName('')
-            return
-        }
+    // 开始在指定文件夹创建
+    const handleStartCreate = useCallback((path: string, type: 'file' | 'folder') => {
+        setCreatingIn({ path, type })
+    }, [])
 
-        const fullPath = joinPath(workspacePath, newItemName)
+    // 取消创建
+    const handleCancelCreate = useCallback(() => {
+        setCreatingIn(null)
+    }, [])
 
+    // 提交创建
+    const handleCreateSubmit = useCallback(async (parentPath: string, name: string, type: 'file' | 'folder') => {
+        const fullPath = joinPath(parentPath, name)
         let success = false
-        if (isCreating === 'file') {
+        
+        if (type === 'file') {
             success = await window.electronAPI.writeFile(fullPath, '')
         } else {
             success = await window.electronAPI.mkdir(fullPath)
         }
 
         if (success) {
+            // 失效父目录缓存
+            directoryCacheService.invalidate(parentPath)
             await refreshFiles()
+            toast.success(type === 'file' ? 'File created' : 'Folder created')
         }
-        setIsCreating(null)
-        setNewItemName('')
-    }
+        setCreatingIn(null)
+    }, [refreshFiles])
 
-    const handleCreateKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') handleCreateSubmit()
-        if (e.key === 'Escape') {
-            setIsCreating(null)
-            setNewItemName('')
+    // 在根目录创建
+    const handleRootCreate = useCallback((type: 'file' | 'folder') => {
+        if (workspacePath) {
+            setCreatingIn({ path: workspacePath, type })
         }
-    }
+    }, [workspacePath])
+
+    // 根目录右键菜单
+    const handleRootContextMenu = useCallback((e: React.MouseEvent) => {
+        e.preventDefault()
+        if (workspacePath) {
+            setRootContextMenu({ x: e.clientX, y: e.clientY })
+        }
+    }, [workspacePath])
+
+    const rootMenuItems: ContextMenuItem[] = [
+        { id: 'newFile', label: t('newFile', language), icon: FilePlus, onClick: () => handleRootCreate('file') },
+        { id: 'newFolder', label: t('newFolder', language), icon: FolderPlus, onClick: () => handleRootCreate('folder') },
+        { id: 'sep1', label: '', separator: true },
+        { id: 'refresh', label: t('refresh', language), icon: RefreshCw, onClick: refreshFiles },
+        { id: 'reveal', label: 'Reveal in Explorer', icon: ExternalLink, onClick: () => workspacePath && window.electronAPI.showItemInFolder(workspacePath) },
+    ]
 
     return (
         <div className="h-full flex flex-col bg-transparent">
@@ -357,10 +541,10 @@ function ExplorerView() {
                     {t('explorer', language)}
                 </span>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => setIsCreating('file')} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('newFile', language)}>
+                    <button onClick={() => handleRootCreate('file')} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('newFile', language)}>
                         <FilePlus className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
                     </button>
-                    <button onClick={() => setIsCreating('folder')} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('newFolder', language)}>
+                    <button onClick={() => handleRootCreate('folder')} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('newFolder', language)}>
                         <FolderPlus className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
                     </button>
                     <button onClick={refreshFiles} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('refresh', language)}>
@@ -372,35 +556,51 @@ function ExplorerView() {
                 </div>
             </div>
 
-            {/* Creation Input Area */}
-            {isCreating && (
-                <div className="p-2 border-b border-border-subtle bg-surface/30 animate-slide-in">
-                    <div className="flex items-center gap-2 mb-1 text-[10px] text-text-muted uppercase font-semibold">
-                        {isCreating === 'file' ? <FilePlus className="w-3 h-3" /> : <FolderPlus className="w-3 h-3" />}
-                        {isCreating === 'file' ? t('newFile', language) : t('newFolder', language)}
-                    </div>
-                    <input
-                        ref={newItemInputRef}
-                        value={newItemName}
-                        onChange={(e) => setNewItemName(e.target.value)}
-                        onBlur={handleCreateSubmit}
-                        onKeyDown={handleCreateKeyDown}
-                        placeholder={t('create', language)}
-                        className="w-full bg-background border border-accent rounded px-2 py-1 text-xs focus:outline-none shadow-glow"
-                    />
-                </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar py-1">
+            <div 
+                className="flex-1 overflow-hidden flex flex-col"
+                onContextMenu={handleRootContextMenu}
+            >
                 {workspacePath ? (
-                    files
-                        .sort((a: FileItem, b: FileItem) => {
-                            if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name)
-                            return a.isDirectory ? -1 : 1
-                        })
-                        .map((item: FileItem) => (
-                            <FileTreeItem key={item.path} item={item} onRefresh={refreshFiles} />
-                        ))
+                    files.length > VIRTUAL_SCROLL_THRESHOLD ? (
+                        // 大目录使用虚拟滚动
+                        <VirtualFileTree
+                            items={files}
+                            onRefresh={refreshFiles}
+                            creatingIn={creatingIn}
+                            onStartCreate={handleStartCreate}
+                            onCancelCreate={handleCancelCreate}
+                            onCreateSubmit={handleCreateSubmit}
+                        />
+                    ) : (
+                        // 小目录使用普通渲染
+                        <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar py-1">
+                            {/* 根目录内联创建 */}
+                            {creatingIn?.path === workspacePath && (
+                                <InlineCreateInput
+                                    type={creatingIn.type}
+                                    depth={0}
+                                    onSubmit={(name) => handleCreateSubmit(workspacePath, name, creatingIn.type)}
+                                    onCancel={handleCancelCreate}
+                                />
+                            )}
+                            {files
+                                .sort((a: FileItem, b: FileItem) => {
+                                    if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name)
+                                    return a.isDirectory ? -1 : 1
+                                })
+                                .map((item: FileItem) => (
+                                    <FileTreeItem
+                                        key={item.path}
+                                        item={item}
+                                        onRefresh={refreshFiles}
+                                        creatingIn={creatingIn}
+                                        onStartCreate={handleStartCreate}
+                                        onCancelCreate={handleCancelCreate}
+                                        onCreateSubmit={handleCreateSubmit}
+                                    />
+                                ))}
+                        </div>
+                    )
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-center px-6">
                         <div className="w-12 h-12 bg-surface-hover rounded-xl flex items-center justify-center mb-4 border border-white/5">
@@ -432,6 +632,16 @@ function ExplorerView() {
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* 根目录右键菜单 */}
+            {rootContextMenu && (
+                <ContextMenu
+                    x={rootContextMenu.x}
+                    y={rootContextMenu.y}
+                    items={rootMenuItems}
+                    onClose={() => setRootContextMenu(null)}
+                />
             )}
         </div>
     )

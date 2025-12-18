@@ -1,6 +1,6 @@
 /**
  * 工具调用卡片 - Cursor 风格设计
- * 支持流式参数预览、状态指示、结果展示
+ * 支持流式参数预览、状态指示、结果展示、代码高亮
  */
 
 import { useStore } from '../../store'
@@ -12,6 +12,8 @@ import {
   Trash2, Eye, Copy, ArrowRight, AlertTriangle
 } from 'lucide-react'
 import { ToolCall } from '../../agent/core/types'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 interface ToolCallCardProps {
   toolCall: ToolCall
@@ -83,6 +85,24 @@ export default function ToolCallCard({
   const codeContent = useMemo(() => {
     if (!args) return null
     return (args.code || args.content || args.search_replace_blocks || args.replacement || args.source) as string
+  }, [args])
+
+  // 根据文件路径推断语言
+  const codeLanguage = useMemo(() => {
+    const path = args?.path as string
+    if (!path) return 'text'
+    const ext = path.split('.').pop()?.toLowerCase()
+    const langMap: Record<string, string> = {
+      ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx',
+      py: 'python', rs: 'rust', go: 'go', java: 'java',
+      cpp: 'cpp', c: 'c', h: 'c', hpp: 'cpp',
+      css: 'css', scss: 'scss', less: 'less',
+      html: 'html', vue: 'vue', svelte: 'svelte',
+      json: 'json', yaml: 'yaml', yml: 'yaml', toml: 'toml',
+      md: 'markdown', sql: 'sql', sh: 'bash', bash: 'bash',
+      xml: 'xml', graphql: 'graphql', prisma: 'prisma',
+    }
+    return langMap[ext || ''] || 'text'
   }, [args])
 
   // 获取简短描述
@@ -192,22 +212,37 @@ export default function ToolCallCard({
       {isExpanded && (
         <div className="border-t border-white/5 bg-black/5 animate-slide-down">
 
-          {/* 代码预览 (Streaming Args) */}
+          {/* 代码预览 (Streaming Args) - 带语法高亮 */}
           {codeContent && (
             <div className="border-b border-white/5">
               <div className="flex items-center justify-between px-2.5 py-1 bg-white/[0.02]">
                 <span className="text-[9px] text-text-muted uppercase tracking-wider opacity-70 flex items-center gap-1">
                   <Edit3 className="w-2.5 h-2.5" />
                   {isStreaming || isRunning ? 'Generating Code...' : 'Code Change'}
+                  {codeLanguage !== 'text' && (
+                    <span className="ml-1 px-1 py-0.5 bg-white/5 rounded text-[8px]">{codeLanguage}</span>
+                  )}
                 </span>
               </div>
-              <div className="max-h-60 overflow-auto custom-scrollbar px-2.5 py-2">
-                <pre className="text-[10px] font-mono text-text-secondary whitespace-pre-wrap break-all pl-2 border-l-2 border-accent/30">
+              <div className="max-h-60 overflow-auto custom-scrollbar relative">
+                <SyntaxHighlighter
+                  language={codeLanguage}
+                  style={oneDark}
+                  customStyle={{
+                    margin: 0,
+                    padding: '8px 10px',
+                    fontSize: '10px',
+                    lineHeight: '1.4',
+                    background: 'transparent',
+                    borderLeft: '2px solid rgba(var(--accent-rgb), 0.3)',
+                  }}
+                  wrapLongLines
+                >
                   {codeContent}
-                  {(isStreaming || isRunning) && (
-                    <span className="inline-block w-1.5 h-3 bg-accent ml-1 animate-pulse align-middle" />
-                  )}
-                </pre>
+                </SyntaxHighlighter>
+                {(isStreaming || isRunning) && (
+                  <span className="absolute bottom-2 right-2 inline-block w-1.5 h-3 bg-accent animate-pulse" />
+                )}
               </div>
             </div>
           )}

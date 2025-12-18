@@ -15,6 +15,22 @@ import { executeTool, getToolDefinitions, getToolApprovalType, WRITE_TOOLS } fro
 import { buildOpenAIMessages, validateOpenAIMessages, OpenAIMessage } from './MessageConverter'
 import { MessageContent, ToolStatus, ContextItem } from './types'
 import { LLMStreamChunk, LLMToolCall } from '@/renderer/types/electron'
+import { parsePartialJson, truncateToolResult } from '@/renderer/utils/partialJson'
+
+// 读取类工具（可以并行执行）
+const READ_TOOLS = [
+  'read_file',
+  'read_multiple_files',
+  'list_directory',
+  'get_dir_tree',
+  'search_files',
+  'codebase_search',
+  'find_references',
+  'go_to_definition',
+  'get_hover_info',
+  'get_document_symbols',
+  'get_lint_errors',
+]
 
 // ===== 配置常量 =====
 
@@ -242,25 +258,58 @@ class AgentServiceClass {
         })),
       })
 
-      // 执行所有工具调用
+      // 执行所有工具调用（只读工具并行，写入工具串行）
       let hasSuccessfulTool = false
       let userRejected = false
 
       console.log(`[Agent] Executing ${result.toolCalls.length} tool calls`)
 
-      for (const toolCall of result.toolCalls) {
-        if (this.abortController?.signal.aborted) break
+      // 分离只读工具和写入工具
+      const readToolCalls = result.toolCalls.filter(tc => READ_TOOLS.includes(tc.name))
+      const writeToolCalls = result.toolCalls.filter(tc => !READ_TOOLS.includes(tc.name))
 
-        console.log(`[Agent] Executing tool: ${toolCall.name}`, toolCall.arguments)
+      // 并行执行只读工具
+      if (readToolCalls.length > 0 && !this.abortController?.signal.aborted) {
+        console.log(`[Agent] Executing ${readToolCalls.length} read tools in parallel`)
+        const readResults = await Promise.all(
+          readToolCalls.map(async (toolCall) => {
+            console.log(`[Agent] Executing read tool: ${toolCall.name}`, toolCall.arguments)
+            const toolResult = await this.executeToolCall(toolCall, workspacePath)
+            return { toolCall, toolResult }
+          })
+        )
+
+        // 按原始顺序添加结果到消息历史
+        for (const { toolCall, toolResult } of readResults) {
+          llmMessages.push({
+            role: 'tool' as const,
+            tool_call_id: toolCall.id,
+            content: toolResult.content,
+          })
+
+          console.log(`[Agent] Tool result (${toolCall.name}):`, {
+            success: toolResult.success,
+            contentLength: toolResult.content.length,
+            contentPreview: toolResult.content.slice(0, 200),
+          })
+
+          if (toolResult.success) hasSuccessfulTool = true
+          if (toolResult.rejected) userRejected = true
+        }
+      }
+
+      // 串行执行写入工具（需要保持顺序和用户审批）
+      for (const toolCall of writeToolCalls) {
+        if (this.abortController?.signal.aborted || userRejected) break
+
+        console.log(`[Agent] Executing write tool: ${toolCall.name}`, toolCall.arguments)
         const toolResult = await this.executeToolCall(toolCall, workspacePath)
 
-        // 添加 tool 结果到历史
-        const toolResultMessage = {
+        llmMessages.push({
           role: 'tool' as const,
           tool_call_id: toolCall.id,
           content: toolResult.content,
-        }
-        llmMessages.push(toolResultMessage)
+        })
 
         console.log(`[Agent] Tool result (${toolCall.name}):`, {
           success: toolResult.success,
@@ -268,13 +317,8 @@ class AgentServiceClass {
           contentPreview: toolResult.content.slice(0, 200),
         })
 
-        if (toolResult.success) {
-          hasSuccessfulTool = true
-        }
-
-        if (toolResult.rejected) {
-          userRejected = true
-        }
+        if (toolResult.success) hasSuccessfulTool = true
+        if (toolResult.rejected) userRejected = true
       }
 
       console.log(`[Agent] After tool execution, message count: ${llmMessages.length}`)
@@ -665,10 +709,8 @@ class AgentServiceClass {
       ? result.result
       : `Error: ${result.error}`
 
-    // 截断过长的结果
-    const truncatedContent = resultContent.length > CONFIG.maxToolResultChars
-      ? resultContent.slice(0, CONFIG.maxToolResultChars) + '\n...(truncated)'
-      : resultContent
+    // 使用智能截断（根据工具类型）
+    const truncatedContent = truncateToolResult(resultContent, name, CONFIG.maxToolResultChars)
 
     const resultType = result.success ? 'success' : 'tool_error'
     store.addToolResult(id, name, truncatedContent, resultType, args as Record<string, unknown>)
@@ -701,11 +743,12 @@ class AgentServiceClass {
     // 2. 使用 MessageConverter 转换为 OpenAI 格式
     const openaiMessages = buildOpenAIMessages(filteredMessages, systemPrompt)
 
-    // 3. 截断过长的 tool 结果
+    // 3. 截断过长的 tool 结果（使用智能截断）
     for (const msg of openaiMessages) {
       if (msg.role === 'tool' && typeof msg.content === 'string') {
         if (msg.content.length > CONFIG.maxToolResultChars) {
-          msg.content = msg.content.slice(0, CONFIG.maxToolResultChars) + '\n...(truncated)'
+          // 尝试从 tool_call_id 推断工具名称，否则使用默认截断
+          msg.content = truncateToolResult(msg.content, 'default', CONFIG.maxToolResultChars)
         }
       }
     }
@@ -801,49 +844,20 @@ class AgentServiceClass {
 
   /**
    * 解析部分参数（用于流式预览）
+   * 使用健壮的部分 JSON 解析器
    */
-  private parsePartialArgs(argsString: string, toolName: string): Record<string, unknown> {
-    const result: Record<string, unknown> = {}
-
-    // 提取 path
-    const pathMatch = argsString.match(/"path"\s*:\s*"([^"]*)"?/)
-    if (pathMatch) result.path = pathMatch[1]
-
-    // 提取通用代码参数
-    const extractCodeParam = (paramName: string) => {
-      // 匹配 JSON 字符串值：允许非引号字符或转义字符
-      const regex = new RegExp(`"${paramName}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*?)(?:"|$)`)
-      const match = argsString.match(regex)
-
-      // DEBUG LOG
-      if (paramName === 'search_replace_blocks' && match) {
-        console.log('[Agent] extractCodeParam match:', match[1].slice(0, 50))
-      }
-
-      if (match) {
-        try {
-          // 尝试处理转义字符
-          return match[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
-        } catch {
-          return match[1]
-        }
-      }
-      return null
+  private parsePartialArgs(argsString: string, _toolName: string): Record<string, unknown> {
+    if (!argsString || argsString.length < 2) {
+      return {}
     }
 
-    // 对于写入工具，提取 content
-    if (WRITE_TOOLS.includes(toolName)) {
-      const content = extractCodeParam('content')
-      if (content) result.content = content
-
-      const searchReplace = extractCodeParam('search_replace_blocks')
-      if (searchReplace) result.search_replace_blocks = searchReplace
-
-      const code = extractCodeParam('code')
-      if (code) result.code = code
+    // 使用新的部分 JSON 解析器
+    const parsed = parsePartialJson(argsString)
+    if (parsed && Object.keys(parsed).length > 0) {
+      return parsed
     }
 
-    return result
+    return {}
   }
 
   // ===== 私有方法：辅助功能 =====
