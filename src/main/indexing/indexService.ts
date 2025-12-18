@@ -3,11 +3,10 @@
  * 整合 Embedding、分块、向量存储
  */
 
-import * as fs from 'fs'
 import * as path from 'path'
 import { BrowserWindow } from 'electron'
+import { Worker } from 'worker_threads'
 import { EmbeddingService } from './embedder'
-import { ChunkerService } from './chunker'
 import { VectorStoreService } from './vectorStore'
 import {
   IndexConfig,
@@ -23,9 +22,9 @@ export class CodebaseIndexService {
   private workspacePath: string
   private config: IndexConfig
   private embedder: EmbeddingService
-  private chunker: ChunkerService
   private vectorStore: VectorStoreService
   private mainWindow: BrowserWindow | null = null
+  private worker: Worker | null = null
 
   private status: IndexStatus = {
     isIndexing: false,
@@ -38,8 +37,69 @@ export class CodebaseIndexService {
     this.workspacePath = workspacePath
     this.config = { ...DEFAULT_INDEX_CONFIG, ...config }
     this.embedder = new EmbeddingService(this.config.embedding)
-    this.chunker = new ChunkerService(this.config)
     this.vectorStore = new VectorStoreService(workspacePath)
+    this.initWorker()
+  }
+
+  private initWorker() {
+    try {
+      const workerPath = path.join(__dirname, 'indexer.worker.js')
+      this.worker = new Worker(workerPath)
+      
+      this.worker.on('message', async (message: any) => {
+        switch (message.type) {
+          case 'progress':
+            this.status.indexedFiles = message.processed
+            if (message.total) this.status.totalFiles = message.total
+            this.emitProgress()
+            break
+            
+          case 'result':
+            if (message.chunks && message.chunks.length > 0) {
+              await this.vectorStore.addBatch(message.chunks)
+              this.status.totalChunks += message.chunks.length
+            }
+            this.status.indexedFiles = message.processed
+            if (message.total) this.status.totalFiles = message.total
+            this.emitProgress()
+            break
+            
+          case 'update_result':
+            if (message.deleted) {
+              await this.vectorStore.deleteFile(message.filePath)
+            } else if (message.chunks && message.chunks.length > 0) {
+              await this.vectorStore.upsertFile(message.filePath, message.chunks)
+            }
+            console.log(`[IndexService] Updated index for: ${message.filePath}`)
+            break
+            
+          case 'complete':
+            this.status.isIndexing = false
+            this.status.lastIndexedAt = Date.now()
+            console.log(`[IndexService] Indexing complete. Total chunks: ${this.status.totalChunks}`)
+            this.emitProgress()
+            break
+            
+          case 'error':
+            console.error('[IndexService] Worker error:', message.error)
+            this.status.error = message.error
+            this.status.isIndexing = false
+            this.emitProgress()
+            break
+        }
+      })
+
+      this.worker.on('error', (err) => {
+        console.error('[IndexService] Worker thread error (full):', err)
+        if (err.stack) console.error(err.stack)
+        this.status.error = err.message
+        this.status.isIndexing = false
+        this.emitProgress()
+      })
+
+    } catch (e) {
+      console.error('[IndexService] Failed to initialize worker:', e)
+    }
   }
 
   /**
@@ -75,7 +135,7 @@ export class CodebaseIndexService {
     if (config.embedding) {
       this.embedder.updateConfig(config.embedding)
     }
-    this.chunker.updateConfig(this.config)
+    // Worker will get new config on next message
   }
 
   /**
@@ -109,6 +169,10 @@ export class CodebaseIndexService {
       return
     }
 
+    if (!this.worker) {
+      this.initWorker()
+    }
+
     this.status = {
       isIndexing: true,
       totalFiles: 0,
@@ -118,60 +182,24 @@ export class CodebaseIndexService {
     this.emitProgress()
 
     try {
-      // 1. 收集所有代码文件
-      console.log('[IndexService] Collecting files...')
-      const files = await this.collectCodeFiles(this.workspacePath)
-      this.status.totalFiles = files.length
-      this.emitProgress()
+      // Fetch existing file hashes for incremental update
+      // Note: We don't clear() anymore by default, we let worker decide what to skip
+      // But if we want a fresh index, we might want a flag. 
+      // Assuming incremental by default now.
+      const existingHashes = await this.vectorStore.getFileHashes()
 
-      if (files.length === 0) {
-        console.log('[IndexService] No code files found')
-        this.status.isIndexing = false
-        this.emitProgress()
-        return
-      }
+      // 2. 发送给 Worker 处理 (Worker now handles file collection)
+      console.log(`[IndexService] Starting indexing for ${this.workspacePath}...`)
+      this.worker?.postMessage({
+        type: 'index',
+        workspacePath: this.workspacePath,
+        config: this.config,
+        existingHashes // Pass Map directly (Worker will receive it)
+      })
 
-      // 2. 分块所有文件
-      console.log(`[IndexService] Chunking ${files.length} files...`)
-      const allChunks: CodeChunk[] = []
-
-      for (const file of files) {
-        try {
-          const content = fs.readFileSync(file, 'utf-8')
-          
-          // 跳过太大的文件
-          if (content.length > this.config.maxFileSize) {
-            console.log(`[IndexService] Skipping large file: ${file}`)
-            continue
-          }
-
-          const chunks = this.chunker.chunkFile(file, content, this.workspacePath)
-          allChunks.push(...chunks)
-        } catch (e) {
-          console.error(`[IndexService] Error chunking file ${file}:`, e)
-        }
-
-        this.status.indexedFiles++
-        this.emitProgress()
-      }
-
-      console.log(`[IndexService] Created ${allChunks.length} chunks`)
-
-      // 3. 批量 Embedding
-      console.log('[IndexService] Generating embeddings...')
-      const indexedChunks = await this.embedChunks(allChunks)
-      this.status.totalChunks = indexedChunks.length
-
-      // 4. 存储到向量数据库
-      console.log('[IndexService] Storing to vector database...')
-      await this.vectorStore.createIndex(indexedChunks)
-
-      this.status.lastIndexedAt = Date.now()
-      console.log(`[IndexService] Indexing complete: ${indexedChunks.length} chunks`)
     } catch (e) {
       console.error('[IndexService] Indexing failed:', e)
       this.status.error = e instanceof Error ? e.message : String(e)
-    } finally {
       this.status.isIndexing = false
       this.emitProgress()
     }
@@ -185,44 +213,22 @@ export class CodebaseIndexService {
       return
     }
 
-    // 检查文件是否应该被索引
-    if (!this.chunker.shouldIndexFile(filePath)) {
+    if (!this.worker) {
+      this.initWorker()
+    }
+
+    // 简单检查后缀
+    const ext = path.extname(filePath).toLowerCase()
+    if (!this.config.includedExts.includes(ext)) {
       return
     }
 
-    try {
-      // 检查文件是否存在
-      if (!fs.existsSync(filePath)) {
-        // 文件被删除，从索引中移除
-        await this.vectorStore.deleteFile(filePath)
-        console.log(`[IndexService] Removed from index: ${filePath}`)
-        return
-      }
-
-      const content = fs.readFileSync(filePath, 'utf-8')
-
-      // 跳过太大的文件
-      if (content.length > this.config.maxFileSize) {
-        return
-      }
-
-      // 分块
-      const chunks = this.chunker.chunkFile(filePath, content, this.workspacePath)
-
-      if (chunks.length === 0) {
-        await this.vectorStore.deleteFile(filePath)
-        return
-      }
-
-      // Embedding
-      const indexedChunks = await this.embedChunks(chunks)
-
-      // 更新向量存储
-      await this.vectorStore.upsertFile(filePath, indexedChunks)
-      console.log(`[IndexService] Updated index for: ${filePath}`)
-    } catch (e) {
-      console.error(`[IndexService] Error updating file ${filePath}:`, e)
-    }
+    this.worker?.postMessage({
+      type: 'update',
+      workspacePath: this.workspacePath,
+      file: filePath,
+      config: this.config
+    })
   }
 
   /**
@@ -233,7 +239,7 @@ export class CodebaseIndexService {
       throw new Error('Index not initialized')
     }
 
-    // 生成查询向量
+    // 生成查询向量 (Keep in main process for low latency)
     const queryVector = await this.embedder.embed(query)
 
     // 向量搜索
@@ -246,11 +252,6 @@ export class CodebaseIndexService {
   async hybridSearch(query: string, topK: number = 10): Promise<SearchResult[]> {
     // 1. 向量搜索
     const semanticResults = await this.search(query, topK * 2)
-
-    // 2. 关键词搜索（使用 ripgrep，通过 IPC 调用）
-    // 这里简化处理，只返回向量搜索结果
-    // 完整实现需要调用 ripgrep 并融合结果
-
     return semanticResults.slice(0, topK)
   }
 
@@ -275,95 +276,17 @@ export class CodebaseIndexService {
     return this.embedder.testConnection()
   }
 
+  /**
+   * 销毁服务
+   */
+  destroy(): void {
+    if (this.worker) {
+      this.worker.terminate()
+      this.worker = null
+    }
+  }
+
   // ========== 私有方法 ==========
-
-  /**
-   * 收集所有代码文件
-   */
-  private async collectCodeFiles(dir: string): Promise<string[]> {
-    const files: string[] = []
-
-    const walk = (currentDir: string) => {
-      let entries: fs.Dirent[]
-      try {
-        entries = fs.readdirSync(currentDir, { withFileTypes: true })
-      } catch {
-        return
-      }
-
-      for (const entry of entries) {
-        // 跳过忽略的目录
-        if (entry.isDirectory()) {
-          if (this.chunker.shouldIgnoreDir(entry.name)) {
-            continue
-          }
-          walk(path.join(currentDir, entry.name))
-        } else if (entry.isFile()) {
-          const fullPath = path.join(currentDir, entry.name)
-          if (this.chunker.shouldIndexFile(fullPath)) {
-            files.push(fullPath)
-          }
-        }
-      }
-    }
-
-    walk(dir)
-    return files
-  }
-
-  /**
-   * 批量 Embedding
-   */
-  private async embedChunks(chunks: CodeChunk[]): Promise<IndexedChunk[]> {
-    const batchSize = 50  // 每批处理的数量
-    const indexedChunks: IndexedChunk[] = []
-
-    for (let i = 0; i < chunks.length; i += batchSize) {
-      const batch = chunks.slice(i, i + batchSize)
-      const texts = batch.map(c => this.prepareTextForEmbedding(c))
-
-      try {
-        const vectors = await this.embedder.embedBatch(texts)
-
-        for (let j = 0; j < batch.length; j++) {
-          indexedChunks.push({
-            ...batch[j],
-            vector: vectors[j],
-          })
-        }
-      } catch (e) {
-        console.error(`[IndexService] Embedding batch failed:`, e)
-        // 继续处理下一批
-      }
-
-      // 更新进度
-      this.emitProgress()
-    }
-
-    return indexedChunks
-  }
-
-  /**
-   * 准备用于 Embedding 的文本
-   */
-  private prepareTextForEmbedding(chunk: CodeChunk): string {
-    // 添加文件路径和符号信息作为上下文
-    let text = `File: ${chunk.relativePath}\n`
-    
-    if (chunk.symbols && chunk.symbols.length > 0) {
-      text += `Symbols: ${chunk.symbols.join(', ')}\n`
-    }
-    
-    text += `\n${chunk.content}`
-    
-    // 限制长度（大多数 Embedding 模型有 token 限制）
-    const maxLength = 8000
-    if (text.length > maxLength) {
-      text = text.slice(0, maxLength)
-    }
-    
-    return text
-  }
 
   /**
    * 发送进度事件到渲染进程

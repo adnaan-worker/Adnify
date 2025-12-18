@@ -39,6 +39,28 @@ export default defineConfig({
 				}
 			},
 			{
+				// Worker 文件需要单独编译到与 main.js 相同的目录
+				entry: 'src/main/indexing/indexer.worker.ts',
+				vite: {
+					build: {
+						outDir: 'dist/main',
+						lib: {
+							entry: 'src/main/indexing/indexer.worker.ts',
+							formats: ['cjs'],
+							fileName: () => 'indexer.worker.js'
+						},
+						rollupOptions: {
+							external: [
+								'electron',
+								'@lancedb/lancedb',
+								'apache-arrow',
+								'web-tree-sitter'
+							]
+						}
+					}
+				}
+			},
+			{
 				entry: 'src/main/preload.ts',
 				onstart(options) {
 					options.reload()

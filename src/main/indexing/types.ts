@@ -49,6 +49,7 @@ export interface CodeChunk {
   id: string
   filePath: string
   relativePath: string
+  fileHash: string     // 文件内容哈希（用于增量更新）
   content: string
   startLine: number
   endLine: number

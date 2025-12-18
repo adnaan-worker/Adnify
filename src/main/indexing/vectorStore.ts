@@ -76,6 +76,38 @@ export class VectorStoreService {
   }
 
   /**
+   * 获取所有文件的 Hash
+   */
+  async getFileHashes(): Promise<Map<string, string>> {
+    if (!this.table) return new Map()
+    
+    // LanceDB SQL-like query or just scan
+    // Assuming distinct filePath and taking first hash found (chunks of same file have same hash)
+    // Note: LanceDB might not support 'distinct' efficiently in JS API yet.
+    // We fetch all chunks' filePath and fileHash.
+    // Optimization: limit columns
+    try {
+        const results = await this.table
+        .query()
+        .select(['filePath', 'fileHash'])
+        .limit(1000000) // safety limit
+        .execute()
+        
+        const hashMap = new Map<string, string>()
+        for (const r of results) {
+            // Overwrite is fine as all chunks of same file should have same hash
+            if (r.filePath && r.fileHash) {
+                hashMap.set(r.filePath as string, r.fileHash as string)
+            }
+        }
+        return hashMap
+    } catch (e) {
+        console.error('[VectorStore] Error fetching file hashes:', e)
+        return new Map()
+    }
+  }
+
+  /**
    * 创建或重建索引
    */
   async createIndex(chunks: IndexedChunk[]): Promise<void> {
@@ -91,6 +123,7 @@ export class VectorStoreService {
       id: chunk.id,
       filePath: chunk.filePath,
       relativePath: chunk.relativePath,
+      fileHash: chunk.fileHash,
       content: chunk.content,
       startLine: chunk.startLine,
       endLine: chunk.endLine,
@@ -107,6 +140,35 @@ export class VectorStoreService {
 
     this.table = await this.db.createTable(this.tableName, data)
     console.log(`[VectorStore] Created index with ${chunks.length} chunks`)
+  }
+
+  /**
+   * 批量添加 chunks (追加模式，表不存在时自动创建)
+   */
+  async addBatch(chunks: IndexedChunk[]): Promise<void> {
+    if (!this.db || chunks.length === 0) return
+
+    const data = chunks.map(chunk => ({
+      id: chunk.id,
+      filePath: chunk.filePath,
+      relativePath: chunk.relativePath,
+      fileHash: chunk.fileHash,
+      content: chunk.content,
+      startLine: chunk.startLine,
+      endLine: chunk.endLine,
+      type: chunk.type,
+      language: chunk.language,
+      symbols: chunk.symbols?.join(',') || '',
+      vector: chunk.vector,
+    }))
+
+    // 如果表不存在，创建表
+    if (!this.table) {
+      this.table = await this.db.createTable(this.tableName, data)
+      console.log(`[VectorStore] Created table with ${chunks.length} initial chunks`)
+    } else {
+      await this.table.add(data)
+    }
   }
 
   /**
@@ -127,6 +189,7 @@ export class VectorStoreService {
       id: chunk.id,
       filePath: chunk.filePath,
       relativePath: chunk.relativePath,
+      fileHash: chunk.fileHash,
       content: chunk.content,
       startLine: chunk.startLine,
       endLine: chunk.endLine,

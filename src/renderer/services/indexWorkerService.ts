@@ -1,15 +1,9 @@
 /**
  * Index Worker Service
- * Manages the background indexing worker and provides a clean API
- * 
- * This service:
- * - Creates and manages the Web Worker
- * - Handles communication with the worker
- * - Provides progress callbacks
- * - Integrates with the main indexing service
+ * Manages the background indexing via Electron IPC
  */
 
-import type { IndexWorkerMessage, IndexWorkerResponse, FileToProcess, ProcessedChunk } from '../workers/indexWorker'
+import type { IndexStatus } from '../types/electron'
 
 // ============ Types ============
 
@@ -22,7 +16,7 @@ export interface IndexProgress {
 }
 
 export interface IndexResult {
-  chunks: ProcessedChunk[]
+  chunks: any[] // We don't get chunks back in progress, only stats
   totalFiles: number
   totalChunks: number
 }
@@ -34,122 +28,65 @@ type ErrorCallback = (error: string) => void
 // ============ Worker Service ============
 
 class IndexWorkerService {
-  private worker: Worker | null = null
   private progressCallbacks: Set<ProgressCallback> = new Set()
   private completeCallbacks: Set<CompleteCallback> = new Set()
   private errorCallbacks: Set<ErrorCallback> = new Set()
   private isInitialized = false
+  private stopListener: (() => void) | null = null
 
   /**
-   * Initialize the worker
+   * Initialize the service and listeners
    */
   initialize(): void {
     if (this.isInitialized) return
 
     try {
-      // Create worker from the worker file
-      // Note: In Vite, we use ?worker suffix or import.meta.url
-      this.worker = new Worker(
-        new URL('../workers/indexWorker.ts', import.meta.url),
-        { type: 'module' }
-      )
-
-      this.worker.onmessage = this.handleMessage.bind(this)
-      this.worker.onerror = this.handleError.bind(this)
+      this.stopListener = window.electronAPI.onIndexProgress((status: IndexStatus) => {
+        this.handleStatusUpdate(status)
+      })
       
       this.isInitialized = true
-      console.log('[IndexWorkerService] Worker initialized')
+      console.log('[IndexWorkerService] Initialized (IPC)')
     } catch (error) {
-      console.error('[IndexWorkerService] Failed to initialize worker:', error)
-      // Fallback: worker not available, will use main thread
+      console.error('[IndexWorkerService] Failed to initialize:', error)
     }
   }
 
   /**
-   * Check if worker is available
+   * Check if service is available
    */
   isAvailable(): boolean {
-    return this.isInitialized && this.worker !== null
+    return this.isInitialized
   }
 
   /**
    * Start indexing files
    */
-  startIndexing(files: FileToProcess[]): void {
-    if (!this.worker) {
-      this.handleError(new ErrorEvent('error', { message: 'Worker not initialized' }))
-      return
-    }
-
-    const message: IndexWorkerMessage = {
-      type: 'start',
-      payload: { files },
-    }
-
-    this.worker.postMessage(message)
+  async startIndexing(workspacePath: string): Promise<void> {
+    if (!this.isInitialized) this.initialize()
+    await window.electronAPI.indexStart(workspacePath)
   }
 
   /**
-   * Stop current indexing
+   * Stop current indexing (Not directly supported in simple IPC yet, but we can clear)
    */
   stopIndexing(): void {
-    if (!this.worker) return
-
-    const message: IndexWorkerMessage = {
-      type: 'stop',
-    }
-
-    this.worker.postMessage(message)
+    // No-op for now unless we add cancel to backend
+    console.warn('[IndexWorkerService] Stop not fully implemented in backend')
   }
 
   /**
    * Update a single file
    */
-  updateFile(file: FileToProcess): Promise<ProcessedChunk[]> {
-    return new Promise((resolve, reject) => {
-      if (!this.worker) {
-        reject(new Error('Worker not initialized'))
-        return
-      }
-
-      const handler = (event: MessageEvent<IndexWorkerResponse>) => {
-        if (event.data.type === 'complete' && event.data.payload.filePath === file.path) {
-          this.worker?.removeEventListener('message', handler)
-          resolve(event.data.payload.chunks || [])
-        } else if (event.data.type === 'error') {
-          this.worker?.removeEventListener('message', handler)
-          reject(new Error(event.data.payload.message))
-        }
-      }
-
-      this.worker.addEventListener('message', handler)
-
-      const message: IndexWorkerMessage = {
-        type: 'update_file',
-        payload: { file },
-      }
-
-      this.worker.postMessage(message)
-
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        this.worker?.removeEventListener('message', handler)
-        reject(new Error('Timeout'))
-      }, 30000)
-    })
+  async updateFile(workspacePath: string, filePath: string): Promise<void> {
+    await window.electronAPI.indexUpdateFile(workspacePath, filePath)
   }
 
   /**
    * Clear the index
    */
-  clear(): void {
-    if (!this.worker) return
-
-    const message: IndexWorkerMessage = {
-      type: 'clear',
-    }
-
-    this.worker.postMessage(message)
+  async clear(workspacePath: string): Promise<void> {
+    await window.electronAPI.indexClear(workspacePath)
   }
 
   /**
@@ -177,14 +114,14 @@ class IndexWorkerService {
   }
 
   /**
-   * Terminate the worker
+   * Terminate the service
    */
   terminate(): void {
-    if (this.worker) {
-      this.worker.terminate()
-      this.worker = null
-      this.isInitialized = false
+    if (this.stopListener) {
+      this.stopListener()
+      this.stopListener = null
     }
+    this.isInitialized = false
     this.progressCallbacks.clear()
     this.completeCallbacks.clear()
     this.errorCallbacks.clear()
@@ -192,61 +129,31 @@ class IndexWorkerService {
 
   // ============ Private Methods ============
 
-  private handleMessage(event: MessageEvent<IndexWorkerResponse>): void {
-    const { type, payload } = event.data
-
-    switch (type) {
-      case 'progress':
-        this.progressCallbacks.forEach(cb => cb({
-          processed: payload.processed,
-          total: payload.total,
-          chunksCount: payload.chunksCount,
-          isComplete: false,
-        }))
-        break
-
-      case 'complete':
-        if (payload.chunks) {
-          this.completeCallbacks.forEach(cb => cb({
-            chunks: payload.chunks,
-            totalFiles: payload.totalFiles || 0,
-            totalChunks: payload.totalChunks || payload.chunks.length,
-          }))
-          this.progressCallbacks.forEach(cb => cb({
-            processed: payload.totalFiles || 0,
-            total: payload.totalFiles || 0,
-            chunksCount: payload.totalChunks || 0,
-            isComplete: true,
-          }))
-        }
-        break
-
-      case 'error':
-        this.errorCallbacks.forEach(cb => cb(payload.message))
-        this.progressCallbacks.forEach(cb => cb({
-          processed: 0,
-          total: 0,
-          chunksCount: 0,
-          isComplete: true,
-          error: payload.message,
-        }))
-        break
-
-      case 'status':
-        console.log('[IndexWorkerService] Status:', payload)
-        break
+  private handleStatusUpdate(status: IndexStatus): void {
+    const progress: IndexProgress = {
+      processed: status.indexedFiles,
+      total: status.totalFiles,
+      chunksCount: status.totalChunks,
+      isComplete: !status.isIndexing,
+      error: status.error,
     }
-  }
 
-  private handleError(error: ErrorEvent): void {
-    const message = error.message || 'Unknown worker error'
-    console.error('[IndexWorkerService] Worker error:', message)
-    this.errorCallbacks.forEach(cb => cb(message))
+    this.progressCallbacks.forEach(cb => cb(progress))
+
+    if (status.error) {
+      this.errorCallbacks.forEach(cb => cb(status.error!))
+    }
+
+    if (!status.isIndexing && status.totalFiles > 0) {
+      this.completeCallbacks.forEach(cb => cb({
+        chunks: [], // We don't return chunks anymore to frontend to save memory
+        totalFiles: status.totalFiles,
+        totalChunks: status.totalChunks,
+      }))
+    }
   }
 }
 
 // Export singleton
 export const indexWorkerService = new IndexWorkerService()
 
-// Export types
-export type { FileToProcess, ProcessedChunk }
