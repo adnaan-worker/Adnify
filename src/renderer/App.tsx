@@ -104,6 +104,12 @@ function AppContent() {
         }
 
         // Auto-restore workspace
+        // 加载保存的主题
+        const savedTheme = await window.electronAPI.getSetting('currentTheme')
+        if (savedTheme) {
+          const { setTheme } = useStore.getState()
+          setTheme(savedTheme as 'adnify-dark' | 'midnight' | 'dawn')
+        }
         updateLoaderStatus('Restoring workspace...')
         const lastWorkspace = await window.electronAPI.restoreWorkspace()
         if (lastWorkspace) {
@@ -132,10 +138,10 @@ function AppContent() {
         setTimeout(() => {
           removeInitialLoader()
           setIsInitialized(true)
-          
+
           // 通知主进程：渲染完成，可以显示窗口了
           window.electronAPI.appReady()
-          
+
           // 显示引导的条件：
           // 1. onboardingCompleted 明确为 false（用户主动要求重新体验）
           // 2. 或者 onboardingCompleted 未设置且没有现有配置（真正的新用户）

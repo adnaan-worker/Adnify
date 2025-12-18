@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react'
 import {
   X, Cpu, Check, Eye, EyeOff, Terminal,
-  FileEdit, AlertTriangle, Settings2, Code, Keyboard, Plus, Trash, HardDrive
+  AlertTriangle, Settings2, Code, Keyboard, Plus, Trash, HardDrive
 } from 'lucide-react'
 import { useStore, LLMConfig } from '../store'
 import { t, Language } from '../i18n'
@@ -465,6 +465,8 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
 
   const handleThemeChange = (themeId: string) => {
     setTheme(themeId as any)
+    // 保存主题到 electron-store 以便重启后恢复
+    window.electronAPI.setSetting('currentTheme', themeId)
   }
 
   const handleAdvancedChange = (key: string, value: number) => {
@@ -855,8 +857,8 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
 
 // Agent 设置组件
 interface AgentSettingsProps {
-  autoApprove: { edits: boolean; terminal: boolean; dangerous: boolean }
-  setAutoApprove: (settings: { edits: boolean; terminal: boolean; dangerous: boolean }) => void
+  autoApprove: { terminal: boolean; dangerous: boolean }
+  setAutoApprove: (settings: { terminal: boolean; dangerous: boolean }) => void
   aiInstructions: string
   setAiInstructions: (instructions: string) => void
   promptTemplateId: string
@@ -892,34 +894,29 @@ function AgentSettings({ autoApprove, setAutoApprove, aiInstructions, setAiInstr
         </div>
       </div>
 
+
       <div>
-        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '自动审批' : 'Auto Approve'}</h3>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '工具授权' : 'Tool Authorization'}</h3>
         <p className="text-xs text-text-muted mb-3">
-          {language === 'zh' ? '启用后，工具调用将自动执行' : 'When enabled, tool calls execute automatically'}
+          {language === 'zh'
+            ? '控制Agent执行操作时是否需要你的确认。文件编辑不需要确认（可通过撤销恢复）。'
+            : 'Control whether Agent needs your approval. File edits don\'t require approval (can be undone).'}
         </p>
         <div className="space-y-2">
-          <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors">
-            <input type="checkbox" checked={autoApprove.edits} onChange={(e) => setAutoApprove({ ...autoApprove, edits: e.target.checked })} className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent" />
-            <FileEdit className="w-4 h-4 text-blue-400" />
-            <div className="flex-1">
-              <span className="text-sm">{language === 'zh' ? '文件编辑' : 'File Edits'}</span>
-              <p className="text-xs text-text-muted">{language === 'zh' ? '创建、修改文件' : 'Create, modify files'}</p>
-            </div>
-          </label>
           <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors">
             <input type="checkbox" checked={autoApprove.terminal} onChange={(e) => setAutoApprove({ ...autoApprove, terminal: e.target.checked })} className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent" />
             <Terminal className="w-4 h-4 text-green-400" />
             <div className="flex-1">
-              <span className="text-sm">{language === 'zh' ? '终端命令' : 'Terminal Commands'}</span>
-              <p className="text-xs text-text-muted">{language === 'zh' ? '执行 shell 命令' : 'Execute shell commands'}</p>
+              <span className="text-sm">{language === 'zh' ? '自动执行终端命令' : 'Auto-run Terminal Commands'}</span>
+              <p className="text-xs text-text-muted">{language === 'zh' ? '跳过确认直接执行 shell 命令' : 'Execute shell commands without confirmation'}</p>
             </div>
           </label>
           <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors">
             <input type="checkbox" checked={autoApprove.dangerous} onChange={(e) => setAutoApprove({ ...autoApprove, dangerous: e.target.checked })} className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent" />
             <AlertTriangle className="w-4 h-4 text-red-400" />
             <div className="flex-1">
-              <span className="text-sm">{language === 'zh' ? '危险操作' : 'Dangerous Operations'}</span>
-              <p className="text-xs text-text-muted">{language === 'zh' ? '删除文件等' : 'Delete files, etc.'}</p>
+              <span className="text-sm">{language === 'zh' ? '自动执行危险操作' : 'Auto-run Dangerous Operations'}</span>
+              <p className="text-xs text-text-muted">{language === 'zh' ? '跳过确认直接删除文件/文件夹' : 'Delete files/folders without confirmation'}</p>
             </div>
           </label>
         </div>

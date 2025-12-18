@@ -153,6 +153,10 @@ app.whenReady().then(() => {
   })
 
   console.log('[Security] 安全配置:', securityConfig)
+
+  // 初始化 SecurityManager 配置
+  securityManager.updateConfig(securityConfig as any)
+
   console.log('[Security] ✅ 安全模块已初始化')
   console.log('[Security] 📋 审计日志已启用')
   console.log('[Security] 🛡️ 工作区边界保护已启用')

@@ -11,6 +11,7 @@
  */
 
 import { useAgentStore } from './AgentStore'
+import { useStore } from '../../store'  // 用于读取 autoApprove 配置
 import { executeTool, getToolDefinitions, getToolApprovalType, WRITE_TOOLS } from './ToolExecutor'
 import { buildOpenAIMessages, validateOpenAIMessages, OpenAIMessage } from './MessageConverter'
 import { MessageContent, ToolStatus, ContextItem } from './types'
@@ -602,8 +603,9 @@ class AgentServiceClass {
     const { id, name, arguments: args } = toolCall
 
     // 检查是否需要用户审批
+    // 从 settingsSlice 读取配置（单一状态源）
     const approvalType = getToolApprovalType(name)
-    const autoApprove = store.autoApprove
+    const { autoApprove } = useStore.getState()
     const needsApproval = approvalType && !autoApprove[approvalType]
 
     // 更新工具状态

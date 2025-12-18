@@ -17,6 +17,13 @@ export function registerSettingsHandlers(
   // 设置值
   ipcMain.handle('settings:set', (_, key: string, value: unknown) => {
     mainStore.set(key, value)
+
+    // 如果是安全设置，同步更新到 SecurityManager
+    if (key === 'securitySettings') {
+      const { securityManager } = require('../security')
+      securityManager.updateConfig(value)
+    }
+
     return true
   })
 
@@ -29,7 +36,7 @@ export function registerSettingsHandlers(
       if (!fs.existsSync(newPath)) {
         throw new Error('Directory does not exist')
       }
-      
+
       const currentData = mainStore.store
       const newStore = new Store({ cwd: newPath })
       newStore.store = currentData
@@ -39,5 +46,10 @@ export function registerSettingsHandlers(
     } catch {
       return false
     }
+  })
+
+  // 恢复工作区
+  ipcMain.handle('workspace:restore', () => {
+    return mainStore.get('lastWorkspacePath')
   })
 }

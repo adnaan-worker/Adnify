@@ -403,8 +403,8 @@ class LspManager {
   sendRequest(serverName: string, method: string, params: any, timeoutMs = 30000): Promise<any> {
     return new Promise((resolve, reject) => {
       const instance = this.servers.get(serverName)
-      if (!instance?.process?.stdin) {
-        reject(new Error(`Server ${serverName} not running`))
+      if (!instance?.process?.stdin || !instance.process.stdin.writable) {
+        reject(new Error(`Server ${serverName} not running or not writable`))
         return
       }
 
@@ -418,7 +418,25 @@ class LspManager {
 
       const body = JSON.stringify({ jsonrpc: '2.0', id, method, params })
       const message = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`
-      instance.process.stdin.write(message)
+
+      try {
+        const canWrite = instance.process.stdin.write(message)
+        if (!canWrite) {
+          // 如果缓冲区已满，等待 drain 事件
+          instance.process.stdin.once('drain', () => {
+            console.log(`[LSP ${serverName}] stdin drained`)
+          })
+        }
+      } catch (err: any) {
+        // 处理写入错误（如 EPIPE）
+        instance.pendingRequests.delete(id)
+        clearTimeout(timeout)
+        console.error(`[LSP ${serverName}] Write error:`, err.message)
+
+        // 标记服务器为未初始化，允许后续重启
+        instance.initialized = false
+        reject(new Error(`Failed to write to ${serverName}: ${err.message}`))
+      }
     })
   }
 
@@ -427,11 +445,18 @@ class LspManager {
    */
   sendNotification(serverName: string, method: string, params: any): void {
     const instance = this.servers.get(serverName)
-    if (!instance?.process?.stdin) return
+    if (!instance?.process?.stdin || !instance.process.stdin.writable) return
 
     const body = JSON.stringify({ jsonrpc: '2.0', method, params })
     const message = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`
-    instance.process.stdin.write(message)
+
+    try {
+      instance.process.stdin.write(message)
+    } catch (err: any) {
+      // 处理写入错误（如 EPIPE），静默忽略通知失败
+      console.warn(`[LSP ${serverName}] Notification write error:`, err.message)
+      instance.initialized = false
+    }
   }
 
   /**

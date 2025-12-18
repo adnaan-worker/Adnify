@@ -25,7 +25,7 @@ const WHITELIST: CommandWhitelist = {
   shell: new Set([
     'npm', 'yarn', 'pnpm', 'node', 'npx',
     'git', // 允许 git 调用，但会在 git ipc 中进一步限制
-    'pwd', 'ls', 'cat', 'echo', 'mkdir', 'touch', 'rm', 'mv',
+    'pwd', 'ls', 'cat', 'echo', 'mkdir', 'touch', 'rm', 'mv', 'cd',
   ]),
   git: new Set([
     'status', 'log', 'diff', 'add', 'commit', 'push', 'pull',
@@ -105,7 +105,7 @@ class SecureCommandParser {
       const child = spawn(command, args, {
         cwd,
         timeout,
-        shell: false, // 禁用 shell，防止注入
+        shell: true, // 启用 shell 以支持 && 等操作，但需依赖白名单和危险模式检测来保证安全
         env: {
           ...process.env,
           // 移除可能导致问题的环境变量
@@ -362,23 +362,38 @@ export function registerSecureTerminalHandlers(
     }
   })
 
+  // ============ Interactive Terminal with node-pty ============
+
+  // Terminal instances storage
+  const terminals = new Map<string, any>() // IPty instances
+  let pty: any = null
+
+  // Try to load node-pty
+  try {
+    pty = require('node-pty')
+    console.log('[Terminal] node-pty loaded successfully')
+  } catch (e) {
+    console.warn('[Terminal] node-pty not available, interactive terminal disabled')
+  }
+
   /**
-   * 交互式终端创建（仍然使用 node-pty，但加强路径限制）
+   * 交互式终端创建（使用 node-pty，加强路径限制）
    */
   ipcMain.handle('terminal:interactive', async (
     _,
     options: { id: string; cwd?: string; shell?: string }
   ) => {
+    const mainWindow = getMainWindow()
     const workspace = getWorkspace()
     const { id, cwd, shell } = options
 
-    if (!workspace) {
-      return { success: false, error: '未设置工作区' }
+    if (!pty) {
+      return { success: false, error: 'node-pty not available' }
     }
 
     // 限制只能在工作区内使用终端
-    const targetCwd = cwd || workspace
-    if (!securityManager.validateWorkspacePath(targetCwd, workspace)) {
+    const targetCwd = cwd || workspace || process.cwd()
+    if (workspace && !securityManager.validateWorkspacePath(targetCwd, workspace)) {
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', false, {
         reason: '路径在工作区外',
         cwd: targetCwd,
@@ -386,64 +401,170 @@ export function registerSecureTerminalHandlers(
       return { success: false, error: '终端只能在工作区内创建' }
     }
 
-    // 权限检查
-    const hasPermission = await securityManager.checkPermission(
-      OperationType.TERMINAL_INTERACTIVE,
-      `Terminal:${id}`,
-      { cwd: targetCwd }
-    )
+    try {
+      const isWindows = process.platform === 'win32'
+      const shellPath = shell || (isWindows ? 'powershell.exe' : process.env.SHELL || '/bin/bash')
+      const shellArgs: string[] = []
 
-    if (!hasPermission) {
-      return { success: false, error: '用户拒绝创建终端' }
+      const ptyProcess = pty.spawn(shellPath, shellArgs, {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        cwd: targetCwd,
+        env: process.env,
+      })
+
+      terminals.set(id, ptyProcess)
+
+      // Forward data to renderer
+      ptyProcess.onData((data: string) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('terminal:data', { id, data })
+        }
+      })
+
+      ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
+        terminals.delete(id)
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('terminal:exit', { id, exitCode })
+        }
+      })
+
+      securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', true, {
+        id,
+        cwd: targetCwd,
+        shell: shellPath,
+      })
+
+      console.log(`[Terminal] Created terminal ${id} with shell ${shellPath}`)
+      return { success: true }
+    } catch (error: any) {
+      console.error('[Terminal] Failed to create terminal:', error)
+      return { success: false, error: error.message }
     }
-
-    securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', true, {
-      id,
-      cwd: targetCwd,
-      shell,
-    })
-
-    // 返回成功，实际创建由原来的 terminal.ts 处理
-    return { success: true }
   })
 
   /**
-   * 获取可用 shell 列表（安全版本）
+   * 获取可用 shell 列表（通过命令检测）
    */
   ipcMain.handle('shell:getAvailableShells', async () => {
     const shells: { label: string; path: string }[] = []
     const isWindows = process.platform === 'win32'
+    const fs = require('fs')
+    const pathModule = require('path')
 
-    const findShell = (cmd: string): string[] => {
+    // 检查命令是否可执行
+    const canExecute = (cmd: string): boolean => {
       try {
-        const result = isWindows
-          ? execSync(`where ${cmd}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] })
-          : execSync(`which ${cmd}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] })
-        return result.trim().split(/\r?\n/).filter(Boolean)
+        execSync(`${cmd} --version`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 3000 })
+        return true
       } catch {
-        return []
+        return false
       }
     }
 
     if (isWindows) {
+      // PowerShell (always available)
       shells.push({ label: 'PowerShell', path: 'powershell.exe' })
+
+      // Command Prompt (always available)
       shells.push({ label: 'Command Prompt', path: 'cmd.exe' })
 
-      const bashPaths = findShell('bash')
-      const gitBash = bashPaths.find(p =>
-        p.toLowerCase().includes('git') && require('fs').existsSync(p)
-      )
-      if (gitBash) {
-        shells.push({ label: 'Git Bash', path: gitBash })
+      // Git Bash - 通过 git --exec-path 动态获取
+      try {
+        const gitExecPath = execSync('git --exec-path', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim()
+        if (gitExecPath) {
+          // e.g., C:\Program Files\Git\mingw64\libexec\git-core -> C:\Program Files\Git\bin\bash.exe
+          const gitRoot = pathModule.resolve(gitExecPath, '..', '..', '..')
+          const bashPath = pathModule.join(gitRoot, 'bin', 'bash.exe')
+          if (fs.existsSync(bashPath)) {
+            shells.push({ label: 'Git Bash', path: bashPath })
+          }
+        }
+      } catch {
+        // Git 不可用
+      }
+
+      // WSL - 直接检测 wsl.exe 是否可用
+      if (canExecute('wsl')) {
+        shells.push({ label: 'WSL', path: 'wsl.exe' })
+      }
+
+      // PowerShell Core (pwsh)
+      if (canExecute('pwsh')) {
+        shells.push({ label: 'PowerShell Core', path: 'pwsh.exe' })
       }
     } else {
-      const bash = findShell('bash')[0]
-      if (bash) shells.push({ label: 'Bash', path: bash })
-
-      const zsh = findShell('zsh')[0]
-      if (zsh) shells.push({ label: 'Zsh', path: zsh })
+      // Unix: detect common shells
+      const unixShells = ['bash', 'zsh', 'fish']
+      for (const sh of unixShells) {
+        try {
+          const result = execSync(`which ${sh}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] })
+          if (result.trim()) {
+            shells.push({ label: sh.charAt(0).toUpperCase() + sh.slice(1), path: result.trim() })
+          }
+        } catch { /* not found */ }
+      }
     }
 
+    console.log('[Terminal] Available shells:', shells.map(s => s.label).join(', '))
     return shells
   })
+
+  /**
+   * Write input to terminal
+   */
+  ipcMain.handle('terminal:input', async (_, { id, data }: { id: string; data: string }) => {
+    const ptyProcess = terminals.get(id)
+    if (ptyProcess) {
+      ptyProcess.write(data)
+    }
+  })
+
+  /**
+   * Resize terminal
+   */
+  ipcMain.handle('terminal:resize', async (_, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
+    const ptyProcess = terminals.get(id)
+    if (ptyProcess) {
+      try {
+        ptyProcess.resize(cols, rows)
+      } catch (e) {
+        // Ignore resize errors
+      }
+    }
+  })
+
+  /**
+   * Kill terminal
+   */
+  ipcMain.on('terminal:kill', (_, id?: string) => {
+    if (id) {
+      const ptyProcess = terminals.get(id)
+      if (ptyProcess) {
+        ptyProcess.kill()
+        terminals.delete(id)
+      }
+    } else {
+      // Kill all terminals
+      for (const [termId, ptyProcess] of terminals) {
+        ptyProcess.kill()
+        terminals.delete(termId)
+      }
+    }
+  })
+
+  // Cleanup function
+  const cleanupTerminals = () => {
+    for (const [id, ptyProcess] of terminals) {
+      try {
+        ptyProcess.kill()
+      } catch (e) { }
+      terminals.delete(id)
+    }
+  }
+
+  // Return cleanup function for use in app shutdown
+  return cleanupTerminals
 }
+

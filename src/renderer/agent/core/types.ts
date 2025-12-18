@@ -13,7 +13,8 @@ export type ToolStatus =
   | 'rejected'       // 用户拒绝
   | 'awaiting'       // 等待用户审批
 
-export type ToolApprovalType = 'edits' | 'terminal' | 'dangerous'
+// edits 已移除 - 文件编辑不需要确认（可通过Checkpoint撤销）
+export type ToolApprovalType = 'terminal' | 'dangerous'
 
 export interface ToolCall {
   id: string
@@ -105,7 +106,7 @@ export interface AssistantMessage {
 }
 
 // 工具结果消息（参考 Void 的 ToolMessage）
-export type ToolResultType = 
+export type ToolResultType =
   | 'tool_request'   // 等待用户审批
   | 'running_now'    // 正在执行
   | 'success'        // 执行成功
@@ -143,10 +144,10 @@ export interface InterruptedToolMessage {
   timestamp: number
 }
 
-export type ChatMessage = 
-  | UserMessage 
-  | AssistantMessage 
-  | ToolResultMessage 
+export type ChatMessage =
+  | UserMessage
+  | AssistantMessage
+  | ToolResultMessage
   | CheckpointMessage
   | InterruptedToolMessage
 
@@ -220,7 +221,7 @@ export interface ChatThread {
 
 // ===== 流状态类型 =====
 
-export type StreamPhase = 
+export type StreamPhase =
   | 'idle'           // 空闲
   | 'streaming'      // LLM 正在输出
   | 'tool_pending'   // 工具等待审批
@@ -318,7 +319,7 @@ export function getMessageImages(content: MessageContent): ImageContent[] {
 // 获取消息中所有修改的文件路径
 export function getModifiedFilesFromMessages(messages: ChatMessage[]): string[] {
   const files = new Set<string>()
-  
+
   for (const msg of messages) {
     if (isAssistantMessage(msg)) {
       for (const part of msg.parts) {
@@ -332,7 +333,7 @@ export function getModifiedFilesFromMessages(messages: ChatMessage[]): string[] 
       }
     }
   }
-  
+
   return Array.from(files)
 }
 

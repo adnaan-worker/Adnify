@@ -99,7 +99,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'edit_file',
     description: 'Edit file using SEARCH/REPLACE blocks. Format: <<<<<<< SEARCH\\nold\\n=======\\nnew\\n>>>>>>> REPLACE',
-    approvalType: 'edits',
+    // 文件编辑不需要审批（可通过Checkpoint撤销）
     parameters: {
       type: 'object',
       properties: {
@@ -112,7 +112,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'write_file',
     description: 'Write or overwrite entire file content.',
-    approvalType: 'edits',
+    // 文件写入不需要审批（可通过Checkpoint撤销）
     parameters: {
       type: 'object',
       properties: {
@@ -125,7 +125,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'create_file_or_folder',
     description: 'Create a new file or folder. Path ending with / creates folder.',
-    approvalType: 'edits',
+    // 文件操作不需要审批（可通过Checkpoint撤销）
     parameters: {
       type: 'object',
       properties: {

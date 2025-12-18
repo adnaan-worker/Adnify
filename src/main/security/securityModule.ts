@@ -4,7 +4,7 @@
  */
 
 import Store from 'electron-store'
-import { dialog, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
 
@@ -44,10 +44,18 @@ interface PermissionConfig {
   [key: string]: PermissionLevel
 }
 
+// 来自 settingsSlice.ts 的定义
+export interface SecuritySettings {
+  enablePermissionConfirm: boolean
+  enableAuditLog: boolean
+  strictWorkspaceMode: boolean
+  allowedShellCommands?: string[]
+  showSecurityWarnings?: boolean
+}
+
 interface SecurityModule {
-  // 权限管理
+  // 权限管理（主进程底线检查，不弹窗）
   checkPermission: (operation: OperationType, target: string, context?: any) => Promise<boolean>
-  requestPermission: (operation: OperationType, target: string, context?: any) => Promise<boolean>
   setPermission: (operation: OperationType, level: PermissionLevel) => void
 
   // 审计日志
@@ -61,6 +69,9 @@ interface SecurityModule {
 
   // 白名单管理
   isAllowedCommand: (command: string, type: 'shell' | 'git') => boolean
+
+  // 配置更新
+  updateConfig: (config: Partial<SecuritySettings>) => void
 }
 
 // 默认权限配置
@@ -99,10 +110,10 @@ const DEFAULT_PERMISSIONS: PermissionConfig = {
   [OperationType.FILE_DELETE]: PermissionLevel.ASK,
 
   // 命令执行 - 通过白名单机制控制
-  [OperationType.SHELL_EXECUTE]: PermissionLevel.DENIED,
+  [OperationType.SHELL_EXECUTE]: PermissionLevel.ALLOWED,
 
   // 终端 - 交互式需要确认（安全起见）
-  [OperationType.TERMINAL_INTERACTIVE]: PermissionLevel.ASK,
+  [OperationType.TERMINAL_INTERACTIVE]: PermissionLevel.ALLOWED,
 
   // Git - 工作区内完全自动
   [OperationType.GIT_EXEC]: PermissionLevel.ALLOWED,
@@ -127,7 +138,7 @@ const SENSITIVE_PATHS = [
 // 命令白名单（仅允许安全的子命令）
 const ALLOWED_SHELL_COMMANDS = new Set([
   'git', 'npm', 'yarn', 'pnpm', 'node', 'npx',
-  'pwd', 'ls', 'cat', 'echo', 'mkdir', 'rmdir',
+  'pwd', 'ls', 'cat', 'echo', 'mkdir', 'rmdir', 'cd',
 ])
 
 const ALLOWED_GIT_SUBCOMMANDS = new Set([
@@ -139,13 +150,26 @@ const ALLOWED_GIT_SUBCOMMANDS = new Set([
 class SecurityManager implements SecurityModule {
   private mainWindow: BrowserWindow | null = null
   private sessionStorage: Map<string, boolean> = new Map() // 会话级别的权限缓存
+  private config: Partial<SecuritySettings> = {} // 动态配置
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
   }
 
   /**
-   * 检查权限（会先检查会话缓存，然后检查持久化配置）
+   * 更新安全配置
+   */
+  updateConfig(config: Partial<SecuritySettings>) {
+    this.config = { ...this.config, ...config }
+    console.log('[Security] Configuration updated:', this.config)
+  }
+
+  /**
+   * 检查权限（主进程底线安全检查）
+   * 
+   * 设计原则：
+   * - 主进程只做硬性规则拦截，不弹窗询问用户
+   * - 用户确认流程由渲染进程的 Agent UI 负责
    */
   async checkPermission(operation: OperationType, target: string, context?: any): Promise<boolean> {
     // 从会话缓存检查
@@ -156,61 +180,28 @@ class SecurityManager implements SecurityModule {
 
     // 从持久化配置检查
     const config = this.getPermissionConfig(operation)
-    if (config === PermissionLevel.ALLOWED) {
-      return true
-    }
+
     if (config === PermissionLevel.DENIED) {
+      // 硬性拒绝，记录日志
+      this.logOperation(operation, target, false, { reason: 'Permission denied by policy' })
+      console.warn(`[Security] Operation denied by policy: ${operation} - ${target}`)
       return false
     }
 
-    // 需要用户确认
-    return await this.requestPermission(operation, target, context)
-  }
-
-  /**
-   * 请求用户确认权限
-   */
-  async requestPermission(operation: OperationType, target: string, context?: any): Promise<boolean> {
-    if (!this.mainWindow) {
-      console.error('[Security] No main window available for permission request')
-      return false
-    }
-
-    const message = this.getPermissionMessage(operation, target, context)
-    const detail = this.getPermissionDetail(operation, target, context)
-
-    try {
-      const result = await dialog.showMessageBox(this.mainWindow, {
-        type: 'warning',
-        buttons: ['拒绝', '允许一次', '始终允许'],
-        defaultId: 0,
-        cancelId: 0,
-        title: '安全确认',
-        message,
-        detail,
-      })
-
-      const response = result.response
-
-      if (response === 0) {
-        // 拒绝
-        return false
-      } else if (response === 1) {
-        // 允许一次（保存到会话）
-        const sessionKey = `${operation}:${target}`
-        this.sessionStorage.set(sessionKey, true)
-        return true
-      } else if (response === 2) {
-        // 始终允许（保存到持久化配置）
-        this.setPermission(operation, PermissionLevel.ALLOWED)
+    // 如果是 ASK 级别，检查全局确认开关
+    if (config === PermissionLevel.ASK) {
+      if (this.config.enablePermissionConfirm === false) {
+        // 用户选择不需要确认，直接允许
         return true
       }
-
-      return false
-    } catch (error) {
-      console.error('[Security] Failed to show permission dialog:', error)
-      return false
+      // 需要确认时，默认拒绝（由渲染进程 Agent UI 处理用户确认）
+      // 这里返回 true 是因为渲染进程已经处理了用户确认
+      // 主进程不再弹窗，直接放行工作区内操作
+      return true
     }
+
+    // ALLOWED 级别直接允许
+    return true
   }
 
   /**
@@ -333,7 +324,7 @@ class SecurityManager implements SecurityModule {
 
       // 确保路径在工作区内
       const isInside = resolvedPath.startsWith(resolvedWorkspace + path.sep) ||
-                       resolvedPath === resolvedWorkspace
+        resolvedPath === resolvedWorkspace
 
       // 检查是否为敏感路径
       const isSensitive = this.isSensitivePath(resolvedPath)
@@ -367,7 +358,11 @@ class SecurityManager implements SecurityModule {
     }
 
     if (type === 'shell') {
-      // Shell 命令必须严格匹配白名单
+      // 优先使用配置中的白名单
+      if (this.config.allowedShellCommands && Array.isArray(this.config.allowedShellCommands)) {
+        return this.config.allowedShellCommands.includes(baseCommand)
+      }
+      // 回退到默认白名单
       return ALLOWED_SHELL_COMMANDS.has(baseCommand)
     }
 

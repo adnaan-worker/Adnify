@@ -15,9 +15,9 @@ export interface LLMConfig {
 }
 
 export interface AutoApproveSettings {
-  edits: boolean
-  terminal: boolean
-  dangerous: boolean
+  // edits 已移除 - 文件编辑不需要确认（可通过Checkpoint撤销）
+  terminal: boolean    // 终端命令（run_command）
+  dangerous: boolean   // 危险操作（delete_file_or_folder）
 }
 
 // Provider 配置（自定义模型等）
@@ -60,9 +60,8 @@ const defaultLLMConfig: LLMConfig = {
 }
 
 const defaultAutoApprove: AutoApproveSettings = {
-  edits: false,
-  terminal: false,
-  dangerous: false,
+  terminal: false,   // 默认需要确认终端命令
+  dangerous: false,  // 默认需要确认危险操作
 }
 
 const defaultProviderConfigs: Record<string, ProviderModelConfig> = {
