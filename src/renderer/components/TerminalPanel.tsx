@@ -288,15 +288,27 @@ export default function TerminalPanel() {
 
     const handleFixWithAI = () => {
         if (!activeId) return
-        const buffer = outputBuffers.current.get(activeId) || []
-        const rawOutput = buffer.join('')
-        const cleanOutput = rawOutput.replace(/\u001b\[[0-9;]*m/g, '').slice(-2000)
 
-        if (!cleanOutput.trim()) return
+        const term = terminalRefs.current.get(activeId)
+        if (!term) return
+
+        // 优先使用选中的文本
+        const selectedText = term.getSelection()?.trim()
+
+        let content: string
+        if (selectedText) {
+            content = selectedText
+        } else {
+            // 没有选中时，使用最近的输出缓冲区
+            const buffer = outputBuffers.current.get(activeId) || []
+            const rawOutput = buffer.join('')
+            content = rawOutput.replace(/\u001b\[[0-9;]*m/g, '').slice(-2000).trim()
+        }
+
+        if (!content) return
 
         setChatMode('chat')
-        setTerminalVisible(true)
-        setInputPrompt(`I'm getting this error in the terminal. Please analyze it and fix the code:\n\n\`\`\`\n${cleanOutput}\n\`\`\``)
+        setInputPrompt(`I'm getting this error in the terminal. Please analyze it and fix the code:\n\n\`\`\`\n${content}\n\`\`\``)
     }
 
     if (!terminalVisible) return null
@@ -385,7 +397,7 @@ export default function TerminalPanel() {
                 </div>
 
                 {/* Terminals Container */}
-                <div className={`flex-1 p-0 min-h-0 relative bg-[#18181b] ${isCollapsed ? 'hidden' : 'block'}`}>
+                <div className={`flex-1 p-0 min-h-0 relative bg-surface ${isCollapsed ? 'hidden' : 'block'}`}>
                     {terminals.map(term => (
                         <div
                             key={term.id}

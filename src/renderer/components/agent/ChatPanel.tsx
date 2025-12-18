@@ -56,6 +56,8 @@ export default function ChatPanel() {
     language,
     activeFilePath,
     setActiveDiff,
+    inputPrompt,
+    setInputPrompt,
   } = useStore()
 
   const toast = useToast()
@@ -148,6 +150,13 @@ export default function ChatPanel() {
       scrollToBottom(isStreaming ? 'auto' : 'smooth')
     }
   }, [messages, isStreaming, scrollToBottom])
+  // 一次性同步 inputPrompt 到本地 input（来自终端 Fix 等外部调用）
+  useEffect(() => {
+    if (inputPrompt) {
+      setInput(inputPrompt)
+      setInputPrompt('')  // 立即清空，避免持续监听
+    }
+  }, [inputPrompt, setInputPrompt])
 
   // 处理文件点击 - 用于打开文件
   const handleFileClick = useCallback(async (filePath: string) => {
