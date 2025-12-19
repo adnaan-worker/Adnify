@@ -12,6 +12,7 @@ import { registerSearchHandlers } from './search'
 import { registerLLMHandlers, updateLLMServiceWindow } from './llm'
 import { registerIndexingHandlers } from './indexing'
 import { registerLspHandlers } from './lsp'
+import { registerHttpHandlers } from './http'
 
 // 安全模块
 import {
@@ -72,6 +73,9 @@ export function registerAllHandlers(context: IPCContext) {
   // LSP 语言服务
   registerLspHandlers()
 
+  // HTTP 请求（用于 web_search / read_url）
+  registerHttpHandlers()
+
   console.log('[Security] 所有安全IPC处理器已注册')
 }
 
@@ -85,3 +89,4 @@ export function cleanupAllHandlers() {
 }
 
 export { updateLLMServiceWindow }
+

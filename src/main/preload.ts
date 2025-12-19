@@ -250,6 +250,21 @@ export interface ElectronAPI {
   lspInlayHint: (params: { uri: string; range: any; workspacePath?: string | null }) => Promise<any>
   getLspDiagnostics: (filePath: string) => Promise<any[]>
   onLspDiagnostics: (callback: (params: { uri: string; diagnostics: any[] }) => void) => () => void
+
+  // HTTP (网络请求)
+  httpReadUrl: (url: string, timeout?: number) => Promise<{
+    success: boolean
+    content?: string
+    title?: string
+    error?: string
+    contentType?: string
+    statusCode?: number
+  }>
+  httpWebSearch: (query: string, maxResults?: number) => Promise<{
+    success: boolean
+    results?: { title: string; url: string; snippet: string }[]
+    error?: string
+  }>
 }
 
 // =================== 暴露 API ===================
@@ -389,4 +404,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('lsp:diagnostics', handler)
     return () => ipcRenderer.removeListener('lsp:diagnostics', handler)
   },
+
+  // HTTP API
+  httpReadUrl: (url: string, timeout?: number) => ipcRenderer.invoke('http:readUrl', url, timeout),
+  httpWebSearch: (query: string, maxResults?: number) => ipcRenderer.invoke('http:webSearch', query, maxResults),
 })

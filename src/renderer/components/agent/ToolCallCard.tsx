@@ -9,7 +9,8 @@ import { useState, useMemo, useEffect } from 'react'
 import {
   Check, X, ChevronDown, ChevronRight, Loader2,
   Terminal, Search, FolderOpen, FileText, Edit3,
-  Trash2, Eye, Copy, ArrowRight, AlertTriangle
+  Trash2, Eye, Copy, ArrowRight, AlertTriangle,
+  Globe, Link2, MessageCircle
 } from 'lucide-react'
 import { ToolCall } from '../../agent/core/types'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -32,6 +33,10 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
   create_file: <FileText className="w-3.5 h-3.5" />,
   edit_file: <Edit3 className="w-3.5 h-3.5" />,
   delete_file_or_folder: <Trash2 className="w-3.5 h-3.5" />,
+  // Phase 2 tools
+  web_search: <Globe className="w-3.5 h-3.5" />,
+  read_url: <Link2 className="w-3.5 h-3.5" />,
+  ask_user: <MessageCircle className="w-3.5 h-3.5" />,
 }
 
 // 工具标签映射
@@ -44,6 +49,10 @@ const TOOL_LABELS: Record<string, string> = {
   create_file: 'Create File',
   edit_file: 'Edit File',
   delete_file_or_folder: 'Delete',
+  // Phase 2 tools
+  web_search: 'Web Search',
+  read_url: 'Read URL',
+  ask_user: 'Ask User',
 }
 
 // 工具颜色映射
@@ -56,6 +65,10 @@ const TOOL_COLORS: Record<string, string> = {
   create_file: 'text-emerald-400',
   edit_file: 'text-orange-400',
   delete_file_or_folder: 'text-red-400',
+  // Phase 2 tools
+  web_search: 'text-sky-400',
+  read_url: 'text-indigo-400',
+  ask_user: 'text-pink-400',
 }
 
 export default function ToolCallCard({
@@ -116,7 +129,11 @@ export default function ToolCallCard({
       const path = args.path as string
       return path?.split(/[\\/]/).pop() || path
     }
-    if (name === 'search_files') return `"${args.query}"`
+    // 修复: search_files 使用 pattern 而不是 query
+    if (name === 'search_files') {
+      const pattern = (args.pattern || args.query) as string
+      return pattern ? `"${pattern}"` : ''
+    }
     if (name === 'list_directory') {
       const path = args.path as string
       return path?.split(/[\\/]/).pop() || path || '.'
@@ -124,6 +141,19 @@ export default function ToolCallCard({
     if (name === 'delete_file_or_folder') {
       const path = args.path as string
       return path?.split(/[\\/]/).pop() || path
+    }
+    // Phase 2 tools
+    if (name === 'web_search') {
+      const query = args.query as string
+      return query ? `"${query}"` : ''
+    }
+    if (name === 'read_url') {
+      const url = args.url as string
+      return url?.length > 50 ? url.slice(0, 50) + '...' : url
+    }
+    if (name === 'ask_user') {
+      const question = args.question as string
+      return question?.length > 50 ? question.slice(0, 50) + '...' : question
     }
     return ''
   }, [toolCall.name, args])

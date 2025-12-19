@@ -277,6 +277,21 @@ export interface ElectronAPI {
   lspInlayHint: (params: { uri: string; range: LspRange; workspacePath?: string | null }) => Promise<LspInlayHint[] | null>
   getLspDiagnostics: (filePath: string) => Promise<LspDiagnostic[]>
   onLspDiagnostics: (callback: (params: { uri: string; diagnostics: LspDiagnostic[] }) => void) => () => void
+
+  // HTTP (网络请求 - Phase 2)
+  httpReadUrl: (url: string, timeout?: number) => Promise<{
+    success: boolean
+    content?: string
+    title?: string
+    error?: string
+    contentType?: string
+    statusCode?: number
+  }>
+  httpWebSearch: (query: string, maxResults?: number) => Promise<{
+    success: boolean
+    results?: { title: string; url: string; snippet: string }[]
+    error?: string
+  }>
 }
 
 // LSP Types

@@ -132,6 +132,10 @@ class AdnifyDirService {
       settings: false,
     }
 
+  // 定时刷盘
+  private flushTimer: ReturnType<typeof setTimeout> | null = null
+  private readonly FLUSH_INTERVAL = 5000 // 5秒
+
   /**
    * 初始化指定根目录的 .adnify 结构
    */
@@ -190,6 +194,12 @@ class AdnifyDirService {
   }
 
   async flush(): Promise<void> {
+    // 取消待定的定时器
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer)
+      this.flushTimer = null
+    }
+
     if (!this.initialized || !this.primaryRoot) return
 
     const promises: Promise<void>[] = []
@@ -209,8 +219,21 @@ class AdnifyDirService {
       this.dirty.settings = false
     }
 
-    await Promise.all(promises)
-    console.log('[AdnifyDir] Flushed all data')
+    if (promises.length > 0) {
+      await Promise.all(promises)
+      console.log('[AdnifyDir] Flushed all dirty data')
+    }
+  }
+
+  /**
+   * 调度延迟刷盘（防抖）
+   */
+  private scheduleFlush(): void {
+    if (this.flushTimer) return // 已有待定刷盘
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null
+      this.flush().catch(err => console.error('[AdnifyDir] Flush error:', err))
+    }, this.FLUSH_INTERVAL)
   }
 
   isInitialized(): boolean {
@@ -243,6 +266,9 @@ class AdnifyDirService {
     return this.cache.sessions
   }
 
+  /**
+   * 保存 sessions（立即写入，用于关键操作）
+   */
   async saveSessions(data: SessionsData): Promise<void> {
     this.cache.sessions = data
     this.dirty.sessions = true
@@ -252,10 +278,26 @@ class AdnifyDirService {
     }
   }
 
+  /**
+   * 更新 sessions 部分数据（立即写入，用于关键操作）
+   */
   async updateSessionsPartial(key: string, value: unknown): Promise<void> {
     const sessions = await this.getSessions()
     sessions[key] = value
     await this.saveSessions(sessions)
+  }
+
+  /**
+   * 设置 sessions 部分数据为脏（延迟写入，用于频繁更新）
+   * 这是推荐的高频更新方法
+   */
+  setSessionsPartialDirty(key: string, value: unknown): void {
+    if (!this.cache.sessions) {
+      this.cache.sessions = {}
+    }
+    this.cache.sessions[key] = value
+    this.dirty.sessions = true
+    this.scheduleFlush()
   }
 
   async getWorkspaceState(): Promise<WorkspaceStateData> {

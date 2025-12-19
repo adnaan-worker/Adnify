@@ -321,6 +321,21 @@ class AgentServiceClass {
 
       console.log(`[Agent] After tool execution, message count: ${llmMessages.length}`)
 
+      // === Observe Phase: 检查编辑后的文件是否有错误 ===
+      if (!userRejected && writeToolCalls.length > 0 && workspacePath) {
+        const observation = await this.observeChanges(workspacePath, writeToolCalls)
+        if (observation.hasErrors && observation.errors.length > 0) {
+          // 将观察结果添加到 LLM 消息，让它知道需要修复
+          const observeMessage = `[Observation] 检测到以下代码问题，请修复：\n\n${observation.errors.slice(0, 3).join('\n\n')}`
+          llmMessages.push({
+            role: 'user' as const,
+            content: observeMessage,
+          })
+          console.log('[Agent] Observe phase detected errors:', observation.errors.length)
+          store.appendToAssistant(this.currentAssistantId!, `\n\n🔍 **Auto-check**: Detected ${observation.errors.length} issue(s). Attempting to fix...`)
+        }
+      }
+
       // 检测白名单错误并添加帮助提示
       // 通过检查最近添加的消息来判断是否有白名单错误
       const recentMessages = store.getMessages()
@@ -901,6 +916,50 @@ class AgentServiceClass {
     this.currentAssistantId = null
     this.abortController = null
     this.isRunning = false
+  }
+
+  // ===== Observe Phase =====
+
+  /**
+   * 观察阶段：检查编辑后的文件是否有 lint 错误
+   * 用于 Agent 自动修复错误
+   */
+  private async observeChanges(
+    workspacePath: string,
+    writeToolCalls: LLMToolCall[]
+  ): Promise<{ hasErrors: boolean; errors: string[] }> {
+    const errors: string[] = []
+
+    // 获取所有被编辑的文件路径
+    const editedFiles = writeToolCalls
+      .filter(tc => ['edit_file', 'write_file', 'create_file_or_folder'].includes(tc.name))
+      .map(tc => {
+        const filePath = tc.arguments.path as string
+        // 确保是完整路径
+        if (filePath.startsWith(workspacePath)) {
+          return filePath
+        }
+        return `${workspacePath}/${filePath}`.replace(/\/+/g, '/')
+      })
+      .filter(path => !path.endsWith('/')) // 排除文件夹
+
+    // 对每个文件获取 lint 错误
+    for (const filePath of editedFiles) {
+      try {
+        const lintResult = await executeTool('get_lint_errors', { path: filePath }, workspacePath)
+        if (lintResult.success && lintResult.result) {
+          // 解析 lint 结果
+          const result = lintResult.result.trim()
+          if (result && result !== '[]' && result !== 'No diagnostics found') {
+            errors.push(`File: ${filePath}\n${result}`)
+          }
+        }
+      } catch (e) {
+        console.warn(`[Agent] Failed to get lint errors for ${filePath}:`, e)
+      }
+    }
+
+    return { hasErrors: errors.length > 0, errors }
   }
 }
 

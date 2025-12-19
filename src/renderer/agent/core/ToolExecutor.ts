@@ -250,6 +250,43 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       required: ['paths'],
     },
   },
+  // 网络工具 (Phase 2)
+  {
+    name: 'web_search',
+    description: 'Search the web for information. Returns top results with titles, URLs, and snippets.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        max_results: { type: 'number', description: 'Maximum number of results (default: 5)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'read_url',
+    description: 'Fetch and read content from a URL. Returns the page title and text content.',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'URL to fetch content from' },
+        timeout: { type: 'number', description: 'Timeout in seconds (default: 30)' },
+      },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'ask_user',
+    description: 'Ask the user a question and wait for their response. Use when you need clarification or user input.',
+    approvalType: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'The question to ask the user' },
+      },
+      required: ['question'],
+    },
+  },
 ]
 
 // ===== 工具审批类型映射 =====
@@ -289,6 +326,9 @@ export const TOOL_DISPLAY_NAMES: Record<string, string> = {
   delete_file_or_folder: 'Delete',
   run_command: 'Run',
   get_lint_errors: 'Lint',
+  web_search: 'Web Search',
+  read_url: 'Read URL',
+  ask_user: 'Ask User',
 }
 
 // 写入类工具（需要显示代码预览）
@@ -1080,6 +1120,94 @@ export async function executeTool(
         }
 
         return { success: true, result: output }
+      }
+
+      // ===== Phase 2: 网络工具 =====
+
+      case 'web_search': {
+        const query = String(args.query)
+        const maxResults = typeof args.max_results === 'number' ? args.max_results : 5
+
+        const result = await window.electronAPI.httpWebSearch(query, maxResults)
+
+        if (!result.success || !result.results) {
+          return {
+            success: false,
+            result: '',
+            error: result.error || 'Web search failed',
+          }
+        }
+
+        if (result.results.length === 0) {
+          return {
+            success: true,
+            result: `No results found for: "${query}"`,
+          }
+        }
+
+        let output = `Search results for "${query}":\\n\\n`
+        for (const r of result.results) {
+          output += `**${r.title}**\\n`
+          output += `URL: ${r.url}\\n`
+          output += `${r.snippet}\\n\\n`
+        }
+
+        return { success: true, result: output }
+      }
+
+      case 'read_url': {
+        const url = String(args.url)
+        const timeout = typeof args.timeout === 'number' ? args.timeout * 1000 : 30000
+
+        // 简单的 URL 验证
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          return {
+            success: false,
+            result: '',
+            error: 'Invalid URL: must start with http:// or https://',
+          }
+        }
+
+        const result = await window.electronAPI.httpReadUrl(url, timeout)
+
+        if (!result.success || !result.content) {
+          return {
+            success: false,
+            result: '',
+            error: result.error || 'Failed to fetch URL',
+          }
+        }
+
+        let output = `Fetched: ${url}\\n`
+        if (result.title) {
+          output += `Title: ${result.title}\\n`
+        }
+        output += `Status: ${result.statusCode}\\n`
+        output += `Content-Type: ${result.contentType}\\n\\n`
+
+        // 截断过长的内容
+        const content = result.content.length > 50000
+          ? result.content.slice(0, 50000) + '\\n\\n...(content truncated, showing first 50000 characters)'
+          : result.content
+
+        output += content
+
+        return { success: true, result: output }
+      }
+
+      case 'ask_user': {
+        const question = String(args.question)
+
+        // ask_user 返回一个特殊标记，告诉 AgentService 需要更多用户输入
+        // 实际的用户交互由 AgentService 处理
+        return {
+          success: true,
+          result: `💬 **Question for user**: ${question}\\n\\n_Waiting for user response..._`,
+          meta: {
+            requiresUserInput: true,
+            question,
+          } as any,
+        }
       }
 
       default:

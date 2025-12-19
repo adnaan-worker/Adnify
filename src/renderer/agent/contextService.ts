@@ -6,6 +6,7 @@
 import { useStore } from '../store'
 import { getEditorConfig } from '../config/editorConfig'
 import { terminalService } from './terminalService'
+import { ignoreService } from '../services/ignoreService'
 
 export interface FileContext {
 	path: string
@@ -53,17 +54,17 @@ const getContextLimits = () => {
  */
 export function parseFileReferences(message: string): string[] {
 	const refs: string[] = []
-	
+
 	// 匹配 @file:path 或 @path 格式（排除 @codebase）
 	const regex = /@(?:file:)?([^\s@]+\.[a-zA-Z0-9]+)/g
 	let match
-	
+
 	while ((match = regex.exec(message)) !== null) {
 		if (match[1] !== 'codebase') {
 			refs.push(match[1])
 		}
 	}
-	
+
 	return [...new Set(refs)] // 去重
 }
 
@@ -150,19 +151,19 @@ export function formatFileContext(file: FileContext): string {
 	const lines = file.content.split('\n')
 	const lineCount = lines.length
 	const { maxSingleFileChars } = getContextLimits()
-	
+
 	// 如果文件太大，截断并添加提示
 	let content = file.content
 	if (content.length > maxSingleFileChars) {
 		content = content.slice(0, maxSingleFileChars) + '\n\n... (truncated, file has ' + lineCount + ' lines)'
 	}
-	
+
 	return `**${file.path}** (${lineCount} lines):\n\`\`\`${lang}\n${content}\n\`\`\``
 }
 
 export async function formatProjectStructure(rootPath: string): Promise<string> {
-    const tree = await window.electronAPI.getFileTree(rootPath, 3) // 限制深度为3
-    return `**Project Structure:**\n\`\`\`\n${tree}\n\`\`\``
+	const tree = await window.electronAPI.getFileTree(rootPath, 3) // 限制深度为3
+	return `**Project Structure:**\n\`\`\`\n${tree}\n\`\`\``
 }
 
 /**
@@ -170,11 +171,11 @@ export async function formatProjectStructure(rootPath: string): Promise<string> 
  */
 export function formatSemanticResult(result: FileContext): string {
 	const lang = getLanguageFromPath(result.path)
-	const lineInfo = result.startLine && result.endLine 
-		? ` (lines ${result.startLine}-${result.endLine})` 
+	const lineInfo = result.startLine && result.endLine
+		? ` (lines ${result.startLine}-${result.endLine})`
 		: ''
 	const scoreInfo = result.relevance < 1 ? ` [relevance: ${(result.relevance * 100).toFixed(0)}%]` : ''
-	
+
 	return `**${result.path}**${lineInfo}${scoreInfo}:\n\`\`\`${lang}\n${result.content}\n\`\`\``
 }
 
@@ -182,8 +183,8 @@ export function formatSemanticResult(result: FileContext): string {
  * 构建上下文字符串
  */
 export function buildContextString(
-	files: FileContext[], 
-	projectStructure?: string, 
+	files: FileContext[],
+	projectStructure?: string,
 	semanticResults?: FileContext[],
 	symbolsContext?: string,
 	gitContext?: string,
@@ -191,46 +192,46 @@ export function buildContextString(
 	attachedFilesContext?: string  // 附加的文件上下文
 ): string {
 	let context = '---\n**Context:**\n\n'
-	
+
 	if (projectStructure) {
 		context += projectStructure + '\n\n'
 	}
-	
+
 	// 附加的文件（通过 @ 引用或拖放添加）
 	if (attachedFilesContext) {
 		context += attachedFilesContext + '\n\n'
 	}
-	
+
 	// 语义搜索结果
 	if (semanticResults && semanticResults.length > 0) {
 		context += '**Relevant Code (from codebase search):**\n\n'
 		context += semanticResults.map(formatSemanticResult).join('\n\n')
 		context += '\n\n'
 	}
-	
+
 	// 符号上下文
 	if (symbolsContext) {
 		context += symbolsContext + '\n\n'
 	}
-	
+
 	// Git 上下文
 	if (gitContext) {
 		context += gitContext + '\n\n'
 	}
-	
+
 	// 终端上下文
 	if (terminalContext) {
 		context += terminalContext + '\n\n'
 	}
-	
+
 	// 文件引用
 	if (files.length > 0) {
 		context += '**Referenced Files:**\n\n'
-        const sections = files.map(formatFileContext)
-	    context += sections.join('\n\n')
-    }
-    
-    return context
+		const sections = files.map(formatFileContext)
+		context += sections.join('\n\n')
+	}
+
+	return context
 }
 
 /**
@@ -239,10 +240,10 @@ export function buildContextString(
 export async function searchCodebase(query: string, topK?: number): Promise<FileContext[]> {
 	const state = useStore.getState()
 	if (!state.workspacePath) return []
-	
+
 	const { maxSemanticResults } = getContextLimits()
 	const limit = topK ?? maxSemanticResults
-	
+
 	try {
 		const results = await window.electronAPI.indexSearch(state.workspacePath, query, limit)
 		return results.map(r => ({
@@ -265,7 +266,7 @@ export async function searchCodebase(query: string, topK?: number): Promise<File
 export function extractSymbols(content: string, language: string): string {
 	const lines = content.split('\n')
 	const symbols: string[] = []
-	
+
 	// 根据语言提取符号
 	const patterns: Record<string, RegExp[]> = {
 		typescript: [
@@ -299,9 +300,9 @@ export function extractSymbols(content: string, language: string): string {
 			/^impl(?:<[^>]+>)?\s+(\w+)/,
 		],
 	}
-	
+
 	const langPatterns = patterns[language] || patterns.typescript
-	
+
 	lines.forEach((line, index) => {
 		const trimmed = line.trim()
 		for (const pattern of langPatterns) {
@@ -312,8 +313,8 @@ export function extractSymbols(content: string, language: string): string {
 			}
 		}
 	})
-	
-	return symbols.length > 0 
+
+	return symbols.length > 0
 		? `**Symbols in current file:**\n\`\`\`\n${symbols.join('\n')}\n\`\`\``
 		: ''
 }
@@ -326,36 +327,36 @@ export async function getGitContext(workspacePath: string): Promise<string> {
 		// 使用 gitExecSecure API
 		const statusResult = await window.electronAPI.gitExecSecure(['status', '--short'], workspacePath)
 		const status = statusResult.success ? statusResult.stdout || '' : ''
-		
+
 		const logResult = await window.electronAPI.gitExecSecure(['log', '--oneline', '-5', '--no-decorate'], workspacePath)
 		const log = logResult.success ? logResult.stdout || '' : ''
-		
+
 		const branchResult = await window.electronAPI.gitExecSecure(['branch', '--show-current'], workspacePath)
 		const branch = branchResult.success ? branchResult.stdout || '' : ''
-		
+
 		const diffResult = await window.electronAPI.gitExecSecure(['diff', '--stat', 'HEAD'], workspacePath)
 		const diff = diffResult.success ? diffResult.stdout || '' : ''
-		
+
 		let context = '**Git Context:**\n\n'
-		
+
 		if (branch) {
 			context += `Current branch: \`${branch.trim()}\`\n\n`
 		}
-		
+
 		if (status) {
 			context += `**Changed files:**\n\`\`\`\n${status}\n\`\`\`\n\n`
 		} else {
 			context += `No uncommitted changes.\n\n`
 		}
-		
+
 		if (diff) {
 			context += `**Diff summary:**\n\`\`\`\n${diff}\n\`\`\`\n\n`
 		}
-		
+
 		if (log) {
 			context += `**Recent commits:**\n\`\`\`\n${log}\n\`\`\`\n`
 		}
-		
+
 		return context
 	} catch (e) {
 		console.error('[Context] Git context failed:', e)
@@ -438,7 +439,7 @@ export async function collectContext(
 		maxChars = limits.maxContextChars,
 		contextItems = [],
 	} = options || {}
-	
+
 	const state = useStore.getState()
 	const files: FileContext[] = []
 	let semanticResults: FileContext[] = []
@@ -454,25 +455,33 @@ export async function collectContext(
 		projectStructure = await formatProjectStructure(state.workspacePath)
 		totalChars += projectStructure.length
 	}
-	
+
 	// 1. 从 contextItems 中提取各类上下文
 	const fileItems = contextItems.filter(item => item.type === 'File' || item.type === 'CodeSelection')
 	const hasCodebase = contextItems.some(item => item.type === 'Codebase')
 	const hasSymbols = contextItems.some(item => item.type === 'Symbols')
 	const hasGit = contextItems.some(item => item.type === 'Git')
 	const hasTerminal = contextItems.some(item => item.type === 'Terminal')
-	
+
 	// 消息不需要清理（@ 引用已经通过 contextItems 处理）
 	const cleanedMessage = message
-	
+
+	// 1.5 确保忽略规则已加载
+	if (state.workspacePath) {
+		await ignoreService.loadIgnoreFile(state.workspacePath)
+	}
+
 	// 2. 如果使用 @codebase，执行语义搜索
 	if (hasCodebase && cleanedMessage.trim()) {
-		semanticResults = await searchCodebase(cleanedMessage)
+		const rawResults = await searchCodebase(cleanedMessage)
+		// 过滤被忽略的文件
+		semanticResults = rawResults.filter(r => !ignoreService.isIgnored(r.path))
 		for (const result of semanticResults) {
 			totalChars += result.content.length + 100
 		}
 	}
-	
+
+
 	// 3. 如果使用 @symbols，提取当前文件符号
 	if (hasSymbols && state.activeFilePath) {
 		const activeFile = state.openFiles.find(f => f.path === state.activeFilePath)
@@ -482,25 +491,31 @@ export async function collectContext(
 			totalChars += symbolsContext.length
 		}
 	}
-	
+
 	// 4. 如果使用 @git，获取 Git 上下文
 	if (hasGit && state.workspacePath) {
 		gitContext = await getGitContext(state.workspacePath)
 		totalChars += gitContext.length
 	}
-	
+
 	// 5. 如果使用 @terminal，获取终端输出
 	if (hasTerminal) {
 		terminalContext = getTerminalContext()
 		terminalChars = terminalContext.length
 		totalChars += terminalChars
 	}
-	
+
 	// 6. 处理文件和代码片段上下文
 	const attachedParts: string[] = []
 	for (const item of fileItems) {
 		if (!item.uri) continue
-		
+
+		// 跳过被忽略的文件
+		if (ignoreService.isIgnored(item.uri)) {
+			console.log(`[Context] Skipping ignored file: ${item.uri}`)
+			continue
+		}
+
 		try {
 			const content = await window.electronAPI.readFile(item.uri)
 			if (content !== null) {
@@ -522,11 +537,11 @@ export async function collectContext(
 			console.warn(`[Context] Failed to read file: ${item.uri}`, e)
 		}
 	}
-	
-	const attachedFilesContext = attachedParts.length > 0 
+
+	const attachedFilesContext = attachedParts.length > 0
 		? '<attached_files>\n' + attachedParts.join('\n\n') + '\n</attached_files>'
 		: ''
-	
+
 	// 7. 添加当前活动文件（如果没有在 contextItems 中）
 	if (includeActiveFile && state.activeFilePath) {
 		const alreadyIncluded = fileItems.some(item => item.uri === state.activeFilePath)
@@ -545,14 +560,14 @@ export async function collectContext(
 			}
 		}
 	}
-	
+
 	// 8. 添加其他打开的文件（可选）
 	if (includeOpenFiles) {
 		for (const openFile of state.openFiles) {
 			if (files.length >= limits.maxFiles) break
 			if (files.some(f => f.path === openFile.path)) continue
 			if (totalChars + openFile.content.length > maxChars) continue
-			
+
 			files.push({
 				path: openFile.path,
 				content: openFile.content,
@@ -562,10 +577,10 @@ export async function collectContext(
 			totalChars += openFile.content.length
 		}
 	}
-	
+
 	// 按相关性排序
 	files.sort((a, b) => b.relevance - a.relevance)
-	
+
 	// 构建统计信息
 	const stats: ContextStats = {
 		totalChars,
@@ -577,7 +592,7 @@ export async function collectContext(
 		semanticResultCount: semanticResults.length,
 		terminalChars,
 	}
-	
+
 	return { files, semanticResults, projectStructure, symbolsContext, gitContext, terminalContext, attachedFilesContext, cleanedMessage, totalChars, stats }
 }
 
@@ -600,7 +615,7 @@ export const contextService = {
 	hasTerminalReference,
 	formatFileContext,
 	formatSemanticResult,
-    formatProjectStructure,
+	formatProjectStructure,
 	buildContextString,
 	searchCodebase,
 	extractSymbols,

@@ -41,6 +41,7 @@
     "node-pty": "1.1.0-beta42",
     "openai": "^4.96.0",
     "p-limit": "^3.1.0",
+    "picomatch": "^4.0.3",
     "png2icons": "^2.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -56,6 +57,7 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.2",
     "@types/node": "^22.10.2",
+    "@types/picomatch": "^4.0.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/react-syntax-highlighter": "^15.5.13",

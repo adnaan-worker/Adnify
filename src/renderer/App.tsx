@@ -25,6 +25,7 @@ import { checkpointService } from './agent/checkpointService'
 import { useAgentStore } from './agent/core/AgentStore'
 import { keybindingService } from './services/keybindingService'
 import { registerCoreCommands } from './config/commands'
+import noiseSvg from './assets/images/noise.svg'
 
   // 暴露 store 给插件系统
   ; (window as any).__ADNIFY_STORE__ = { getState: () => useStore.getState() }
@@ -283,7 +284,10 @@ function AppContent() {
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative">
       <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-black pointer-events-none z-0" />
-      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none z-0 mix-blend-overlay" />
+      <div
+        className="absolute inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-overlay"
+        style={{ backgroundImage: `url(${noiseSvg})` }}
+      />
 
       <div className="relative z-10 flex flex-col h-full">
         <TitleBar />
