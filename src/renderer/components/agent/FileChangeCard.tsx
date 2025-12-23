@@ -37,8 +37,16 @@ export default function FileChangeCard({
 
     // 获取新旧内容用于 diff
     const oldContent = useMemo(() => {
+        // 在流式传输或运行阶段，如果工具是局部编辑类（非全量覆盖），
+        // 且还没有 meta 结果（即工具未完成），暂时忽略旧内容，
+        // 避免将 patch 片段与完整旧文件对比导致显示大面积删除。
+        // 这样预览会显示为纯新增（绿色），更符合 patch 的直观感受。
+        if ((isRunning || isStreaming) && !meta?.oldContent) {
+            const isPartialEdit = ['edit_file', 'replace_file_content'].includes(toolCall.name)
+            if (isPartialEdit) return ''
+        }
         return (meta?.oldContent as string) || ''
-    }, [meta])
+    }, [meta, isRunning, isStreaming, toolCall.name])
 
     const newContent = useMemo(() => {
         if (meta?.newContent) return meta.newContent as string

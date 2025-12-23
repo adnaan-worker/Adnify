@@ -41,6 +41,15 @@ function getLanguageFromPath(path: string): string {
 
 // 简单的 diff 算法 - 基于双指针比较
 function computeDiff(oldLines: string[], newLines: string[]): DiffLine[] {
+    // 性能保护：如果文件过大，降级为简单显示，避免卡死 UI
+    if (oldLines.length + newLines.length > 3000) {
+        return newLines.map((line, i) => ({
+            type: 'add',
+            content: line,
+            newLineNumber: i + 1
+        }))
+    }
+
     const result: DiffLine[] = []
 
     let oldIdx = 0
