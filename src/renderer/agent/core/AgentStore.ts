@@ -67,6 +67,7 @@ interface AgentActions {
   addAssistantMessage: (content?: string) => string
   appendToAssistant: (messageId: string, content: string) => void
   finalizeAssistant: (messageId: string) => void
+  _doAppendToAssistant: (messageId: string, content: string) => void
   updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void
   addToolResult: (toolCallId: string, name: string, content: string, type: ToolResultType, rawParams?: Record<string, unknown>) => string
   addCheckpoint: (type: 'user_message' | 'tool_edit', fileSnapshots: Record<string, FileSnapshot>) => string
@@ -203,7 +204,7 @@ const STORE_NAME = 'adnify-agent-store'
 
 export const useAgentStore = create<AgentStore>()(
   persist(
-    (set, get) => ({
+    (set: any, get: () => AgentStore): AgentStore => ({
       // 初始状态
       threads: {},
       currentThreadId: null,
@@ -220,7 +221,7 @@ export const useAgentStore = create<AgentStore>()(
       // 线程操作
       createThread: () => {
         const thread = createEmptyThread()
-        set(state => ({
+        set((state: AgentStore) => ({
           threads: { ...state.threads, [thread.id]: thread },
           currentThreadId: thread.id,
         }))
@@ -234,7 +235,7 @@ export const useAgentStore = create<AgentStore>()(
       },
 
       deleteThread: (threadId) => {
-        set(state => {
+        set((state: AgentStore) => {
           const { [threadId]: _, ...remaining } = state.threads
           const remainingIds = Object.keys(remaining)
           return {
@@ -263,7 +264,7 @@ export const useAgentStore = create<AgentStore>()(
           contextItems,
         }
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId!]
           if (!thread) return state
 
@@ -297,7 +298,7 @@ export const useAgentStore = create<AgentStore>()(
           toolCalls: [],
         }
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -328,7 +329,7 @@ export const useAgentStore = create<AgentStore>()(
         const threadId = state.currentThreadId
         if (!threadId) return
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -374,7 +375,7 @@ export const useAgentStore = create<AgentStore>()(
         const threadId = state.currentThreadId
         if (!threadId) return
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -403,7 +404,7 @@ export const useAgentStore = create<AgentStore>()(
         const threadId = state.currentThreadId
         if (!threadId) return
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -439,7 +440,7 @@ export const useAgentStore = create<AgentStore>()(
           rawParams,
         }
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -471,7 +472,7 @@ export const useAgentStore = create<AgentStore>()(
           fileSnapshots,
         }
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -498,7 +499,7 @@ export const useAgentStore = create<AgentStore>()(
         const threadId = state.currentThreadId
         if (!threadId) return
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -522,7 +523,7 @@ export const useAgentStore = create<AgentStore>()(
         const threadId = state.currentThreadId
         if (!threadId) return
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -548,7 +549,7 @@ export const useAgentStore = create<AgentStore>()(
         const threadId = state.currentThreadId
         if (!threadId) return
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -591,7 +592,7 @@ export const useAgentStore = create<AgentStore>()(
         const threadId = state.currentThreadId
         if (!threadId) return
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -642,7 +643,7 @@ export const useAgentStore = create<AgentStore>()(
 
         if (!threadId) return
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -674,7 +675,7 @@ export const useAgentStore = create<AgentStore>()(
         const threadId = state.currentThreadId
         if (!threadId) return
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -695,7 +696,7 @@ export const useAgentStore = create<AgentStore>()(
         const threadId = state.currentThreadId
         if (!threadId) return
 
-        set(state => {
+        set((state: AgentStore) => {
           const thread = state.threads[threadId]
           if (!thread) return state
 
@@ -710,7 +711,7 @@ export const useAgentStore = create<AgentStore>()(
 
       // 流状态操作
       setStreamState: (newState) => {
-        set(state => ({
+        set((state: AgentStore) => ({
           streamState: { ...state.streamState, ...newState },
         }))
       },
@@ -721,14 +722,14 @@ export const useAgentStore = create<AgentStore>()(
 
       // 配置操作
       setAutoApprove: (type, value) => {
-        set(state => ({
+        set((state: AgentStore) => ({
           autoApprove: { ...state.autoApprove, [type]: value },
         }))
       },
 
       // 待确认更改操作
       addPendingChange: (change) => {
-        set(state => {
+        set((state: AgentStore) => {
           // 检查是否已存在相同文件的更改，如果存在则更新
           const existingIdx = state.pendingChanges.findIndex(c => c.filePath === change.filePath)
           if (existingIdx !== -1) {
@@ -802,7 +803,7 @@ export const useAgentStore = create<AgentStore>()(
       },
 
       acceptChange: (filePath) => {
-        set(state => ({
+        set((state: AgentStore) => ({
           pendingChanges: state.pendingChanges.filter(c => c.filePath !== filePath),
         }))
       },
@@ -822,7 +823,7 @@ export const useAgentStore = create<AgentStore>()(
           }
 
           // 从列表中移除
-          set(state => ({
+          set((state: AgentStore) => ({
             pendingChanges: state.pendingChanges.filter(c => c.filePath !== filePath),
           }))
           return true
@@ -860,7 +861,7 @@ export const useAgentStore = create<AgentStore>()(
 
         console.log('[Checkpoint] Created checkpoint:', checkpoint.id, 'for message:', messageId, 'with files:', Object.keys(fileSnapshots))
 
-        set(state => ({
+        set((state: AgentStore) => ({
           messageCheckpoints: [...state.messageCheckpoints, checkpoint],
         }))
 
@@ -871,7 +872,7 @@ export const useAgentStore = create<AgentStore>()(
       addSnapshotToCurrentCheckpoint: (filePath: string, content: string | null) => {
         console.log('[Checkpoint] Adding snapshot for:', filePath, 'content length:', content?.length ?? 'null')
 
-        set(state => {
+        set((state: AgentStore) => {
           // 找到最新的检查点
           if (state.messageCheckpoints.length === 0) {
             console.log('[Checkpoint] No checkpoints exist, cannot add snapshot')
@@ -976,7 +977,7 @@ export const useAgentStore = create<AgentStore>()(
             const messageIdx = thread.messages.findIndex(m => m.id === checkpoint.messageId)
             if (messageIdx !== -1) {
               // 删除该消息及之后的所有消息（保留该消息之前的）
-              set(state => {
+              set((state: AgentStore) => {
                 const thread = state.threads[threadId]
                 if (!thread) return state
                 return {
@@ -995,7 +996,7 @@ export const useAgentStore = create<AgentStore>()(
         }
 
         // 删除该检查点及之后的检查点，清空待确认更改
-        set(state => ({
+        set((state: AgentStore) => ({
           messageCheckpoints: state.messageCheckpoints.slice(0, checkpointIdx),
           pendingChanges: [],
         }))
@@ -1056,7 +1057,7 @@ export const useAgentStore = create<AgentStore>()(
       },
 
       updatePlanStatus: (status) => {
-        set((state) => {
+        set((state: AgentStore) => {
           if (!state.plan) return {}
           return {
             plan: {
@@ -1069,7 +1070,7 @@ export const useAgentStore = create<AgentStore>()(
       },
 
       updatePlanItem: (itemId, updates) => {
-        set((state) => {
+        set((state: AgentStore) => {
           if (!state.plan) return {}
           return {
             plan: {
@@ -1084,7 +1085,7 @@ export const useAgentStore = create<AgentStore>()(
       },
 
       addPlanItem: (item) => {
-        set((state) => {
+        set((state: AgentStore) => {
           if (!state.plan) return {}
           const newItem: PlanItem = {
             id: generateShortId(),
@@ -1103,7 +1104,7 @@ export const useAgentStore = create<AgentStore>()(
       },
 
       deletePlanItem: (itemId) => {
-        set((state) => {
+        set((state: AgentStore) => {
           if (!state.plan) return {}
           return {
             plan: {
@@ -1116,7 +1117,7 @@ export const useAgentStore = create<AgentStore>()(
       },
 
       setPlanStep: (stepId) => {
-        set((state) => {
+        set((state: AgentStore) => {
           if (!state.plan) return {}
           return {
             plan: {
@@ -1142,7 +1143,7 @@ export const useAgentStore = create<AgentStore>()(
         plan: state.plan,
       }),
     }
-  )
+  ) as any
 )
 
 const EMPTY_MESSAGES: ChatMessage[] = []

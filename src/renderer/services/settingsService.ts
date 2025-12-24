@@ -229,7 +229,7 @@ function cleanProviderConfigs(
             }
         } else {
             // 其他 Provider：只有有实质性配置时才保存
-            if (cleanedConfig.apiKey || cleanedConfig.baseUrl ||
+            if (cleanedConfig.apiKey || cleanedConfig.baseUrl || cleanedConfig.adapterConfig ||
                 (cleanedConfig.customModels && cleanedConfig.customModels.length > 0)) {
                 cleaned[id] = cleanedConfig as ProviderConfig
             }

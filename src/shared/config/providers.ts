@@ -25,13 +25,13 @@ export interface RequestConfig {
 
 /** 响应解析配置 */
 export interface ResponseConfig {
-    // 流式响应字段路径
-    contentField: string          // 内容字段 'delta.content'
-    reasoningField?: string       // 思考字段 'delta.reasoning'
-    toolCallField?: string        // 工具调用 'delta.tool_calls'
+    // 流式响应字段路径（相对于 choice.delta）
+    contentField: string          // 内容字段 'content'
+    reasoningField?: string       // 思考字段 'reasoning_content'
+    toolCallField?: string        // 工具调用 'tool_calls'
     finishReasonField?: string    // 完成原因 'finish_reason'
 
-    // 工具调用解析
+    // 工具调用解析（相对于 tool_call 对象）
     toolNamePath?: string         // 工具名 'function.name'
     toolArgsPath?: string         // 参数 'function.arguments'
     toolIdPath?: string           // ID 'id'
@@ -39,6 +39,73 @@ export interface ResponseConfig {
 
     // 结束标记
     doneMarker?: string           // 流结束标记 '[DONE]'
+}
+
+// ============================================
+// 工具调用配置（从 providerAdapter.ts 合并）
+// ============================================
+
+/** 工具定义格式配置 */
+export interface ToolFormatConfig {
+    /** 工具包装模式: none=直接输出, function=OpenAI风格, tool=Anthropic风格 */
+    wrapMode: 'none' | 'function' | 'tool'
+    /** 包装字段名 (如 "function", "tool") */
+    wrapField?: string
+    /** 参数字段映射 */
+    parameterField: 'parameters' | 'input_schema' | 'schema'
+    /** 是否需要 type 字段 */
+    includeType: boolean
+}
+
+/** XML 解析配置 */
+export interface XMLParseConfig {
+    /** 工具调用标签名 (如 "tool_call", "function_call") */
+    toolCallTag: string
+    /** 工具名称来源 ("name"=子元素, "@name"=属性) */
+    nameSource: string
+    /** 参数标签名 */
+    argsTag: string
+    /** 参数内部格式 */
+    argsFormat: 'json' | 'xml' | 'key-value'
+}
+
+/** 工具调用解析配置 */
+export interface ToolParseConfig {
+    /** 响应格式类型 */
+    responseFormat: 'json' | 'xml' | 'mixed'
+    /** 工具调用路径 (JSON) */
+    toolCallPath?: string
+    /** 工具名称路径 */
+    toolNamePath?: string
+    /** 工具参数路径 */
+    toolArgsPath?: string
+    /** 参数是否已是对象 */
+    argsIsObject?: boolean
+    /** 工具 ID 路径 */
+    toolIdPath?: string
+    /** 是否自动生成 ID */
+    autoGenerateId?: boolean
+    /** XML 配置 (当 responseFormat 为 xml 或 mixed 时) */
+    xmlConfig?: XMLParseConfig
+}
+
+/** 消息格式配置 */
+export interface MessageFormatConfig {
+    /** tool 结果消息的角色名 */
+    toolResultRole: 'tool' | 'user' | 'function'
+    /** tool_call_id 字段名 */
+    toolCallIdField: string
+    /** 是否需要包装 tool_result */
+    wrapToolResult: boolean
+    /** tool_result 包装标签 */
+    toolResultWrapper?: string
+}
+
+/** 解析后的工具调用 */
+export interface ParsedToolCall {
+    id: string
+    name: string
+    arguments: Record<string, unknown>
 }
 
 /** LLM 适配器配置 */
@@ -49,6 +116,10 @@ export interface LLMAdapterConfig {
     request: RequestConfig
     response: ResponseConfig
     isBuiltin?: boolean
+    // 工具调用配置（可选，用于高级自定义）
+    toolFormat?: ToolFormatConfig
+    toolParse?: ToolParseConfig
+    messageFormat?: MessageFormatConfig
 }
 
 /** 功能支持声明 */
@@ -129,15 +200,36 @@ const OPENAI_ADAPTER: LLMAdapterConfig = {
         }
     },
     response: {
-        contentField: 'delta.content',
-        toolCallField: 'delta.tool_calls',
+        contentField: 'content',
+        toolCallField: 'tool_calls',
         toolNamePath: 'function.name',
         toolArgsPath: 'function.arguments',
         toolIdPath: 'id',
         argsIsObject: false,
         finishReasonField: 'finish_reason',
         doneMarker: '[DONE]',
-    }
+    },
+    // 工具调用配置
+    toolFormat: {
+        wrapMode: 'function',
+        wrapField: 'function',
+        parameterField: 'parameters',
+        includeType: true,
+    },
+    toolParse: {
+        responseFormat: 'json',
+        toolCallPath: 'tool_calls',
+        toolNamePath: 'function.name',
+        toolArgsPath: 'function.arguments',
+        argsIsObject: false,
+        toolIdPath: 'id',
+        autoGenerateId: false,
+    },
+    messageFormat: {
+        toolResultRole: 'tool',
+        toolCallIdField: 'tool_call_id',
+        wrapToolResult: false,
+    },
 }
 
 const ANTHROPIC_ADAPTER: LLMAdapterConfig = {
@@ -150,7 +242,7 @@ const ANTHROPIC_ADAPTER: LLMAdapterConfig = {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'anthropic-version': '2023-06-01',
+            'anthropic-version': '2024-01-01',
         },
         bodyTemplate: {
             model: '{{model}}',
@@ -160,7 +252,7 @@ const ANTHROPIC_ADAPTER: LLMAdapterConfig = {
         }
     },
     response: {
-        contentField: 'delta.text',
+        contentField: 'text',
         toolCallField: 'content_block',
         toolNamePath: 'name',
         toolArgsPath: 'input',
@@ -168,7 +260,28 @@ const ANTHROPIC_ADAPTER: LLMAdapterConfig = {
         argsIsObject: true,
         finishReasonField: 'stop_reason',
         doneMarker: 'message_stop',
-    }
+    },
+    // Anthropic 特有的工具调用格式
+    toolFormat: {
+        wrapMode: 'none',
+        parameterField: 'input_schema',
+        includeType: false,
+    },
+    toolParse: {
+        responseFormat: 'json',
+        toolCallPath: 'tool_use',
+        toolNamePath: 'name',
+        toolArgsPath: 'input',
+        argsIsObject: true,
+        toolIdPath: 'id',
+        autoGenerateId: false,
+    },
+    messageFormat: {
+        toolResultRole: 'user',
+        toolCallIdField: 'tool_use_id',
+        wrapToolResult: true,
+        toolResultWrapper: 'tool_result',
+    },
 }
 
 const GEMINI_ADAPTER: LLMAdapterConfig = {
@@ -190,8 +303,8 @@ const GEMINI_ADAPTER: LLMAdapterConfig = {
         }
     },
     response: {
-        contentField: 'delta.content',
-        toolCallField: 'delta.tool_calls',
+        contentField: 'content',
+        toolCallField: 'tool_calls',
         toolNamePath: 'function.name',
         toolArgsPath: 'function.arguments',
         toolIdPath: 'id',
@@ -220,9 +333,9 @@ const DEEPSEEK_ADAPTER: LLMAdapterConfig = {
         }
     },
     response: {
-        contentField: 'delta.content',
-        reasoningField: 'delta.reasoning',
-        toolCallField: 'delta.tool_calls',
+        contentField: 'content',
+        reasoningField: 'reasoning_content',
+        toolCallField: 'tool_calls',
         toolNamePath: 'function.name',
         toolArgsPath: 'function.arguments',
         toolIdPath: 'id',
@@ -251,9 +364,9 @@ const ZHIPU_ADAPTER: LLMAdapterConfig = {
         }
     },
     response: {
-        contentField: 'delta.content',
-        reasoningField: 'delta.reasoning_content',
-        toolCallField: 'delta.tool_calls',
+        contentField: 'content',
+        reasoningField: 'reasoning_content',
+        toolCallField: 'tool_calls',
         toolNamePath: 'function.name',
         toolArgsPath: 'function.arguments',
         toolIdPath: 'id',
@@ -281,8 +394,8 @@ const OLLAMA_ADAPTER: LLMAdapterConfig = {
         }
     },
     response: {
-        contentField: 'delta.content',
-        toolCallField: 'delta.tool_calls',
+        contentField: 'content',
+        toolCallField: 'tool_calls',
         toolNamePath: 'function.name',
         toolArgsPath: 'function.arguments',
         toolIdPath: 'id',
@@ -659,6 +772,102 @@ export function getAdapterConfig(providerId: string): LLMAdapterConfig {
     return provider?.adapter || OPENAI_ADAPTER
 }
 
+const XML_GENERIC_ADAPTER: LLMAdapterConfig = {
+    id: 'xml-generic',
+    name: 'XML Format',
+    description: '通用 XML 工具调用格式',
+    isBuiltin: true,
+    request: {
+        endpoint: '/chat/completions',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        bodyTemplate: {
+            model: '{{model}}',
+            messages: '{{messages}}',
+            stream: true,
+        }
+    },
+    response: {
+        contentField: 'content',
+        // XML 模式下主要依赖 toolParse 配置
+        doneMarker: '[DONE]',
+    },
+    toolFormat: {
+        wrapMode: 'function',
+        wrapField: 'function',
+        parameterField: 'parameters',
+        includeType: true,
+    },
+    toolParse: {
+        responseFormat: 'xml',
+        autoGenerateId: true,
+        xmlConfig: {
+            toolCallTag: 'tool_call',
+            nameSource: 'name',
+            argsTag: 'arguments',
+            argsFormat: 'json',
+        }
+    },
+    messageFormat: {
+        toolResultRole: 'user',
+        toolCallIdField: 'tool_call_id',
+        wrapToolResult: true,
+        toolResultWrapper: 'tool_result',
+    }
+}
+
+const MIXED_ADAPTER: LLMAdapterConfig = {
+    id: 'mixed',
+    name: 'Mixed Format',
+    description: '混合格式 (JSON 优先，XML 回退)',
+    isBuiltin: true,
+    request: {
+        endpoint: '/chat/completions',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        bodyTemplate: {
+            model: '{{model}}',
+            messages: '{{messages}}',
+            stream: true,
+        }
+    },
+    response: {
+        contentField: 'content',
+        toolCallField: 'tool_calls',
+        toolNamePath: 'function.name',
+        toolArgsPath: 'function.arguments',
+        toolIdPath: 'id',
+        argsIsObject: false,
+        doneMarker: '[DONE]',
+    },
+    toolFormat: {
+        wrapMode: 'function',
+        wrapField: 'function',
+        parameterField: 'parameters',
+        includeType: true,
+    },
+    toolParse: {
+        responseFormat: 'mixed',
+        toolCallPath: 'tool_calls',
+        toolNamePath: 'function.name',
+        toolArgsPath: 'function.arguments',
+        argsIsObject: false,
+        toolIdPath: 'id',
+        autoGenerateId: true,
+        xmlConfig: {
+            toolCallTag: 'tool_call',
+            nameSource: 'name',
+            argsTag: 'arguments',
+            argsFormat: 'json',
+        }
+    },
+    messageFormat: {
+        toolResultRole: 'tool',
+        toolCallIdField: 'tool_call_id',
+        wrapToolResult: false,
+    }
+}
+
 /** 获取所有内置适配器 */
 export function getBuiltinAdapters(): LLMAdapterConfig[] {
     return [
@@ -668,6 +877,8 @@ export function getBuiltinAdapters(): LLMAdapterConfig[] {
         DEEPSEEK_ADAPTER,
         ZHIPU_ADAPTER,
         OLLAMA_ADAPTER,
+        XML_GENERIC_ADAPTER,
+        MIXED_ADAPTER,
     ]
 }
 

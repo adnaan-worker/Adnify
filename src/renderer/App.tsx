@@ -131,7 +131,7 @@ function AppContent() {
             await checkpointService.init()
 
             // 重新加载 Agent Store（确保从 .adnify 读取最新数据）
-            await useAgentStore.persist.rehydrate()
+            await (useAgentStore as any).persist.rehydrate()
 
             updateLoaderStatus('Loading files...')
             // 初始显示第一个根目录的文件

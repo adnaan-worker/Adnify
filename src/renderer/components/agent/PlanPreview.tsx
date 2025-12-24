@@ -76,7 +76,7 @@ export function PlanPreview({ content, fontSize = 14 }: PlanPreviewProps) {
                             const match = /^\[( |x|\/|!)\]\s*(?:✅|🔄|❌|⬜)?\s*(?:\[id: ([a-f0-9]+)\])?\s*(.*)/i.exec(text)
 
                             if (match) {
-                                const [_, checkbox, id, title] = match
+                                const [_, checkbox, _id, title] = match
                                 const isCompleted = checkbox.toLowerCase() === 'x'
                                 const isInProgress = checkbox === '/'
                                 const isFailed = checkbox === '!'

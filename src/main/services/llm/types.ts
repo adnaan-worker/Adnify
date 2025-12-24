@@ -28,7 +28,7 @@ export interface LLMConfig {
   timeout?: number
   // 完整适配器配置
   adapterId?: string
-  adapterConfig?: import('@/shared/types/llmAdapter').LLMAdapterConfig
+  adapterConfig?: import('../../../shared/config/providers').LLMAdapterConfig
 }
 
 export interface TextContent {
@@ -104,7 +104,7 @@ export interface ChatParams {
   maxTokens?: number
   signal?: AbortSignal
   // 完整适配器配置（包含请求体和响应解析）
-  adapterConfig?: import('../../../shared/types/llmAdapter').LLMAdapterConfig
+  adapterConfig?: import('../../../shared/config/providers').LLMAdapterConfig
   onStream: (chunk: StreamChunk) => void
   onToolCall: (toolCall: ToolCall) => void
   onComplete: (result: ChatResult) => void

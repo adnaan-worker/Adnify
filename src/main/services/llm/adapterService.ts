@@ -5,258 +5,33 @@
  */
 
 import {
-    ProviderAdapterConfig,
-    ResponseParseConfig,
-    XMLParseConfig,
-    ParsedToolCall,
-    BuiltinAdapterId
-} from '../../../shared/types/providerAdapter'
+    type LLMAdapterConfig,
+    type XMLParseConfig,
+    type ParsedToolCall,
+    getBuiltinAdapter,
+    getBuiltinAdapters
+} from '../../../shared/config/providers'
 import type { ToolDefinition, LLMMessage } from './types'
-
-// ===== 内置适配器预设 =====
-
-const BUILTIN_ADAPTERS: Record<BuiltinAdapterId, ProviderAdapterConfig> = {
-    // OpenAI 标准格式
-    openai: {
-        id: 'openai',
-        name: 'OpenAI',
-        description: 'OpenAI GPT models (standard format)',
-        isBuiltin: true,
-        toolFormat: {
-            wrapMode: 'function',
-            wrapField: 'function',
-            parameterField: 'parameters',
-            includeType: true
-        },
-        responseParse: {
-            responseFormat: 'json',
-            toolCallPath: 'tool_calls',
-            toolNamePath: 'function.name',
-            toolArgsPath: 'function.arguments',
-            argsIsObject: false,
-            toolIdPath: 'id',
-            autoGenerateId: false
-        },
-        messageFormat: {
-            toolResultRole: 'tool',
-            toolCallIdField: 'tool_call_id',
-            wrapToolResult: false
-        }
-    },
-
-    // Anthropic Claude 格式
-    anthropic: {
-        id: 'anthropic',
-        name: 'Anthropic',
-        description: 'Claude models with tool_use content blocks',
-        isBuiltin: true,
-        toolFormat: {
-            wrapMode: 'none',
-            parameterField: 'input_schema',
-            includeType: false
-        },
-        responseParse: {
-            responseFormat: 'json',
-            toolCallPath: 'tool_use',
-            toolNamePath: 'name',
-            toolArgsPath: 'input',
-            argsIsObject: true,
-            toolIdPath: 'id',
-            autoGenerateId: false
-        },
-        messageFormat: {
-            toolResultRole: 'user',
-            toolCallIdField: 'tool_use_id',
-            wrapToolResult: true,
-            toolResultWrapper: 'tool_result'
-        }
-    },
-
-    // 千问 Qwen
-    qwen: {
-        id: 'qwen',
-        name: '千问 Qwen',
-        description: 'Alibaba Qwen models',
-        extendsFrom: 'openai',
-        isBuiltin: true,
-        toolFormat: {
-            wrapMode: 'function',
-            wrapField: 'function',
-            parameterField: 'parameters',
-            includeType: true
-        },
-        responseParse: {
-            responseFormat: 'json',
-            toolCallPath: 'tool_calls',
-            toolNamePath: 'function.name',
-            toolArgsPath: 'function.arguments',
-            argsIsObject: false,
-            toolIdPath: 'id',
-            autoGenerateId: true
-        },
-        messageFormat: {
-            toolResultRole: 'tool',
-            toolCallIdField: 'tool_call_id',
-            wrapToolResult: false
-        }
-    },
-
-    // 智谱 GLM
-    glm: {
-        id: 'glm',
-        name: '智谱 GLM',
-        description: 'Zhipu GLM-4 models',
-        extendsFrom: 'openai',
-        isBuiltin: true,
-        toolFormat: {
-            wrapMode: 'function',
-            wrapField: 'function',
-            parameterField: 'parameters',
-            includeType: true
-        },
-        responseParse: {
-            responseFormat: 'json',
-            toolCallPath: 'tool_calls',
-            toolNamePath: 'function.name',
-            toolArgsPath: 'function.arguments',
-            argsIsObject: true,
-            toolIdPath: 'id',
-            autoGenerateId: false
-        },
-        messageFormat: {
-            toolResultRole: 'tool',
-            toolCallIdField: 'tool_call_id',
-            wrapToolResult: false
-        }
-    },
-
-    // DeepSeek
-    deepseek: {
-        id: 'deepseek',
-        name: 'DeepSeek',
-        description: 'DeepSeek models (OpenAI compatible, supports reasoning)',
-        extendsFrom: 'openai',
-        isBuiltin: true,
-        toolFormat: {
-            wrapMode: 'function',
-            wrapField: 'function',
-            parameterField: 'parameters',
-            includeType: true
-        },
-        responseParse: {
-            responseFormat: 'json',
-            toolCallPath: 'tool_calls',
-            toolNamePath: 'function.name',
-            toolArgsPath: 'function.arguments',
-            argsIsObject: false,
-            toolIdPath: 'id',
-            autoGenerateId: false
-        },
-        messageFormat: {
-            toolResultRole: 'tool',
-            toolCallIdField: 'tool_call_id',
-            wrapToolResult: false
-        },
-        // DeepSeek 特定配置
-        requestConfig: {
-            // Thinking 模式参数 (DeepSeek R1 支持)
-            thinkingParams: {
-                reasoning_effort: 'medium'  // low/medium/high
-            }
-        },
-        streamConfig: {
-            // DeepSeek 使用 reasoning 字段返回思考过程
-            reasoningField: 'reasoning'
-        }
-    },
-
-    // XML 格式通用适配器
-    'xml-generic': {
-        id: 'xml-generic',
-        name: 'XML Format',
-        description: 'Models using XML tool call format (Llama, etc.)',
-        isBuiltin: true,
-        toolFormat: {
-            wrapMode: 'function',
-            wrapField: 'function',
-            parameterField: 'parameters',
-            includeType: true
-        },
-        responseParse: {
-            responseFormat: 'xml',
-            autoGenerateId: true,
-            xmlConfig: {
-                toolCallTag: 'tool_call',
-                nameSource: 'name',
-                argsTag: 'arguments',
-                argsFormat: 'json'
-            }
-        },
-        messageFormat: {
-            toolResultRole: 'user',
-            toolCallIdField: 'tool_call_id',
-            wrapToolResult: true,
-            toolResultWrapper: 'tool_result'
-        }
-    },
-
-    // 混合格式 (JSON + XML fallback)
-    mixed: {
-        id: 'mixed',
-        name: 'Mixed Format',
-        description: 'Try JSON first, fallback to XML parsing',
-        isBuiltin: true,
-        toolFormat: {
-            wrapMode: 'function',
-            wrapField: 'function',
-            parameterField: 'parameters',
-            includeType: true
-        },
-        responseParse: {
-            responseFormat: 'mixed',
-            toolCallPath: 'tool_calls',
-            toolNamePath: 'function.name',
-            toolArgsPath: 'function.arguments',
-            argsIsObject: false,
-            toolIdPath: 'id',
-            autoGenerateId: true,
-            xmlConfig: {
-                toolCallTag: 'tool_call',
-                nameSource: 'name',
-                argsTag: 'arguments',
-                argsFormat: 'json'
-            }
-        },
-        messageFormat: {
-            toolResultRole: 'tool',
-            toolCallIdField: 'tool_call_id',
-            wrapToolResult: false
-        }
-    }
-}
 
 // ===== 适配器服务类 =====
 
 class ProviderAdapterServiceClass {
-    private customAdapters: Map<string, ProviderAdapterConfig> = new Map()
+    private customAdapters: Map<string, LLMAdapterConfig> = new Map()
 
-    getAdapter(adapterId: string): ProviderAdapterConfig | null {
+    getAdapter(adapterId: string): LLMAdapterConfig | null {
         if (this.customAdapters.has(adapterId)) {
             return this.customAdapters.get(adapterId)!
         }
-        if (adapterId in BUILTIN_ADAPTERS) {
-            return BUILTIN_ADAPTERS[adapterId as BuiltinAdapterId]
-        }
-        return null
+        return getBuiltinAdapter(adapterId) || null
     }
 
-    getAllAdapters(): ProviderAdapterConfig[] {
-        const all = [...Object.values(BUILTIN_ADAPTERS)]
+    getAllAdapters(): LLMAdapterConfig[] {
+        const all = [...getBuiltinAdapters()]
         this.customAdapters.forEach(adapter => all.push(adapter))
         return all
     }
 
-    registerAdapter(adapter: ProviderAdapterConfig): void {
+    registerAdapter(adapter: LLMAdapterConfig): void {
         this.customAdapters.set(adapter.id, adapter)
     }
 
@@ -265,8 +40,9 @@ class ProviderAdapterServiceClass {
     }
 
     convertTools(tools: ToolDefinition[], adapterId: string): unknown[] {
-        const adapter = this.getAdapter(adapterId) || BUILTIN_ADAPTERS.openai
-        const config = adapter.toolFormat
+        const adapter = this.getAdapter(adapterId) || getBuiltinAdapter('openai')!
+        // 默认使用 OpenAI 格式
+        const config = adapter.toolFormat || getBuiltinAdapter('openai')!.toolFormat!
 
         return tools.map(tool => {
             const toolDef: Record<string, unknown> = {
@@ -294,25 +70,65 @@ class ProviderAdapterServiceClass {
     }
 
     parseToolCalls(response: unknown, adapterId: string): ParsedToolCall[] {
-        const adapter = this.getAdapter(adapterId) || BUILTIN_ADAPTERS.openai
-        const config = adapter.responseParse
+        const adapter = this.getAdapter(adapterId) || getBuiltinAdapter('openai')!
+        // 优先使用 toolParse 配置，否则回退到 response 配置（兼容旧逻辑）
+        const toolParse = adapter.toolParse
+        const responseConfig = adapter.response
 
-        if (config.responseFormat === 'xml') {
-            return this.parseXMLToolCalls(response as string, config.xmlConfig!)
-        }
-
-        if (config.responseFormat === 'mixed') {
-            const jsonCalls = this.parseJSONToolCalls(response, config)
-            if (jsonCalls.length > 0) return jsonCalls
-            if (typeof response === 'string' && config.xmlConfig) {
-                return this.parseXMLToolCalls(response, config.xmlConfig)
+        // 如果有明确的 toolParse 配置
+        if (toolParse) {
+            if (toolParse.responseFormat === 'xml') {
+                return this.parseXMLToolCalls(response as string, toolParse.xmlConfig!)
             }
+
+            if (toolParse.responseFormat === 'mixed') {
+                // 尝试 JSON 解析
+                const jsonCalls = this.parseJSONToolCalls(response, {
+                    toolCallPath: toolParse.toolCallPath,
+                    toolNamePath: toolParse.toolNamePath,
+                    toolArgsPath: toolParse.toolArgsPath,
+                    argsIsObject: toolParse.argsIsObject,
+                    toolIdPath: toolParse.toolIdPath,
+                    autoGenerateId: toolParse.autoGenerateId
+                })
+                if (jsonCalls.length > 0) return jsonCalls
+
+                // 回退到 XML 解析
+                if (typeof response === 'string' && toolParse.xmlConfig) {
+                    return this.parseXMLToolCalls(response, toolParse.xmlConfig)
+                }
+            }
+
+            // 默认 JSON 解析
+            return this.parseJSONToolCalls(response, {
+                toolCallPath: toolParse.toolCallPath,
+                toolNamePath: toolParse.toolNamePath,
+                toolArgsPath: toolParse.toolArgsPath,
+                argsIsObject: toolParse.argsIsObject,
+                toolIdPath: toolParse.toolIdPath,
+                autoGenerateId: toolParse.autoGenerateId
+            })
         }
 
-        return this.parseJSONToolCalls(response, config)
+        // 兼容旧的 response 配置 (仅支持 JSON)
+        return this.parseJSONToolCalls(response, {
+            toolCallPath: responseConfig.toolCallField,
+            toolNamePath: responseConfig.toolNamePath,
+            toolArgsPath: responseConfig.toolArgsPath,
+            argsIsObject: responseConfig.argsIsObject,
+            toolIdPath: responseConfig.toolIdPath,
+            autoGenerateId: false // 旧配置默认不自动生成 ID
+        })
     }
 
-    private parseJSONToolCalls(response: unknown, config: ResponseParseConfig): ParsedToolCall[] {
+    private parseJSONToolCalls(response: unknown, config: {
+        toolCallPath?: string
+        toolNamePath?: string
+        toolArgsPath?: string
+        argsIsObject?: boolean
+        toolIdPath?: string
+        autoGenerateId?: boolean
+    }): ParsedToolCall[] {
         const results: ParsedToolCall[] = []
         const toolCalls = this.getByPath(response, config.toolCallPath || 'tool_calls')
         if (!toolCalls) return results
@@ -398,8 +214,9 @@ class ProviderAdapterServiceClass {
         result: string,
         adapterId: string
     ): LLMMessage {
-        const adapter = this.getAdapter(adapterId) || BUILTIN_ADAPTERS.openai
-        const config = adapter.messageFormat
+        const adapter = this.getAdapter(adapterId) || getBuiltinAdapter('openai')!
+        // 默认使用 OpenAI 格式
+        const config = adapter.messageFormat || getBuiltinAdapter('openai')!.messageFormat!
 
         const msg: LLMMessage = {
             role: config.toolResultRole as 'tool' | 'user',
@@ -438,4 +255,3 @@ class ProviderAdapterServiceClass {
 }
 
 export const adapterService = new ProviderAdapterServiceClass()
-export { BUILTIN_ADAPTERS }
