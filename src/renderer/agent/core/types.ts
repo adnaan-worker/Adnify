@@ -3,18 +3,31 @@
  * 参考 Cursor/Void 的架构设计
  */
 
+import {
+  MessageRole,
+  ToolStatus,
+  ToolApprovalType, // Note: This was a type alias, not enum, checking if I should make it an enum too. Let's keep it as type for now or move to enums if needed. Wait, it's 'terminal' | 'dangerous'.
+  StreamPhase,
+  ToolResultType,
+  PlanStatus,
+  PlanItemStatus,
+  ContextItemType
+} from './enums'
+
+export {
+  MessageRole,
+  ToolStatus,
+  StreamPhase,
+  ToolResultType,
+  PlanStatus,
+  PlanItemStatus,
+  ContextItemType
+}
+
 // ===== 工具相关类型 =====
 
-export type ToolStatus =
-  | 'pending'        // 等待执行/流式接收中
-  | 'running'        // 正在执行
-  | 'success'        // 执行成功
-  | 'error'          // 执行失败
-  | 'rejected'       // 用户拒绝
-  | 'awaiting'       // 等待用户审批
-
 // edits 已移除 - 文件编辑不需要确认（可通过Checkpoint撤销）
-export type ToolApprovalType = 'terminal' | 'dangerous'
+// export type ToolApprovalType = 'terminal' | 'dangerous' // Moved to enums
 
 export interface ToolCall {
   id: string
@@ -85,7 +98,7 @@ export interface FileSnapshot {
 // 用户消息
 export interface UserMessage {
   id: string
-  role: 'user'
+  role: MessageRole.User
   content: MessageContent
   displayContent?: string  // 显示给用户的内容（可能与发送给 LLM 的不同）
   timestamp: number
@@ -108,7 +121,7 @@ export type AssistantPart = TextPart | ToolCallPart
 // 助手消息
 export interface AssistantMessage {
   id: string
-  role: 'assistant'
+  role: MessageRole.Assistant
   content: string  // 纯文本内容（用于发送给 LLM）
   displayContent?: string  // 显示给用户的内容
   timestamp: number
@@ -120,16 +133,9 @@ export interface AssistantMessage {
 }
 
 // 工具结果消息（参考 Void 的 ToolMessage）
-export type ToolResultType =
-  | 'tool_request'   // 等待用户审批
-  | 'running_now'    // 正在执行
-  | 'success'        // 执行成功
-  | 'tool_error'     // 执行出错
-  | 'rejected'       // 用户拒绝
-
 export interface ToolResultMessage {
   id: string
-  role: 'tool'
+  role: MessageRole.Tool
   toolCallId: string
   name: string
   content: string  // 工具执行结果
@@ -141,7 +147,7 @@ export interface ToolResultMessage {
 // Checkpoint 消息（参考 Void）
 export interface CheckpointMessage {
   id: string
-  role: 'checkpoint'
+  role: MessageRole.Checkpoint
   type: 'user_message' | 'tool_edit'  // 触发类型
   timestamp: number
   // 文件快照：路径 -> 快照
@@ -153,7 +159,7 @@ export interface CheckpointMessage {
 // 被中断的工具调用（装饰性消息）
 export interface InterruptedToolMessage {
   id: string
-  role: 'interrupted_tool'
+  role: MessageRole.InterruptedTool
   name: string
   timestamp: number
 }
@@ -164,13 +170,13 @@ export interface PlanItem {
   id: string
   title: string
   description?: string
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
+  status: PlanItemStatus
 }
 
 export interface Plan {
   id: string
   items: PlanItem[]
-  status: 'draft' | 'active' | 'completed' | 'failed'
+  status: PlanStatus
   currentStepId: string | null
   createdAt: number
   updatedAt: number
@@ -185,43 +191,41 @@ export type ChatMessage =
 
 // ===== 上下文相关类型 =====
 
-export type ContextItemType = 'File' | 'CodeSelection' | 'Folder' | 'Codebase' | 'Git' | 'Terminal' | 'Symbols'
-
 export interface FileContext {
-  type: 'File'
+  type: ContextItemType.File
   uri: string
 }
 
 export interface CodeSelectionContext {
-  type: 'CodeSelection'
+  type: ContextItemType.CodeSelection
   uri: string
   range: [number, number]
 }
 
 export interface FolderContext {
-  type: 'Folder'
+  type: ContextItemType.Folder
   uri: string
 }
 
 export interface CodebaseContext {
-  type: 'Codebase'
+  type: ContextItemType.Codebase
   query?: string
 }
 
 export interface GitContext {
-  type: 'Git'
+  type: ContextItemType.Git
 }
 
 export interface TerminalContext {
-  type: 'Terminal'
+  type: ContextItemType.Terminal
 }
 
 export interface SymbolsContext {
-  type: 'Symbols'
+  type: ContextItemType.Symbols
 }
 
 export interface WebContext {
-  type: 'Web'
+  type: ContextItemType.Web
   query?: string
 }
 
@@ -258,13 +262,6 @@ export interface ChatThread {
 }
 
 // ===== 流状态类型 =====
-
-export type StreamPhase =
-  | 'idle'           // 空闲
-  | 'streaming'      // LLM 正在输出
-  | 'tool_pending'   // 工具等待审批
-  | 'tool_running'   // 工具执行中
-  | 'error'          // 出错
 
 export interface StreamState {
   phase: StreamPhase
@@ -314,23 +311,23 @@ export interface AgentConfig {
 // ===== 辅助函数 =====
 
 export function isUserMessage(msg: ChatMessage): msg is UserMessage {
-  return msg.role === 'user'
+  return msg.role === MessageRole.User
 }
 
 export function isAssistantMessage(msg: ChatMessage): msg is AssistantMessage {
-  return msg.role === 'assistant'
+  return msg.role === MessageRole.Assistant
 }
 
 export function isToolResultMessage(msg: ChatMessage): msg is ToolResultMessage {
-  return msg.role === 'tool'
+  return msg.role === MessageRole.Tool
 }
 
 export function isCheckpointMessage(msg: ChatMessage): msg is CheckpointMessage {
-  return msg.role === 'checkpoint'
+  return msg.role === MessageRole.Checkpoint
 }
 
 export function isInterruptedToolMessage(msg: ChatMessage): msg is InterruptedToolMessage {
-  return msg.role === 'interrupted_tool'
+  return msg.role === MessageRole.InterruptedTool
 }
 
 export function isTextPart(part: AssistantPart): part is TextPart {
