@@ -392,11 +392,17 @@ AgentService.ts (~1656 行) 拆分完成：
 - ✅ 删除 `MessageBuilder.ts`（与 ContextBuilder.ts 功能重复）
 - ✅ 移除 `enums.ts` 中重复的 PlanStatus/PlanItemStatus（已在 types.ts 定义）
 
-**未使用但保留的文件（作为未来扩展点）：**
-- `ElectronEnvironment.ts` + `interfaces.ts` - Electron API 抽象层
-- `PlanManager.ts` - Plan 模式管理器
-- `UndoService.ts` - 撤销服务
-- `toolRegistry.ts` - 高级工具注册系统
+**已删除的未使用模块：**
+- ✅ `src/renderer/features/agent/` - 未使用的重导出模块
+- ✅ `src/renderer/agent/types/` - 未使用的重导出模块
+- ✅ `src/renderer/hooks/agent/` - 未使用的 llmClient
+- ✅ `src/renderer/plan/` - 未集成的 Plan 模块（与 agent/core/types.ts 重复）
+- ✅ `src/renderer/agent/core/PlanManager.ts` - 未使用
+- ✅ `src/renderer/agent/core/UndoService.ts` - 未使用
+- ✅ `src/renderer/agent/core/toolRegistry.ts` - 未使用
+- ✅ `src/renderer/agent/core/ElectronEnvironment.ts` - 未使用
+- ✅ `src/renderer/agent/core/interfaces.ts` - 未使用
+- ✅ `src/renderer/agent/core/ContextCompression.ts` - 未使用（与 ContextCompressor.ts 功能重复）
 
 ---
 
@@ -417,6 +423,8 @@ AgentService.ts (~1656 行) 拆分完成：
 | 原 AgentService.ts 行数 | 1656 → 705 |
 | TypeScript 错误修复 | 12 |
 | 删除冗余文件 | 1 |
+| 删除未使用模块 | 10 |
+| 删除空目录 | 4 |
 
 ## 五、路径别名配置
 
