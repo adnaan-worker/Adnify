@@ -7,7 +7,7 @@ import { logger } from '@utils/Logger'
 import { useAgentStore } from '../store/AgentStore'
 import { useModeStore } from '@/renderer/modes'
 import { getToolDefinitions, ToolDefinition } from '../tools'
-import { parsePartialArgs, parseXMLToolCalls, removeXMLToolCallsFromContent } from '../utils/XMLToolParser'
+import { parsePartialArgs, parseXMLToolCalls, removeXMLToolCallsFromContent, generateToolCallId } from '../utils/XMLToolParser'
 import { LLMStreamChunk, LLMToolCall } from '@/renderer/types/electron'
 
 /**
@@ -164,7 +164,7 @@ export function handleToolCallStart(
   if (chunk.type !== 'tool_call_start' || !chunk.toolCallDelta) return
 
   const store = useAgentStore.getState()
-  const toolId = chunk.toolCallDelta.id || `tool_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+  const toolId = chunk.toolCallDelta.id || generateToolCallId('tool')
   const toolName = chunk.toolCallDelta.name || 'unknown'
 
   logger.agent.debug(`%c[Agent] ✅ Tool call START: ${toolName} (${toolId})`, 'color: #00ff00; font-weight: bold')

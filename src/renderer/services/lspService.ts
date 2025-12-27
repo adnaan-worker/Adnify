@@ -11,6 +11,45 @@ import { EXTENSION_TO_LANGUAGE, LSP_SUPPORTED_LANGUAGES } from '@shared/language
 const documentVersions = new Map<string, number>()
 const openedDocuments = new Set<string>()
 
+// ===== 内部辅助函数 =====
+
+/**
+ * 执行 LSP 请求的通用包装器
+ * 处理 URI 转换、工作区路径获取、错误处理
+ */
+async function executeLspRequest<T>(
+  filePath: string,
+  request: (params: { uri: string; workspacePath: string | null }) => Promise<T>,
+  defaultValue: T
+): Promise<T> {
+  const uri = pathToLspUri(filePath)
+  const workspacePath = getFileWorkspaceRoot(filePath)
+  try {
+    return await request({ uri, workspacePath })
+  } catch {
+    return defaultValue
+  }
+}
+
+/**
+ * 执行带位置参数的 LSP 请求
+ */
+async function executeLspPositionRequest<T>(
+  filePath: string,
+  line: number,
+  character: number,
+  request: (params: { uri: string; line: number; character: number; workspacePath: string | null }) => Promise<T>,
+  defaultValue: T
+): Promise<T> {
+  const uri = pathToLspUri(filePath)
+  const workspacePath = getFileWorkspaceRoot(filePath)
+  try {
+    return await request({ uri, line, character, workspacePath })
+  } catch {
+    return defaultValue
+  }
+}
+
 /**
  * 获取文件所属的工作区根目录
  */
@@ -187,15 +226,15 @@ export async function goToDefinition(
   line: number,
   character: number
 ): Promise<{ uri: string; range: any }[] | null> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    const result = await window.electronAPI.lspDefinition({ uri, line, character, workspacePath } as any)
-    if (!result) return null
-    return Array.isArray(result) ? result : [result]
-  } catch {
-    return null
-  }
+  return executeLspPositionRequest(
+    filePath, line, character,
+    async (params) => {
+      const result = await window.electronAPI.lspDefinition(params as any)
+      if (!result) return null
+      return Array.isArray(result) ? result : [result]
+    },
+    null
+  )
 }
 
 /**
@@ -206,13 +245,11 @@ export async function findReferences(
   line: number,
   character: number
 ): Promise<{ uri: string; range: any }[] | null> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspReferences({ uri, line, character, workspacePath } as any)
-  } catch {
-    return null
-  }
+  return executeLspPositionRequest(
+    filePath, line, character,
+    (params) => window.electronAPI.lspReferences(params as any),
+    null
+  )
 }
 
 /**
@@ -223,13 +260,11 @@ export async function getHoverInfo(
   line: number,
   character: number
 ): Promise<{ contents: any; range?: any } | null> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspHover({ uri, line, character, workspacePath } as any)
-  } catch {
-    return null
-  }
+  return executeLspPositionRequest(
+    filePath, line, character,
+    (params) => window.electronAPI.lspHover(params as any),
+    null
+  )
 }
 
 /**
@@ -240,13 +275,11 @@ export async function getCompletions(
   line: number,
   character: number
 ): Promise<any> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspCompletion({ uri, line, character, workspacePath } as any)
-  } catch {
-    return null
-  }
+  return executeLspPositionRequest(
+    filePath, line, character,
+    (params) => window.electronAPI.lspCompletion(params as any),
+    null
+  )
 }
 
 /**
@@ -286,15 +319,15 @@ export async function goToTypeDefinition(
   line: number,
   character: number
 ): Promise<{ uri: string; range: any }[] | null> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    const result = await window.electronAPI.lspTypeDefinition({ uri, line, character, workspacePath } as any)
-    if (!result) return null
-    return Array.isArray(result) ? result : [result]
-  } catch {
-    return null
-  }
+  return executeLspPositionRequest(
+    filePath, line, character,
+    async (params) => {
+      const result = await window.electronAPI.lspTypeDefinition(params as any)
+      if (!result) return null
+      return Array.isArray(result) ? result : [result]
+    },
+    null
+  )
 }
 
 /**
@@ -305,15 +338,15 @@ export async function goToImplementation(
   line: number,
   character: number
 ): Promise<{ uri: string; range: any }[] | null> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    const result = await window.electronAPI.lspImplementation({ uri, line, character, workspacePath } as any)
-    if (!result) return null
-    return Array.isArray(result) ? result : [result]
-  } catch {
-    return null
-  }
+  return executeLspPositionRequest(
+    filePath, line, character,
+    async (params) => {
+      const result = await window.electronAPI.lspImplementation(params as any)
+      if (!result) return null
+      return Array.isArray(result) ? result : [result]
+    },
+    null
+  )
 }
 
 /**
@@ -324,13 +357,11 @@ export async function getSignatureHelp(
   line: number,
   character: number
 ): Promise<any> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspSignatureHelp({ uri, line, character, workspacePath } as any)
-  } catch {
-    return null
-  }
+  return executeLspPositionRequest(
+    filePath, line, character,
+    (params) => window.electronAPI.lspSignatureHelp(params as any),
+    null
+  )
 }
 
 /**
@@ -341,26 +372,22 @@ export async function prepareRename(
   line: number,
   character: number
 ): Promise<{ range: any; placeholder: string } | null> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspPrepareRename({ uri, line, character, workspacePath } as any)
-  } catch {
-    return null
-  }
+  return executeLspPositionRequest(
+    filePath, line, character,
+    (params) => window.electronAPI.lspPrepareRename(params as any),
+    null
+  )
 }
 
 /**
  * 获取文档符号（大纲）
  */
 export async function getDocumentSymbols(filePath: string): Promise<any[]> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspDocumentSymbol({ uri, workspacePath } as any) || []
-  } catch {
-    return []
-  }
+  return executeLspRequest(
+    filePath,
+    (params) => window.electronAPI.lspDocumentSymbol(params as any),
+    []
+  ) as Promise<any[]>
 }
 
 /**
@@ -382,13 +409,11 @@ export async function getCodeActions(
   range: { start: { line: number; character: number }; end: { line: number; character: number } },
   diagnostics?: any[]
 ): Promise<any[]> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspCodeAction({ uri, range, diagnostics, workspacePath } as any) || []
-  } catch {
-    return []
-  }
+  return executeLspRequest(
+    filePath,
+    (params) => window.electronAPI.lspCodeAction({ ...params, range, diagnostics } as any),
+    []
+  ) as Promise<any[]>
 }
 
 /**
@@ -398,13 +423,11 @@ export async function formatDocument(
   filePath: string,
   options?: { tabSize?: number; insertSpaces?: boolean }
 ): Promise<any[]> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspFormatting({ uri, options, workspacePath } as any) || []
-  } catch {
-    return []
-  }
+  return executeLspRequest(
+    filePath,
+    (params) => window.electronAPI.lspFormatting({ ...params, options } as any),
+    []
+  ) as Promise<any[]>
 }
 
 /**
@@ -415,13 +438,11 @@ export async function formatRange(
   range: { start: { line: number; character: number }; end: { line: number; character: number } },
   options?: { tabSize?: number; insertSpaces?: boolean }
 ): Promise<any[]> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspRangeFormatting({ uri, range, options, workspacePath } as any) || []
-  } catch {
-    return []
-  }
+  return executeLspRequest(
+    filePath,
+    (params) => window.electronAPI.lspRangeFormatting({ ...params, range, options } as any),
+    []
+  ) as Promise<any[]>
 }
 
 /**
@@ -432,26 +453,22 @@ export async function getDocumentHighlights(
   line: number,
   character: number
 ): Promise<any[]> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspDocumentHighlight({ uri, line, character, workspacePath } as any) || []
-  } catch {
-    return []
-  }
+  return executeLspPositionRequest(
+    filePath, line, character,
+    (params) => window.electronAPI.lspDocumentHighlight(params as any),
+    []
+  ) as Promise<any[]>
 }
 
 /**
  * 获取折叠范围
  */
 export async function getFoldingRanges(filePath: string): Promise<any[]> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspFoldingRange({ uri, workspacePath } as any) || []
-  } catch {
-    return []
-  }
+  return executeLspRequest(
+    filePath,
+    (params) => window.electronAPI.lspFoldingRange(params as any),
+    []
+  ) as Promise<any[]>
 }
 
 /**
@@ -472,11 +489,9 @@ export async function getInlayHints(
   filePath: string,
   range: { start: { line: number; character: number }; end: { line: number; character: number } }
 ): Promise<any[]> {
-  const uri = pathToLspUri(filePath)
-  const workspacePath = getFileWorkspaceRoot(filePath)
-  try {
-    return await window.electronAPI.lspInlayHint({ uri, range, workspacePath } as any) || []
-  } catch {
-    return []
-  }
+  return executeLspRequest(
+    filePath,
+    (params) => window.electronAPI.lspInlayHint({ ...params, range } as any),
+    []
+  ) as Promise<any[]>
 }

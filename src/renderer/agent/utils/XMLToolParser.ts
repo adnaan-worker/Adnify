@@ -6,6 +6,20 @@
 import { parsePartialJson } from '@/renderer/utils/partialJson'
 import { logger } from '@/renderer/utils/Logger'
 
+// ===== 共享的正则表达式 =====
+
+/** 匹配 function 标签的正则 */
+const FUNCTION_TAG_REGEX = /<function[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/function>/gi
+
+/** 匹配 function 开始标签的正则（用于流式检测） */
+const FUNCTION_START_REGEX = /<function[=\s]+["']?([^"'>\s]+)["']?\s*>/gi
+
+/** 匹配 parameter 标签的正则 */
+const PARAMETER_REGEX = /<parameter[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/parameter>/gi
+
+/** 匹配 parameter 标签的正则（支持未闭合） */
+const PARAMETER_PARTIAL_REGEX = /<parameter[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)(?:<\/parameter>|$)/gi
+
 export interface ParsedToolCall {
     id: string
     name: string
@@ -24,10 +38,11 @@ export function parseXMLToolCalls(content: string): ParsedToolCall[] {
 
     while ((toolCallMatch = toolCallRegex.exec(content)) !== null) {
         const toolCallContent = toolCallMatch[1]
-        const funcRegex = /<function[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/function>/gi
+        // 重置正则状态
+        FUNCTION_TAG_REGEX.lastIndex = 0
         let funcMatch
 
-        while ((funcMatch = funcRegex.exec(toolCallContent)) !== null) {
+        while ((funcMatch = FUNCTION_TAG_REGEX.exec(toolCallContent)) !== null) {
             const toolName = funcMatch[1]
             const paramsContent = funcMatch[2]
             const args = parseXMLParameters(paramsContent)
@@ -65,9 +80,10 @@ function parseStandaloneFunctions(content: string): ParsedToolCall[] {
         toolCallRanges.push({ start: blockMatch.index, end: blockMatch.index + blockMatch[0].length })
     }
 
-    const standaloneFuncRegex = /<function[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/function>/gi
+    // 重置正则状态
+    FUNCTION_TAG_REGEX.lastIndex = 0
     let standaloneMatch
-    while ((standaloneMatch = standaloneFuncRegex.exec(content)) !== null) {
+    while ((standaloneMatch = FUNCTION_TAG_REGEX.exec(content)) !== null) {
         const matchPos = standaloneMatch.index
         const isInsideToolCall = toolCallRanges.some(range => matchPos >= range.start && matchPos < range.end)
         if (isInsideToolCall) continue
@@ -91,10 +107,11 @@ function parseStandaloneFunctions(content: string): ParsedToolCall[] {
  */
 function parseXMLParameters(paramsContent: string): Record<string, unknown> {
     const args: Record<string, unknown> = {}
-    const paramRegex = /<parameter[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/parameter>/gi
+    // 重置正则状态
+    PARAMETER_REGEX.lastIndex = 0
     let paramMatch
 
-    while ((paramMatch = paramRegex.exec(paramsContent)) !== null) {
+    while ((paramMatch = PARAMETER_REGEX.exec(paramsContent)) !== null) {
         const paramName = paramMatch[1]
         let paramValue: unknown = paramMatch[2].trim()
 
@@ -131,11 +148,12 @@ export interface DetectedStreamingToolCall {
  * 检测流式内容中的 XML 工具调用
  */
 export function detectStreamingXMLToolCall(contentBuffer: string): DetectedStreamingToolCall | null {
-    const funcStartRegex = /<function[=\s]+["']?([^"'>\s]+)["']?\s*>/gi
+    // 重置正则状态
+    FUNCTION_START_REGEX.lastIndex = 0
     let match
     let lastFunc: { name: string; index: number; fullMatch: string } | null = null
 
-    while ((match = funcStartRegex.exec(contentBuffer)) !== null) {
+    while ((match = FUNCTION_START_REGEX.exec(contentBuffer)) !== null) {
         lastFunc = {
             name: match[1],
             index: match.index,
@@ -149,9 +167,10 @@ export function detectStreamingXMLToolCall(contentBuffer: string): DetectedStrea
     const isClosed = remainingContent.includes('</function>')
 
     const args: Record<string, unknown> = {}
-    const paramRegex = /<parameter[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)(?:<\/parameter>|$)/gi
+    // 重置正则状态
+    PARAMETER_PARTIAL_REGEX.lastIndex = 0
     let paramMatch
-    while ((paramMatch = paramRegex.exec(remainingContent)) !== null) {
+    while ((paramMatch = PARAMETER_PARTIAL_REGEX.exec(remainingContent)) !== null) {
         const paramName = paramMatch[1]
         let paramValue: string | Record<string, unknown> = paramMatch[2].trim()
 
