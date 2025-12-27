@@ -1,6 +1,6 @@
 import { logger } from '@utils/Logger'
 import { useEffect, useState, useMemo } from 'react'
-import { GitBranch, AlertCircle, XCircle, Database, Loader2, Cpu, Terminal, CheckCircle2, ScrollText, Coins } from 'lucide-react'
+import { GitBranch, AlertCircle, XCircle, Database, Loader2, Cpu, Terminal, CheckCircle2, ScrollText, Coins, Minimize2, MessageSquare } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import { IndexStatus } from '@app-types/electron'
@@ -8,7 +8,7 @@ import { indexWorkerService, IndexProgress } from '@services/indexWorkerService'
 import BottomBarPopover from '../ui/BottomBarPopover'
 import ToolCallLogContent from '../panels/ToolCallLogContent'
 import { PlanListPopover } from '../panels/PlanListContent'
-import { useAgentStore, selectMessages } from '@renderer/agent/store/AgentStore'
+import { useAgentStore, selectMessages, selectContextSummary } from '@renderer/agent'
 import { isAssistantMessage, TokenUsage } from '@renderer/agent/types'
 import { useDiagnosticsStore, getFileStats } from '@services/diagnosticsStore'
 
@@ -34,6 +34,8 @@ export default function StatusBar() {
 
   // 获取消息列表并计算 token 统计
   const messages = useAgentStore(selectMessages)
+  const contextSummary = useAgentStore(selectContextSummary)
+  
   const tokenStats = useMemo(() => {
     let totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
     let lastUsage: TokenUsage | undefined
@@ -48,6 +50,11 @@ export default function StatusBar() {
     }
 
     return { totalUsage, lastUsage }
+  }, [messages])
+
+  // 消息统计
+  const messageCount = useMemo(() => {
+    return messages.filter(m => m.role === 'user' || m.role === 'assistant').length
   }, [messages])
 
   // 初始化 Worker 并监听进度
@@ -154,6 +161,28 @@ export default function StatusBar() {
           <div className="flex items-center gap-2 text-accent animate-pulse-glow px-2 py-0.5 rounded-full bg-accent/5 border border-accent/10">
             <div className="w-1 h-1 rounded-full bg-accent animate-pulse" />
             <span className="font-medium">AI Processing</span>
+          </div>
+        )}
+
+        {/* 上下文压缩状态 */}
+        {contextSummary && (
+          <div 
+            className="flex items-center gap-1.5 text-green-400 cursor-default"
+            title={language === 'zh' ? '对话已压缩' : 'Context compacted'}
+          >
+            <Minimize2 className="w-3 h-3" />
+            <span>{language === 'zh' ? '已压缩' : 'Compacted'}</span>
+          </div>
+        )}
+
+        {/* 对话消息统计 */}
+        {messageCount > 0 && (
+          <div 
+            className="flex items-center gap-1.5 hover:text-text-primary transition-colors cursor-default"
+            title={language === 'zh' ? `${messageCount} 条消息` : `${messageCount} messages`}
+          >
+            <MessageSquare className="w-3 h-3" />
+            <span>{messageCount}</span>
           </div>
         )}
 

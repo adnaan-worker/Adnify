@@ -321,43 +321,75 @@ export const createBranchSlice: StateCreator<
     if (messageIndex === -1) return null
 
     const message = thread.messages[messageIndex]
-    
-    // 只能从用户消息重新生成
+
+    // 找到要重新生成的用户消息
+    let userMessageIndex = messageIndex
     if (message.role !== 'user') {
-      // 找到前一个用户消息
-      let userMessageIndex = messageIndex - 1
+      // 如果点击的是 assistant 消息，找到前一个用户消息
+      userMessageIndex = messageIndex - 1
       while (userMessageIndex >= 0 && thread.messages[userMessageIndex].role !== 'user') {
         userMessageIndex--
       }
       if (userMessageIndex < 0) return null
-      
-      const userMessage = thread.messages[userMessageIndex]
-      
-      // 创建分支（从用户消息的前一条开始）
-      const forkMessageId = userMessageIndex > 0 
-        ? thread.messages[userMessageIndex - 1].id 
-        : thread.messages[0].id
-      
-      const branchId = get().createBranch(forkMessageId, `Regenerate: ${new Date().toLocaleTimeString()}`)
-      if (!branchId) return null
-
-      return {
-        branchId,
-        messageContent: (userMessage as any).content,
-      }
     }
 
-    // 从用户消息的前一条创建分支
-    const forkMessageId = messageIndex > 0 
-      ? thread.messages[messageIndex - 1].id 
-      : thread.messages[0].id
+    const userMessage = thread.messages[userMessageIndex]
+    const messageContent = (userMessage as any).content
 
-    const branchId = get().createBranch(forkMessageId, `Regenerate: ${new Date().toLocaleTimeString()}`)
-    if (!branchId) return null
+    // 如果是第一条消息，不创建分支，直接返回 null（让调用方使用旧逻辑）
+    if (userMessageIndex === 0) {
+      return null
+    }
+
+    // 分支点：用户消息（这样分支会包含用户消息之后的 AI 回复）
+    const forkMessageId = userMessage.id
+
+    // 获取用户消息之后的所有消息（即 AI 的回复）
+    const messagesAfterUser = thread.messages.slice(userMessageIndex + 1)
+
+    // 只有当有 AI 回复时才创建分支
+    if (messagesAfterUser.length === 0) {
+      return null
+    }
+
+    // 创建分支保存当前的 AI 回复
+    const branchId = generateId()
+    const branchName = `Branch: ${new Date().toLocaleTimeString()}`
+
+    const newBranch: Branch = {
+      id: branchId,
+      name: branchName,
+      forkFromMessageId: forkMessageId,
+      createdAt: Date.now(),
+      messages: messagesAfterUser.map(m => ({ ...m })), // 复制 AI 回复
+      isActive: false,
+    }
+
+    // 更新状态：添加分支 + 删除主线中用户消息之后的消息
+    set(state => {
+      const currentThread = state.threads[threadId]
+      if (!currentThread) return state
+
+      return {
+        branches: {
+          ...state.branches,
+          [threadId]: [...(state.branches[threadId] || []), newBranch],
+        },
+        threads: {
+          ...state.threads,
+          [threadId]: {
+            ...currentThread,
+            // 保留到用户消息（包含用户消息），删除之后的 AI 回复
+            messages: currentThread.messages.slice(0, userMessageIndex + 1),
+            lastModified: Date.now(),
+          },
+        },
+      }
+    })
 
     return {
       branchId,
-      messageContent: (message as any).content,
+      messageContent,
     }
   },
 })

@@ -22,25 +22,37 @@ export default function StreamRecoveryBanner({
   const [recoverableSessions, setRecoverableSessions] = useState<ReturnType<typeof streamRecoveryService.getRecoverableSessions>>([])
   const [isExpanded, setIsExpanded] = useState(false)
   const [isRecovering, setIsRecovering] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
 
   // 检查可恢复的会话
   useEffect(() => {
+    // 清理旧的存储数据，避免误报
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const key = sessionStorage.key(i)
+        if (key?.startsWith('stream-recovery-')) {
+          sessionStorage.removeItem(key)
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     const checkSessions = () => {
+      if (dismissed) return
       const sessions = streamRecoveryService.getRecoverableSessions()
-      setRecoverableSessions(sessions)
+      // 只显示最近 2 分钟内的中断会话
+      const recentSessions = sessions.filter(s => Date.now() - s.timestamp < 2 * 60 * 1000)
+      setRecoverableSessions(recentSessions)
     }
 
     // 初始检查
     checkSessions()
 
-    // 从存储恢复
-    streamRecoveryService.restoreFromStorage()
-    checkSessions()
-
-    // 定期检查
-    const interval = setInterval(checkSessions, 5000)
+    // 定期检查（降低频率）
+    const interval = setInterval(checkSessions, 10000)
     return () => clearInterval(interval)
-  }, [])
+  }, [dismissed])
 
   const handleRecover = useCallback(async (recoveryId: string) => {
     setIsRecovering(true)
@@ -57,6 +69,7 @@ export default function StreamRecoveryBanner({
   const handleDismiss = useCallback(() => {
     streamRecoveryService.clearAll()
     setRecoverableSessions([])
+    setDismissed(true)
     onDismiss?.()
   }, [onDismiss])
 

@@ -88,6 +88,11 @@ export function useAgent() {
   const setPlanStep = useAgentStore(state => state.setPlanStep)
   const clearPlan = useAgentStore(state => state.clearPlan)
 
+  // 分支操作
+  const createBranch = useAgentStore(state => state.createBranch)
+  const switchBranch = useAgentStore(state => state.switchBranch)
+  const regenerateFromMessage = useAgentStore(state => state.regenerateFromMessage)
+
   // 发送消息
   const sendMessage = useCallback(async (content: MessageContent) => {
     // 类型转换：OpenFile[] -> string[], string | null -> string | undefined
@@ -241,5 +246,10 @@ export function useAgent() {
     deletePlanItem,
     setPlanStep,
     clearPlan,
+
+    // 分支
+    createBranch,
+    switchBranch,
+    regenerateFromMessage,
   }
 }

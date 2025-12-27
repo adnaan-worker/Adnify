@@ -3,7 +3,6 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 import {
   AlertTriangle,
-  GitBranch,
   History,
   Plus,
   Trash2,
@@ -25,7 +24,7 @@ import {
   FileContext,
 } from '@/renderer/agent/types'
 
-import { ChatInput, PendingImage, ChatContextStats } from '@/renderer/components/chat'
+import { ChatInput, PendingImage } from '@/renderer/components/chat'
 import MentionPopup from '@/renderer/components/agent/MentionPopup'
 import { MentionParser, MentionCandidate } from '@/renderer/agent/utils/MentionParser'
 import ChatMessageUI from './ChatMessage'
@@ -36,10 +35,10 @@ import SlashCommandPopup from './SlashCommandPopup'
 import { AgentService } from '@/renderer/agent/services/AgentService'
 import { Button } from '../ui'
 import { useToast } from '@/renderer/components/common/ToastProvider'
-import { BranchIndicator } from './BranchManager'
+import { BranchSelector } from './BranchManager'
 import BranchManager from './BranchManager'
 import StreamRecoveryBanner from './StreamRecoveryBanner'
-import ContextCompactionIndicator, { CompactionProgressBar } from './ContextCompactionIndicator'
+import { CompactionProgressBar } from './ContextCompactionIndicator'
 
 export default function ChatPanel() {
   const {
@@ -53,7 +52,6 @@ export default function ChatPanel() {
     inputPrompt,
     setInputPrompt,
     selectedCode,
-    contextStats,
   } = useStore()
 
   const { currentMode: chatMode, setMode: setChatMode } = useModeStore()
@@ -90,6 +88,7 @@ export default function ChatPanel() {
     addContextItem,
     removeContextItem,
     checkContextLength,
+    regenerateFromMessage,
   } = useAgent()
 
   const [input, setInput] = useState('')
@@ -484,23 +483,33 @@ export default function ChatPanel() {
     await sendMessage(content.trim())
   }, [deleteMessagesAfter, sendMessage])
 
-  // 重新生成
+  // 重新生成（创建分支）
   const handleRegenerate = useCallback(async (messageId: string) => {
-    const msgIndex = messages.findIndex((m: ChatMessageType) => m.id === messageId)
-    if (msgIndex <= 0) return
+    // 使用分支功能重新生成
+    const result = regenerateFromMessage(messageId)
+    
+    if (result) {
+      // 成功创建分支，发送消息重新生成
+      toast.success(language === 'zh' ? '已创建新分支' : 'Branch created')
+      await sendMessage(result.messageContent)
+    } else {
+      // 回退到原来的逻辑（直接删除并重新发送）
+      const msgIndex = messages.findIndex((m: ChatMessageType) => m.id === messageId)
+      if (msgIndex <= 0) return
 
-    let userMsgIndex = msgIndex - 1
-    while (userMsgIndex >= 0 && messages[userMsgIndex].role !== 'user') {
-      userMsgIndex--
+      let userMsgIndex = msgIndex - 1
+      while (userMsgIndex >= 0 && messages[userMsgIndex].role !== 'user') {
+        userMsgIndex--
+      }
+
+      if (userMsgIndex < 0) return
+      const userMsg = messages[userMsgIndex]
+      if (!isUserMessage(userMsg)) return
+
+      deleteMessagesAfter(userMsg.id)
+      await sendMessage(userMsg.content)
     }
-
-    if (userMsgIndex < 0) return
-    const userMsg = messages[userMsgIndex]
-    if (!isUserMessage(userMsg)) return
-
-    deleteMessagesAfter(userMsg.id)
-    await sendMessage(userMsg.content)
-  }, [messages, deleteMessagesAfter, sendMessage])
+  }, [messages, deleteMessagesAfter, sendMessage, regenerateFromMessage, toast, language])
 
   // 添加当前文件
   const handleAddCurrentFile = useCallback(() => {
@@ -675,31 +684,19 @@ export default function ChatPanel() {
           </div>
         )}
 
-        {/* Header */}
+        {/* Header - 简洁版 */}
         <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/80 backdrop-blur-md border-b border-white/5 select-none">
-          <div className="flex items-center gap-3">
-            {contextStats && (
-              <ChatContextStats stats={contextStats} language={language} compact />
-            )}
-            <BranchIndicator language={language} onClick={() => setShowBranches(!showBranches)} />
-            <ContextCompactionIndicator language={language} />
+          <div className="flex items-center gap-2">
+            {/* 分支选择器 - 始终显示，点击展开分支管理 */}
+            <BranchSelector language={language} onClick={() => setShowBranches(!showBranches)} />
           </div>
 
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setShowBranches(!showBranches)}
-              title={language === 'zh' ? '分支管理' : 'Branch Manager'}
-              className="hover:bg-white/5 text-text-muted hover:text-text-primary"
-            >
-              <GitBranch className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
               onClick={() => setShowThreads(!showThreads)}
-              title="Chat history"
+              title={language === 'zh' ? '历史记录' : 'Chat history'}
               className="hover:bg-white/5 text-text-muted hover:text-text-primary"
             >
               <History className="w-4 h-4" />
@@ -708,7 +705,7 @@ export default function ChatPanel() {
               variant="ghost"
               size="icon"
               onClick={() => createThread()}
-              title="New chat"
+              title={language === 'zh' ? '新对话' : 'New chat'}
               className="hover:bg-white/5 text-text-muted hover:text-text-primary"
             >
               <Plus className="w-4 h-4" />
@@ -719,7 +716,7 @@ export default function ChatPanel() {
               size="icon"
               onClick={clearMessages}
               className="hover:bg-red-500/10 hover:text-red-500 text-text-muted"
-              title="Clear chat"
+              title={language === 'zh' ? '清空对话' : 'Clear chat'}
             >
               <Trash2 className="w-4 h-4" />
             </Button>

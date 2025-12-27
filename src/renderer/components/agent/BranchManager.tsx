@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useCallback } from 'react'
-import { GitBranch, Trash2, Edit2, Check, X, RotateCcw } from 'lucide-react'
+import { GitBranch, Trash2, Edit2, Check, X, RotateCcw, ChevronDown } from 'lucide-react'
 import { useAgentStore, selectBranches, selectActiveBranch, selectIsOnBranch } from '@/renderer/agent'
 import { Button } from '../ui'
 import type { Branch } from '@/renderer/agent/store/slices/branchSlice'
@@ -229,7 +229,52 @@ export default function BranchManager({ language = 'en', onClose }: BranchManage
 }
 
 /**
- * 分支指示器 - 显示在聊天面板顶部
+ * 分支选择器 - 显示在聊天面板顶部左侧
+ * 始终显示当前分支状态，点击展开分支管理
+ */
+export function BranchSelector({ 
+  language = 'en',
+  onClick 
+}: { 
+  language?: 'zh' | 'en'
+  onClick?: () => void 
+}) {
+  const activeBranch = useAgentStore(selectActiveBranch)
+  const branches = useAgentStore(selectBranches)
+  const isOnBranch = useAgentStore(selectIsOnBranch)
+
+  // 计算显示文本
+  const displayText = isOnBranch && activeBranch 
+    ? activeBranch.name 
+    : (language === 'zh' ? '主线' : 'Main')
+
+  const hasBranches = branches.length > 0
+
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors ${
+        isOnBranch 
+          ? 'bg-accent/10 border border-accent/20 text-accent hover:bg-accent/20' 
+          : 'hover:bg-white/5 text-text-muted hover:text-text-primary'
+      }`}
+      title={language === 'zh' ? '点击管理分支' : 'Click to manage branches'}
+    >
+      <GitBranch className="w-3.5 h-3.5" />
+      <span className="truncate max-w-[120px]">{displayText}</span>
+      {hasBranches && !isOnBranch && (
+        <span className="ml-1 px-1 py-0.5 rounded bg-white/10 text-[10px]">
+          +{branches.length}
+        </span>
+      )}
+      <ChevronDown className="w-3 h-3 opacity-50" />
+    </button>
+  )
+}
+
+/**
+ * 分支指示器 - 简化版，只在有分支时显示
+ * @deprecated 使用 BranchSelector 替代
  */
 export function BranchIndicator({ 
   language = 'en',
