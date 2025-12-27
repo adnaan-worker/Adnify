@@ -5,10 +5,8 @@
 
 import { StateCreator } from 'zustand'
 import { logger } from '@utils/Logger'
-import type {
-    CustomProviderConfig,
-    ProviderApiKey,
-} from '@shared/types/customProvider'
+import type { CustomProviderConfig } from '@shared/config/providers'
+import type { ProviderApiKey } from '@shared/types/customProvider'
 
 // ============ Slice 接口 ============
 

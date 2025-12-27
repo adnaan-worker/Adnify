@@ -10,8 +10,7 @@ import { useState } from 'react'
 import { ChevronDown, ChevronUp, Plus, Trash, Zap, X, Save, Code2 } from 'lucide-react'
 import { Button, Input, Select } from '@components/ui'
 import { useStore } from '@store'
-import type { CustomProviderConfig, ProviderMode, CustomModeConfig } from '@shared/types/customProvider'
-import type { AdvancedConfig } from '@/shared/config/providers'
+import type { CustomProviderConfig, AdvancedConfig, ProviderMode, CustomModeConfig, AuthType } from '@shared/config/providers'
 import { VENDOR_PRESETS, validateCustomProviderConfig } from '@shared/types/customProviderPresets'
 import { toast } from '@components/common/ToastProvider'
 import { AdapterOverridesEditor } from '../AdapterOverridesEditor'
@@ -76,7 +75,7 @@ export function InlineProviderEditor({ provider, language, onSave, onCancel, isN
                         toolCallField: cfg.response.streaming.toolCallsField,
                         doneMarker: cfg.response.sseConfig.doneMarker,
                     },
-                    auth: { type: cfg.auth.type, headerName: cfg.auth.headerName },
+                    auth: { type: cfg.auth.type as AuthType, headerName: cfg.auth.headerName },
                 })
             }
         }
@@ -136,7 +135,7 @@ export function InlineProviderEditor({ provider, language, onSave, onCancel, isN
             models,
             mode,
             customConfig,
-            defaults: { timeout: timeout * 1000 },
+            defaults: { maxTokens: 8192, temperature: 0.7, topP: 1, timeout: timeout * 1000 },
         }
 
         const validation = validateCustomProviderConfig(config)

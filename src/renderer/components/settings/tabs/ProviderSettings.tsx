@@ -10,14 +10,18 @@
 import { useState } from 'react'
 import { Plus, Trash, Eye, EyeOff, Check, AlertTriangle, X } from 'lucide-react'
 import { useStore } from '@store'
-import { PROVIDERS, getAdapterConfig } from '@/shared/config/providers'
+import { PROVIDERS, getAdapterConfig, type CustomProviderConfig, type LLMAdapterConfig } from '@/shared/config/providers'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Input, Select } from '@components/ui'
 import { ProviderSettingsProps } from '../types'
 import { InlineProviderEditor } from './CustomProviderEditor'
 import { AdapterOverridesEditor } from '../AdapterOverridesEditor'
-import type { CustomProviderConfig } from '@shared/types/customProvider'
-import type { LLMAdapterConfig, AdvancedConfig } from '@/shared/config/providers'
+
+/** 高级配置类型 */
+interface AdvancedConfig {
+  request?: { endpoint?: string; bodyTemplate?: Record<string, unknown> }
+  response?: { contentField?: string; reasoningField?: string; toolCallField?: string; doneMarker?: string }
+}
 
 // 内置厂商 ID
 const BUILTIN_PROVIDER_IDS = ['openai', 'anthropic', 'gemini']

@@ -4,6 +4,8 @@
 
 import type { LLMAdapterConfig, AdvancedConfig } from '@/shared/config/providers'
 
+export type { AdvancedConfig }
+
 // ============ Provider 设置类型 ============
 
 /** 单个 Provider 的用户配置 */

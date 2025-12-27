@@ -8,7 +8,12 @@
  * - 事件类型解析 (event: xxx)
  */
 
-import type { SSEConfig } from '@shared/types/customProvider'
+/** SSE 解析配置 */
+export interface SSEConfig {
+  dataPrefix?: string
+  doneMarker: string
+  eventField?: string
+}
 
 /** SSE 事件类型 */
 export type SSEEventType = 'data' | 'done' | 'error' | 'event'

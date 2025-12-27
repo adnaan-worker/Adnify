@@ -3,7 +3,7 @@
  *
  * 设计原则：
  * 1. 单一数据源：所有 Provider 信息集中管理
- * 2. 简化概念：统一的配置类型
+ * 2. 统一配置类型：BuiltinProviderDef 和 CustomProviderConfig 共用核心类型
  * 3. 清晰路由：基于 providerId 决定使用哪个 Provider 实现
  */
 
@@ -17,12 +17,16 @@ export type AuthType = 'bearer' | 'api-key' | 'header' | 'query' | 'none'
 /** 认证配置 */
 export interface AuthConfig {
   type: AuthType
-  headerName?: string // type='header' 时使用
+  headerName?: string
+  headerTemplate?: string
+  queryParam?: string
+  placeholder?: string
+  helpUrl?: string
 }
 
 /** 请求配置 */
 export interface RequestConfig {
-  endpoint: string // API 路径 (如 '/chat/completions')
+  endpoint: string
   method: 'POST' | 'GET'
   headers: Record<string, string>
   bodyTemplate: Record<string, unknown>
@@ -30,18 +34,18 @@ export interface RequestConfig {
 
 /** 响应解析配置 */
 export interface ResponseConfig {
-  contentField: string // 内容字段，如 'delta.content'
-  reasoningField?: string // 思考字段，如 'delta.reasoning_content'
-  toolCallField?: string // 工具调用，如 'delta.tool_calls'
-  finishReasonField?: string // 完成原因，如 'finish_reason'
-  toolNamePath?: string // 工具名，如 'function.name'
-  toolArgsPath?: string // 参数，如 'function.arguments'
-  toolIdPath?: string // ID，如 'id'
-  argsIsObject?: boolean // 参数是否已是对象
-  doneMarker?: string // 流结束标记，如 '[DONE]'
+  contentField: string
+  reasoningField?: string
+  toolCallField?: string
+  finishReasonField?: string
+  toolNamePath?: string
+  toolArgsPath?: string
+  toolIdPath?: string
+  argsIsObject?: boolean
+  doneMarker?: string
 }
 
-/** LLM 适配器配置（用于自定义请求/响应格式） */
+/** LLM 适配器配置 */
 export interface LLMAdapterConfig {
   id: string
   name: string
@@ -50,61 +54,105 @@ export interface LLMAdapterConfig {
   response: ResponseConfig
 }
 
-/** 高级配置（覆盖默认行为） */
-export interface AdvancedConfig {
-  auth?: AuthConfig
-  request?: Partial<RequestConfig>
-  response?: Partial<ResponseConfig>
-}
-
-/** LLM 参数 */
-export interface LLMParameters {
-  maxTokens: number
-  temperature: number
-  topP: number
-}
-
 /** 功能支持声明 */
 export interface ProviderFeatures {
   streaming: boolean
   tools: boolean
-  vision: boolean
+  vision?: boolean
   reasoning?: boolean
 }
 
+/** LLM 参数默认值 */
+export interface LLMDefaults {
+  maxTokens: number
+  temperature: number
+  topP: number
+  timeout: number
+}
+
 // ============================================
-// Provider 配置类型
+// 统一的 Provider 配置类型
 // ============================================
 
-/** 内置 Provider 定义 */
-export interface BuiltinProviderDef {
+/** Provider 模式 */
+export type ProviderMode = 'openai' | 'anthropic' | 'gemini' | 'custom'
+
+/** 自定义模式配置 */
+export interface CustomModeConfig {
+  request: {
+    endpoint: string
+    method: 'POST' | 'GET'
+    headers?: Record<string, string>
+    bodyTemplate: Record<string, unknown>
+  }
+  response: {
+    sseConfig: { dataPrefix?: string; doneMarker: string }
+    streaming: {
+      contentField: string
+      reasoningField?: string
+      toolCallsField?: string
+      toolNameField?: string
+      toolArgsField?: string
+      toolIdField?: string
+      finishReasonField?: string
+    }
+    toolCall: { mode: string; argsIsObject?: boolean }
+  }
+  auth: { type: string; headerName?: string }
+}
+
+/** Provider 基础配置（内置和自定义共用） */
+export interface BaseProviderConfig {
   id: string
   name: string
   displayName: string
   description: string
-  defaultBaseUrl: string
-  defaultModels: string[]
-  recommendedModel: string
+  baseUrl: string
+  models: string[]
+  defaultModel: string
   adapter: LLMAdapterConfig
   features: ProviderFeatures
-  defaults: LLMParameters & { timeout: number }
-  auth: {
-    type: AuthType
-    placeholder: string
-    helpUrl?: string
+  defaults: LLMDefaults
+  auth: AuthConfig
+}
+
+/** 内置 Provider 定义 */
+export interface BuiltinProviderDef extends BaseProviderConfig {
+  readonly isBuiltin: true
+}
+
+/** 自定义 Provider 配置 */
+export interface CustomProviderConfig extends BaseProviderConfig {
+  isBuiltin: false
+  mode: ProviderMode
+  customConfig?: CustomModeConfig
+  createdAt?: number
+  updatedAt?: number
+}
+
+/** 高级配置（覆盖默认行为） */
+export interface AdvancedConfig {
+  auth?: { type?: AuthType; headerName?: string }
+  request?: { endpoint?: string; headers?: Record<string, string>; bodyTemplate?: Record<string, unknown> }
+  response?: {
+    contentField?: string
+    reasoningField?: string
+    toolCallField?: string
+    toolNamePath?: string
+    toolArgsPath?: string
+    argsIsObject?: boolean
+    doneMarker?: string
   }
 }
 
-/** 用户 Provider 配置（保存到配置文件） */
+/** 用户 Provider 配置（保存到配置文件，覆盖默认值） */
 export interface UserProviderConfig {
   apiKey?: string
   baseUrl?: string
   timeout?: number
   model?: string
   customModels?: string[]
-  // 自定义 Provider 需要的适配器配置
   adapterConfig?: LLMAdapterConfig
-  // 高级配置（覆盖默认行为）
   advanced?: AdvancedConfig
 }
 
@@ -112,7 +160,7 @@ export interface UserProviderConfig {
 // 内置适配器预设
 // ============================================
 
-const OPENAI_ADAPTER: LLMAdapterConfig = {
+export const OPENAI_ADAPTER: LLMAdapterConfig = {
   id: 'openai',
   name: 'OpenAI',
   description: 'OpenAI API 标准格式',
@@ -138,7 +186,7 @@ const OPENAI_ADAPTER: LLMAdapterConfig = {
   },
 }
 
-const ANTHROPIC_ADAPTER: LLMAdapterConfig = {
+export const ANTHROPIC_ADAPTER: LLMAdapterConfig = {
   id: 'anthropic',
   name: 'Anthropic',
   description: 'Claude API 格式',
@@ -166,7 +214,7 @@ const ANTHROPIC_ADAPTER: LLMAdapterConfig = {
   },
 }
 
-const GEMINI_ADAPTER: LLMAdapterConfig = {
+export const GEMINI_ADAPTER: LLMAdapterConfig = {
   id: 'gemini',
   name: 'Google Gemini',
   description: 'Gemini API 格式 (OpenAI 兼容)',
@@ -192,6 +240,13 @@ const GEMINI_ADAPTER: LLMAdapterConfig = {
   },
 }
 
+/** 所有内置适配器 */
+export const BUILTIN_ADAPTERS: Record<string, LLMAdapterConfig> = {
+  openai: OPENAI_ADAPTER,
+  anthropic: ANTHROPIC_ADAPTER,
+  gemini: GEMINI_ADAPTER,
+}
+
 // ============================================
 // 内置 Provider 定义
 // ============================================
@@ -202,9 +257,9 @@ export const BUILTIN_PROVIDERS: Record<string, BuiltinProviderDef> = {
     name: 'openai',
     displayName: 'OpenAI',
     description: 'GPT-4, GPT-4o, o1 等模型',
-    defaultBaseUrl: 'https://api.openai.com/v1',
-    defaultModels: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini', 'o3-mini'],
-    recommendedModel: 'gpt-4o',
+    baseUrl: 'https://api.openai.com/v1',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini', 'o3-mini'],
+    defaultModel: 'gpt-4o',
     adapter: OPENAI_ADAPTER,
     features: {
       streaming: true,
@@ -223,6 +278,7 @@ export const BUILTIN_PROVIDERS: Record<string, BuiltinProviderDef> = {
       placeholder: 'sk-proj-...',
       helpUrl: 'https://platform.openai.com/api-keys',
     },
+    isBuiltin: true,
   },
 
   anthropic: {
@@ -230,14 +286,14 @@ export const BUILTIN_PROVIDERS: Record<string, BuiltinProviderDef> = {
     name: 'anthropic',
     displayName: 'Anthropic',
     description: 'Claude 3.5, Claude 4 等模型',
-    defaultBaseUrl: 'https://api.anthropic.com',
-    defaultModels: [
+    baseUrl: 'https://api.anthropic.com',
+    models: [
       'claude-sonnet-4-20250514',
       'claude-3-5-sonnet-20241022',
       'claude-3-5-haiku-20241022',
       'claude-3-opus-20240229',
     ],
-    recommendedModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-4-20250514',
     adapter: ANTHROPIC_ADAPTER,
     features: {
       streaming: true,
@@ -256,6 +312,7 @@ export const BUILTIN_PROVIDERS: Record<string, BuiltinProviderDef> = {
       placeholder: 'sk-ant-...',
       helpUrl: 'https://console.anthropic.com/settings/keys',
     },
+    isBuiltin: true,
   },
 
   gemini: {
@@ -263,9 +320,9 @@ export const BUILTIN_PROVIDERS: Record<string, BuiltinProviderDef> = {
     name: 'gemini',
     displayName: 'Google Gemini',
     description: 'Gemini Pro, Gemini Flash 等模型',
-    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    defaultModels: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-    recommendedModel: 'gemini-2.0-flash-exp',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    models: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    defaultModel: 'gemini-2.0-flash-exp',
     adapter: GEMINI_ADAPTER,
     features: {
       streaming: true,
@@ -283,6 +340,7 @@ export const BUILTIN_PROVIDERS: Record<string, BuiltinProviderDef> = {
       placeholder: 'AIzaSy...',
       helpUrl: 'https://aistudio.google.com/apikey',
     },
+    isBuiltin: true,
   },
 }
 
@@ -305,7 +363,7 @@ export function getBuiltinProvider(providerId: string): BuiltinProviderDef | und
   return BUILTIN_PROVIDERS[providerId]
 }
 
-/** 获取 Provider 的默认适配器配置 */
+/** 获取 Provider 的适配器配置 */
 export function getAdapterConfig(providerId: string): LLMAdapterConfig {
   const provider = BUILTIN_PROVIDERS[providerId]
   return provider?.adapter || OPENAI_ADAPTER
@@ -313,15 +371,14 @@ export function getAdapterConfig(providerId: string): LLMAdapterConfig {
 
 /** 获取所有内置适配器 */
 export function getBuiltinAdapters(): LLMAdapterConfig[] {
-  return [OPENAI_ADAPTER, ANTHROPIC_ADAPTER, GEMINI_ADAPTER]
+  return Object.values(BUILTIN_ADAPTERS)
 }
 
 /** 获取 Provider 的默认模型 */
 export function getProviderDefaultModel(providerId: string): string {
   const provider = BUILTIN_PROVIDERS[providerId]
-  return provider?.recommendedModel || provider?.defaultModels[0] || ''
+  return provider?.defaultModel || provider?.models[0] || ''
 }
-
 
 // ============================================
 // UI 组件使用的辅助类型和函数
@@ -356,14 +413,14 @@ export function getProviders(): Record<string, ProviderInfo> {
       name: def.name,
       displayName: def.displayName,
       description: def.description,
-      models: def.defaultModels,
+      models: def.models,
       auth: {
         type: def.auth.type,
-        placeholder: def.auth.placeholder,
+        placeholder: def.auth.placeholder || '',
         helpUrl: def.auth.helpUrl,
       },
       endpoint: {
-        default: def.defaultBaseUrl,
+        default: def.baseUrl,
       },
       defaults: {
         timeout: def.defaults.timeout,

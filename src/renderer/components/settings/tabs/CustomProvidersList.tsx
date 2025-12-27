@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { Plus, Edit2, Trash2, Settings, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from '@components/ui'
 import { useStore } from '@store'
-import type { CustomProviderConfig } from '@shared/types/customProvider'
+import type { CustomProviderConfig } from '@shared/config/providers'
 import { InlineProviderEditor } from './CustomProviderEditor'
 
 interface CustomProvidersListProps {

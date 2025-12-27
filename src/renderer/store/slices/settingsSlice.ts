@@ -94,8 +94,8 @@ function generateDefaultProviderConfigs(): Record<string, ProviderModelConfig> {
     configs[id] = {
       customModels: [],
       adapterConfig: provider.adapter,
-      model: provider.recommendedModel || provider.defaultModels[0] || '',
-      baseUrl: provider.defaultBaseUrl,
+      model: provider.defaultModel || '',
+      baseUrl: provider.baseUrl,
     }
   }
   return configs

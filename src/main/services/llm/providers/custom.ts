@@ -7,7 +7,7 @@
 
 import { BaseProvider } from './base'
 import { ChatParams, ToolDefinition, LLMToolCall, LLMErrorClass, LLMErrorCode } from '../types'
-import { getByPath } from '../utils/jsonPath'
+import { getByPath } from '@shared/utils/jsonUtils'
 import type { LLMAdapterConfig } from '@shared/config/providers'
 import { AGENT_DEFAULTS } from '@shared/constants'
 

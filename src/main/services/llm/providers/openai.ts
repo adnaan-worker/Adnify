@@ -8,6 +8,7 @@ import { BaseProvider } from './base'
 import { ChatParams, ToolDefinition, LLMToolCall, MessageContent, LLMErrorCode } from '../types'
 import { adapterService } from '../adapterService'
 import { AGENT_DEFAULTS } from '@shared/constants'
+import { cleanToolCallArgs, fixUnescapedNewlines, fixMalformedJson } from '@shared/utils/jsonUtils'
 
 export class OpenAIProvider extends BaseProvider {
   private client: OpenAI
@@ -293,19 +294,19 @@ export class OpenAIProvider extends BaseProvider {
     if (!tc.id || !tc.name) return null
 
     let argsStr = tc.argsString || '{}'
-    argsStr = this.cleanToolCallArgs(argsStr)
+    argsStr = cleanToolCallArgs(argsStr)
 
     try {
       const args = JSON.parse(argsStr)
       return { id: tc.id, name: tc.name, arguments: args }
     } catch {
       try {
-        const fixed = this.fixUnescapedNewlines(argsStr)
+        const fixed = fixUnescapedNewlines(argsStr)
         const args = JSON.parse(fixed)
         return { id: tc.id, name: tc.name, arguments: args }
       } catch {
         try {
-          const fixed = this.fixMalformedJson(argsStr)
+          const fixed = fixMalformedJson(argsStr)
           const args = JSON.parse(fixed)
           return { id: tc.id, name: tc.name, arguments: args }
         } catch {
@@ -314,180 +315,5 @@ export class OpenAIProvider extends BaseProvider {
         }
       }
     }
-  }
-
-  private cleanToolCallArgs(argsStr: string): string {
-    let cleaned = argsStr.trimStart()
-    cleaned = cleaned.replace(/<\|[^|]+\|>/g, '')
-    cleaned = cleaned.trimEnd()
-
-    if (cleaned.length > 0 && !cleaned.endsWith('}')) {
-      let braceCount = 0
-      let lastValidEnd = -1
-      let inString = false
-      let escaped = false
-
-      for (let i = 0; i < cleaned.length; i++) {
-        const char = cleaned[i]
-        if (escaped) {
-          escaped = false
-          continue
-        }
-        if (char === '\\' && inString) {
-          escaped = true
-          continue
-        }
-        if (char === '"') {
-          inString = !inString
-          continue
-        }
-        if (!inString) {
-          if (char === '{') braceCount++
-          else if (char === '}') {
-            braceCount--
-            if (braceCount === 0) lastValidEnd = i
-          }
-        }
-      }
-
-      if (lastValidEnd !== -1) {
-        cleaned = cleaned.slice(0, lastValidEnd + 1)
-      }
-    }
-
-    return cleaned
-  }
-
-  private fixUnescapedNewlines(argsStr: string): string {
-    let inString = false
-    let escaped = false
-    let result = ''
-
-    for (let i = 0; i < argsStr.length; i++) {
-      const char = argsStr[i]
-      const charCode = char.charCodeAt(0)
-
-      if (escaped) {
-        result += char
-        escaped = false
-        continue
-      }
-      if (char === '\\') {
-        escaped = true
-        result += char
-        continue
-      }
-      if (char === '"') {
-        inString = !inString
-        result += char
-        continue
-      }
-
-      if (inString) {
-        if (char === '\n') {
-          result += '\\n'
-          continue
-        }
-        if (char === '\r') {
-          result += '\\r'
-          continue
-        }
-        if (char === '\t') {
-          result += '\\t'
-          continue
-        }
-        if (charCode < 32) {
-          result += `\\u${charCode.toString(16).padStart(4, '0')}`
-          continue
-        }
-      }
-
-      result += char
-    }
-
-    return result
-  }
-
-  private fixMalformedJson(argsStr: string): string {
-    let result = ''
-    let inString = false
-    let escaped = false
-    let i = 0
-
-    while (i < argsStr.length) {
-      const char = argsStr[i]
-      const charCode = char.charCodeAt(0)
-
-      if (escaped) {
-        result += char
-        escaped = false
-        i++
-        continue
-      }
-      if (char === '\\') {
-        escaped = true
-        result += char
-        i++
-        continue
-      }
-      if (char === '"') {
-        inString = !inString
-        result += char
-        i++
-        continue
-      }
-
-      if (inString) {
-        if (char === '\n') result += '\\n'
-        else if (char === '\r') result += '\\r'
-        else if (char === '\t') result += '\\t'
-        else if (charCode < 32) result += `\\u${charCode.toString(16).padStart(4, '0')}`
-        else result += char
-      } else {
-        result += char
-      }
-
-      i++
-    }
-
-    if (inString) result += '"'
-
-    let braceCount = 0
-    let bracketCount = 0
-    inString = false
-    escaped = false
-
-    for (let j = 0; j < result.length; j++) {
-      const c = result[j]
-      if (escaped) {
-        escaped = false
-        continue
-      }
-      if (c === '\\') {
-        escaped = true
-        continue
-      }
-      if (c === '"') {
-        inString = !inString
-        continue
-      }
-      if (!inString) {
-        if (c === '{') braceCount++
-        else if (c === '}') braceCount--
-        else if (c === '[') bracketCount++
-        else if (c === ']') bracketCount--
-      }
-    }
-
-    while (bracketCount > 0) {
-      result += ']'
-      bracketCount--
-    }
-    while (braceCount > 0) {
-      result += '}'
-      braceCount--
-    }
-
-    return result
   }
 }

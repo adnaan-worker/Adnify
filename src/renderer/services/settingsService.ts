@@ -147,8 +147,8 @@ function generateDefaultProviderConfigs(): Record<string, ProviderConfig> {
   const configs: Record<string, ProviderConfig> = {}
   for (const [id, def] of Object.entries(BUILTIN_PROVIDERS)) {
     configs[id] = {
-      model: def.recommendedModel,
-      baseUrl: def.defaultBaseUrl,
+      model: def.defaultModel,
+      baseUrl: def.baseUrl,
     }
   }
   return configs
@@ -160,7 +160,7 @@ function generateDefaultProviderConfigs(): Record<string, ProviderConfig> {
 function isDefaultBaseUrl(providerId: string, baseUrl?: string): boolean {
   if (!baseUrl) return true
   const provider = getBuiltinProvider(providerId)
-  return provider?.defaultBaseUrl === baseUrl
+  return provider?.baseUrl === baseUrl
 }
 
 /** 清理 LLM 配置 - 只保存 provider 和 model */
@@ -333,9 +333,9 @@ class SettingsService {
     const merged: LLMConfig = {
       ...defaultLLMConfig,
       provider: providerId,
-      model: saved.model || providerConfig.model || builtinDef?.recommendedModel || defaultLLMConfig.model,
+      model: saved.model || providerConfig.model || builtinDef?.defaultModel || defaultLLMConfig.model,
       apiKey: providerConfig.apiKey || '',
-      baseUrl: providerConfig.baseUrl || builtinDef?.defaultBaseUrl,
+      baseUrl: providerConfig.baseUrl || builtinDef?.baseUrl,
       timeout: providerConfig.timeout || builtinDef?.defaults.timeout || 120000,
       parameters: {
         ...defaultLLMParameters,
