@@ -275,9 +275,13 @@ export function VirtualFileTree({
       if (content !== null) {
         openFile(node.item.path, content)
         setActiveFile(node.item.path)
+      } else {
+        // 文件读取失败，可能是二进制文件或权限问题
+        // 尝试用空内容打开，让编辑器显示
+        toast.warning(t('error.fileNotFound', language, { path: node.item.name }))
       }
     }
-  }, [renamingPath, toggleFolder, expandedFolders, loadChildren, openFile, setActiveFile])
+  }, [renamingPath, toggleFolder, expandedFolders, loadChildren, openFile, setActiveFile, language])
 
   // 右键菜单
   const handleContextMenu = useCallback((e: React.MouseEvent, node: FlattenedNode) => {

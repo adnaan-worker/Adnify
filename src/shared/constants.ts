@@ -67,27 +67,15 @@ export const SENSITIVE_PATH_PATTERNS = [
     /^\/bin\//i,
     /^\/sbin\//i,
     /^\/root\//i,
-    // 用户敏感目录
+    // 用户敏感目录 (系统级凭证目录)
     /[/\\]\.ssh[/\\]/i,
     /[/\\]\.gnupg[/\\]/i,
     /[/\\]\.aws[/\\]/i,
     /[/\\]\.azure[/\\]/i,
     /[/\\]\.kube[/\\]/i,
-    /[/\\]\.docker[/\\]/i,
-    // 敏感文件
-    /\.env\.local$/i,
-    /\.env\.production$/i,
-    /secrets?\.(json|ya?ml|toml)$/i,
-    /credentials?\.(json|ya?ml|toml)$/i,
-    /private[_-]?key/i,
-    /id_rsa/i,
-    /id_ed25519/i,
-    /\.pem$/i,
-    /\.key$/i,
-    /\.p12$/i,
-    /\.pfx$/i,
-    // 密码相关
-    /password|secret|credential/i,
+    // 私钥文件 (系统级)
+    /[/\\]id_rsa$/i,
+    /[/\\]id_ed25519$/i,
 ] as const
 
 /** 危险路径模式 - 可能导致目录遍历 */
