@@ -81,8 +81,13 @@ async function searchInDirectory(
         try {
           const json = JSON.parse(line)
           if (json.type === 'match') {
+            // 转换为相对路径
+            let filePath = json.data.path.text
+            if (filePath.startsWith(rootPath)) {
+              filePath = filePath.slice(rootPath.length).replace(/^[/\\]+/, '')
+            }
             results.push({
-              path: json.data.path.text,
+              path: filePath,
               line: json.data.line_number,
               text: json.data.lines.text.trim().slice(0, 500),
             })

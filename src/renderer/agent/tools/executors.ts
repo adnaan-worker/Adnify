@@ -356,7 +356,20 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             uri: pathToLspUri(path), line: (args.line as number) - 1, character: (args.column as number) - 1, workspacePath: ctx.workspacePath
         })
         if (!locations?.length) return { success: true, result: 'No references found' }
-        return { success: true, result: locations.map(loc => `${loc.uri}:${loc.range.start.line + 1}:${loc.range.start.character + 1}`).join('\n') }
+        
+        // 转换 URI 为相对路径
+        const formatLocation = (loc: { uri: string; range: { start: { line: number; character: number } } }) => {
+            let filePath = loc.uri
+            if (filePath.startsWith('file:///')) filePath = filePath.slice(8)
+            else if (filePath.startsWith('file://')) filePath = filePath.slice(7)
+            try { filePath = decodeURIComponent(filePath) } catch {}
+            // 转为相对路径
+            if (ctx.workspacePath && filePath.toLowerCase().startsWith(ctx.workspacePath.toLowerCase().replace(/\\/g, '/'))) {
+                filePath = filePath.slice(ctx.workspacePath.length).replace(/^[/\\]+/, '')
+            }
+            return `${filePath}:${loc.range.start.line + 1}:${loc.range.start.character + 1}`
+        }
+        return { success: true, result: locations.map(formatLocation).join('\n') }
     },
 
     async go_to_definition(args, ctx) {
@@ -365,7 +378,20 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             uri: pathToLspUri(path), line: (args.line as number) - 1, character: (args.column as number) - 1, workspacePath: ctx.workspacePath
         })
         if (!locations?.length) return { success: true, result: 'Definition not found' }
-        return { success: true, result: locations.map(loc => `${loc.uri}:${loc.range.start.line + 1}:${loc.range.start.character + 1}`).join('\n') }
+        
+        // 转换 URI 为相对路径
+        const formatLocation = (loc: { uri: string; range: { start: { line: number; character: number } } }) => {
+            let filePath = loc.uri
+            if (filePath.startsWith('file:///')) filePath = filePath.slice(8)
+            else if (filePath.startsWith('file://')) filePath = filePath.slice(7)
+            try { filePath = decodeURIComponent(filePath) } catch {}
+            // 转为相对路径
+            if (ctx.workspacePath && filePath.toLowerCase().startsWith(ctx.workspacePath.toLowerCase().replace(/\\/g, '/'))) {
+                filePath = filePath.slice(ctx.workspacePath.length).replace(/^[/\\]+/, '')
+            }
+            return `${filePath}:${loc.range.start.line + 1}:${loc.range.start.character + 1}`
+        }
+        return { success: true, result: locations.map(formatLocation).join('\n') }
     },
 
     async get_hover_info(args, ctx) {
