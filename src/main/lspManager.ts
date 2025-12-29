@@ -138,6 +138,9 @@ class LspManager {
   private diagnosticsCache: Map<string, any[]> = new Map()
   private startingServers: Set<string> = new Set()
   
+  // 跟踪每个服务器打开的文档
+  private serverOpenedDocuments: Map<string, Map<string, { languageId: string; version: number; text: string }>> = new Map()
+  
   // 空闲关闭配置
   private serverLastActivity: Map<string, number> = new Map()
   private idleCheckInterval: NodeJS.Timeout | null = null
@@ -445,6 +448,26 @@ class LspManager {
   async stopServerByKey(key: string): Promise<void> {
     const instance = this.servers.get(key)
     if (!instance?.process) return
+    
+    // 清除该服务器相关的诊断缓存
+    const workspaceUri = `file:///${instance.workspacePath.replace(/\\/g, '/')}`
+    for (const uri of this.diagnosticsCache.keys()) {
+      if (uri.startsWith(workspaceUri) || uri.startsWith(workspaceUri.replace('file:///', 'file://'))) {
+        this.diagnosticsCache.delete(uri)
+        // 通知前端清除诊断
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) {
+            try {
+              win.webContents.send('lsp:diagnostics', { uri, diagnostics: [], serverKey: key })
+            } catch { }
+          }
+        })
+      }
+    }
+    
+    // 清除文档跟踪（服务器关闭后文档状态无效）
+    this.serverOpenedDocuments.delete(key)
+    
     try {
       await this.sendRequest(key, 'shutdown', null, 3000)
       this.sendNotification(key, 'exit', null)
@@ -452,6 +475,8 @@ class LspManager {
     instance.process.kill()
     this.servers.delete(key)
     this.serverLastActivity.delete(key)
+    
+    logger.lsp.info(`[LSP ${key}] Server stopped and diagnostics cleared`)
   }
 
   async stopAllServers(): Promise<void> {
@@ -492,6 +517,37 @@ class LspManager {
 
   resetDocumentVersion(uri: string): void {
     this.documentVersions.delete(uri)
+  }
+
+  // 跟踪文档打开状态
+  trackDocumentOpen(serverKey: string, uri: string, languageId: string, version: number, text: string): void {
+    if (!this.serverOpenedDocuments.has(serverKey)) {
+      this.serverOpenedDocuments.set(serverKey, new Map())
+    }
+    this.serverOpenedDocuments.get(serverKey)!.set(uri, { languageId, version, text })
+  }
+
+  trackDocumentChange(serverKey: string, uri: string, version: number, text: string): void {
+    const docs = this.serverOpenedDocuments.get(serverKey)
+    if (docs?.has(uri)) {
+      const doc = docs.get(uri)!
+      doc.version = version
+      doc.text = text
+    }
+  }
+
+  trackDocumentClose(serverKey: string, uri: string): void {
+    this.serverOpenedDocuments.get(serverKey)?.delete(uri)
+  }
+
+  // 检查文档是否已在服务器上打开
+  isDocumentOpen(serverKey: string, uri: string): boolean {
+    return this.serverOpenedDocuments.get(serverKey)?.has(uri) || false
+  }
+
+  // 获取服务器打开的所有文档（用于重启后恢复）
+  getOpenedDocuments(serverKey: string): Map<string, { languageId: string; version: number; text: string }> | undefined {
+    return this.serverOpenedDocuments.get(serverKey)
   }
 }
 

@@ -30,6 +30,14 @@ function getLanguageId(filePath: string): LanguageId | null {
   return EXT_TO_LANGUAGE[ext] || null
 }
 
+function getLanguageIdFromUri(uri: string): string {
+  let filePath = uri
+  if (uri.startsWith('file:///')) filePath = uri.slice(8)
+  else if (uri.startsWith('file://')) filePath = uri.slice(7)
+  try { filePath = decodeURIComponent(filePath) } catch { }
+  return getLanguageId(filePath) || 'plaintext'
+}
+
 async function getServerForUri(uri: string, workspacePath: string): Promise<string | null> {
   let filePath = uri
   if (uri.startsWith('file:///')) filePath = uri.slice(8)
@@ -71,6 +79,9 @@ export function registerLspHandlers(): void {
     const serverName = await getServerForUri(params.uri, params.workspacePath || '')
     if (!serverName) return
 
+    // 跟踪文档打开状态
+    lspManager.trackDocumentOpen(serverName, params.uri, params.languageId, params.version, params.text)
+
     lspManager.sendNotification(serverName, 'textDocument/didOpen', {
       textDocument: { uri: params.uri, languageId: params.languageId, version: params.version, text: params.text },
     })
@@ -79,6 +90,19 @@ export function registerLspHandlers(): void {
   ipcMain.handle('lsp:didChange', async (_, params: { uri: string; version: number; text: string; workspacePath?: string }) => {
     const serverName = await getServerForUri(params.uri, params.workspacePath || '')
     if (!serverName) return
+
+    // 如果文档未在服务器上打开（可能服务器重启过），先打开它
+    if (!lspManager.isDocumentOpen(serverName, params.uri)) {
+      const languageId = getLanguageIdFromUri(params.uri)
+      lspManager.trackDocumentOpen(serverName, params.uri, languageId, params.version, params.text)
+      lspManager.sendNotification(serverName, 'textDocument/didOpen', {
+        textDocument: { uri: params.uri, languageId, version: params.version, text: params.text },
+      })
+      return
+    }
+
+    // 更新跟踪状态
+    lspManager.trackDocumentChange(serverName, params.uri, params.version, params.text)
 
     lspManager.sendNotification(serverName, 'textDocument/didChange', {
       textDocument: { uri: params.uri, version: params.version },
@@ -89,6 +113,9 @@ export function registerLspHandlers(): void {
   ipcMain.handle('lsp:didClose', async (_, params: { uri: string; workspacePath?: string }) => {
     const serverName = await getServerForUri(params.uri, params.workspacePath || '')
     if (!serverName) return
+
+    // 移除跟踪
+    lspManager.trackDocumentClose(serverName, params.uri)
 
     lspManager.sendNotification(serverName, 'textDocument/didClose', {
       textDocument: { uri: params.uri },
