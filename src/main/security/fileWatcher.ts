@@ -1,11 +1,13 @@
 /**
  * 文件监听服务
- * 从 secureFile.ts 拆分出来的文件监听功能
+ * 使用 @parcel/watcher 监听文件变化
  */
 
 import { logger } from '@shared/utils/Logger'
 import { FileChangeBuffer, createFileChangeHandler } from '../indexing/fileChangeBuffer'
 import { getIndexService } from '../indexing/indexService'
+import * as watcher from '@parcel/watcher'
+import picomatch from 'picomatch'
 
 export interface FileWatcherEvent {
   event: 'create' | 'update' | 'delete'
@@ -30,29 +32,39 @@ const DEFAULT_CONFIG: FileWatcherConfig = {
   maxWaitTimeMs: 5000,
 }
 
-let watcherSubscription: any = null
+let watcherSubscription: watcher.AsyncSubscription | null = null
 let fileChangeBuffer: FileChangeBuffer | null = null
+
+// 创建忽略匹配器
+function createIgnoreMatcher(patterns: (string | RegExp)[]): (path: string) => boolean {
+  const regexPatterns = patterns.filter((p): p is RegExp => p instanceof RegExp)
+  const globPatterns = patterns.filter((p): p is string => typeof p === 'string')
+  const globMatcher = globPatterns.length > 0 ? picomatch(globPatterns) : null
+
+  return (filePath: string) => {
+    // 检查正则
+    for (const regex of regexPatterns) {
+      if (regex.test(filePath)) return true
+    }
+    // 检查 glob
+    if (globMatcher && globMatcher(filePath)) return true
+    return false
+  }
+}
 
 /**
  * 设置文件监听器
  */
-export function setupFileWatcher(
+export async function setupFileWatcher(
   getWorkspaceSessionFn: () => { roots: string[] } | null,
   callback: (data: FileWatcherEvent) => void,
   config?: Partial<FileWatcherConfig>
-): void {
+): Promise<void> {
   const workspace = getWorkspaceSessionFn()
   if (!workspace || workspace.roots.length === 0) return
 
   const mergedConfig = { ...DEFAULT_CONFIG, ...config }
-
-  // 动态导入 chokidar
-  const chokidar = require('chokidar')
-  const watcher = chokidar.watch(workspace.roots, {
-    ignored: mergedConfig.ignored,
-    persistent: mergedConfig.persistent,
-    ignoreInitial: mergedConfig.ignoreInitial,
-  })
+  const shouldIgnore = createIgnoreMatcher(mergedConfig.ignored)
 
   // 使用工厂函数创建文件变更缓冲器
   const indexService = getIndexService(workspace.roots[0])
@@ -62,31 +74,29 @@ export function setupFileWatcher(
     maxWaitTimeMs: mergedConfig.maxWaitTimeMs,
   })
 
-  watcherSubscription = watcher
-    .on('add', (filePath: string) => {
-      callback({ event: 'create', path: filePath })
-      fileChangeBuffer?.add({ type: 'create', path: filePath, timestamp: Date.now() })
-    })
-    .on('change', (filePath: string) => {
-      callback({ event: 'update', path: filePath })
-      fileChangeBuffer?.add({ type: 'update', path: filePath, timestamp: Date.now() })
-    })
-    .on('unlink', (filePath: string) => {
-      callback({ event: 'delete', path: filePath })
-      fileChangeBuffer?.add({ type: 'delete', path: filePath, timestamp: Date.now() })
-    })
-    .on('error', (error: Error) => logger.security.error('[Watcher] Error:', error))
+  // 使用 @parcel/watcher
+  watcherSubscription = await watcher.subscribe(workspace.roots[0], (err, events) => {
+    if (err) {
+      logger.security.error('[Watcher] Error:', err)
+      return
+    }
 
-  // 保存到全局以便调试
-  ;(global as any).fileWatcher = watcher
+    for (const event of events) {
+      if (shouldIgnore(event.path)) continue
 
-  logger.security.info('[Watcher] File watcher started for:', workspace.roots)
+      const eventType = event.type === 'create' ? 'create' : event.type === 'delete' ? 'delete' : 'update'
+      callback({ event: eventType, path: event.path })
+      fileChangeBuffer?.add({ type: eventType, path: event.path, timestamp: Date.now() })
+    }
+  })
+
+  logger.security.info('[Watcher] File watcher started for:', workspace.roots[0])
 }
 
 /**
  * 清理文件监听器
  */
-export function cleanupFileWatcher(): void {
+export async function cleanupFileWatcher(): Promise<void> {
   // 清理文件变更缓冲器
   if (fileChangeBuffer) {
     fileChangeBuffer.destroy()
@@ -97,9 +107,11 @@ export function cleanupFileWatcher(): void {
     logger.security.info('[Watcher] Cleaning up file watcher...')
     const subscription = watcherSubscription
     watcherSubscription = null
-    subscription.close().catch((e: any) => {
+    try {
+      await subscription.unsubscribe()
+    } catch (e: any) {
       logger.security.info('[Watcher] Cleanup completed (ignored error):', e.message)
-    })
+    }
   }
 }
 

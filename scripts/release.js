@@ -44,7 +44,8 @@ console.log(`✅ Created tag v${newVersion}`)
 
 // 4. 推送到远程（包括 tag）
 execSync('git push', { stdio: 'inherit' })
-execSync('git push --tags', { stdio: 'inherit' })
+// 只推送当前版本的 tag，避免旧 tag 冲突
+execSync(`git push origin v${newVersion}`, { stdio: 'inherit' })
 console.log(`✅ Pushed to remote`)
 
 console.log(`
