@@ -112,27 +112,39 @@ export default function ChatPanel() {
   const [atBottom, setAtBottom] = useState(true)
 
   // 缓存过滤后的消息列表，避免每次渲染都创建新数组
-  const filteredMessages = useMemo(() => 
-    messages.filter(m => m.role === 'user' || m.role === 'assistant'),
+  const filteredMessages = useMemo(
+    () => messages.filter(m => m.role === 'user' || m.role === 'assistant'),
     [messages]
   )
 
-  // 自动滚动逻辑 - 使用节流避免频繁滚动
-  const lastScrollTime = useRef(0)
+  // 自动滚动逻辑 - 使用 RAF + 定时器，不依赖消息内容变化
   useEffect(() => {
-    if (isStreaming && atBottom) {
-      const now = Date.now()
-      // 节流：最多每 100ms 滚动一次
-      if (now - lastScrollTime.current > 100) {
-        lastScrollTime.current = now
+    if (!isStreaming || !atBottom) return
+
+    let rafId: number
+    let intervalId: NodeJS.Timeout
+
+    const scrollToBottom = () => {
+      rafId = requestAnimationFrame(() => {
         virtuosoRef.current?.scrollToIndex({
           index: filteredMessages.length - 1,
           align: 'end',
           behavior: 'auto'
         })
-      }
+      })
     }
-  }, [filteredMessages.length, isStreaming, atBottom])
+
+    // 立即滚动一次
+    scrollToBottom()
+    
+    // 每 150ms 检查并滚动
+    intervalId = setInterval(scrollToBottom, 150)
+
+    return () => {
+      cancelAnimationFrame(rafId)
+      clearInterval(intervalId)
+    }
+  }, [isStreaming, atBottom, filteredMessages.length])
 
   // 一次性同步 inputPrompt 到本地 input
   useEffect(() => {

@@ -16,6 +16,7 @@ import { truncateToolResult } from '@/renderer/utils/partialJson'
 import { isWriteTool } from '@/shared/config/tools'
 import { getAgentConfig } from '../utils/AgentConfig'
 import { compressToolResult } from '../utils/ContextCompressor'
+import { streamingEditService } from './streamingEditService'
 
 export interface ToolExecutionContext {
   workspacePath: string | null
@@ -79,6 +80,7 @@ export class ToolExecutionService {
     // 保存文件快照（用于撤销）
     let originalContent: string | null = null
     let fullPath: string | null = null
+    let streamingEditId: string | null = null
 
     if (isWriteTool(name)) {
       const filePath = args.path as string
@@ -86,6 +88,10 @@ export class ToolExecutionService {
         fullPath = filePath.startsWith(workspacePath) ? filePath : `${workspacePath}/${filePath}`
         originalContent = await window.electronAPI.readFile(fullPath)
         store.addSnapshotToCurrentCheckpoint(fullPath, originalContent)
+        
+        // 启动流式编辑追踪
+        streamingEditId = streamingEditService.startEdit(fullPath, originalContent || '')
+        logger.agent.debug(`[ToolExecutionService] Started streaming edit for ${fullPath}, editId: ${streamingEditId}`)
       }
     }
 
@@ -116,7 +122,18 @@ export class ToolExecutionService {
 
     // 记录文件变更
     if (result.success && fullPath && isWriteTool(name)) {
+      // 完成流式编辑
+      if (streamingEditId) {
+        const finalContent = result.meta?.newContent as string || ''
+        streamingEditService.replaceContent(streamingEditId, finalContent)
+        streamingEditService.completeEdit(streamingEditId)
+        logger.agent.debug(`[ToolExecutionService] Completed streaming edit for ${fullPath}`)
+      }
+      
       await this.recordFileChange(store, fullPath, id, name, originalContent, result, workspacePath)
+    } else if (streamingEditId) {
+      // 工具执行失败，取消流式编辑
+      streamingEditService.cancelEdit(streamingEditId)
     }
 
     // 格式化结果 - 先用智能压缩，再用通用截断

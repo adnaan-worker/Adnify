@@ -1,12 +1,17 @@
 /**
  * 文件变更卡片 - 带 Diff 预览的设计
  * 显示删除/新增行的 unified diff 视图，支持语法高亮
+ * 
+ * 增强功能：
+ * - 实时流式 Diff 更新（订阅 streamingEditService）
+ * - 与多文件 Diff 面板联动
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Check, X, ChevronDown, ChevronRight, ExternalLink, Loader2, FileCode } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@renderer/agent/types'
+import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import InlineDiffPreview, { getDiffStats } from './InlineDiffPreview'
 
 interface FileChangeCardProps {
@@ -36,6 +41,35 @@ export default function FileChangeCard({
     const isSuccess = toolCall.status === 'success'
     const isError = toolCall.status === 'error'
 
+    // 流式内容状态 - 订阅 streamingEditService 获取实时更新
+    const [streamingContent, setStreamingContent] = useState<string | null>(null)
+
+    // 订阅流式编辑更新
+    useEffect(() => {
+        if (!isRunning && !isStreaming) {
+            setStreamingContent(null)
+            return
+        }
+
+        // 尝试获取该文件的流式编辑状态
+        const editState = streamingEditService.getEditByFilePath(filePath)
+        if (editState) {
+            setStreamingContent(editState.currentContent)
+        }
+
+        // 订阅全局变更
+        const unsubscribe = streamingEditService.subscribeGlobal((activeEdits) => {
+            for (const [, state] of activeEdits) {
+                if (state.filePath === filePath) {
+                    setStreamingContent(state.currentContent)
+                    return
+                }
+            }
+        })
+
+        return unsubscribe
+    }, [filePath, isRunning, isStreaming])
+
     // 获取新旧内容用于 diff
     const oldContent = useMemo(() => {
         // 优先从 meta 获取（工具执行完成后会有准确的 oldContent）
@@ -56,10 +90,14 @@ export default function FileChangeCard({
     }, [meta, isRunning, isStreaming, toolCall.name])
 
     const newContent = useMemo(() => {
+        // 优先使用流式内容（实时更新）
+        if (streamingContent && (isRunning || isStreaming)) {
+            return streamingContent
+        }
         if (meta?.newContent) return meta.newContent as string
         // Fallback: 从 args 中获取
         return (args.content || args.code || args.search_replace_blocks || args.replacement || args.source) as string || ''
-    }, [args, meta])
+    }, [args, meta, streamingContent, isRunning, isStreaming])
 
     // 计算行数变化 - 优先使用工具返回的准确统计
     const diffStats = useMemo(() => {

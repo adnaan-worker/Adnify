@@ -48,6 +48,7 @@ import {
 import { toolExecutionService } from './ToolExecutionService'
 import { buildLLMMessages, compressContext } from '../llm/MessageBuilder'
 import { executeToolCallsIntelligently } from './ParallelToolExecutor'
+import { composerService } from './composerService'
 
 export interface LLMCallConfig {
   provider: string
@@ -186,6 +187,12 @@ class AgentServiceClass {
       const llmMessages = await buildLLMMessages(userMessage, contextContent, systemPrompt)
       this.currentAssistantId = store.addAssistantMessage()
       store.setStreamPhase('streaming')
+
+      // 启动 Composer Session 用于多文件变更追踪
+      composerService.startSession(
+        userQuery.slice(0, 50) || 'Agent Task',
+        `Started at ${new Date().toLocaleTimeString()}`
+      )
 
       await this.runAgentLoop(config, llmMessages, workspacePath, chatMode)
     } catch (error) {
@@ -556,6 +563,18 @@ class AgentServiceClass {
     this.abortController = null
     this.isRunning = false
     this.streamState = createStreamHandlerState()
+    
+    // 完成 Composer Session（但不自动关闭，让用户决定是否接受变更）
+    const composerState = composerService.getState()
+    if (composerState.currentSession) {
+      // 检查是否有待处理的变更
+      const hasPending = composerState.currentSession.changes.some(c => c.status === 'pending')
+      if (!hasPending) {
+        // 如果没有待处理的变更，完成 session
+        composerService.completeSession()
+      }
+      // 如果有待处理的变更，保持 session 打开，让用户在 UI 中处理
+    }
   }
 
   private async observeChanges(
