@@ -224,6 +224,8 @@ class AgentServiceClass {
     toolExecutionService.reject()
 
     const store = useAgentStore.getState()
+    
+    // 确保当前助手消息的工具调用状态被更新
     if (this.currentAssistantId) {
       const thread = store.getCurrentThread()
       if (thread) {
@@ -239,6 +241,19 @@ class AgentServiceClass {
               })
             }
           }
+        }
+      }
+      
+      // 确保消息的 isStreaming 被设置为 false
+      store.finalizeAssistant(this.currentAssistantId)
+    }
+    
+    // 额外检查：确保所有正在流式输出的消息都被终止
+    const thread = store.getCurrentThread()
+    if (thread) {
+      for (const msg of thread.messages) {
+        if (msg.role === 'assistant' && (msg as any).isStreaming) {
+          store.finalizeAssistant(msg.id)
         }
       }
     }

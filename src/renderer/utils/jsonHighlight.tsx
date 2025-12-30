@@ -138,15 +138,45 @@ export function highlightJson(
 export function JsonHighlight({
     data,
     className = '',
-    maxHeight = 'max-h-64'
+    maxHeight = 'max-h-64',
+    maxLength = 2000, // 最大字符数
 }: {
     data: unknown
     className?: string
     maxHeight?: string
+    maxLength?: number
 }) {
+    // 预处理数据：截断过长的内容
+    const processedData = React.useMemo(() => {
+        let text: string
+        if (typeof data === 'string') {
+            text = data
+        } else {
+            try {
+                text = JSON.stringify(data, null, 2)
+            } catch {
+                text = String(data)
+            }
+        }
+        
+        if (text.length > maxLength) {
+            return {
+                content: text.slice(0, maxLength),
+                truncated: true,
+                originalLength: text.length
+            }
+        }
+        return { content: text, truncated: false, originalLength: text.length }
+    }, [data, maxLength])
+
     return (
         <pre className={`text-xs font-mono overflow-auto ${maxHeight} ${className}`}>
-            <code>{highlightJson(data)}</code>
+            <code>{highlightJson(processedData.content)}</code>
+            {processedData.truncated && (
+                <span className="text-text-muted/50 italic block mt-2">
+                    ... ({(processedData.originalLength / 1000).toFixed(1)}KB truncated)
+                </span>
+            )}
         </pre>
     )
 }

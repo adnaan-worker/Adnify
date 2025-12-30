@@ -197,6 +197,7 @@ const ToolCallCard = memo(function ToolCallCard({
                 data={toolCall.result}
                 className="p-2"
                 maxHeight="max-h-48"
+                maxLength={3000}
               />
             </div>
           )}
@@ -213,6 +214,7 @@ const ToolCallCard = memo(function ToolCallCard({
             <JsonHighlight
               data={Object.fromEntries(Object.entries(args).filter(([k]) => !k.startsWith('_')))}
               maxHeight="max-h-32"
+              maxLength={1500}
             />
           </div>
         )}
@@ -233,6 +235,7 @@ const ToolCallCard = memo(function ToolCallCard({
               <JsonHighlight
                 data={toolCall.result}
                 maxHeight="max-h-48"
+                maxLength={3000}
               />
             </div>
           </div>

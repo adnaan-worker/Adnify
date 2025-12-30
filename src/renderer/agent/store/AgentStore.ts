@@ -280,6 +280,23 @@ export async function initializeAgentStore(): Promise<void> {
         const { initializeTools } = await import('../tools')
         await initializeTools()
         logger.agent.info('[AgentStore] Tools initialized')
+        
+        // 监听线程切换，重置压缩服务状态
+        const { contextCompactionService } = await import('../services/ContextCompactionService')
+        let lastThreadId = useAgentStore.getState().currentThreadId
+        
+        useAgentStore.subscribe((state) => {
+            if (state.currentThreadId !== lastThreadId) {
+                lastThreadId = state.currentThreadId
+                // 重置压缩服务状态
+                contextCompactionService.reset()
+                // 从新线程恢复摘要
+                if (state.currentThreadId) {
+                    contextCompactionService.restoreFromStore()
+                }
+                logger.agent.info('[AgentStore] Thread changed, compaction service reset')
+            }
+        })
     } catch (error) {
         logger.agent.error('[AgentStore] Failed to initialize:', error)
     }

@@ -19,6 +19,8 @@ interface CompactionState {
   lastCompactedAt: number | null
   summary: string | null
   compactedMessageCount: number
+  // 增量压缩：记录已压缩的消息 ID
+  compactedMessageIds: Set<string>
 }
 
 class ContextCompactionServiceClass {
@@ -27,6 +29,7 @@ class ContextCompactionServiceClass {
     lastCompactedAt: null,
     summary: null,
     compactedMessageCount: 0,
+    compactedMessageIds: new Set(),
   }
 
   // 压缩请求队列（防止并发压缩）
@@ -93,13 +96,21 @@ class ContextCompactionServiceClass {
       return this.state.summary
     }
 
+    // 增量压缩：只处理未压缩过的消息
+    const newMessages = messagesToCompact.filter(m => !this.state.compactedMessageIds.has(m.id))
+    
+    if (newMessages.length === 0 && this.state.summary) {
+      logger.agent.info('[ContextCompaction] No new messages to compact, using existing summary')
+      return this.state.summary
+    }
+
     this.state.isCompacting = true
     this.updateStoreCompactingState(true)
-    logger.agent.info(`[ContextCompaction] Starting compaction of ${messagesToCompact.length} messages`)
+    logger.agent.info(`[ContextCompaction] Starting compaction of ${newMessages.length} new messages (${messagesToCompact.length} total)`)
 
     try {
-      // 构建压缩提示词
-      const prompt = buildCompactPrompt(messagesToCompact)
+      // 构建压缩提示词，传入已有摘要让 LLM 整合
+      const prompt = buildCompactPrompt(newMessages, this.state.summary || undefined)
 
       // 调用 LLM 生成摘要
       const summary = await this.callLLMForSummary(prompt)
@@ -114,7 +125,12 @@ class ContextCompactionServiceClass {
         // 更新状态
         this.state.summary = summary
         this.state.lastCompactedAt = Date.now()
-        this.state.compactedMessageCount += messagesToCompact.length
+        this.state.compactedMessageCount += newMessages.length
+        
+        // 记录已压缩的消息 ID
+        for (const msg of messagesToCompact) {
+          this.state.compactedMessageIds.add(msg.id)
+        }
 
         // 保存到 store（用于持久化）
         this.saveSummaryToStore(summary)
@@ -215,7 +231,24 @@ class ContextCompactionServiceClass {
   clearSummary(): void {
     this.state.summary = null
     this.state.compactedMessageCount = 0
+    this.state.compactedMessageIds.clear()
+    this.state.lastCompactedAt = null
     this.saveSummaryToStore('')
+    logger.agent.info('[ContextCompaction] Summary cleared')
+  }
+
+  /**
+   * 重置状态（线程切换时调用）
+   */
+  reset(): void {
+    this.state = {
+      isCompacting: false,
+      lastCompactedAt: null,
+      summary: null,
+      compactedMessageCount: 0,
+      compactedMessageIds: new Set(),
+    }
+    logger.agent.info('[ContextCompaction] State reset')
   }
 
   /**

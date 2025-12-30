@@ -56,10 +56,13 @@ function getMessageTextContent(msg: CompactableMessage): string {
 }
 
 /**
- * 估算 Token 数量（粗略估算：1 token ≈ 4 chars）
+ * 估算 Token 数量
+ * 中文约 1.5 字符/token，英文约 4 字符/token
  */
 function estimateTokens(text: string): number {
-    return Math.ceil(text.length / 4)
+    const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length
+    const otherChars = text.length - chineseChars
+    return Math.ceil(chineseChars / 1.5 + otherChars / 4)
 }
 
 /**
@@ -130,8 +133,10 @@ function extractMessageSummary(msg: CompactableMessage): MessageSummary {
 
 /**
  * 构建用于生成摘要的提示词
+ * @param messages 需要压缩的消息
+ * @param existingSummary 已有的摘要（如果有，让 LLM 整合而非简单拼接）
  */
-export function buildCompactPrompt(messages: ChatMessage[]): string {
+export function buildCompactPrompt(messages: ChatMessage[], existingSummary?: string): string {
     const compactable = messages.filter(isCompactableMessage)
     const summaries = compactable.map(extractMessageSummary)
 
@@ -157,7 +162,12 @@ export function buildCompactPrompt(messages: ChatMessage[]): string {
         return `[${role}]: ${truncated}`
     }).join('\n\n')
 
-    return `Please summarize the following conversation history into a concise summary (max ${COMPACT_CONFIG.maxSummaryChars} chars).
+    // 如果有已有摘要，让 LLM 整合
+    const existingContext = existingSummary 
+        ? `\n\nPrevious Summary (integrate key points from this):\n${existingSummary}\n`
+        : ''
+
+    return `Please summarize the following conversation history into a concise summary (max ${COMPACT_CONFIG.maxSummaryChars} chars).${existingContext}
 Focus on:
 1. The user's main requests and goals
 2. Key decisions made
@@ -165,7 +175,7 @@ Focus on:
 4. Important context that should be preserved
 5. Any errors or issues encountered
 
-Conversation History:
+New Conversation History:
 ${conversationHistory}
 
 Summary:`

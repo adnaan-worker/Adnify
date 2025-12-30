@@ -26,10 +26,26 @@ export { buildContextContent, buildUserContent, calculateContextStats } from './
  * 生成简单摘要（不调用 LLM）
  * 提取关键信息：用户请求、文件操作、重要决策
  */
-function generateSimpleSummary(messages: ChatMessage[]): string {
+function generateSimpleSummary(messages: ChatMessage[], importantMessages?: ChatMessage[]): string {
   const userRequests: string[] = []
   const fileOperations: string[] = []
   const toolsUsed = new Set<string>()
+  const importantContent: string[] = []
+
+  // 处理重要消息（用户消息和关键工具调用）
+  if (importantMessages && importantMessages.length > 0) {
+    for (const msg of importantMessages) {
+      if (isUserMessage(msg)) {
+        const content = typeof msg.content === 'string' 
+          ? msg.content 
+          : (msg.content as TextContent[])?.find(p => p.type === 'text')?.text || ''
+        if (content.length > 0) {
+          const truncated = content.length > 150 ? content.slice(0, 150) + '...' : content
+          importantContent.push(`[User] ${truncated}`)
+        }
+      }
+    }
+  }
 
   for (const msg of messages) {
     // 提取用户请求
@@ -66,6 +82,11 @@ function generateSimpleSummary(messages: ChatMessage[]): string {
 
   // 构建摘要
   const parts: string[] = []
+  
+  // 重要内容优先
+  if (importantContent.length > 0) {
+    parts.push(`## Key Context\n${importantContent.slice(0, 5).join('\n')}`)
+  }
   
   if (userRequests.length > 0) {
     parts.push(`## User Requests (${userRequests.length} total)\n${userRequests.slice(0, 5).map((r, i) => `${i + 1}. ${r}`).join('\n')}`)
@@ -148,14 +169,13 @@ export async function buildLLMMessages(
   if (shouldCompactContext(filteredMessages)) {
     logger.agent.info('[MessageBuilder] Context exceeds threshold, compacting...')
 
-    const { recentMessages, messagesToCompact } = prepareMessagesForCompact(filteredMessages as any)
+    const { recentMessages, messagesToCompact, importantMessages } = prepareMessagesForCompact(filteredMessages as any)
     
     // 检查是否有已有的摘要
     const existingSummary = store.contextSummary || contextCompactionService.getSummary()
     
     if (existingSummary && messagesToCompact.length > 0) {
-      // 有摘要，但还有新的消息需要压缩
-      // 将旧摘要和新消息一起重新压缩
+      // 有摘要，使用它
       compactedSummary = existingSummary
       
       // 计算并记录压缩节省的 Token 数
@@ -164,18 +184,13 @@ export async function buildLLMMessages(
       
       filteredMessages = recentMessages as NonCheckpointMessage[]
       
-      // 如果待压缩消息较多，异步更新摘要（包含新内容）
+      // 如果有新消息需要压缩，异步更新摘要（LLM 会整合旧摘要）
       if (messagesToCompact.length >= 10) {
-        logger.agent.info(`[MessageBuilder] ${messagesToCompact.length} new messages to compact, requesting LLM update...`)
+        logger.agent.info(`[MessageBuilder] ${messagesToCompact.length} messages to compact, requesting LLM update...`)
         contextCompactionService.requestCompaction(messagesToCompact as any).then(llmSummary => {
           if (llmSummary && llmSummary.length > 100) {
-            // 合并旧摘要和新摘要
-            const mergedSummary = `${existingSummary}\n\n--- Updated ---\n\n${llmSummary}`
-            const truncatedSummary = mergedSummary.length > 3000 
-              ? llmSummary // 如果合并后太长，只用新摘要
-              : mergedSummary
-            store.setContextSummary(truncatedSummary)
-            logger.agent.info('[MessageBuilder] Summary updated with new content')
+            store.setContextSummary(llmSummary)
+            logger.agent.info('[MessageBuilder] Summary updated with integrated content')
           }
         }).catch(err => {
           logger.agent.warn('[MessageBuilder] Failed to update summary:', err)
@@ -187,8 +202,8 @@ export async function buildLLMMessages(
       filteredMessages = recentMessages as NonCheckpointMessage[]
     } else if (messagesToCompact.length > 0) {
       // 没有摘要，需要首次压缩
-      // 先生成简单摘要（立即可用）
-      const simpleSummary = generateSimpleSummary(messagesToCompact as any)
+      // 先生成简单摘要（立即可用），包含重要消息
+      const simpleSummary = generateSimpleSummary(messagesToCompact as any, importantMessages as any)
       compactedSummary = simpleSummary
       store.setContextSummary(simpleSummary)
       
