@@ -10,7 +10,7 @@ import { joinPath } from '@utils/pathUtils'
 import { gitService } from '@renderer/agent/services/gitService'
 import { getEditorConfig } from '@renderer/config/editorConfig'
 import { toast } from '../../common/ToastProvider'
-import { adnifyDir } from '@services/adnifyDirService'
+import { workspaceManager } from '@services/WorkspaceManager'
 import { directoryCacheService } from '@services/directoryCacheService'
 import { Button, Tooltip, ContextMenu, ContextMenuItem } from '../../ui'
 import { VirtualFileTree } from '../../tree/VirtualFileTree'
@@ -19,7 +19,6 @@ export function ExplorerView() {
   const {
     workspacePath,
     workspace,
-    setWorkspacePath,
     files,
     setFiles,
     language,
@@ -101,21 +100,9 @@ export function ExplorerView() {
 
   const handleOpenFolder = async () => {
     const path = await window.electronAPI.openFolder()
-    if (path) {
-      await adnifyDir.flush()
-
-      const { checkpointService } = await import('@renderer/agent/services/checkpointService')
-      checkpointService.reset()
-      adnifyDir.reset()
+    if (path && typeof path === 'string') {
       directoryCacheService.clear()
-
-      setWorkspacePath(path)
-      await adnifyDir.initialize(path)
-
-      const items = await directoryCacheService.getDirectory(path, true)
-      setFiles(items)
-
-      await checkpointService.init()
+      await workspaceManager.openFolder(path)
     }
   }
 

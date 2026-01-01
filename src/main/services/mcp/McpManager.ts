@@ -21,18 +21,12 @@ import type {
 export class McpManager extends EventEmitter {
   private clients = new Map<string, McpClient>()
   private configLoader: McpConfigLoader
-  private mainWindow: BrowserWindow | null = null
   private initialized = false
 
   constructor() {
     super()
     this.configLoader = new McpConfigLoader()
     this.configLoader.setOnConfigChange(() => this.handleConfigChange())
-  }
-
-  /** 设置主窗口（用于发送 IPC 事件） */
-  setMainWindow(window: BrowserWindow | null): void {
-    this.mainWindow = window
   }
 
   /** 初始化 MCP 管理器 */
@@ -367,9 +361,16 @@ export class McpManager extends EventEmitter {
   }
 
   private sendToRenderer(channel: string, data: unknown): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send(channel, data)
-    }
+    // 广播到所有窗口（MCP 状态是全局的）
+    BrowserWindow.getAllWindows().forEach(win => {
+      if (!win.isDestroyed()) {
+        try {
+          win.webContents.send(channel, data)
+        } catch {
+          // 忽略发送失败
+        }
+      }
+    })
   }
 }
 

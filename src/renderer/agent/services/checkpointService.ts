@@ -1,20 +1,20 @@
 /**
  * 检查点服务 - 支持文件状态回滚
  * 
- * 数据存储在项目目录 .adnify/checkpoints.json
+ * 数据存储在项目目录 .adnify/sessions.json
  * 支持配置保留策略（数量、时间、文件大小限制）
  */
 
 import { logger } from '@utils/Logger'
 import { Checkpoint, FileSnapshot } from '../types'
-import { 
-  loadCheckpoints, 
-  saveCheckpoints, 
-  loadProjectSettings,
-  CheckpointData,
-  DEFAULT_PROJECT_SETTINGS 
-} from '@services/projectStorageService'
+import { adnifyDir, DEFAULT_PROJECT_SETTINGS } from '@services/adnifyDirService'
 import { useStore } from '@store'
+
+/** 检查点数据结构 */
+interface CheckpointData {
+  checkpoints: Checkpoint[]
+  currentIdx: number
+}
 
 class CheckpointService {
   private checkpoints: Checkpoint[] = []
@@ -41,13 +41,14 @@ class CheckpointService {
     if (!workspacePath) return
     
     // 加载保留策略配置
-    const settings = await loadProjectSettings()
+    const settings = await adnifyDir.getSettings()
     this.maxCheckpoints = settings.checkpointRetention.maxCount
     this.maxAgeDays = settings.checkpointRetention.maxAgeDays
     this.maxFileSizeKB = settings.checkpointRetention.maxFileSizeKB
     
     // 加载检查点数据
-    const data = await loadCheckpoints()
+    const sessions = await adnifyDir.getSessions()
+    const data = sessions['checkpoints'] as CheckpointData | undefined
     if (data) {
       this.checkpoints = data.checkpoints
       this.currentIdx = data.currentIdx ?? this.checkpoints.length - 1
@@ -94,8 +95,9 @@ class CheckpointService {
       currentIdx: this.currentIdx,
     }
     
-    const success = await saveCheckpoints(data)
-    if (!success) {
+    try {
+      await adnifyDir.updateSessionsPartial('checkpoints', data)
+    } catch {
       logger.agent.warn('[Checkpoint] Failed to save to project storage')
     }
   }

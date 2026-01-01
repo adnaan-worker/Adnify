@@ -6,7 +6,7 @@ import { logger } from '@utils/Logger'
 import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Plus, FolderOpen, History, Folder } from 'lucide-react'
 import { useStore } from '@store'
-import { adnifyDir } from '@services/adnifyDirService'
+import { workspaceManager } from '@services/WorkspaceManager'
 
 interface RecentWorkspace {
     path: string
@@ -14,7 +14,7 @@ interface RecentWorkspace {
 }
 
 export default function WorkspaceDropdown() {
-    const { workspace, setWorkspace, setFiles } = useStore()
+    const { workspace } = useStore()
     const [isOpen, setIsOpen] = useState(false)
     const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspace[]>([])
     const containerRef = useRef<HTMLDivElement>(null)
@@ -60,11 +60,7 @@ export default function WorkspaceDropdown() {
         setIsOpen(false)
         const result = await window.electronAPI.openFolder()
         if (result && typeof result === 'string') {
-            // 正常打开文件夹
-            await adnifyDir.setPrimaryRoot(result)
-            setWorkspace({ configPath: null, roots: [result] })
-            const items = await window.electronAPI.readDir(result)
-            setFiles(items)
+            await workspaceManager.openFolder(result)
         }
         // 如果返回 { redirected: true }，说明已聚焦到其他窗口，无需处理
     }
@@ -74,14 +70,7 @@ export default function WorkspaceDropdown() {
         setIsOpen(false)
         const result = await window.electronAPI.openWorkspace()
         if (result && !('redirected' in result)) {
-            if (result.roots.length > 0) {
-                await adnifyDir.setPrimaryRoot(result.roots[0])
-            }
-            setWorkspace(result)
-            if (result.roots.length > 0) {
-                const items = await window.electronAPI.readDir(result.roots[0])
-                setFiles(items)
-            }
+            await workspaceManager.switchTo(result)
         }
     }
 
@@ -96,27 +85,13 @@ export default function WorkspaceDropdown() {
         setIsOpen(false)
         const path = await window.electronAPI.addFolderToWorkspace()
         if (path) {
-            const { addRoot } = useStore.getState()
-            addRoot(path)
-            // 初始化新根目录的 .adnify
-            await adnifyDir.initialize(path)
+            await workspaceManager.addFolder(path)
         }
     }
 
     const handleOpenRecent = async (path: string) => {
         setIsOpen(false)
-        // 切换主根目录，确保状态保存到正确的 .adnify 目录
-        await adnifyDir.setPrimaryRoot(path)
-        // 通知主进程保存活动工作区并设置窗口映射
-        await window.electronAPI.setActiveWorkspace([path])
-        // 设置渲染进程状态
-        setWorkspace({ configPath: null, roots: [path] })
-        try {
-            const items = await window.electronAPI.readDir(path)
-            setFiles(items)
-        } catch (e) {
-            logger.ui.error('[WorkspaceDropdown] Failed to open recent workspace:', e)
-        }
+        await workspaceManager.openFolder(path)
     }
 
     return (

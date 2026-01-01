@@ -394,14 +394,6 @@ class AdnifyDirService {
       logger.system.error(`[AdnifyDir] Failed to write ${file}:`, error)
     }
   }
-
-  // ============ 兼容旧 API ============
-  /** @deprecated */
-  async readJson<T>(file: AdnifyFile): Promise<T | null> { return this.readJsonFile<T>(file) }
-  /** @deprecated */
-  async writeJson<T>(file: AdnifyFile, data: T): Promise<boolean> {
-    try { await this.writeJsonFile(file, data); return true } catch { return false }
-  }
 }
 
 export const adnifyDir = new AdnifyDirService()

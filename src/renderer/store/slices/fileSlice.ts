@@ -37,7 +37,7 @@ export interface OpenFile {
 
 export interface FileSlice {
   workspace: WorkspaceConfig | null
-  workspacePath: string | null // Legacy: returns first root or null
+  workspacePath: string | null // 返回第一个根目录或 null
   files: FileItem[]
   expandedFolders: Set<string>
   openFiles: OpenFile[]
@@ -46,7 +46,6 @@ export interface FileSlice {
   selectedFolderPath: string | null
 
   setWorkspace: (workspace: WorkspaceConfig | null) => void
-  setWorkspacePath: (path: string | null) => void // Deprecated wrapper
   addRoot: (path: string) => void
   removeRoot: (path: string) => void
   setFiles: (files: FileItem[]) => void
@@ -89,16 +88,6 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
     return {
       workspace,
       workspacePath: workspace?.roots[0] || null,
-      expandedFolders: newExpanded
-    }
-  }),
-  setWorkspacePath: (path) => set((state) => {
-    // 自动展开根文件夹
-    const newExpanded = new Set(state.expandedFolders)
-    if (path) newExpanded.add(path)
-    return {
-      workspacePath: path,
-      workspace: path ? { configPath: null, roots: [path] } : null,
       expandedFolders: newExpanded
     }
   }),

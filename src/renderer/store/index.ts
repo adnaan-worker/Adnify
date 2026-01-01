@@ -14,7 +14,7 @@ import { CustomProviderSlice, createCustomProviderSlice } from './slices/customP
 import { McpSlice, createMcpSlice } from './slices/mcpSlice'
 
 // 导出类型
-export type { OpenFile } from './slices/fileSlice'
+export type { OpenFile, WorkspaceConfig } from './slices/fileSlice'
 export type { ProviderType, LLMConfig, LLMParameters, AutoApproveSettings, SecuritySettings } from './slices/settingsSlice'
 export type { ProviderModelConfig } from '@app-types/provider'
 export type { SidePanel, DiffView } from './slices/uiSlice'

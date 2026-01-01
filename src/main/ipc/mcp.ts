@@ -12,10 +12,7 @@ import type {
   McpPromptGetRequest,
 } from '@shared/types/mcp'
 
-export function registerMcpHandlers(getMainWindow: () => BrowserWindow | null): void {
-  // 设置主窗口
-  mcpManager.setMainWindow(getMainWindow())
-
+export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null): void {
   // 初始化 MCP 管理器
   ipcMain.handle('mcp:initialize', async (_, workspaceRoots: string[]) => {
     try {

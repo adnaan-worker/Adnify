@@ -15,7 +15,7 @@ import { themeManager, Theme } from '@renderer/config/themeConfig'
 import { PROVIDERS } from '@/shared/config/providers'
 import { LLM_DEFAULTS } from '@/shared/constants'
 import { Logo } from '../common/Logo'
-import { adnifyDir } from '@services/adnifyDirService'
+import { workspaceManager } from '@services/WorkspaceManager'
 import { Button, Input, Select, Switch } from '../ui'
 
 interface OnboardingWizardProps {
@@ -34,7 +34,6 @@ const LANGUAGES: { id: Language; name: string; native: string }[] = [
 export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const {
     setLLMConfig, setLanguage, language,
-    setWorkspacePath, setFiles,
     setAutoApprove, setSecuritySettings,
     autoApprove, securitySettings,
     workspacePath
@@ -127,12 +126,8 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
 
   const handleOpenFolder = async () => {
     const result = await window.electronAPI.openFolder()
-    if (result) {
-      setWorkspacePath(result)
-      // 初始化 .adnify 目录
-      await adnifyDir.initialize(result)
-      const items = await window.electronAPI.readDir(result)
-      setFiles(items)
+    if (result && typeof result === 'string') {
+      await workspaceManager.openFolder(result)
     }
   }
 

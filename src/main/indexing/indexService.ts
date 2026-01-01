@@ -357,39 +357,52 @@ export class CodebaseIndexService {
   }
 }
 
-// 全局索引服务实例
-let indexServiceInstance: CodebaseIndexService | null = null
+// 按工作区路径管理索引服务实例（支持多窗口）
+const indexServiceInstances = new Map<string, CodebaseIndexService>()
 
 /**
- * 获取或创建索引服务实例
- * 切换工作区时会销毁旧实例，释放 Worker 资源
+ * 规范化工作区路径（用于 Map key）
  */
-export function getIndexService(workspacePath: string): CodebaseIndexService {
-  // 检查是否需要切换工作区
-  if (indexServiceInstance) {
-    const currentPath = (indexServiceInstance as any).workspacePath as string
-    if (currentPath !== workspacePath) {
-      // 销毁旧实例，释放 Worker 资源
-      logger.index.info(`[IndexService] Switching workspace from ${currentPath} to ${workspacePath}`)
-      indexServiceInstance.destroy()
-      indexServiceInstance = null
-    }
-  }
-
-  if (!indexServiceInstance) {
-    indexServiceInstance = new CodebaseIndexService(workspacePath)
-  }
-
-  return indexServiceInstance
+function normalizeWorkspacePath(workspacePath: string): string {
+  return workspacePath.replace(/\\/g, '/').toLowerCase()
 }
 
 /**
- * 销毁索引服务实例
+ * 获取或创建索引服务实例
+ * 每个工作区有独立的实例，支持多窗口同时打开不同工作区
  */
-export function destroyIndexService(): void {
-  if (indexServiceInstance) {
-    indexServiceInstance.destroy()
-    indexServiceInstance = null
-    logger.index.info('[IndexService] Instance destroyed')
+export function getIndexService(workspacePath: string): CodebaseIndexService {
+  const normalizedPath = normalizeWorkspacePath(workspacePath)
+  
+  let instance = indexServiceInstances.get(normalizedPath)
+  if (!instance) {
+    instance = new CodebaseIndexService(workspacePath)
+    indexServiceInstances.set(normalizedPath, instance)
+    logger.index.info(`[IndexService] Created instance for: ${workspacePath}`)
+  }
+
+  return instance
+}
+
+/**
+ * 销毁指定工作区的索引服务实例
+ */
+export function destroyIndexService(workspacePath?: string): void {
+  if (workspacePath) {
+    const normalizedPath = normalizeWorkspacePath(workspacePath)
+    const instance = indexServiceInstances.get(normalizedPath)
+    if (instance) {
+      instance.destroy()
+      indexServiceInstances.delete(normalizedPath)
+      logger.index.info(`[IndexService] Instance destroyed for: ${workspacePath}`)
+    }
+  } else {
+    // 销毁所有实例
+    for (const [path, instance] of indexServiceInstances) {
+      instance.destroy()
+      logger.index.info(`[IndexService] Instance destroyed for: ${path}`)
+    }
+    indexServiceInstances.clear()
+    logger.index.info('[IndexService] All instances destroyed')
   }
 }
