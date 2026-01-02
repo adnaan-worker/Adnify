@@ -10,7 +10,6 @@ import { SettingsSlice, createSettingsSlice } from './slices/settingsSlice'
 import { UISlice, createUISlice } from './slices/uiSlice'
 import { ThemeSlice, createThemeSlice } from './slices/themeSlice'
 import { LogSlice, createLogSlice } from './slices/logSlice'
-import { CustomProviderSlice, createCustomProviderSlice } from './slices/customProviderSlice'
 import { McpSlice, createMcpSlice } from './slices/mcpSlice'
 
 // 导出类型
@@ -27,7 +26,7 @@ export { useModeStore } from '@/renderer/modes/modeStore'
 export type { WorkMode } from '@/renderer/modes/types'
 
 // 组合所有 slices
-type StoreState = FileSlice & SettingsSlice & UISlice & ThemeSlice & LogSlice & CustomProviderSlice & McpSlice
+type StoreState = FileSlice & SettingsSlice & UISlice & ThemeSlice & LogSlice & McpSlice
 
 export const useStore = create<StoreState>()((...args) => ({
   ...createFileSlice(...args),
@@ -35,6 +34,5 @@ export const useStore = create<StoreState>()((...args) => ({
   ...createUISlice(...args),
   ...createThemeSlice(...args),
   ...createLogSlice(...args),
-  ...createCustomProviderSlice(...args),
   ...createMcpSlice(...args),
 }))

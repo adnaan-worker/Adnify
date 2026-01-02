@@ -39,19 +39,13 @@ export interface PresetTemplate {
 }
 
 // ============================================
-// Store 类型
+// Store 类型（已废弃，保留类型定义以兼容）
 // ============================================
 
-/** API Key 存储 (与配置分离，安全考虑) */
+/** API Key 存储 - 已废弃，API Key 现在存储在 providerConfigs 中 */
 export interface ProviderApiKey {
   providerId: string
   apiKey: string
-}
-
-/** 自定义 Provider Store 状态 */
-export interface CustomProviderStore {
-  customProviders: import('@/shared/config/providers').CustomProviderConfig[]
-  providerApiKeys: ProviderApiKey[]
 }
 
 // ============================================

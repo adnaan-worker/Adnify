@@ -4,7 +4,6 @@
  */
 import { useRef, useCallback, useMemo, useState } from 'react'
 import {
-  Sparkles,
   FileText,
   X,
   Code,
@@ -13,7 +12,6 @@ import {
   Database,
   Paperclip,
   ArrowUp,
-  ClipboardList,
   Plus,
   Folder,
   Globe
@@ -22,6 +20,8 @@ import { useStore } from '@store'
 import { WorkMode } from '@/renderer/modes/types'
 import { t } from '@renderer/i18n'
 import { Button } from '../ui'
+import ModelSelector from './ModelSelector'
+import ModeSelector from './ModeSelector'
 
 import { ContextItem, FileContext } from '@/renderer/agent/types'
 
@@ -293,59 +293,17 @@ export default function ChatInput({
         </div>
       </div>
 
-      {/* Mode Switcher & Footer */}
+      {/* Mode & Model Selector */}
       <div className="mt-3 flex items-center justify-between px-3">
-        <div className="flex items-center gap-1 bg-black/20 p-0.5 rounded-full border border-white/5 backdrop-blur-md">
-          <ModeButton
-            active={chatMode === 'chat'}
-            onClick={() => setChatMode('chat')}
-          >
-            Chat
-          </ModeButton>
-          <ModeButton
-            active={chatMode === 'agent'}
-            onClick={() => setChatMode('agent')}
-          >
-            <Sparkles className="w-3 h-3" />
-            Agent
-          </ModeButton>
-          <ModeButton
-            active={chatMode === 'plan'}
-            onClick={() => setChatMode('plan')}
-          >
-            <ClipboardList className="w-3 h-3" />
-            Plan
-          </ModeButton>
+        <div className="flex items-center gap-2">
+          <ModeSelector mode={chatMode} onModeChange={setChatMode} />
+          <ModelSelector />
         </div>
         <span className="text-[10px] text-text-muted/40 font-medium tracking-wide">
           {t('returnToSend', language)}
         </span>
       </div>
     </div>
-  )
-}
-
-// 辅助组件：模式按钮
-function ModeButton({
-  active,
-  onClick,
-  children
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`h-7 px-3 gap-1.5 text-[11px] font-semibold transition-all duration-200 rounded-full flex items-center
-        ${active
-          ? 'bg-surface/80 text-text-primary shadow-sm ring-1 ring-white/10'
-          : 'text-text-muted/60 hover:text-text-secondary hover:bg-white/5'
-        }`}
-    >
-      {children}
-    </button>
   )
 }
 

@@ -104,7 +104,7 @@ interface PerformanceTimer {
 
 class LoggerClass {
   private config: LoggerConfig = {
-    minLevel: 'warn',  // 默认只显示警告和错误
+    minLevel: 'info',  // 默认只显示警告和错误
     enabled: true,
     maxLogs: 1000,
     fileLogging: false,

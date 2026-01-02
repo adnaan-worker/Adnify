@@ -67,6 +67,8 @@ export interface SettingsSlice {
   setAutoApprove: (settings: Partial<AutoApproveSettings>) => void
   setPromptTemplateId: (id: string) => void
   setProviderConfig: (providerId: string, config: ProviderModelConfig) => void
+  updateProviderConfig: (providerId: string, updates: Partial<ProviderModelConfig>) => void
+  removeProviderConfig: (providerId: string) => void
   addCustomModel: (providerId: string, model: string) => void
   removeCustomModel: (providerId: string, model: string) => void
   setSecuritySettings: (settings: Partial<SecuritySettings>) => void
@@ -76,6 +78,9 @@ export interface SettingsSlice {
   setHasExistingConfig: (hasConfig: boolean) => void
   setAiInstructions: (instructions: string) => void
   loadSettings: (isEmptyWindow?: boolean) => Promise<void>
+  
+  // 自定义厂商便捷方法
+  getCustomProviders: () => Array<{ id: string; config: ProviderModelConfig }>
 }
 
 // ============ 默认值（从 settingsService 派生） ============
@@ -162,6 +167,23 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
       },
     })),
 
+  updateProviderConfig: (providerId, updates) =>
+    set((state) => {
+      const current = state.providerConfigs[providerId] || {}
+      return {
+        providerConfigs: {
+          ...state.providerConfigs,
+          [providerId]: { ...current, ...updates, updatedAt: Date.now() },
+        },
+      }
+    }),
+
+  removeProviderConfig: (providerId) =>
+    set((state) => {
+      const { [providerId]: _, ...rest } = state.providerConfigs
+      return { providerConfigs: rest }
+    }),
+
   addCustomModel: (providerId, model) =>
     set((state) => {
       const current = state.providerConfigs[providerId] || { customModels: [] }
@@ -238,13 +260,15 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
         aiInstructions: settings.aiInstructions || '',
         editorConfig: getEditorConfig(),
       })
-
-      // 加载自定义 Provider（从 localStorage）- 不阻塞
-      ;(get() as any).loadCustomProviders?.().catch(() => {})
-      
-      // 注意：workspace 恢复已移到 App.tsx 中统一处理，避免重复调用
     } catch (e) {
       logger.settings.error('[SettingsSlice] Failed to load settings:', e)
     }
+  },
+
+  getCustomProviders: () => {
+    const { providerConfigs } = get()
+    return Object.entries(providerConfigs)
+      .filter(([id]) => id.startsWith('custom-'))
+      .map(([id, config]) => ({ id, config }))
   },
 })
