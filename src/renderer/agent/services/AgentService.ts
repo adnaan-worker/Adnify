@@ -90,7 +90,7 @@ class AgentServiceClass {
    */
   markFileAsRead(filePath: string, content: string): void {
     const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase()
-    this.fileReadCache.set(normalizedPath, this.simpleHash(content))
+    this.fileReadCache.set(normalizedPath, this.fnvHash(content))
   }
 
   /**
@@ -109,13 +109,29 @@ class AgentServiceClass {
     logger.agent.info('[Agent] Session cleared')
   }
 
-  private simpleHash(str: string): string {
-    let hash = 0
-    for (let i = 0; i < str.length; i++) {
-      hash = ((hash << 5) - hash) + str.charCodeAt(i)
-      hash = hash & hash
+  /**
+   * FNV-1a 哈希算法 - 比简单位运算哈希碰撞率更低
+   * 使用 64 位分两部分计算，避免 JS 整数精度问题
+   */
+  private fnvHash(str: string): string {
+    // FNV-1a 32-bit
+    let h1 = 0x811c9dc5
+    let h2 = 0x811c9dc5
+    const len = str.length
+    const mid = len >> 1
+
+    // 分两部分计算，增加熵
+    for (let i = 0; i < mid; i++) {
+      h1 ^= str.charCodeAt(i)
+      h1 = Math.imul(h1, 0x01000193)
     }
-    return hash.toString(36)
+    for (let i = mid; i < len; i++) {
+      h2 ^= str.charCodeAt(i)
+      h2 = Math.imul(h2, 0x01000193)
+    }
+
+    // 组合两个哈希值
+    return ((h1 >>> 0).toString(36) + (h2 >>> 0).toString(36))
   }
 
   async calculateContextStats(contextItems: ContextItem[], currentInput: string): Promise<void> {

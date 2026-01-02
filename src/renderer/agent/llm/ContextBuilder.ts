@@ -284,7 +284,11 @@ export function buildUserContent(
 
 /**
  * 计算并更新当前上下文统计信息
+ * 优化：使用缓存的文件大小，避免频繁读取文件
  */
+// 文件大小缓存
+const fileSizeCache = new Map<string, number>()
+
 export async function calculateContextStats(
   contextItems: ContextItem[],
   currentInput: string
@@ -317,18 +321,29 @@ export async function calculateContextStats(
   // 2. 计算当前输入长度
   totalChars += currentInput.length
 
-  // 3. 计算上下文项长度
+  // 3. 计算上下文项长度（使用缓存）
   for (const item of contextItems) {
     if (item.type === 'File') {
       fileCount++
       const filePath = (item as any).uri
       if (filePath) {
-        try {
-          const content = await window.electronAPI.readFile(filePath)
-          if (content) {
-            totalChars += Math.min(content.length, config.maxFileContentChars)
+        // 使用缓存的文件大小
+        let fileSize = fileSizeCache.get(filePath)
+        if (fileSize === undefined) {
+          try {
+            const content = await window.electronAPI.readFile(filePath)
+            fileSize = content?.length ?? 0
+            fileSizeCache.set(filePath, fileSize)
+            // 限制缓存大小
+            if (fileSizeCache.size > 100) {
+              const firstKey = fileSizeCache.keys().next().value
+              if (firstKey) fileSizeCache.delete(firstKey)
+            }
+          } catch {
+            fileSize = 0
           }
-        } catch (e) { }
+        }
+        totalChars += Math.min(fileSize, config.maxFileContentChars)
       }
     } else if (item.type === 'Codebase') {
       semanticResultCount++

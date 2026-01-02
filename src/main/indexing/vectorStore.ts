@@ -388,17 +388,20 @@ export class VectorStoreService {
 
     try {
       // 构建 SQL WHERE 条件：任意关键词匹配 content、symbols 或 relativePath
-      // LanceDB 使用 SQL 语法的 LIKE 进行模糊匹配
+      // 注意：LanceDB 字段名区分大小写，必须用双引号包裹
       const conditions = keywords.map(kw => {
         const safeKw = this.sanitizeKeyword(kw)
-        return `(content LIKE '%${safeKw}%' OR symbols LIKE '%${safeKw}%' OR relativePath LIKE '%${safeKw}%')`
+        return `(content LIKE '%${safeKw}%' OR symbols LIKE '%${safeKw}%' OR "relativePath" LIKE '%${safeKw}%')`
       }).join(' OR ')
 
-      const results = await this.table
+      const queryResult = await this.table
         .query()
         .where(conditions)
         .limit(topK)
         .execute()
+
+      // 确保结果是数组
+      const results = Array.isArray(queryResult) ? queryResult : []
 
       return results.map((r: LanceDBRecord) => ({
         filePath: r.filePath,

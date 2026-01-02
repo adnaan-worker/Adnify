@@ -147,22 +147,26 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
     async read_multiple_files(args, ctx) {
         const paths = args.paths as string[]
-        let result = ''
-        for (const p of paths) {
-            try {
-                const validPath = resolvePath(p, ctx.workspacePath, true)
-                const content = await window.electronAPI.readFile(validPath)
-                if (content !== null) {
-                    result += `\n--- File: ${p} ---\n${content}\n`
-                    AgentService.markFileAsRead(validPath, content)
-                } else {
-                    result += `\n--- File: ${p} ---\n[File not found]\n`
+        const pLimit = (await import('p-limit')).default
+        const limit = pLimit(5) // 最多 5 个并发读取
+
+        const results = await Promise.all(
+            paths.map(p => limit(async () => {
+                try {
+                    const validPath = resolvePath(p, ctx.workspacePath, true)
+                    const content = await window.electronAPI.readFile(validPath)
+                    if (content !== null) {
+                        AgentService.markFileAsRead(validPath, content)
+                        return `\n--- File: ${p} ---\n${content}\n`
+                    }
+                    return `\n--- File: ${p} ---\n[File not found]\n`
+                } catch (e: unknown) {
+                    return `\n--- File: ${p} ---\n[Error: ${(e as Error).message}]\n`
                 }
-            } catch (e: unknown) {
-                result += `\n--- File: ${p} ---\n[Error: ${(e as Error).message}]\n`
-            }
-        }
-        return { success: true, result }
+            }))
+        )
+
+        return { success: true, result: results.join('') }
     },
 
     async edit_file(args, ctx) {
@@ -170,20 +174,16 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         const originalContent = await window.electronAPI.readFile(path)
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}` }
 
-        // 计算当前内容哈希，检查文件是否被外部修改
-        const currentHash = AgentService.getFileCacheHash(path)
-        const simpleHash = (str: string) => {
-            let hash = 0
-            for (let i = 0; i < str.length; i++) {
-                hash = ((hash << 5) - hash) + str.charCodeAt(i)
-                hash = hash & hash
+        // 检查文件是否被外部修改（通过重新计算哈希并比较）
+        // 注意：这里只是警告，不阻止操作，因为 SEARCH 块匹配会验证内容
+        const cachedHash = AgentService.getFileCacheHash(path)
+        if (cachedHash) {
+            // 重新标记文件以获取当前哈希
+            AgentService.markFileAsRead(path, originalContent)
+            const newHash = AgentService.getFileCacheHash(path)
+            if (cachedHash !== newHash) {
+                logger.agent.warn(`[edit_file] File ${path} was modified externally since last read`)
             }
-            return hash.toString(36)
-        }
-        
-        // 如果文件在缓存中但内容已变化，警告但不阻止（依赖 SEARCH 块匹配验证）
-        if (currentHash && currentHash !== simpleHash(originalContent)) {
-            logger.agent.warn(`[edit_file] File ${path} was modified externally since last read`)
         }
 
         const blocks = parseSearchReplaceBlocks(args.search_replace_blocks as string)

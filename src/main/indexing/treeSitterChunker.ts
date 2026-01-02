@@ -284,8 +284,8 @@ export class TreeSitterChunker {
   }
 
   /**
-   * 递归拆分过大的代码块
-   * 策略：按直接子节点拆分，如果子节点仍然过大则继续递归
+   * 迭代拆分过大的代码块（避免栈溢出）
+   * 使用栈模拟递归，处理深层嵌套的大型代码块
    */
   private splitLargeNode(
     node: Parser.SyntaxNode,
@@ -296,36 +296,53 @@ export class TreeSitterChunker {
     maxChunkChars: number
   ): CodeChunk[] {
     const chunks: CodeChunk[] = []
+    const stack: Parser.SyntaxNode[] = [node]
 
-    // 获取有意义的子节点（跳过标点符号等）
-    const meaningfulChildren: Parser.SyntaxNode[] = []
-    for (let i = 0; i < node.childCount; i++) {
-      const child = node.child(i)
-      if (child && child.text.length > 50) {
-        meaningfulChildren.push(child)
+    while (stack.length > 0) {
+      const current = stack.pop()!
+
+      // 获取有意义的子节点
+      const meaningfulChildren: Parser.SyntaxNode[] = []
+      for (let i = 0; i < current.childCount; i++) {
+        const child = current.child(i)
+        if (child && child.text.length > 50) {
+          meaningfulChildren.push(child)
+        }
       }
-    }
 
-    // 如果没有足够的子节点，无法拆分
-    if (meaningfulChildren.length < 2) {
-      return []
-    }
+      // 无法拆分：没有足够的子节点
+      if (meaningfulChildren.length < 2) {
+        // 截断当前节点
+        if (current.text.length > maxChunkChars) {
+          chunks.push({
+            id: `${filePath}:${current.startPosition.row}`,
+            filePath,
+            relativePath,
+            fileHash,
+            content: current.text.slice(0, maxChunkChars) + '\n...[truncated]',
+            startLine: current.startPosition.row + 1,
+            endLine: current.endPosition.row + 1,
+            type: 'block',
+            language: langName,
+            symbols: this.extractName(current)
+          })
+        }
+        continue
+      }
 
-    // 按子节点创建分块
-    for (const child of meaningfulChildren) {
-      if (child.text.length > maxChunkChars) {
-        // 子节点仍然过大，递归拆分
-        const subChunks = this.splitLargeNode(child, filePath, relativePath, fileHash, langName, maxChunkChars)
-        if (subChunks.length > 0) {
-          chunks.push(...subChunks)
-        } else {
-          // 无法继续拆分，截断
+      // 处理子节点
+      for (const child of meaningfulChildren) {
+        if (child.text.length > maxChunkChars) {
+          // 子节点过大，加入栈继续拆分
+          stack.push(child)
+        } else if (child.endPosition.row - child.startPosition.row >= 3) {
+          // 子节点大小合适，直接添加
           chunks.push({
             id: `${filePath}:${child.startPosition.row}`,
             filePath,
             relativePath,
             fileHash,
-            content: child.text.slice(0, maxChunkChars) + '\n...[truncated]',
+            content: child.text,
             startLine: child.startPosition.row + 1,
             endLine: child.endPosition.row + 1,
             type: 'block',
@@ -333,20 +350,6 @@ export class TreeSitterChunker {
             symbols: this.extractName(child)
           })
         }
-      } else if (child.endPosition.row - child.startPosition.row >= 3) {
-        // 子节点大小合适，直接添加
-        chunks.push({
-          id: `${filePath}:${child.startPosition.row}`,
-          filePath,
-          relativePath,
-          fileHash,
-          content: child.text,
-          startLine: child.startPosition.row + 1,
-          endLine: child.endPosition.row + 1,
-          type: 'block',
-          language: langName,
-          symbols: this.extractName(child)
-        })
       }
     }
 
