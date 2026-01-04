@@ -4,10 +4,25 @@
  */
 
 import { logger } from '@shared/utils/Logger'
-import { ipcMain } from 'electron'
+import { ipcMain, app } from 'electron'
 import { spawn } from 'child_process'
 import { rgPath } from '@vscode/ripgrep'
 import * as path from 'path'
+import * as fs from 'fs'
+
+/**
+ * 获取 ripgrep 可执行文件路径
+ * 打包后需要从 app.asar.unpacked 中获取
+ */
+function getRgPath(): string {
+  if (!app.isPackaged) {
+    return rgPath
+  }
+  
+  // 打包环境：ripgrep 在 asar.unpacked 中
+  const unpackedPath = rgPath.replace('app.asar', 'app.asar.unpacked')
+  return fs.existsSync(unpackedPath) ? unpackedPath : rgPath
+}
 
 interface SearchFilesOptions {
   isRegex: boolean
@@ -44,7 +59,8 @@ async function searchInDirectory(
 
   return new Promise((resolve) => {
     const args = buildRipgrepArgs(query, normalizedPath, options)
-    const rg = spawn(rgPath, args)
+    const actualRgPath = getRgPath()
+    const rg = spawn(actualRgPath, args)
     
     let output = ''
     let hasError = false
