@@ -371,4 +371,5 @@ export const zh = {
   'git.generateFailed': '生成失败',
   'git.openFile': '打开文件',
   'git.openFileFailed': '打开文件失败',
+  'git.refreshStatus': '刷新 Git 状态',
 } as const

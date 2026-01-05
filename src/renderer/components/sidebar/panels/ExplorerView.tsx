@@ -71,18 +71,19 @@ export function ExplorerView() {
     }
   }, [workspacePath, setFiles, updateGitStatus, triggerFileTreeRefresh])
 
-  // 工作区变化时更新 Git 状态
+  // 工作区变化时更新 Git 状态（只在初始化时执行一次）
   useEffect(() => {
+    if (!workspacePath) return
     updateGitStatus()
-    const interval = setInterval(updateGitStatus, getEditorConfig().performance.gitStatusIntervalMs)
-    return () => clearInterval(interval)
-  }, [updateGitStatus])
+  }, [workspacePath])
 
   // 监听文件变化事件
   useEffect(() => {
     if (!workspacePath) return
 
+    const config = getEditorConfig()
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    let gitDebounceTimer: ReturnType<typeof setTimeout> | null = null
     let pendingChanges: Array<{ path: string; event: string }> = []
 
     const unsubscribe = api.file.onChanged((event: { event: 'create' | 'update' | 'delete'; path: string }) => {
@@ -97,15 +98,22 @@ export function ExplorerView() {
           })
           pendingChanges = []
           refreshFiles()
-        }, getEditorConfig().performance.fileChangeDebounceMs)
+        }, config.performance.fileChangeDebounceMs)
+        
+        // 如果启用了自动刷新且是 .git 目录变化，延迟刷新 Git 状态
+        if (config.git.autoRefresh && event.path.includes('.git')) {
+          if (gitDebounceTimer) clearTimeout(gitDebounceTimer)
+          gitDebounceTimer = setTimeout(updateGitStatus, 500)
+        }
       }
     })
 
     return () => {
       unsubscribe()
       if (debounceTimer) clearTimeout(debounceTimer)
+      if (gitDebounceTimer) clearTimeout(gitDebounceTimer)
     }
-  }, [workspacePath, refreshFiles])
+  }, [workspacePath, refreshFiles, updateGitStatus])
 
   const handleOpenFolder = async () => {
     const path = await api.file.openFolder()
@@ -245,11 +253,19 @@ export function ExplorerView() {
             <GitBranch className="w-3.5 h-3.5" />
             <span>{gitStatus.branch}</span>
             {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
-              <span className="ml-auto flex items-center gap-1 text-[10px] text-text-muted bg-surface-active px-1.5 py-0.5 rounded">
+              <span className="flex items-center gap-1 text-[10px] text-text-muted bg-surface-active px-1.5 py-0.5 rounded">
                 {gitStatus.ahead > 0 && `↑${gitStatus.ahead}`}
                 {gitStatus.behind > 0 && `↓${gitStatus.behind}`}
               </span>
             )}
+            <Tooltip content={t('git.refreshStatus', language) || 'Refresh Git Status'}>
+              <button
+                onClick={updateGitStatus}
+                className="ml-auto p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       )}

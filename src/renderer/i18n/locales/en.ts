@@ -371,4 +371,5 @@ export const en = {
   'git.generateFailed': 'Failed to generate message',
   'git.openFile': 'Open file',
   'git.openFileFailed': 'Failed to open file',
+  'git.refreshStatus': 'Refresh Git Status',
 } as const

@@ -455,11 +455,32 @@ export function GitView() {
         }
     }, [workspacePath])
 
+    // 初始化时刷新一次
     useEffect(() => {
         refreshStatus()
-        const interval = setInterval(refreshStatus, getEditorConfig().performance.indexStatusIntervalMs)
-        return () => clearInterval(interval)
-    }, [refreshStatus])
+    }, [workspacePath])
+
+    // 监听 .git 目录变化，自动刷新（如果启用）
+    useEffect(() => {
+        if (!workspacePath) return
+        
+        const config = getEditorConfig()
+        if (!config.git.autoRefresh) return
+
+        let debounceTimer: ReturnType<typeof setTimeout> | null = null
+        
+        const unsubscribe = api.file.onChanged((event: { event: string; path: string }) => {
+            if (event.path.includes('.git')) {
+                if (debounceTimer) clearTimeout(debounceTimer)
+                debounceTimer = setTimeout(refreshStatus, 500)
+            }
+        })
+
+        return () => {
+            unsubscribe()
+            if (debounceTimer) clearTimeout(debounceTimer)
+        }
+    }, [workspacePath, refreshStatus])
 
     // 切换展开状态
     const toggleSection = (section: keyof typeof expandedSections) => {

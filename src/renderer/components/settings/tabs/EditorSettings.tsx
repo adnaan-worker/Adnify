@@ -274,6 +274,30 @@ export function EditorSettings({ settings, setSettings, language }: EditorSettin
                         </div>
                     </section>
 
+                    {/* Git Settings */}
+                    <section className="p-5 bg-surface/30 rounded-xl border border-white/5 space-y-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Settings2 className="w-4 h-4 text-accent" />
+                            <h5 className="text-sm font-medium text-text-primary">Git</h5>
+                        </div>
+                        <div className="space-y-3">
+                            <Switch 
+                                label={language === 'zh' ? '自动刷新 Git 状态' : 'Auto Refresh Git Status'} 
+                                checked={advancedConfig.git?.autoRefresh ?? true} 
+                                onChange={(e) => { 
+                                    const newConfig = { ...advancedConfig, git: { ...advancedConfig.git, autoRefresh: e.target.checked } }
+                                    setAdvancedConfig(newConfig)
+                                    saveEditorConfig(newConfig) 
+                                }} 
+                            />
+                            <p className="text-[10px] text-text-muted opacity-70 pl-7">
+                                {language === 'zh' 
+                                    ? '关闭后需手动点击刷新按钮更新 Git 状态' 
+                                    : 'When disabled, click refresh button to update Git status manually'}
+                            </p>
+                        </div>
+                    </section>
+
                     {/* Performance */}
                     <section className="p-5 bg-surface/30 rounded-xl border border-white/5 space-y-4">
                         <div className="flex items-center gap-2 mb-1">

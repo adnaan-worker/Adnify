@@ -33,6 +33,11 @@ export interface EditorConfig {
     scrollback: number
   }
 
+  // Git 相关
+  git: {
+    autoRefresh: boolean // 是否自动刷新 Git 状态
+  }
+
   // 性能相关
   performance: {
     // 文件扫描
@@ -45,7 +50,6 @@ export interface EditorConfig {
     searchDebounceMs: number // 搜索防抖
 
     // 刷新间隔
-    gitStatusIntervalMs: number // Git 状态刷新间隔
     indexStatusIntervalMs: number // 索引状态刷新间隔
 
     // 超时
@@ -96,6 +100,11 @@ export const defaultEditorConfig: EditorConfig = {
     scrollback: 1000,
   },
 
+  // Git 相关
+  git: {
+    autoRefresh: true,
+  },
+
   // 性能相关
   performance: {
     maxProjectFiles: 500,
@@ -103,7 +112,6 @@ export const defaultEditorConfig: EditorConfig = {
     fileChangeDebounceMs: 300,
     completionDebounceMs: 300,
     searchDebounceMs: 200,
-    gitStatusIntervalMs: 5000,
     indexStatusIntervalMs: 10000,
     requestTimeoutMs: 120000, // 2 分钟
     commandTimeoutMs: 30000, // 30 秒
@@ -232,6 +240,13 @@ export function getEditorConfig(): EditorConfig {
  * 清理配置，只保留 EditorConfig 接口定义的字段
  */
 function cleanConfig(config: EditorConfig): EditorConfig {
+  // 只保留接口定义的字段，过滤掉旧配置中可能存在的废弃字段
+  const {
+    maxProjectFiles, maxFileTreeDepth, fileChangeDebounceMs, completionDebounceMs,
+    searchDebounceMs, indexStatusIntervalMs, requestTimeoutMs, commandTimeoutMs,
+    terminalBufferSize, maxResultLength, largeFileWarningThresholdMB
+  } = config.performance
+
   return {
     fontSize: config.fontSize,
     fontFamily: config.fontFamily,
@@ -246,7 +261,12 @@ function cleanConfig(config: EditorConfig): EditorConfig {
     autoSave: config.autoSave,
     autoSaveDelay: config.autoSaveDelay,
     terminal: config.terminal,
-    performance: config.performance,
+    git: config.git,
+    performance: {
+      maxProjectFiles, maxFileTreeDepth, fileChangeDebounceMs, completionDebounceMs,
+      searchDebounceMs, indexStatusIntervalMs, requestTimeoutMs, commandTimeoutMs,
+      terminalBufferSize, maxResultLength, largeFileWarningThresholdMB
+    },
     ai: config.ai,
   }
 }
