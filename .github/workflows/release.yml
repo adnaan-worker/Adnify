@@ -6,178 +6,258 @@ on:
       - 'v*'
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from package.json
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+  build-windows:
+    needs: get-version
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: npm ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build and Package
-        run: npm run dist
+
+      - name: Build
+        run: npm run build
+
+      - name: Package Windows ${{ matrix.arch }}
+        run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: List release files
-        run: dir release
-        
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-builds
-          path: release/*
-          if-no-files-found: error
+          name: windows-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.zip
+          if-no-files-found: ignore
+
 
   build-macos:
+    needs: get-version
     runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install setuptools (for node-gyp)
+        run: pip install setuptools
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: npm ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build and Package
-        run: npm run dist
+
+      - name: Build
+        run: npm run build
+
+      - name: Package macOS ${{ matrix.arch }}
+        run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: List release files
-        run: ls -la release/
-        
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-builds
-          path: release/*
-          if-no-files-found: error
+          name: macos-${{ matrix.arch }}
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: ignore
 
   build-linux:
+    needs: get-version
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install setuptools (for node-gyp)
+        run: pip install setuptools
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: npm ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build and Package
-        run: npm run dist
+
+      - name: Build
+        run: npm run build
+
+      - name: Package Linux ${{ matrix.arch }}
+        run: npx electron-builder --linux --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: List release files
-        run: ls -la release/
-        
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-builds
-          path: release/*
-          if-no-files-found: error
+          name: linux-${{ matrix.arch }}
+          path: |
+            release/*.AppImage
+            release/*.tar.gz
+          if-no-files-found: ignore
+
 
   release:
-    needs: [build-windows, build-macos, build-linux]
+    needs: [get-version, build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download Windows artifacts
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: windows-builds
-          path: release-files
-          
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-builds
-          path: release-files
-          
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-builds
-          path: release-files
-      
-      - name: List all release files
-        run: ls -la release-files/
-      
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.tar.gz" \) -exec cp {} release-files/ \;
+          ls -la release-files/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Adnify v${{ steps.version.outputs.VERSION }}
+          tag_name: v${{ needs.get-version.outputs.version }}
+          name: Adnify v${{ needs.get-version.outputs.version }}
           body: |
-            ## Adnify v${{ steps.version.outputs.VERSION }}
+            ## Adnify v${{ needs.get-version.outputs.version }}
             
             ### 下载 / Downloads
             
-            | 平台 | 文件 |
-            |------|------|
-            | Windows 安装版 | `Adnify-Setup-${{ steps.version.outputs.VERSION }}.exe` |
-            | Windows 便携版 | `Adnify-${{ steps.version.outputs.VERSION }}-Portable.exe` |
-            | macOS | `Adnify-${{ steps.version.outputs.VERSION }}.dmg` |
-            | Linux | `Adnify-${{ steps.version.outputs.VERSION }}.AppImage` |
+            | 平台 | 架构 | 文件 |
+            |------|------|------|
+            | Windows 安装版 | x64 | `Adnify-Setup-${{ needs.get-version.outputs.version }}-x64.exe` |
+            | Windows 安装版 | arm64 | `Adnify-Setup-${{ needs.get-version.outputs.version }}-arm64.exe` |
+            | Windows 便携版 | x64 | `Adnify-${{ needs.get-version.outputs.version }}-x64-Portable.exe` |
+            | Windows 便携版 | arm64 | `Adnify-${{ needs.get-version.outputs.version }}-arm64-Portable.exe` |
+            | macOS | Intel (x64) | `Adnify-${{ needs.get-version.outputs.version }}-x64-mac.dmg` |
+            | macOS | Apple Silicon (arm64) | `Adnify-${{ needs.get-version.outputs.version }}-arm64-mac.dmg` |
+            | Linux | x64 | `Adnify-${{ needs.get-version.outputs.version }}-x86_64-linux.AppImage` |
+            | Linux | arm64 | `Adnify-${{ needs.get-version.outputs.version }}-arm64-linux.AppImage` |
             
             ### 安装说明
-            - **Windows**: 下载 Setup.exe 运行安装，或下载 Portable 版本直接运行
-            - **macOS**: 下载 .dmg 拖入 Applications
-            - **Linux**: 下载 .AppImage，`chmod +x` 后运行
+            - **Windows**: 下载对应架构的 Setup.exe 运行安装，或下载 Portable 版本直接运行
+            - **macOS**: 下载对应架构的 .dmg 拖入 Applications。如提示"已损坏"，请在终端执行：`xattr -cr /Applications/Adnify.app`
+            - **Linux**: 下载对应架构的 .AppImage，`chmod +x` 后运行
+            
+            > 💡 不确定架构？Windows 大多数电脑选 x64，M1/M2/M3 Mac 选 arm64，Intel Mac 选 x64
             
             ---
-            📦 [Gitee 镜像](https://gitee.com/adnaan/adnify/releases/tag/v${{ steps.version.outputs.VERSION }})
-          files: |
-            release-files/*.exe
-            release-files/*.dmg
-            release-files/*.zip
-            release-files/*.AppImage
-            release-files/*.tar.gz
+            📦 [Gitee 镜像](https://gitee.com/adnaan/adnify/releases/tag/v${{ needs.get-version.outputs.version }})
+          files: release-files/*
           fail_on_unmatched_files: false
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+
   sync-to-gitee:
-    needs: release
+    needs: [get-version, release]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - name: Sync to Gitee
+
+      - name: Sync code to Gitee
         run: |
           git remote add gitee https://${{ secrets.GITEE_USERNAME }}:${{ secrets.GITEE_TOKEN }}@gitee.com/adnaan/adnify.git
           git push gitee --all --force
           git push gitee --tags --force
         continue-on-error: true
+
+      - name: Create Gitee Release
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          VERSION: ${{ needs.get-version.outputs.version }}
+        run: |
+          TAG="v$VERSION"
+          GITHUB_RELEASE_URL="https://github.com/adnaan-worker/adnify/releases/tag/$TAG"
+          
+          BODY="## Adnify v$VERSION\n\n### 下载 / Downloads\n\n请前往 GitHub Release 下载：\n\n👉 **[$GITHUB_RELEASE_URL]($GITHUB_RELEASE_URL)**\n\n| 平台 | 架构 | 文件 |\n|------|------|------|\n| Windows 安装版 | x64 | [Adnify-Setup-$VERSION-x64.exe]($GITHUB_RELEASE_URL) |\n| Windows 安装版 | arm64 | [Adnify-Setup-$VERSION-arm64.exe]($GITHUB_RELEASE_URL) |\n| Windows 便携版 | x64 | [Adnify-$VERSION-x64-Portable.exe]($GITHUB_RELEASE_URL) |\n| Windows 便携版 | arm64 | [Adnify-$VERSION-arm64-Portable.exe]($GITHUB_RELEASE_URL) |\n| macOS | Intel (x64) | [Adnify-$VERSION-x64-mac.dmg]($GITHUB_RELEASE_URL) |\n| macOS | Apple Silicon | [Adnify-$VERSION-arm64-mac.dmg]($GITHUB_RELEASE_URL) |\n| Linux | x64 | [Adnify-$VERSION-x86_64-linux.AppImage]($GITHUB_RELEASE_URL) |\n| Linux | arm64 | [Adnify-$VERSION-arm64-linux.AppImage]($GITHUB_RELEASE_URL) |"
+          
+          RESPONSE=$(curl -s -X POST \
+            "https://gitee.com/api/v5/repos/adnaan/adnify/releases" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"access_token\": \"$GITEE_TOKEN\",
+              \"tag_name\": \"$TAG\",
+              \"target_commitish\": \"master\",
+              \"name\": \"Adnify v$VERSION\",
+              \"body\": \"$BODY\",
+              \"prerelease\": false
+            }")
+          
+          echo "Create release response: $RESPONSE"
+          
+          RELEASE_ID=$(echo $RESPONSE | jq -r '.id // empty')
+          
+          if [ -n "$RELEASE_ID" ]; then
+            echo "✅ Gitee Release created successfully, ID: $RELEASE_ID"
+          else
+            echo "Release may already exist or creation failed"
+          fi

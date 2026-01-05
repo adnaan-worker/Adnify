@@ -1,6 +1,6 @@
 {
   "name": "adnify",
-  "version": "1.3.2",
+  "version": "1.3.6",
   "description": "Adnify - A lightweight yet powerful AI-powered code editor",
   "productName": "Adnify",
   "author": "adnaan",
@@ -115,13 +115,15 @@
         {
           "target": "nsis",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         },
         {
           "target": "portable",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         }
       ]
@@ -134,24 +136,51 @@
       "shortcutName": "Adnify",
       "installerIcon": "resources/icon.ico",
       "uninstallerIcon": "resources/icon.ico",
-      "installerHeaderIcon": "resources/icon.ico"
+      "installerHeaderIcon": "resources/icon.ico",
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
     },
     "portable": {
-      "artifactName": "${productName}-${version}-Portable.${ext}"
+      "artifactName": "${productName}-${version}-${arch}-Portable.${ext}"
     },
     "mac": {
       "icon": "resources/icon.icns",
+      "artifactName": "${productName}-${version}-${arch}-mac.${ext}",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "category": "public.app-category.developer-tools"
     },
     "linux": {
       "icon": "resources/icon.png",
+      "artifactName": "${productName}-${version}-${arch}-linux.${ext}",
       "target": [
-        "AppImage",
-        "tar.gz"
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "category": "Development"
     },
