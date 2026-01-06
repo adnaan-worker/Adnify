@@ -490,6 +490,27 @@ export function getIndexService(workspacePath: string): CodebaseIndexService {
 }
 
 /**
+ * 使用指定配置初始化索引服务
+ * 如果实例已存在，会更新其配置
+ */
+export function initIndexServiceWithConfig(workspacePath: string, config: Partial<IndexConfig>): CodebaseIndexService {
+  const normalizedPath = normalizeWorkspacePath(workspacePath)
+  
+  let instance = indexServiceInstances.get(normalizedPath)
+  if (!instance) {
+    instance = new CodebaseIndexService(workspacePath, config)
+    indexServiceInstances.set(normalizedPath, instance)
+    logger.index.info(`[IndexService] Created instance with config for: ${workspacePath}`)
+  } else if (config.embedding) {
+    // 如果实例已存在，更新 embedding 配置
+    instance.updateEmbeddingConfig(config.embedding)
+    logger.index.info(`[IndexService] Updated embedding config for: ${workspacePath}`)
+  }
+
+  return instance
+}
+
+/**
  * 销毁指定工作区的索引服务实例
  */
 export function destroyIndexService(workspacePath?: string): void {

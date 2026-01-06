@@ -78,8 +78,8 @@ export function registerAllHandlers(context: IPCContext) {
   // LLM
   registerLLMHandlers(getMainWindow)
 
-  // 索引
-  registerIndexingHandlers(getMainWindow)
+  // 索引 - 传入 mainStore 以读取保存的 embedding 配置
+  registerIndexingHandlers(getMainWindow, mainStore)
 
   // LSP 语言服务
   registerLspHandlers(mainStore)

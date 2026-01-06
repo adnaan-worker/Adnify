@@ -16,18 +16,16 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { BrowserWindow } from 'electron'
 import { SERVICE_DEFAULTS } from '@shared/constants'
+import { LanguageId } from '@shared/languages'
 import {
   getInstalledServerPath,
   commandExists,
 } from './lsp/installer'
 
-// ============ 类型定义 ============
+// 重新导出 LanguageId 供其他模块使用
+export type { LanguageId } from '@shared/languages'
 
-export type LanguageId =
-  | 'typescript' | 'typescriptreact' | 'javascript' | 'javascriptreact'
-  | 'html' | 'css' | 'scss' | 'less' | 'json' | 'jsonc'
-  | 'python' | 'go' | 'rust' | 'cpp' | 'c' | 'vue'
-  | 'zig' | 'csharp'
+// ============ 类型定义 ============
 
 interface LspServerConfig {
   name: string

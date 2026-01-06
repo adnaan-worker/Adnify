@@ -1,7 +1,19 @@
 /**
  * 语言配置
  * 统一管理文件扩展名到语言 ID 的映射，避免重复定义
+ * 
+ * 这是语言配置的唯一真实来源（Single Source of Truth）
  */
+
+// ==========================================
+// LSP 支持的语言 ID 类型
+// ==========================================
+
+export type LanguageId =
+  | 'typescript' | 'typescriptreact' | 'javascript' | 'javascriptreact'
+  | 'html' | 'css' | 'scss' | 'less' | 'json' | 'jsonc'
+  | 'python' | 'go' | 'rust' | 'cpp' | 'c' | 'vue'
+  | 'zig' | 'csharp'
 
 // ==========================================
 // 文件扩展名 -> 语言 ID 映射

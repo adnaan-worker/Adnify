@@ -8,12 +8,20 @@ import { t, TranslationKey } from '@renderer/i18n'
 import { getIncomingCalls, getOutgoingCalls, lspUriToPath } from '@renderer/services/lspService'
 import type { editor } from 'monaco-editor'
 
+// 支持 Call Hierarchy 的语言（只有支持函数/方法调用的语言才有意义）
+const CALL_HIERARCHY_SUPPORTED_LANGUAGES = [
+  'typescript', 'typescriptreact', 'javascript', 'javascriptreact',
+  'python', 'go', 'rust', 'java', 'csharp', 'cpp', 'c'
+]
+
 interface MenuItem {
   id: string
   labelKey: TranslationKey
   shortcut?: string
   action: () => void
   divider?: boolean
+  disabled?: boolean
+  hidden?: boolean
 }
 
 interface CallHierarchyResult {
@@ -38,6 +46,10 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
   const menuRef = useRef<HTMLDivElement>(null)
   const [callHierarchyResult, setCallHierarchyResult] = useState<CallHierarchyResult | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // 获取当前编辑器语言
+  const editorLanguage = editor.getModel()?.getLanguageId() || 'plaintext'
+  const supportsCallHierarchy = CALL_HIERARCHY_SUPPORTED_LANGUAGES.includes(editorLanguage)
 
   // 点击外部关闭菜单
   useEffect(() => {
@@ -80,7 +92,12 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
   }, [x, y, callHierarchyResult])
 
   const runAction = (actionId: string) => {
-    editor.getAction(actionId)?.run()
+    // 先聚焦编辑器，某些 action（如 quickOutline）需要编辑器处于焦点状态
+    editor.focus()
+    // 使用 setTimeout 确保焦点已设置
+    setTimeout(() => {
+      editor.getAction(actionId)?.run()
+    }, 0)
     onClose()
   }
 
@@ -110,9 +127,11 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
           })),
         })
       } else {
+        // 显示空结果（可能是光标不在函数上，或者没有调用者）
         setCallHierarchyResult({ type: 'callers', items: [] })
       }
-    } catch {
+    } catch (err) {
+      console.error('[Call Hierarchy] Failed to get incoming calls:', err)
       setCallHierarchyResult({ type: 'callers', items: [] })
     } finally {
       setLoading(false)
@@ -139,9 +158,11 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
           })),
         })
       } else {
+        // 显示空结果（可能是光标不在函数上，或者函数没有调用其他函数）
         setCallHierarchyResult({ type: 'callees', items: [] })
       }
-    } catch {
+    } catch (err) {
+      console.error('[Call Hierarchy] Failed to get outgoing calls:', err)
       setCallHierarchyResult({ type: 'callees', items: [] })
     } finally {
       setLoading(false)
@@ -168,8 +189,8 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     { id: 'goto-def', labelKey: 'ctxGotoDefinition', shortcut: 'F12', action: () => runAction('editor.action.revealDefinition') },
     { id: 'find-refs', labelKey: 'ctxFindReferences', shortcut: 'Shift+F12', action: () => runAction('editor.action.goToReferences') },
     { id: 'goto-symbol', labelKey: 'ctxGotoSymbol', shortcut: 'Ctrl+Shift+O', action: () => runAction('editor.action.quickOutline') },
-    { id: 'find-callers', labelKey: 'ctxFindCallers', action: handleFindCallers },
-    { id: 'find-callees', labelKey: 'ctxFindCallees', action: handleFindCallees, divider: true },
+    { id: 'find-callers', labelKey: 'ctxFindCallers', action: handleFindCallers, disabled: !supportsCallHierarchy },
+    { id: 'find-callees', labelKey: 'ctxFindCallees', action: handleFindCallees, divider: true, disabled: !supportsCallHierarchy },
     // 编辑
     { id: 'rename', labelKey: 'ctxRename', shortcut: 'F2', action: () => runAction('editor.action.rename') },
     { id: 'change-all', labelKey: 'ctxChangeAll', shortcut: 'Ctrl+F2', action: () => runAction('editor.action.changeAll') },
@@ -243,18 +264,23 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
           <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
         </div>
       )}
-      {menuItems.map((item, index) => (
+      {menuItems.filter(item => !item.hidden).map((item, index, filteredItems) => (
         <div key={item.id}>
           <button
-            className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-surface-hover flex items-center justify-between gap-4 transition-colors"
-            onClick={item.action}
+            className={`w-full px-3 py-1.5 text-left text-sm flex items-center justify-between gap-4 transition-colors ${
+              item.disabled 
+                ? 'text-text-muted/50 cursor-not-allowed' 
+                : 'text-text-primary hover:bg-surface-hover'
+            }`}
+            onClick={item.disabled ? undefined : item.action}
+            disabled={item.disabled}
           >
             <span>{t(item.labelKey, language)}</span>
             {item.shortcut && (
               <span className="text-xs text-text-muted opacity-60">{item.shortcut}</span>
             )}
           </button>
-          {item.divider && index < menuItems.length - 1 && (
+          {item.divider && index < filteredItems.length - 1 && (
             <div className="my-1 border-t border-border-subtle" />
           )}
         </div>

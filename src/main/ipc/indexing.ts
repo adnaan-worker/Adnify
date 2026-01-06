@@ -4,14 +4,37 @@
 
 import { logger } from '@shared/utils/Logger'
 import { ipcMain, BrowserWindow } from 'electron'
-import { getIndexService, EmbeddingConfig } from '../indexing'
+import { getIndexService, EmbeddingConfig, initIndexServiceWithConfig } from '../indexing'
 import { ok, failFromError, Result } from '@shared/types/result'
+import Store from 'electron-store'
 
-export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | null) {
+// mainStore 引用
+let _mainStore: Store | null = null
+
+/**
+ * 从 mainStore 获取保存的 embedding 配置
+ */
+function getSavedEmbeddingConfig(): Partial<EmbeddingConfig> | undefined {
+  if (!_mainStore) return undefined
+  const saved = _mainStore.get('embeddingConfig') as Partial<EmbeddingConfig> | undefined
+  if (saved) {
+    logger.index.info('[Indexing] Loaded saved embedding config:', { provider: saved.provider })
+  }
+  return saved
+}
+
+export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | null, mainStore?: Store) {
+  _mainStore = mainStore || null
+
   // 初始化索引服务
   ipcMain.handle('index:initialize', async (_, workspacePath: string): Promise<Result<void>> => {
     try {
-      const indexService = getIndexService(workspacePath)
+      // 使用保存的配置初始化
+      const savedConfig = getSavedEmbeddingConfig()
+      const indexService = savedConfig 
+        ? initIndexServiceWithConfig(workspacePath, { embedding: savedConfig as EmbeddingConfig })
+        : getIndexService(workspacePath)
+      
       const mainWindow = getMainWindow()
       if (mainWindow) {
         indexService.setMainWindow(mainWindow)
@@ -27,7 +50,12 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
   // 开始全量索引
   ipcMain.handle('index:start', async (_, workspacePath: string): Promise<Result<void>> => {
     try {
-      const indexService = getIndexService(workspacePath)
+      // 使用保存的配置
+      const savedConfig = getSavedEmbeddingConfig()
+      const indexService = savedConfig 
+        ? initIndexServiceWithConfig(workspacePath, { embedding: savedConfig as EmbeddingConfig })
+        : getIndexService(workspacePath)
+      
       const mainWindow = getMainWindow()
       if (mainWindow) {
         indexService.setMainWindow(mainWindow)

@@ -1247,8 +1247,8 @@ export default function Editor() {
                     loop: true,
                   },
                   
-                  // 多光标
-                  multiCursorModifier: 'ctrlCmd',
+                  // 多光标 - 使用 Alt+Click 添加多光标，Ctrl+Click 跳转到定义
+                  multiCursorModifier: 'alt',
                   multiCursorMergeOverlapping: true,
                   multiCursorPaste: 'spread',
                   

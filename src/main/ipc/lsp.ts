@@ -5,6 +5,7 @@
 import { logger } from '@shared/utils/Logger'
 import { ipcMain } from 'electron'
 import { lspManager, LanguageId } from '../lspManager'
+import { EXTENSION_TO_LANGUAGE } from '@shared/languages'
 import { 
   getLspServerStatus, 
   installServer,
@@ -14,46 +15,11 @@ import {
   setCustomLspBinDir,
 } from '../lsp/installer'
 
-// 文件扩展名到语言 ID 的映射
-const EXT_TO_LANGUAGE: Record<string, LanguageId> = {
-  ts: 'typescript',
-  tsx: 'typescriptreact',
-  js: 'javascript',
-  jsx: 'javascriptreact',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  html: 'html',
-  htm: 'html',
-  css: 'css',
-  scss: 'scss',
-  less: 'less',
-  json: 'json',
-  jsonc: 'jsonc',
-  py: 'python',
-  pyw: 'python',
-  // Go
-  go: 'go',
-  // Rust
-  rs: 'rust',
-  // C/C++
-  c: 'c',
-  h: 'c',
-  cpp: 'cpp',
-  cc: 'cpp',
-  cxx: 'cpp',
-  hpp: 'cpp',
-  hxx: 'cpp',
-  // Vue
-  vue: 'vue',
-  // Zig
-  zig: 'zig',
-  // C#
-  cs: 'csharp',
-}
-
 function getLanguageId(filePath: string): LanguageId | null {
   const ext = filePath.split('.').pop()?.toLowerCase() || ''
-  return EXT_TO_LANGUAGE[ext] || null
+  const lang = EXTENSION_TO_LANGUAGE[ext]
+  // 只返回 LSP 支持的语言
+  return lang as LanguageId | null
 }
 
 function getLanguageIdFromUri(uri: string): string {
