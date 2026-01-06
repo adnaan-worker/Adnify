@@ -97,19 +97,29 @@ async function findNearestRoot(
 
 function findModulePath(moduleName: string, subPath: string): string | null {
   const possiblePaths = [
-    // 优先检查 LSP 安装目录
+    // 优先检查 LSP 安装目录（用户自定义安装的）
     path.join(getLspBinDir(), 'node_modules', moduleName, subPath),
-    // 然后检查项目目录
+    // 检查项目 node_modules（开发模式）
     path.join(process.cwd(), 'node_modules', moduleName, subPath),
     path.join(__dirname, '..', '..', 'node_modules', moduleName, subPath),
+    path.join(__dirname, '..', 'node_modules', moduleName, subPath),
+    // 检查 app 目录（打包后）
     path.join(app.getAppPath(), 'node_modules', moduleName, subPath),
+    // 检查 asar 包内
     path.join(process.resourcesPath || '', 'app.asar', 'node_modules', moduleName, subPath),
     path.join(process.resourcesPath || '', 'app', 'node_modules', moduleName, subPath),
+    // 检查 asar 解压目录（某些模块需要解压）
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'node_modules', moduleName, subPath),
   ]
 
   for (const p of possiblePaths) {
-    if (fs.existsSync(p)) return p
+    if (fs.existsSync(p)) {
+      logger.lsp.debug(`[LSP] Found ${moduleName} at: ${p}`)
+      return p
+    }
   }
+  
+  logger.lsp.debug(`[LSP] ${moduleName} not found in any of:`, possiblePaths.slice(0, 3))
   return null
 }
 
@@ -384,6 +394,8 @@ class LspManager {
   private languageToServer: Map<LanguageId, string> = new Map()
   private documentVersions: Map<string, number> = new Map() // 启用文档版本管理
   private diagnosticsCache: Map<string, any[]> = new Map()
+  private diagnosticsCacheOrder: string[] = [] // LRU 顺序追踪
+  private static readonly MAX_DIAGNOSTICS_CACHE_SIZE = 500 // 最多缓存 500 个文件的诊断
   private startingServers: Set<string> = new Set()
   
   // 跟踪每个服务器打开的文档
@@ -412,6 +424,29 @@ class LspManager {
     
     // 启动空闲检查定时器
     this.startIdleCheck()
+  }
+
+  /**
+   * 设置诊断缓存（带 LRU 淘汰）
+   */
+  private setDiagnosticsCache(uri: string, diagnostics: any[]): void {
+    // 如果已存在，先从顺序列表中移除
+    const existingIndex = this.diagnosticsCacheOrder.indexOf(uri)
+    if (existingIndex >= 0) {
+      this.diagnosticsCacheOrder.splice(existingIndex, 1)
+    }
+    
+    // 添加到末尾（最近使用）
+    this.diagnosticsCacheOrder.push(uri)
+    this.diagnosticsCache.set(uri, diagnostics)
+    
+    // 如果超过限制，淘汰最旧的
+    while (this.diagnosticsCacheOrder.length > LspManager.MAX_DIAGNOSTICS_CACHE_SIZE) {
+      const oldestUri = this.diagnosticsCacheOrder.shift()
+      if (oldestUri) {
+        this.diagnosticsCache.delete(oldestUri)
+      }
+    }
   }
 
   private startIdleCheck() {
@@ -613,7 +648,7 @@ class LspManager {
   private handleNotification(key: string, message: any): void {
     if (message.method === 'textDocument/publishDiagnostics') {
       const { uri, diagnostics } = message.params
-      this.diagnosticsCache.set(uri, diagnostics)
+      this.setDiagnosticsCache(uri, diagnostics)
 
       // 只在有诊断信息时记录日志
       if (diagnostics.length > 0) {

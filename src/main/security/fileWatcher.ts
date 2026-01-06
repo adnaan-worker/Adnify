@@ -6,6 +6,7 @@
 import { logger } from '@shared/utils/Logger'
 import { FileChangeBuffer, createFileChangeHandler } from '../indexing/fileChangeBuffer'
 import { getIndexService } from '../indexing/indexService'
+import { lspManager } from '../lspManager'
 import * as watcher from '@parcel/watcher'
 import picomatch from 'picomatch'
 
@@ -35,6 +36,13 @@ const DEFAULT_CONFIG: FileWatcherConfig = {
 let watcherSubscription: watcher.AsyncSubscription | null = null
 let fileChangeBuffer: FileChangeBuffer | null = null
 
+// LSP 文件变更类型映射
+const LSP_FILE_CHANGE_TYPE = {
+  create: 1,
+  update: 2,
+  delete: 3,
+} as const
+
 // 创建忽略匹配器
 function createIgnoreMatcher(patterns: (string | RegExp)[]): (path: string) => boolean {
   const regexPatterns = patterns.filter((p): p is RegExp => p instanceof RegExp)
@@ -50,6 +58,34 @@ function createIgnoreMatcher(patterns: (string | RegExp)[]): (path: string) => b
     if (globMatcher && globMatcher(filePath)) return true
     return false
   }
+}
+
+/**
+ * 通知 LSP 服务器文件变化
+ */
+function notifyLspFileChanges(changes: Array<{ path: string; type: 'create' | 'update' | 'delete' }>): void {
+  const runningServers = lspManager.getRunningServers()
+  if (runningServers.length === 0) return
+
+  const lspChanges = changes.map(c => ({
+    uri: pathToLspUri(c.path),
+    type: LSP_FILE_CHANGE_TYPE[c.type],
+  }))
+
+  for (const serverKey of runningServers) {
+    lspManager.notifyDidChangeWatchedFiles(serverKey, lspChanges)
+  }
+}
+
+/**
+ * 将文件路径转换为 LSP URI
+ */
+function pathToLspUri(filePath: string): string {
+  const normalizedPath = filePath.replace(/\\/g, '/')
+  if (/^[a-zA-Z]:/.test(normalizedPath)) {
+    return `file:///${normalizedPath}`
+  }
+  return `file://${normalizedPath}`
 }
 
 /**
@@ -97,12 +133,23 @@ export async function setupFileWatcher(
       return
     }
 
+    // 收集 LSP 通知的变更
+    const lspChanges: Array<{ path: string; type: 'create' | 'update' | 'delete' }> = []
+
     for (const event of events) {
       if (shouldIgnore(event.path)) continue
 
       const eventType = event.type === 'create' ? 'create' : event.type === 'delete' ? 'delete' : 'update'
       callback({ event: eventType, path: event.path })
       fileChangeBuffer?.add({ type: eventType, path: event.path, timestamp: Date.now() })
+      
+      // 收集用于 LSP 通知
+      lspChanges.push({ path: event.path, type: eventType })
+    }
+
+    // 批量通知 LSP 服务器
+    if (lspChanges.length > 0) {
+      notifyLspFileChanges(lspChanges)
     }
   }, watcherOptions)
 

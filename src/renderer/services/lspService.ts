@@ -568,7 +568,7 @@ export async function getOutgoingCalls(
 export async function waitForDiagnostics(filePath: string): Promise<boolean> {
   const uri = pathToLspUri(filePath)
   try {
-    const result = await (api.lsp as any).waitForDiagnostics({ uri })
+    const result = await api.lsp.waitForDiagnostics({ uri })
     return result?.success || false
   } catch {
     return false
@@ -587,7 +587,7 @@ export async function findBestRoot(filePath: string): Promise<string | null> {
   if (!workspacePath) return null
 
   try {
-    return await (api.lsp as any).findBestRoot({ filePath, languageId, workspacePath })
+    return await api.lsp.findBestRoot({ filePath, languageId, workspacePath })
   } catch {
     return workspacePath
   }
@@ -604,7 +604,7 @@ export async function ensureServerForFile(filePath: string): Promise<boolean> {
   if (!workspacePath) return false
 
   try {
-    const result = await (api.lsp as any).ensureServerForFile({ filePath, languageId, workspacePath })
+    const result = await api.lsp.ensureServerForFile({ filePath, languageId, workspacePath })
     return result?.success || false
   } catch {
     return false
@@ -616,6 +616,9 @@ export async function ensureServerForFile(filePath: string): Promise<boolean> {
 /**
  * 通知 LSP 服务器文件变化
  * type: 1 = Created, 2 = Changed, 3 = Deleted
+ * 
+ * 注意：此函数主要用于渲染进程手动触发通知
+ * 文件监视器会自动调用主进程的 lspManager.notifyDidChangeWatchedFiles
  */
 export async function notifyFileChanges(
   changes: Array<{ filePath: string; type: 1 | 2 | 3 }>
@@ -626,68 +629,8 @@ export async function notifyFileChanges(
   }))
 
   try {
-    await (api.lsp as any).didChangeWatchedFiles({ changes: lspChanges })
+    await api.lsp.didChangeWatchedFiles({ changes: lspChanges })
   } catch {
     // 忽略错误
-  }
-}
-
-// ============ 获取支持的语言 ============
-
-/**
- * 获取 LSP 支持的所有语言
- */
-export async function getSupportedLanguages(): Promise<string[]> {
-  try {
-    return await (api.lsp as any).getSupportedLanguages() || []
-  } catch {
-    return []
-  }
-}
-
-// ============ LSP 服务器安装管理 ============
-
-/**
- * 获取所有 LSP 服务器的安装状态
- */
-export async function getServerStatus(): Promise<Record<string, { installed: boolean; path?: string }>> {
-  try {
-    return await api.lsp.getServerStatus()
-  } catch {
-    return {}
-  }
-}
-
-/**
- * 获取 LSP 服务器安装目录
- */
-export async function getLspBinDir(): Promise<string> {
-  try {
-    return await api.lsp.getBinDir()
-  } catch {
-    return ''
-  }
-}
-
-/**
- * 安装指定的 LSP 服务器
- * @param serverType 服务器类型: typescript, html, css, json, python, vue, go
- */
-export async function installServer(serverType: string): Promise<{ success: boolean; path?: string; error?: string }> {
-  try {
-    return await api.lsp.installServer(serverType)
-  } catch (error: any) {
-    return { success: false, error: error.message }
-  }
-}
-
-/**
- * 安装所有基础 LSP 服务器 (TypeScript, HTML, CSS, JSON)
- */
-export async function installBasicServers(): Promise<{ success: boolean; error?: string }> {
-  try {
-    return await api.lsp.installBasicServers()
-  } catch (error: any) {
-    return { success: false, error: error.message }
   }
 }

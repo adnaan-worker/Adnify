@@ -28,6 +28,7 @@ function createGroupedAPI() {
     file: {
       open: () => raw.openFile(),
       openFolder: () => raw.openFolder(),
+      selectFolder: () => raw.selectFolder(),
       readDir: (path: string) => raw.readDir(path),
       getTree: (path: string, maxDepth?: number) => raw.getFileTree(path, maxDepth),
       read: (path: string) => raw.readFile(path),
@@ -205,6 +206,8 @@ function createGroupedAPI() {
       // LSP 服务器安装管理
       getServerStatus: () => raw.lspGetServerStatus(),
       getBinDir: () => raw.lspGetBinDir(),
+      getDefaultBinDir: () => raw.lspGetDefaultBinDir(),
+      setCustomBinDir: (customPath: string | null) => raw.lspSetCustomBinDir(customPath),
       installServer: (serverType: string) => raw.lspInstallServer(serverType),
       installBasicServers: () => raw.lspInstallBasicServers(),
     },

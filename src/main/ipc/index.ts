@@ -82,7 +82,7 @@ export function registerAllHandlers(context: IPCContext) {
   registerIndexingHandlers(getMainWindow)
 
   // LSP 语言服务
-  registerLspHandlers()
+  registerLspHandlers(mainStore)
 
   // HTTP 请求（用于 web_search / read_url）
   registerHttpHandlers()

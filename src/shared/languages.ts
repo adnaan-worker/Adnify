@@ -132,29 +132,112 @@ export const EXTENSION_TO_LANGUAGE: Record<string, string> = {
 }
 
 // ==========================================
-// LSP 支持的语言
+// LSP 服务器配置（统一定义）
 // ==========================================
 
-export const LSP_SUPPORTED_LANGUAGES = [
-    // 完全支持（内置 LSP）
-    'typescript',
-    'typescriptreact',
-    'javascript',
-    'javascriptreact',
-    'html',
-    'css',
-    'scss',
-    'less',
-    'json',
-    'jsonc',
-    // 新增支持（需要外部 LSP 服务器）
-    'python',  // pylsp / pyright
-    'go',      // gopls
-    'rust',    // rust-analyzer
-    'c',       // clangd
-    'cpp',     // clangd
-    'vue',     // vue-language-server
-] as const
+export interface LspServerDefinition {
+    id: string
+    name: string
+    description: string
+    languages: string[]        // 支持的语言 ID
+    displayLanguages: string[] // UI 显示的语言名称
+    builtin: boolean           // 是否内置（通过 package.json 依赖）
+    installable: boolean       // 是否可通过 npm 安装
+}
+
+/**
+ * 所有 LSP 服务器的统一配置
+ * 这是唯一的真实来源，其他地方应该引用这里
+ */
+export const LSP_SERVER_DEFINITIONS: LspServerDefinition[] = [
+    {
+        id: 'typescript',
+        name: 'TypeScript / JavaScript',
+        description: 'typescript-language-server',
+        languages: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
+        displayLanguages: ['TypeScript', 'JavaScript', 'TSX', 'JSX'],
+        builtin: true,
+        installable: true,
+    },
+    {
+        id: 'html',
+        name: 'HTML',
+        description: 'vscode-html-language-server',
+        languages: ['html'],
+        displayLanguages: ['HTML'],
+        builtin: true,
+        installable: true,
+    },
+    {
+        id: 'css',
+        name: 'CSS / SCSS / Less',
+        description: 'vscode-css-language-server',
+        languages: ['css', 'scss', 'less'],
+        displayLanguages: ['CSS', 'SCSS', 'Less'],
+        builtin: true,
+        installable: true,
+    },
+    {
+        id: 'json',
+        name: 'JSON',
+        description: 'vscode-json-language-server',
+        languages: ['json', 'jsonc'],
+        displayLanguages: ['JSON', 'JSONC'],
+        builtin: true,
+        installable: true,
+    },
+    {
+        id: 'python',
+        name: 'Python',
+        description: 'Pyright',
+        languages: ['python'],
+        displayLanguages: ['Python'],
+        builtin: false,
+        installable: true,
+    },
+    {
+        id: 'vue',
+        name: 'Vue',
+        description: '@vue/language-server',
+        languages: ['vue'],
+        displayLanguages: ['Vue'],
+        builtin: false,
+        installable: true,
+    },
+    {
+        id: 'go',
+        name: 'Go',
+        description: 'gopls (需要已安装 Go)',
+        languages: ['go'],
+        displayLanguages: ['Go'],
+        builtin: false,
+        installable: true, // 需要系统有 Go
+    },
+    {
+        id: 'rust',
+        name: 'Rust',
+        description: 'rust-analyzer (需要已安装)',
+        languages: ['rust'],
+        displayLanguages: ['Rust'],
+        builtin: false,
+        installable: false, // 需要用户自行安装
+    },
+    {
+        id: 'clangd',
+        name: 'C / C++',
+        description: 'clangd (需要已安装)',
+        languages: ['c', 'cpp'],
+        displayLanguages: ['C', 'C++'],
+        builtin: false,
+        installable: false, // 需要用户自行安装
+    },
+]
+
+// ==========================================
+// LSP 支持的语言（从定义自动生成）
+// ==========================================
+
+export const LSP_SUPPORTED_LANGUAGES = LSP_SERVER_DEFINITIONS.flatMap(s => s.languages) as readonly string[]
 
 // 可扩展支持（需要额外 LSP 服务器）
 export const LSP_EXTENSIBLE_LANGUAGES = [
@@ -167,6 +250,14 @@ export const LSP_EXTENSIBLE_LANGUAGES = [
     'elixir',  // elixir-ls
     'zig',     // zls
 ] as const
+
+/**
+ * 根据语言 ID 获取对应的 LSP 服务器 ID
+ */
+export function getServerIdForLanguage(languageId: string): string | null {
+    const server = LSP_SERVER_DEFINITIONS.find(s => s.languages.includes(languageId))
+    return server?.id || null
+}
 
 // ==========================================
 // 忽略目录（完整列表）
@@ -241,24 +332,6 @@ export const IGNORED_DIRECTORIES = [
     'logs',
     '.DS_Store',
     'Thumbs.db',
-] as const
-
-// ==========================================
-// FIM (Fill-in-the-Middle) 支持的模型
-// ==========================================
-
-export const FIM_CAPABLE_MODELS = [
-    'deepseek-coder',
-    'deepseek-coder-v2',
-    'codellama',
-    'code-llama',
-    'starcoder',
-    'starcoder2',
-    'qwen-coder',
-    'qwen2.5-coder',
-    'yi-coder',
-    'codestral',
-    'codegemma',
 ] as const
 
 // ==========================================

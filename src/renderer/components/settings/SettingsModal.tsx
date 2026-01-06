@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug } from 'lucide-react'
+import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces } from 'lucide-react'
 import { useStore } from '@store'
 import { PROVIDERS } from '@/shared/config/providers'
 import { getEditorConfig, saveEditorConfig } from '@renderer/config/editorConfig'
@@ -19,7 +19,8 @@ import {
     SecuritySettings,
     IndexSettings,
     SystemSettings,
-    McpSettings
+    McpSettings,
+    LspSettings
 } from './tabs'
 
 export default function SettingsModal() {
@@ -163,6 +164,7 @@ export default function SettingsModal() {
         { id: 'editor', label: language === 'zh' ? '编辑器' : 'Editor', icon: <Code className="w-4 h-4" /> },
         { id: 'agent', label: language === 'zh' ? '智能体' : 'Agent', icon: <Settings2 className="w-4 h-4" /> },
         { id: 'mcp', label: 'MCP', icon: <Plug className="w-4 h-4" /> },
+        { id: 'lsp', label: language === 'zh' ? '语言服务' : 'LSP', icon: <Braces className="w-4 h-4" /> },
         { id: 'keybindings', label: language === 'zh' ? '快捷键' : 'Keybindings', icon: <Keyboard className="w-4 h-4" /> },
         { id: 'indexing', label: language === 'zh' ? '代码索引' : 'Indexing', icon: <Database className="w-4 h-4" /> },
         { id: 'security', label: language === 'zh' ? '安全设置' : 'Security', icon: <Shield className="w-4 h-4" /> },
@@ -261,6 +263,7 @@ export default function SettingsModal() {
                         )}
                         {activeTab === 'keybindings' && <KeybindingPanel />}
                         {activeTab === 'mcp' && <McpSettings language={language} />}
+                        {activeTab === 'lsp' && <LspSettings language={language} />}
                         {activeTab === 'indexing' && <IndexSettings language={language} />}
                         {activeTab === 'security' && <SecuritySettings language={language} />}
                         {activeTab === 'system' && <SystemSettings language={language} />}

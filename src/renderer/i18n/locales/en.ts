@@ -241,6 +241,8 @@ export const en = {
   'ctxGotoDefinition': 'Go to Definition',
   'ctxFindReferences': 'Find All References',
   'ctxGotoSymbol': 'Go to Symbol...',
+  'ctxFindCallers': 'Find Callers',
+  'ctxFindCallees': 'Find Callees',
   'ctxRename': 'Rename Symbol',
   'ctxChangeAll': 'Change All Occurrences',
   'ctxFormat': 'Format Document',

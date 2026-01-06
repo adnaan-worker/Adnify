@@ -14,6 +14,8 @@ import {
   installGopls,
   installBasicServers,
   getLspBinDir,
+  getDefaultLspBinDir,
+  setCustomLspBinDir,
 } from '../lsp/installer'
 
 // 文件扩展名到语言 ID 的映射
@@ -73,7 +75,12 @@ async function getServerForUri(uri: string, workspacePath: string): Promise<stri
   return lspManager.ensureServerForFile(filePath, languageId, workspacePath)
 }
 
-export function registerLspHandlers(): void {
+// mainStore 引用，用于保存 LSP 配置
+let _mainStore: any = null
+
+export function registerLspHandlers(mainStore?: any): void {
+  _mainStore = mainStore
+
   // 启动服务器
   ipcMain.handle('lsp:start', async (_, workspacePath: string) => {
     const success = await lspManager.startServer('typescript', workspacePath)
@@ -425,6 +432,23 @@ export function registerLspHandlers(): void {
 
   ipcMain.handle('lsp:getBinDir', () => {
     return getLspBinDir()
+  })
+
+  ipcMain.handle('lsp:getDefaultBinDir', () => {
+    return getDefaultLspBinDir()
+  })
+
+  ipcMain.handle('lsp:setCustomBinDir', (_, customPath: string | null) => {
+    setCustomLspBinDir(customPath)
+    // 保存到配置文件
+    if (_mainStore) {
+      if (customPath) {
+        _mainStore.set('lspSettings.customBinDir', customPath)
+      } else {
+        _mainStore.delete('lspSettings.customBinDir')
+      }
+    }
+    return { success: true }
   })
 
   ipcMain.handle('lsp:installServer', async (_, serverType: string) => {

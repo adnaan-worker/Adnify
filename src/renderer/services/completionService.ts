@@ -14,7 +14,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { getEditorConfig } from '@renderer/config/editorConfig'
-import { FIM_CAPABLE_MODELS, getLanguageFromPath as sharedGetLanguageFromPath } from '@shared/languages'
+import { getLanguageFromPath as sharedGetLanguageFromPath } from '@shared/languages'
 
 // ============ Interfaces ============
 
@@ -61,20 +61,14 @@ export interface CompletionOptions {
   maxTokens: number
   temperature: number
   triggerCharacters: string[]
-  // Enhanced options
-  fimEnabled: boolean  // Use FIM format for supported models
   contextLines: number  // Lines of context to include
   multilineSuggestions: boolean  // Allow multi-line completions
-  // Cursor-style options
-  cacheEnabled: boolean  // Enable completion caching
-  cacheMaxSize: number  // Max cache entries
+  // Cache options
+  cacheEnabled: boolean
+  cacheMaxSize: number
   cacheTTL: number  // Cache TTL in ms
   maxCandidates: number  // Max candidates to generate
 }
-
-// FIM-capable models (from shared config)
-const FIM_MODELS = FIM_CAPABLE_MODELS
-
 
 // 从配置获取默认选项
 function getDefaultOptions(): CompletionOptions {
@@ -85,10 +79,8 @@ function getDefaultOptions(): CompletionOptions {
     maxTokens: config.ai.completionMaxTokens,
     temperature: config.ai.completionTemperature,
     triggerCharacters: config.ai.completionTriggerChars || ['.', '(', '{', '[', '"', "'", '/', ' ', '\n'],
-    fimEnabled: true,
     contextLines: 50,
     multilineSuggestions: true,
-    // Cursor-style defaults
     cacheEnabled: true,
     cacheMaxSize: 100,
     cacheTTL: 60000, // 1 minute
@@ -585,8 +577,8 @@ class CompletionService {
         return
       }
 
-      // Build the prompt for FIM (Fill-in-the-Middle)
-      const prompt = this.buildFIMPrompt(context)
+      // Build the prompt
+      const prompt = this.buildCompletionPrompt(context)
       let completionText = ''
       let isAborted = false
 
@@ -656,61 +648,21 @@ class CompletionService {
 
 
   /**
-   * Check if current model supports FIM format
+   * Build completion prompt
+   * Uses a universal format that works with any LLM
    */
-  private isFIMModel(model: string): boolean {
-    const modelLower = model.toLowerCase()
-    return FIM_MODELS.some(fim => modelLower.includes(fim))
-  }
+  private buildCompletionPrompt(context: CompletionContext): string {
+    const { prefix, suffix, language, currentFunction } = context
 
-  /**
-   * Build FIM (Fill-in-the-Middle) prompt
-   * Uses proper FIM format for supported models
-   */
-  private buildFIMPrompt(context: CompletionContext): string {
-    const { prefix, suffix, language, openFiles, currentFunction, imports } = context
-    const state = useStore.getState()
-    const model = state.llmConfig.model || ''
-
-    // Check if model supports native FIM format
-    if (this.options.fimEnabled && this.isFIMModel(model)) {
-      // DeepSeek Coder FIM format
-      if (model.toLowerCase().includes('deepseek')) {
-        return `<｜fim▁begin｜>${prefix}<｜fim▁hole｜>${suffix}<｜fim▁end｜>`
-      }
-      // CodeLlama/StarCoder FIM format
-      return `<PRE>${prefix}<SUF>${suffix}<MID>`
-    }
-
-    // Build enhanced context for non-FIM models
-    let contextStr = ''
-
-    // Add imports context
-    if (imports && imports.length > 0) {
-      contextStr += `// Imports in this file:\n${imports.slice(0, 10).join('\n')}\n\n`
-    }
-
-    // Add current function context
+    // Build concise context
+    let contextInfo = `Language: ${language}`
     if (currentFunction) {
-      contextStr += `// Currently editing function: ${currentFunction}\n\n`
+      contextInfo += ` | Function: ${currentFunction}`
     }
 
-    // Add related files context (minimal)
-    if (openFiles.length > 0) {
-      const relatedSnippets = openFiles
-        .slice(0, 2)
-        .map(f => {
-          const fileName = f.path.split(/[\\/]/).pop()
-          // Only include relevant parts (first 500 chars)
-          return `// ${fileName}:\n${f.content.slice(0, 500)}...`
-        })
-        .join('\n\n')
-      contextStr += `// Related files:\n${relatedSnippets}\n\n`
-    }
-
-    // Build the prompt
-    return `${contextStr}// Language: ${language}
-// Complete the code at <CURSOR>. Output ONLY the completion code, nothing else.
+    // Simple, universal prompt format
+    return `[${contextInfo}]
+Complete the code at <CURSOR>. Output ONLY the code to insert, no explanations.
 
 ${prefix}<CURSOR>${suffix}`
   }

@@ -288,6 +288,7 @@ export interface ElectronAPI {
   // File operations (安全 - 强制工作区边界)
   openFile: () => Promise<{ path: string; content: string } | null>
   openFolder: () => Promise<string | null>
+  selectFolder: () => Promise<string | null>
   openWorkspace: () => Promise<WorkspaceConfig | null>
   addFolderToWorkspace: () => Promise<string | null>
   saveWorkspace: (configPath: string, roots: string[]) => Promise<boolean>
@@ -426,6 +427,8 @@ export interface ElectronAPI {
   // LSP 服务器安装管理
   lspGetServerStatus: () => Promise<Record<string, { installed: boolean; path?: string }>>
   lspGetBinDir: () => Promise<string>
+  lspGetDefaultBinDir: () => Promise<string>
+  lspSetCustomBinDir: (customPath: string | null) => Promise<{ success: boolean }>
   lspInstallServer: (serverType: string) => Promise<{ success: boolean; path?: string; error?: string }>
   lspInstallBasicServers: () => Promise<{ success: boolean; error?: string }>
 

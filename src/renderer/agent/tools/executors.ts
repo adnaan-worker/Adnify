@@ -8,7 +8,7 @@ import { logger } from '@utils/Logger'
 import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
 import type { PlanItem } from '../types'
 import { validatePath, isSensitivePath } from '@/renderer/utils/pathUtils'
-import { pathToLspUri } from '@/renderer/services/lspService'
+import { pathToLspUri, waitForDiagnostics, isLanguageSupported, getLanguageId } from '@/renderer/services/lspService'
 import {
     calculateLineChanges,
 } from '@/renderer/utils/searchReplace'
@@ -20,6 +20,22 @@ import { lintService } from '../services/lintService'
 import { useStore } from '@/renderer/store'
 
 // ===== 辅助函数 =====
+
+/**
+ * 文件写入后通知 LSP 并等待诊断
+ * 用于在 Agent 修改文件后获取最新的诊断信息
+ */
+async function notifyLspAfterWrite(filePath: string): Promise<void> {
+    const languageId = getLanguageId(filePath)
+    if (!isLanguageSupported(languageId)) return
+    
+    try {
+        // 等待 LSP 返回诊断信息（最多等待 3 秒）
+        await waitForDiagnostics(filePath)
+    } catch {
+        // 忽略错误，不影响主流程
+    }
+}
 
 interface DirTreeNode {
     name: string
@@ -213,6 +229,9 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
         // 更新文件缓存
         AgentService.markFileAsRead(path, newContent)
+        
+        // 通知 LSP 并等待诊断
+        await notifyLspAfterWrite(path)
 
         const lineChanges = calculateLineChanges(originalContent, newContent)
         
@@ -239,6 +258,9 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         const originalContent = await api.file.read(path) || ''
         const success = await api.file.write(path, content)
         if (!success) return { success: false, result: '', error: 'Failed to write file' }
+
+        // 通知 LSP 并等待诊断
+        await notifyLspAfterWrite(path)
 
         const lineChanges = calculateLineChanges(originalContent, content)
         return { success: true, result: 'File written successfully', meta: { filePath: path, oldContent: originalContent, newContent: content, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
@@ -284,6 +306,9 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         
         // 更新文件缓存
         AgentService.markFileAsRead(path, newContent)
+        
+        // 通知 LSP 并等待诊断
+        await notifyLspAfterWrite(path)
 
         const lineChanges = calculateLineChanges(originalContent, newContent)
         return { success: true, result: 'File updated successfully', meta: { filePath: path, oldContent: originalContent, newContent, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
@@ -300,6 +325,12 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
         const content = (args.content as string) || ''
         const success = await api.file.write(path, content)
+        
+        if (success) {
+            // 通知 LSP 并等待诊断
+            await notifyLspAfterWrite(path)
+        }
+        
         return { success, result: success ? 'File created' : 'Failed to create file', meta: { filePath: path, isNewFile: true, newContent: content, linesAdded: content.split('\n').length } }
     },
 

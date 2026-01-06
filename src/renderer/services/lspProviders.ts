@@ -26,6 +26,7 @@ import {
   renameSymbol,
   goToTypeDefinition,
   goToImplementation,
+  getInlayHints,
 } from './lspService'
 
 // LSP CompletionItemKind 到 Monaco CompletionItemKind 的映射
@@ -498,6 +499,36 @@ export function registerLspProviders(monaco: typeof Monaco) {
       })
 
       return result.map(convertSymbol)
+    },
+  })
+
+  // Inlay Hints 提供者（类型提示、参数名提示等）
+  monaco.languages.registerInlayHintsProvider(languages, {
+    provideInlayHints: async (model, range) => {
+      const filePath = lspUriToPath(model.uri.toString())
+      const lspRange = {
+        start: { line: range.startLineNumber - 1, character: 0 },
+        end: { line: range.endLineNumber - 1, character: 0 },
+      }
+
+      const result = await getInlayHints(filePath, lspRange)
+
+      if (!result || result.length === 0) {
+        return { hints: [], dispose: () => {} }
+      }
+
+      const hints: Monaco.languages.InlayHint[] = result.map((hint: any) => ({
+        label: typeof hint.label === 'string' ? hint.label : hint.label.map((p: any) => p.value).join(''),
+        position: {
+          lineNumber: hint.position.line + 1,
+          column: hint.position.character + 1,
+        },
+        kind: hint.kind === 1 ? monaco.languages.InlayHintKind.Type : monaco.languages.InlayHintKind.Parameter,
+        paddingLeft: hint.paddingLeft,
+        paddingRight: hint.paddingRight,
+      }))
+
+      return { hints, dispose: () => {} }
     },
   })
 

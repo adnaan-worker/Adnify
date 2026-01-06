@@ -1,6 +1,8 @@
 /**
  * LSP 服务器自动安装器
  * 参考 OpenCode 的实现，支持自动下载和安装 LSP 服务器
+ * 
+ * 支持用户自定义安装路径，避免占用系统盘空间
  */
 
 import { app } from 'electron'
@@ -9,22 +11,37 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { logger } from '@shared/utils/Logger'
 
-// LSP 服务器安装目录（在应用数据目录下）
-const LSP_BIN_DIR = path.join(app.getPath('userData'), 'lsp-servers')
+// 默认 LSP 服务器安装目录
+const DEFAULT_LSP_BIN_DIR = path.join(app.getPath('userData'), 'lsp-servers')
 
-// 确保目录存在
-function ensureLspBinDir(): string {
-  if (!fs.existsSync(LSP_BIN_DIR)) {
-    fs.mkdirSync(LSP_BIN_DIR, { recursive: true })
-  }
-  return LSP_BIN_DIR
+// 自定义路径缓存
+let customLspBinDir: string | null = null
+
+/**
+ * 设置自定义 LSP 服务器安装目录
+ * @param customPath 自定义路径，传 null 恢复默认
+ */
+export function setCustomLspBinDir(customPath: string | null): void {
+  customLspBinDir = customPath
+  logger.lsp.info(`[LSP Installer] Custom bin dir set to: ${customPath || 'default'}`)
 }
 
 /**
- * 获取 LSP 服务器安装目录
+ * 获取当前配置的 LSP 服务器安装目录
  */
 export function getLspBinDir(): string {
-  return ensureLspBinDir()
+  const dir = customLspBinDir || DEFAULT_LSP_BIN_DIR
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+/**
+ * 获取默认 LSP 服务器安装目录
+ */
+export function getDefaultLspBinDir(): string {
+  return DEFAULT_LSP_BIN_DIR
 }
 
 /**
@@ -78,7 +95,7 @@ export interface LspInstallResult {
  * 安装 TypeScript Language Server
  */
 export async function installTypeScriptServer(): Promise<LspInstallResult> {
-  const binDir = ensureLspBinDir()
+  const binDir = getLspBinDir()
   const serverPath = path.join(binDir, 'node_modules', 'typescript-language-server', 'lib', 'cli.mjs')
   
   if (fs.existsSync(serverPath)) {
@@ -101,7 +118,7 @@ export async function installTypeScriptServer(): Promise<LspInstallResult> {
  * 安装 VSCode Language Servers (HTML/CSS/JSON)
  */
 export async function installVscodeLanguageServers(): Promise<LspInstallResult> {
-  const binDir = ensureLspBinDir()
+  const binDir = getLspBinDir()
   const htmlPath = path.join(binDir, 'node_modules', 'vscode-langservers-extracted', 'bin', 'vscode-html-language-server.js')
   
   if (fs.existsSync(htmlPath)) {
@@ -124,7 +141,7 @@ export async function installVscodeLanguageServers(): Promise<LspInstallResult> 
  * 安装 Pyright (Python LSP)
  */
 export async function installPyright(): Promise<LspInstallResult> {
-  const binDir = ensureLspBinDir()
+  const binDir = getLspBinDir()
   const serverPath = path.join(binDir, 'node_modules', 'pyright', 'dist', 'pyright-langserver.js')
   
   if (fs.existsSync(serverPath)) {
@@ -147,7 +164,7 @@ export async function installPyright(): Promise<LspInstallResult> {
  * 安装 Vue Language Server
  */
 export async function installVueServer(): Promise<LspInstallResult> {
-  const binDir = ensureLspBinDir()
+  const binDir = getLspBinDir()
   const serverPath = path.join(binDir, 'node_modules', '@vue', 'language-server', 'bin', 'vue-language-server.js')
   
   if (fs.existsSync(serverPath)) {
@@ -176,7 +193,7 @@ export async function installGopls(): Promise<LspInstallResult> {
     return { success: false, error: 'Go is not installed. Please install Go first.' }
   }
   
-  const binDir = ensureLspBinDir()
+  const binDir = getLspBinDir()
   const ext = process.platform === 'win32' ? '.exe' : ''
   const goplsPath = path.join(binDir, 'gopls' + ext)
   
@@ -209,11 +226,13 @@ export async function installGopls(): Promise<LspInstallResult> {
 
 /**
  * 获取已安装的 LSP 服务器路径
+ * 同时检查用户安装目录和内置 node_modules
  */
 export function getInstalledServerPath(serverType: string): string | null {
   const binDir = getLspBinDir()
   
-  const paths: Record<string, string[]> = {
+  // 用户安装目录的路径
+  const userPaths: Record<string, string[]> = {
     typescript: [
       path.join(binDir, 'node_modules', 'typescript-language-server', 'lib', 'cli.mjs'),
       path.join(binDir, 'node_modules', 'typescript-language-server', 'lib', 'cli.js'),
@@ -236,13 +255,60 @@ export function getInstalledServerPath(serverType: string): string | null {
     go: [
       path.join(binDir, 'gopls' + (process.platform === 'win32' ? '.exe' : '')),
     ],
+    rust: [], // rust-analyzer 需要系统安装
+    clangd: [], // clangd 需要系统安装
   }
   
-  const serverPaths = paths[serverType]
-  if (!serverPaths) return null
+  // 内置 node_modules 的路径（开发模式和打包后）
+  const builtinBases = [
+    path.join(process.cwd(), 'node_modules'),
+    path.join(__dirname, '..', '..', 'node_modules'),
+    path.join(__dirname, '..', 'node_modules'),
+    path.join(app.getAppPath(), 'node_modules'),
+    path.join(process.resourcesPath || '', 'app.asar', 'node_modules'),
+    path.join(process.resourcesPath || '', 'app', 'node_modules'),
+  ]
   
-  for (const p of serverPaths) {
-    if (fs.existsSync(p)) return p
+  const builtinSubPaths: Record<string, string[]> = {
+    typescript: ['typescript-language-server/lib/cli.mjs', 'typescript-language-server/lib/cli.js'],
+    html: ['vscode-langservers-extracted/bin/vscode-html-language-server.js'],
+    css: ['vscode-langservers-extracted/bin/vscode-css-language-server.js'],
+    json: ['vscode-langservers-extracted/bin/vscode-json-language-server.js'],
+    python: ['pyright/dist/pyright-langserver.js'],
+    vue: ['@vue/language-server/bin/vue-language-server.js'],
+    go: [], // Go 不内置
+    rust: [], // Rust 不内置
+    clangd: [], // clangd 不内置
+  }
+  
+  // 先检查用户安装目录
+  const userServerPaths = userPaths[serverType]
+  if (userServerPaths) {
+    for (const p of userServerPaths) {
+      if (fs.existsSync(p)) return p
+    }
+  }
+  
+  // 再检查内置 node_modules
+  const builtinSubs = builtinSubPaths[serverType]
+  if (builtinSubs) {
+    for (const base of builtinBases) {
+      for (const sub of builtinSubs) {
+        const fullPath = path.join(base, sub)
+        if (fs.existsSync(fullPath)) return fullPath
+      }
+    }
+  }
+  
+  // 检查系统 PATH 中的命令（rust-analyzer, clangd, gopls）
+  if (serverType === 'rust' && commandExists('rust-analyzer')) {
+    return 'rust-analyzer' // 返回命令名表示系统已安装
+  }
+  if (serverType === 'clangd' && commandExists('clangd')) {
+    return 'clangd'
+  }
+  if (serverType === 'go' && commandExists('gopls')) {
+    return 'gopls'
   }
   
   return null
@@ -252,7 +318,7 @@ export function getInstalledServerPath(serverType: string): string | null {
  * 获取所有 LSP 服务器的安装状态
  */
 export function getLspServerStatus(): Record<string, { installed: boolean; path?: string }> {
-  const servers = ['typescript', 'html', 'css', 'json', 'python', 'vue', 'go']
+  const servers = ['typescript', 'html', 'css', 'json', 'python', 'vue', 'go', 'rust', 'clangd']
   const status: Record<string, { installed: boolean; path?: string }> = {}
   
   for (const server of servers) {

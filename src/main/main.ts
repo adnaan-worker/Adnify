@@ -225,16 +225,23 @@ function createWindow(isEmpty = false): BrowserWindow {
 
 async function initializeModules(firstWin: BrowserWindow) {
   // 并行加载所有模块
-  const [ipc, lsp, security, windowIpc] = await Promise.all([
+  const [ipc, lsp, security, windowIpc, lspInstaller] = await Promise.all([
     import('./ipc'),
     import('./lspManager'),
     import('./security'),
     import('./ipc/window'),
+    import('./lsp/installer'),
   ])
 
   ipcModule = ipc
   lspManager = lsp.lspManager
   securityManager = security.securityManager
+
+  // 从配置加载自定义 LSP 安装路径
+  const customLspPath = mainStore.get('lspSettings.customBinDir') as string | undefined
+  if (customLspPath) {
+    lspInstaller.setCustomLspBinDir(customLspPath)
+  }
 
   // 注册窗口控制
   windowIpc.registerWindowHandlers(createWindow)

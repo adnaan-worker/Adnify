@@ -241,6 +241,8 @@ export const zh = {
   'ctxGotoDefinition': '跳转到定义',
   'ctxFindReferences': '查找所有引用',
   'ctxGotoSymbol': '跳转到符号...',
+  'ctxFindCallers': '查找调用者',
+  'ctxFindCallees': '查找被调用者',
   'ctxRename': '重命名符号',
   'ctxChangeAll': '更改所有匹配项',
   'ctxFormat': '格式化文档',

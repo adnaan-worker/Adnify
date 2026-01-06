@@ -7,7 +7,7 @@ import { LLMConfig, AutoApproveSettings } from '@store'
 import { ProviderModelConfig } from '@app-types/provider'
 import { AgentConfig } from '@renderer/store/slices/settingsSlice'
 
-export type SettingsTab = 'provider' | 'editor' | 'agent' | 'mcp' | 'keybindings' | 'indexing' | 'security' | 'system'
+export type SettingsTab = 'provider' | 'editor' | 'agent' | 'mcp' | 'lsp' | 'keybindings' | 'indexing' | 'security' | 'system'
 
 export interface ProviderSettingsProps {
     localConfig: LLMConfig

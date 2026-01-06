@@ -147,6 +147,7 @@ export interface ElectronAPI {
   // File operations
   openFile: () => Promise<{ path: string; content: string } | null>
   openFolder: () => Promise<string | null>
+  selectFolder: () => Promise<string | null>
   openWorkspace: () => Promise<{ configPath: string | null; roots: string[] } | null>
   addFolderToWorkspace: () => Promise<string | null>
   saveWorkspace: (configPath: string, roots: string[]) => Promise<boolean>
@@ -280,6 +281,8 @@ export interface ElectronAPI {
   // LSP 服务器安装管理
   lspGetServerStatus: () => Promise<Record<string, { installed: boolean; path?: string }>>
   lspGetBinDir: () => Promise<string>
+  lspGetDefaultBinDir: () => Promise<string>
+  lspSetCustomBinDir: (customPath: string | null) => Promise<{ success: boolean }>
   lspInstallServer: (serverType: string) => Promise<{ success: boolean; path?: string; error?: string }>
   lspInstallBasicServers: () => Promise<{ success: boolean; error?: string }>
 
@@ -361,6 +364,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   openFile: () => ipcRenderer.invoke('file:open'),
   openFolder: () => ipcRenderer.invoke('file:openFolder'),
+  selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
   openWorkspace: () => ipcRenderer.invoke('workspace:open'),
   addFolderToWorkspace: () => ipcRenderer.invoke('workspace:addFolder'),
   saveWorkspace: (configPath: string, roots: string[]) => ipcRenderer.invoke('workspace:save', configPath, roots),
@@ -517,6 +521,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // LSP 服务器安装管理
   lspGetServerStatus: () => ipcRenderer.invoke('lsp:getServerStatus'),
   lspGetBinDir: () => ipcRenderer.invoke('lsp:getBinDir'),
+  lspGetDefaultBinDir: () => ipcRenderer.invoke('lsp:getDefaultBinDir'),
+  lspSetCustomBinDir: (customPath: string | null) => ipcRenderer.invoke('lsp:setCustomBinDir', customPath),
   lspInstallServer: (serverType: string) => ipcRenderer.invoke('lsp:installServer', serverType),
   lspInstallBasicServers: () => ipcRenderer.invoke('lsp:installBasicServers'),
 

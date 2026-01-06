@@ -2,9 +2,10 @@
  * 编辑器自定义右键菜单组件
  * 完全国际化支持
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '@store'
 import { t, TranslationKey } from '@renderer/i18n'
+import { getIncomingCalls, getOutgoingCalls, lspUriToPath } from '@renderer/services/lspService'
 import type { editor } from 'monaco-editor'
 
 interface MenuItem {
@@ -15,6 +16,16 @@ interface MenuItem {
   divider?: boolean
 }
 
+interface CallHierarchyResult {
+  type: 'callers' | 'callees'
+  items: Array<{
+    name: string
+    uri: string
+    line: number
+    character: number
+  }>
+}
+
 interface EditorContextMenuProps {
   x: number
   y: number
@@ -23,8 +34,10 @@ interface EditorContextMenuProps {
 }
 
 export default function EditorContextMenu({ x, y, editor, onClose }: EditorContextMenuProps) {
-  const { language } = useStore()
+  const { language, activeFile, openFile, setActiveFile } = useStore()
   const menuRef = useRef<HTMLDivElement>(null)
+  const [callHierarchyResult, setCallHierarchyResult] = useState<CallHierarchyResult | null>(null)
+  const [loading, setLoading] = useState(false)
 
   // 点击外部关闭菜单
   useEffect(() => {
@@ -34,7 +47,13 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
       }
     }
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        if (callHierarchyResult) {
+          setCallHierarchyResult(null)
+        } else {
+          onClose()
+        }
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     document.addEventListener('keydown', handleKeyDown)
@@ -42,7 +61,7 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [onClose])
+  }, [onClose, callHierarchyResult])
 
   // 调整菜单位置，防止超出屏幕
   useEffect(() => {
@@ -58,10 +77,89 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
         menuRef.current.style.top = `${viewportHeight - rect.height - 10}px`
       }
     }
-  }, [x, y])
+  }, [x, y, callHierarchyResult])
 
   const runAction = (actionId: string) => {
     editor.getAction(actionId)?.run()
+    onClose()
+  }
+
+  // 获取当前光标位置
+  const getPosition = () => {
+    const position = editor.getPosition()
+    return position ? { line: position.lineNumber - 1, character: position.column - 1 } : null
+  }
+
+  // 查找调用者
+  const handleFindCallers = async () => {
+    if (!activeFile) return
+    const pos = getPosition()
+    if (!pos) return
+
+    setLoading(true)
+    try {
+      const results = await getIncomingCalls(activeFile, pos.line, pos.character)
+      if (results && results.length > 0) {
+        setCallHierarchyResult({
+          type: 'callers',
+          items: results.map((r: any) => ({
+            name: r.from?.name || 'Unknown',
+            uri: r.from?.uri || '',
+            line: r.from?.range?.start?.line || 0,
+            character: r.from?.range?.start?.character || 0,
+          })),
+        })
+      } else {
+        setCallHierarchyResult({ type: 'callers', items: [] })
+      }
+    } catch {
+      setCallHierarchyResult({ type: 'callers', items: [] })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 查找被调用者
+  const handleFindCallees = async () => {
+    if (!activeFile) return
+    const pos = getPosition()
+    if (!pos) return
+
+    setLoading(true)
+    try {
+      const results = await getOutgoingCalls(activeFile, pos.line, pos.character)
+      if (results && results.length > 0) {
+        setCallHierarchyResult({
+          type: 'callees',
+          items: results.map((r: any) => ({
+            name: r.to?.name || 'Unknown',
+            uri: r.to?.uri || '',
+            line: r.to?.range?.start?.line || 0,
+            character: r.to?.range?.start?.character || 0,
+          })),
+        })
+      } else {
+        setCallHierarchyResult({ type: 'callees', items: [] })
+      }
+    } catch {
+      setCallHierarchyResult({ type: 'callees', items: [] })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 跳转到调用位置
+  const handleJumpToCall = async (item: CallHierarchyResult['items'][0]) => {
+    const filePath = lspUriToPath(item.uri)
+    if (filePath) {
+      await openFile(filePath)
+      setActiveFile(filePath)
+      // 延迟设置光标位置，等待编辑器加载
+      setTimeout(() => {
+        editor.setPosition({ lineNumber: item.line + 1, column: item.character + 1 })
+        editor.revealLineInCenter(item.line + 1)
+      }, 100)
+    }
     onClose()
   }
 
@@ -69,7 +167,9 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     // 导航
     { id: 'goto-def', labelKey: 'ctxGotoDefinition', shortcut: 'F12', action: () => runAction('editor.action.revealDefinition') },
     { id: 'find-refs', labelKey: 'ctxFindReferences', shortcut: 'Shift+F12', action: () => runAction('editor.action.goToReferences') },
-    { id: 'goto-symbol', labelKey: 'ctxGotoSymbol', shortcut: 'Ctrl+Shift+O', action: () => runAction('editor.action.quickOutline'), divider: true },
+    { id: 'goto-symbol', labelKey: 'ctxGotoSymbol', shortcut: 'Ctrl+Shift+O', action: () => runAction('editor.action.quickOutline') },
+    { id: 'find-callers', labelKey: 'ctxFindCallers', action: handleFindCallers },
+    { id: 'find-callees', labelKey: 'ctxFindCallees', action: handleFindCallees, divider: true },
     // 编辑
     { id: 'rename', labelKey: 'ctxRename', shortcut: 'F2', action: () => runAction('editor.action.rename') },
     { id: 'change-all', labelKey: 'ctxChangeAll', shortcut: 'Ctrl+F2', action: () => runAction('editor.action.changeAll') },
@@ -87,12 +187,62 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     { id: 'select-next', labelKey: 'ctxSelectNext', shortcut: 'Ctrl+D', action: () => runAction('editor.action.addSelectionToNextFindMatch') },
   ]
 
+  // 渲染 Call Hierarchy 结果
+  if (callHierarchyResult) {
+    const title = callHierarchyResult.type === 'callers' 
+      ? t('ctxFindCallers', language) 
+      : t('ctxFindCallees', language)
+    
+    return (
+      <div
+        ref={menuRef}
+        className="fixed z-50 bg-surface border border-border-subtle rounded-lg shadow-xl py-1 min-w-[280px] max-w-[400px] select-none"
+        style={{ left: x, top: y }}
+      >
+        <div className="px-3 py-2 text-sm font-medium text-text-primary border-b border-border-subtle flex items-center justify-between">
+          <span>{title}</span>
+          <button 
+            className="text-text-muted hover:text-text-primary text-xs"
+            onClick={() => setCallHierarchyResult(null)}
+          >
+            ← Back
+          </button>
+        </div>
+        {callHierarchyResult.items.length === 0 ? (
+          <div className="px-3 py-2 text-sm text-text-muted">
+            No results found
+          </div>
+        ) : (
+          <div className="max-h-[300px] overflow-y-auto">
+            {callHierarchyResult.items.map((item, index) => (
+              <button
+                key={index}
+                className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-surface-hover flex flex-col gap-0.5 transition-colors"
+                onClick={() => handleJumpToCall(item)}
+              >
+                <span className="font-medium">{item.name}</span>
+                <span className="text-xs text-text-muted truncate">
+                  {lspUriToPath(item.uri).split(/[/\\]/).pop()}:{item.line + 1}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div
       ref={menuRef}
       className="fixed z-50 bg-surface border border-border-subtle rounded-lg shadow-xl py-1 min-w-[220px] select-none"
       style={{ left: x, top: y }}
     >
+      {loading && (
+        <div className="absolute inset-0 bg-surface/80 flex items-center justify-center rounded-lg">
+          <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
       {menuItems.map((item, index) => (
         <div key={item.id}>
           <button

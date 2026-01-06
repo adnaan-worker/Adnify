@@ -49,11 +49,11 @@ const SERVER_NAMES: Record<string, string> = {
 }
 
 // 安装说明
-const INSTALL_HINTS: Record<string, { auto: boolean; hint: string }> = {
-  typescript: { auto: true, hint: '可自动安装' },
-  html: { auto: true, hint: '可自动安装' },
-  css: { auto: true, hint: '可自动安装' },
-  json: { auto: true, hint: '可自动安装' },
+const INSTALL_HINTS: Record<string, { auto: boolean; hint: string; builtin?: boolean }> = {
+  typescript: { auto: true, hint: '可自动安装', builtin: true },
+  html: { auto: true, hint: '可自动安装', builtin: true },
+  css: { auto: true, hint: '可自动安装', builtin: true },
+  json: { auto: true, hint: '可自动安装', builtin: true },
   python: { auto: true, hint: '可自动安装 Pyright' },
   go: { auto: true, hint: '需要系统已安装 Go' },
   rust: { auto: false, hint: '请运行: rustup component add rust-analyzer' },
@@ -195,8 +195,15 @@ export default function LspStatusIndicator() {
 
         {/* 已安装时显示路径 */}
         {isInstalled && currentStatus?.path && (
-          <div className="text-xs text-text-muted bg-background-tertiary px-2 py-1.5 rounded font-mono truncate">
-            {currentStatus.path}
+          <div className="space-y-1">
+            {installInfo?.builtin && (
+              <div className="text-xs text-blue-400">
+                {language === 'zh' ? '内置语言服务器' : 'Built-in Language Server'}
+              </div>
+            )}
+            <div className="text-xs text-text-muted bg-background-tertiary px-2 py-1.5 rounded font-mono truncate">
+              {currentStatus.path}
+            </div>
           </div>
         )}
       </div>

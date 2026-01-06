@@ -78,7 +78,7 @@ export function SystemSettings({ language }: SystemSettingsProps) {
                                 </div>
                             </div>
                             <Button variant="secondary" size="sm" onClick={async () => {
-                                const newPath = await api.file.openFolder()
+                                const newPath = await api.file.selectFolder()
                                 if (newPath) {
                                     // @ts-ignore
                                     const success = await api.settings.setConfigPath?.(newPath)

@@ -277,4 +277,20 @@ export function registerWorkspaceHandlers(
     logger.security.info('[Workspace] Removed from recent:', path)
     return true
   })
+
+  // 选择目录（仅返回路径，不改变工作区状态）
+  // 用于设置界面选择自定义路径等场景
+  ipcMain.handle('dialog:selectFolder', async () => {
+    const mainWindow = getMainWindowFn()
+    if (!mainWindow) return null
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory'],
+    })
+
+    if (!result.canceled && result.filePaths[0]) {
+      return result.filePaths[0]
+    }
+    return null
+  })
 }
