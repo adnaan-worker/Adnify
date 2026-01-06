@@ -94,6 +94,28 @@ interface LoggerConfig {
   maxFiles: number     // 最大文件数量（轮转）
 }
 
+// 检测是否为生产环境
+function isProduction(): boolean {
+  // Electron 主进程
+  if (typeof process !== 'undefined') {
+    // 检查 NODE_ENV
+    if (process.env.NODE_ENV === 'production') return true
+    // 检查是否打包后运行（app.isPackaged）
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { app } = require('electron')
+      if (app?.isPackaged) return true
+    } catch {
+      // 不在 Electron 环境中
+    }
+  }
+  // Renderer 进程 - 检查 import.meta.env
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env?.PROD) {
+    return true
+  }
+  return false
+}
+
 // 性能计时器
 interface PerformanceTimer {
   name: string
@@ -104,11 +126,11 @@ interface PerformanceTimer {
 
 class LoggerClass {
   private config: LoggerConfig = {
-    minLevel: 'info',  // 默认只显示警告和错误
+    minLevel: isProduction() ? 'warn' : 'info',  // 生产环境只显示警告和错误
     enabled: true,
     maxLogs: 1000,
     fileLogging: false,
-    consoleLogging: true,
+    consoleLogging: !isProduction(),  // 生产环境默认关闭控制台日志
     maxFileSize: 10 * 1024 * 1024, // 10MB
     maxFiles: 5,
   }
@@ -119,6 +141,9 @@ class LoggerClass {
   
   // 检测是否在主进程中运行
   private isMain = typeof process !== 'undefined' && process.versions?.node && !(globalThis as Record<string, unknown>).window
+  
+  // 缓存生产环境检测结果
+  private isProd = isProduction()
 
   /**
    * 配置日志器
@@ -139,6 +164,20 @@ class LoggerClass {
    */
   setEnabled(enabled: boolean): void {
     this.config.enabled = enabled
+  }
+
+  /**
+   * 启用/禁用控制台日志
+   */
+  setConsoleLogging(enabled: boolean): void {
+    this.config.consoleLogging = enabled
+  }
+
+  /**
+   * 检查是否为生产环境
+   */
+  isProductionMode(): boolean {
+    return this.isProd
   }
 
   /**
