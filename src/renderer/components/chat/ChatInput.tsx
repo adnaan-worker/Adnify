@@ -1,6 +1,6 @@
 /**
  * 聊天输入组件
- * 新设计：极简悬浮胶囊设计，注重沉浸感
+ * 极致打磨：悬浮光晕、灵动按钮、精致上下文药丸
  */
 import { useRef, useCallback, useMemo, useState } from 'react'
 import {
@@ -14,7 +14,8 @@ import {
   ArrowUp,
   Plus,
   Folder,
-  Globe
+  Globe,
+  Image as ImageIcon
 } from 'lucide-react'
 import { useStore } from '@store'
 import { WorkMode } from '@/renderer/modes/types'
@@ -124,6 +125,8 @@ export default function ChatInput({
     [setImages]
   )
 
+  const isSendable = input.trim().length > 0 || images.length > 0
+
   return (
     <div ref={inputContainerRef} className="p-4 z-20">
       <div
@@ -132,8 +135,8 @@ export default function ChatInput({
             ${isStreaming
             ? 'bg-surface/80 border-accent/30 ring-1 ring-accent/20'
             : isFocused
-              ? 'bg-surface/80 border-border-active ring-1 ring-border-active shadow-2xl shadow-black/40 transform -translate-y-0.5'
-              : 'bg-surface/60 border-border hover:border-border-active shadow-xl shadow-black/20'
+              ? 'bg-background/90 border-accent/40 ring-1 ring-accent/10 shadow-2xl shadow-accent/5 translate-y-[-1px]'
+              : 'bg-surface/40 border-border hover:border-accent/20 shadow-xl shadow-black/20'
           }
         `}
       >
@@ -148,7 +151,7 @@ export default function ChatInput({
                 <img src={img.previewUrl} alt="preview" className="w-full h-full object-cover" />
                 <button
                   onClick={() => removeImage(img.id)}
-                  className="absolute top-1 right-1 p-1 bg-black/60 backdrop-blur rounded-full text-white hover:bg-red-500 transition-all opacity-0 group-hover/img:opacity-100"
+                  className="absolute top-1 right-1 p-1 bg-black/60 backdrop-blur rounded-full text-white hover:bg-red-500 transition-all opacity-0 group-hover/img:opacity-100 scale-90 hover:scale-100"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -164,20 +167,20 @@ export default function ChatInput({
             {activeFilePath && onAddFile && !contextItems.some(item => item.type === 'File' && (item as FileContext).uri === activeFilePath) && (
               <button
                 onClick={() => onAddFile(activeFilePath)}
-                className="inline-flex items-center gap-1.5 px-2 py-1 bg-accent/5 text-accent text-[11px] font-medium rounded-lg border border-accent/10 animate-fade-in select-none hover:bg-accent/15 transition-colors"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-accent/5 text-accent text-[11px] font-bold rounded-full border border-accent/10 animate-fade-in select-none hover:bg-accent/15 transition-colors hover:border-accent/30"
               >
-                <Plus className="w-3 h-3" />
-                <span>{activeFilePath.split(/[\\/]/).pop()}</span>
+                <Plus className="w-3 h-3" strokeWidth={3} />
+                <span>{activeFilePath.split(/[/\\]/).pop()}</span>
               </button>
             )}
             {/* Context Items */}
             {contextItems.filter(item => ['File', 'Folder', 'CodeSelection'].includes(item.type)).map((item, i) => {
               const getContextStyle = (type: string) => {
                 switch (type) {
-                  case 'File': return { bg: 'bg-white/5', text: 'text-text-secondary', border: 'border-border', Icon: FileText }
-                  case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-300', border: 'border-purple-500/10', Icon: Code }
-                  case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-300', border: 'border-yellow-500/10', Icon: Folder }
-                  default: return { bg: 'bg-white/5', text: 'text-text-muted', border: 'border-border', Icon: FileText }
+                  case 'File': return { bg: 'bg-surface/50', text: 'text-text-secondary', border: 'border-border', Icon: FileText }
+                  case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20', Icon: Code }
+                  case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20', Icon: Folder }
+                  default: return { bg: 'bg-surface/50', text: 'text-text-muted', border: 'border-border', Icon: FileText }
                 }
               }
 
@@ -187,12 +190,12 @@ export default function ChatInput({
                   case 'File':
                   case 'Folder': {
                     const uri = (item as any).uri || ''
-                    return uri.split(/[\\/]/).pop() || uri
+                    return uri.split(/[/\\]/).pop() || uri
                   }
                   case 'CodeSelection': {
                     const uri = (item as any).uri || ''
                     const range = (item as any).range as [number, number] | undefined
-                    const name = uri.split(/[\\/]/).pop() || uri
+                    const name = uri.split(/[/\\]/).pop() || uri
                     return range ? `${name}:${range[0]}-${range[1]}` : name
                   }
                   default: return 'Context'
@@ -202,13 +205,13 @@ export default function ChatInput({
               return (
                 <span
                   key={`ctx-${i}`}
-                  className={`inline-flex items-center gap-1.5 px-2 py-1 ${style.bg} ${style.text} text-[11px] font-medium rounded-lg border ${style.border} animate-fade-in select-none group/chip transition-colors hover:border-white/20`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 ${style.bg} ${style.text} text-[11px] font-medium rounded-full border ${style.border} animate-fade-in select-none group/chip transition-all hover:border-opacity-100 hover:shadow-sm`}
                 >
                   <style.Icon className="w-3 h-3 opacity-70" />
                   <span className="max-w-[120px] truncate">{label}</span>
                   <button
                     onClick={() => onRemoveContextItem(item)}
-                    className="ml-0.5 p-0.5 rounded-md hover:bg-white/10 text-current hover:text-red-400 opacity-0 group-hover/chip:opacity-100 transition-all"
+                    className="ml-0.5 p-0.5 rounded-full hover:bg-black/20 text-current hover:text-red-400 opacity-60 group-hover/chip:opacity-100 transition-all"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -216,7 +219,7 @@ export default function ChatInput({
               )
             })}
 
-            {/* 其他引用 Chips (Codebase, Git etc) - 保持一致样式 */}
+            {/* Other Reference Chips */}
             {hasCodebaseRef && <ContextChip icon={Database} label="@codebase" color="green" />}
             {hasSymbolsRef && <ContextChip icon={Code} label="@symbols" color="pink" />}
             {hasGitRef && <ContextChip icon={GitBranch} label="@git" color="orange" />}
@@ -237,14 +240,14 @@ export default function ChatInput({
             onBlur={() => setIsFocused(false)}
             placeholder={hasApiKey ? t('pasteImagesHint', language) : t('configureApiKey', language)}
             disabled={!hasApiKey || hasPendingToolCall}
-            className="flex-1 bg-transparent border-none p-0 py-2
+            className="flex-1 bg-transparent border-none p-0 py-2.5
                        text-[15px] text-text-primary placeholder-text-muted/40 resize-none
                        focus:ring-0 focus:outline-none leading-relaxed custom-scrollbar max-h-[200px] caret-accent font-medium tracking-wide"
             rows={1}
-            style={{ minHeight: '44px', fontSize: `${Math.max(14, editorConfig.fontSize)}px` }}
+            style={{ minHeight: '48px', fontSize: `${Math.max(14, editorConfig.fontSize)}px` }}
           />
 
-          <div className="flex items-center gap-2 pb-1.5">
+          <div className="flex items-center gap-2 pb-2">
             <input
               type="file"
               ref={fileInputRef}
@@ -263,9 +266,9 @@ export default function ChatInput({
               size="icon"
               onClick={() => fileInputRef.current?.click()}
               title={t('uploadImage', language)}
-              className="rounded-xl w-8 h-8 hover:bg-white/10 text-text-muted hover:text-text-primary transition-all active:scale-95"
+              className="rounded-xl w-8 h-8 hover:bg-surface-active text-text-muted hover:text-text-primary transition-all active:scale-95"
             >
-              <Paperclip className="w-4 h-4 stroke-[2.5]" />
+              <ImageIcon className="w-4 h-4 opacity-70 group-hover:opacity-100" />
             </Button>
 
             <button
@@ -275,10 +278,10 @@ export default function ChatInput({
               }
               className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)
                   ${isStreaming
-                  ? 'bg-surface/50 text-text-primary border border-border hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20'
-                  : input.trim() || images.length > 0
-                    ? 'bg-white text-black shadow-lg shadow-white/10 hover:scale-105 active:scale-95'
-                    : 'bg-white/5 text-text-muted/20 cursor-not-allowed'
+                  ? 'bg-surface/50 text-text-primary border border-white/10 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20'
+                  : isSendable
+                    ? 'bg-accent text-white shadow-lg shadow-accent/30 hover:shadow-accent/50 hover:scale-105 active:scale-95 border border-white/10'
+                    : 'bg-white/5 text-text-muted/30 cursor-not-allowed border border-transparent'
                 }
                   `}
             >
@@ -294,13 +297,15 @@ export default function ChatInput({
 
       {/* Mode & Model Selector */}
       <div className="mt-3 flex items-center justify-between px-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
           <ModeSelector mode={chatMode} onModeChange={setChatMode} />
           <ModelSelector />
         </div>
-        <span className="text-[10px] text-text-muted/40 font-medium tracking-wide">
-          {t('returnToSend', language)}
-        </span>
+        <div className="hidden sm:flex items-center gap-2 text-[10px] text-text-muted/40 font-medium tracking-wide whitespace-nowrap overflow-hidden shrink-0">
+          <span>⏎ Send</span>
+          <span className="w-1 h-1 rounded-full bg-current opacity-30" />
+          <span>⇧⏎ New Line</span>
+        </div>
       </div>
     </div>
   )
@@ -317,7 +322,7 @@ function ContextChip({ icon: Icon, label, color }: { icon: any, label: string, c
   }
   
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-1 ${colorMap[color]} text-[11px] font-medium rounded-lg border animate-fade-in select-none`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 ${colorMap[color]} text-[11px] font-bold rounded-full border animate-fade-in select-none`}>
       <Icon className="w-3 h-3" />
       {label}
     </span>

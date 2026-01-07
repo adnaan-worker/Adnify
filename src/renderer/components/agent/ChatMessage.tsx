@@ -28,6 +28,7 @@ import ToolCallCard from './ToolCallCard'
 import ToolCallGroup from './ToolCallGroup'
 import { isWriteTool } from '@/shared/config/tools'
 import { useStore } from '@store'
+import { MessageBranchActions } from './BranchManager'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -53,24 +54,24 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
   }, [children])
 
   return (
-    <div className="relative group/code my-3 rounded-lg overflow-hidden border border-border bg-black/30 backdrop-blur-sm shadow-sm">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-border">
-        <span className="text-[10px] text-text-muted font-mono uppercase tracking-wider opacity-70">
+    <div className="relative group/code my-4 rounded-xl overflow-hidden border border-border bg-black/40 shadow-sm">
+      <div className="flex items-center justify-between px-4 py-2 bg-white/[0.03] border-b border-border/50">
+        <span className="text-[10px] text-text-muted font-bold font-mono uppercase tracking-widest opacity-70">
           {language || 'text'}
         </span>
         <button
           onClick={handleCopy}
-          className="p-1 rounded-md hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors"
+          className="p-1.5 rounded-lg hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors"
           title="Copy code"
         >
-          {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
         </button>
       </div>
       <SyntaxHighlighter
         style={vscDarkPlus}
         language={language}
         PreTag="div"
-        className="!bg-transparent !p-3 !m-0 custom-scrollbar leading-relaxed font-mono"
+        className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono"
         customStyle={{ background: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
         wrapLines
         wrapLongLines
@@ -86,10 +87,8 @@ CodeBlock.displayName = 'CodeBlock'
 // 辅助函数：清理流式输出中的 XML 工具调用标签
 const cleanStreamingContent = (text: string): string => {
   if (!text) return ''
-  // 匹配完整的 <tool_call>...</tool_call> 和 <function>...</function> 块并移除
   let cleaned = text.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
   cleaned = cleaned.replace(/<function[\s\S]*?<\/function>/gi, '')
-  // 匹配以 <tool_call> 或 <function> 开头但未闭合的块（在字符串末尾）并移除
   cleaned = cleaned.replace(/<tool_call>[\s\S]*$/gi, '')
   cleaned = cleaned.replace(/<function[\s\S]*$/gi, '')
   return cleaned.trim()
@@ -97,31 +96,24 @@ const cleanStreamingContent = (text: string): string => {
 
 // ThinkingBlock 组件 - 高级折叠样式
 const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: { content: string; startTime?: number; isStreaming: boolean; fontSize: number }) => {
-  const [isExpanded, setIsExpanded] = useState(isStreaming) // 流式时展开
+  const [isExpanded, setIsExpanded] = useState(isStreaming)
   const [elapsed, setElapsed] = useState<number>(0)
   const lastElapsed = React.useRef<number>(0)
 
-  // 当流式结束时自动折叠
-  React.useEffect(() => {
+  useEffect(() => {
     setIsExpanded(isStreaming)
   }, [isStreaming])
 
-  // 计时器逻辑
-  React.useEffect(() => {
-    if (!startTime || !isStreaming) {
-      return
-    }
-
+  useEffect(() => {
+    if (!startTime || !isStreaming) return
     const timer = setInterval(() => {
       const current = Math.floor((Date.now() - startTime) / 1000)
       setElapsed(current)
       lastElapsed.current = current
     }, 1000)
-
     return () => clearInterval(timer)
   }, [startTime, isStreaming])
 
-  // 格式化时长
   const durationText = !isStreaming
     ? (lastElapsed.current > 0 ? `Thought for ${lastElapsed.current}s` : 'Thought')
     : `Thinking for ${elapsed}s...`
@@ -130,18 +122,18 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
     <div className="my-4 group/think">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 text-text-muted/80 hover:text-text-secondary transition-colors select-none"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface/30 border border-border hover:bg-surface/50 transition-all text-text-muted/80 hover:text-text-secondary select-none"
       >
-        <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}>
+        <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}>
           <ChevronDown className="w-3.5 h-3.5" />
         </div>
-        <span className="text-sm font-medium tracking-tight">
+        <span className="text-xs font-bold tracking-wide">
           {durationText}
         </span>
       </button>
 
       {isExpanded && (
-        <div className="mt-2 pl-5 border-l border-border space-y-2">
+        <div className="mt-3 pl-4 border-l-2 border-border/50 space-y-2 animate-slide-down">
           {content ? (
             <div
               style={{ fontSize: `${fontSize - 1}px` }}
@@ -162,14 +154,12 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
 })
 ThinkingBlock.displayName = 'ThinkingBlock'
 
-// Markdown 渲染组件 - 优化排版
+// Markdown 渲染组件
 const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { content: string; fontSize: number; isStreaming?: boolean }) => {
-  // 使用 useMemo 缓存清理后的内容，避免每次渲染都执行正则
   const cleanedContent = React.useMemo(() => {
     return isStreaming ? cleanStreamingContent(content) : content
   }, [content, isStreaming])
 
-  // 缓存 components 配置，避免每次渲染都创建新对象
   const markdownComponents = React.useMemo(() => ({
     code({ className, children, node, ...props }: any) {
       const match = /language-(\w+)/.exec(className || '')
@@ -178,32 +168,32 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { conten
       const isInline = !isCodeBlock && !codeContent.includes('\n')
 
       return isInline ? (
-        <code className="bg-white/10 px-1.5 py-0.5 rounded text-accent-light font-mono text-[0.9em]" {...props}>
+        <code className="bg-white/10 px-1.5 py-0.5 rounded-md text-accent-light font-mono text-[0.9em] border border-white/5" {...props}>
           {children}
         </code>
       ) : (
         <CodeBlock language={match?.[1]} fontSize={fontSize}>{children}</CodeBlock>
       )
     },
-    p: ({ children }: any) => <p className="mb-2 last:mb-0">{children}</p>,
-    ul: ({ children }: any) => <ul className="list-disc pl-4 mb-2 space-y-1">{children}</ul>,
-    ol: ({ children }: any) => <ol className="list-decimal pl-4 mb-2 space-y-1">{children}</ol>,
-    li: ({ children }: any) => <li className="">{children}</li>,
+    p: ({ children }: any) => <p className="mb-3 last:mb-0 leading-7">{children}</p>,
+    ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
+    ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
+    li: ({ children }: any) => <li className="pl-1">{children}</li>,
     a: ({ href, children }: any) => (
-      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2">{children}</a>
+      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium">{children}</a>
     ),
     blockquote: ({ children }: any) => (
-      <blockquote className="border-l-2 border-accent/40 pl-4 my-2 text-text-muted italic bg-white/5 py-1 rounded-r">{children}</blockquote>
+      <blockquote className="border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r">{children}</blockquote>
     ),
-    h1: ({ children }: any) => <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0 text-text-primary">{children}</h1>,
-    h2: ({ children }: any) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0 text-text-primary">{children}</h2>,
-    h3: ({ children }: any) => <h3 className="text-sm font-semibold mb-1 mt-2 first:mt-0 text-text-primary">{children}</h3>,
+    h1: ({ children }: any) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight">{children}</h1>,
+    h2: ({ children }: any) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight">{children}</h2>,
+    h3: ({ children }: any) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary">{children}</h3>,
   }), [fontSize])
 
   if (!cleanedContent) return null
 
   return (
-    <div style={{ fontSize: `${fontSize}px` }} className="text-text-primary/90 leading-8 tracking-wide">
+    <div style={{ fontSize: `${fontSize}px` }} className="text-text-primary/90 leading-relaxed tracking-wide">
       <ReactMarkdown
         className="prose prose-invert max-w-none"
         components={markdownComponents}
@@ -242,10 +232,7 @@ const RenderPart = React.memo(({
 
   if (isReasoningPart(part)) {
     const reasoningPart = part as ReasoningPart
-    // 跳过空内容且非流式的 reasoning part
-    if (!reasoningPart.content?.trim() && !reasoningPart.isStreaming) {
-      return null
-    }
+    if (!reasoningPart.content?.trim() && !reasoningPart.isStreaming) return null
     return (
       <ThinkingBlock
         key={`reasoning-${index}`}
@@ -264,7 +251,7 @@ const RenderPart = React.memo(({
 
     if (isFileOp) {
       return (
-        <div className="my-2">
+        <div className="my-3">
           <FileChangeCard
             key={`tool-${tc.id}-${index}`}
             toolCall={tc}
@@ -278,7 +265,7 @@ const RenderPart = React.memo(({
     }
 
     return (
-      <div className="my-2">
+      <div className="my-3">
         <ToolCallCard
           key={`tool-${tc.id}-${index}`}
           toolCall={tc}
@@ -339,145 +326,153 @@ const ChatMessage = React.memo(({
   }
 
   return (
-    <div className={`w-full py-6 group transition-colors duration-200 border-b border-border last:border-0 animate-fade-in`}>
-      <div className="max-w-3xl mx-auto px-4">
-        {/* Header Row: Avatar + Name + Time/Actions */}
+    <div className="w-full py-6 group transition-colors duration-200 border-b border-border/40 animate-fade-in">
+      <div className="max-w-3xl mx-auto px-6 relative">
+        {/* Header Row: Avatar + Name + Actions */}
         <div className="flex items-center gap-3 mb-3 select-none">
           <div className="flex-shrink-0">
             {isUser ? (
-              <div className="w-6 h-6 rounded-full bg-surface-active/50 border border-border flex items-center justify-center shadow-sm">
+              <div className="w-6 h-6 rounded-lg bg-surface/50 border border-border flex items-center justify-center">
                 <User className="w-3.5 h-3.5 text-text-secondary" />
               </div>
             ) : (
-              <div className={`w-6 h-6 rounded-full overflow-hidden border border-accent/20 shadow-sm shadow-accent/10 bg-black transition-all duration-500 ${isAssistantMessage(message) && message.isStreaming ? 'ring-2 ring-accent/30 shadow-[0_0_10px_rgba(var(--accent)/0.3)]' : ''}`}>
+              <div className="w-6 h-6 rounded-lg overflow-hidden border border-accent/20 bg-black">
                 <img src={aiAvatar} alt="AI" className="w-full h-full object-cover opacity-90" />
               </div>
             )}
           </div>
 
           <div className="flex-1 min-w-0 flex items-center gap-2">
-            <span className="text-sm font-semibold text-text-primary">
+            <span className="text-sm font-bold text-text-primary">
               {isUser ? 'You' : 'Adnify'}
             </span>
             {!isUser && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent/10 text-accent border border-accent/20 flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5" />
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent/10 text-accent border border-accent/20 flex items-center gap-1 uppercase tracking-wide">
                 AI
               </span>
             )}
           </div>
 
-          {/* Actions (Visible on Hover) */}
+          {/* Floating Actions */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
             {isUser && onEdit && (
-              <button onClick={handleStartEdit} className="p-1.5 text-text-muted hover:text-text-primary rounded hover:bg-white/5 transition-colors" title="Edit">
+              <button onClick={handleStartEdit} className="p-1.5 text-text-muted hover:text-text-primary rounded-md hover:bg-white/10 transition-colors" title="Edit">
                 <Edit2 className="w-3.5 h-3.5" />
               </button>
             )}
             {!isUser && onRegenerate && (
-              <button onClick={() => onRegenerate(message.id)} className="p-1.5 text-text-muted hover:text-text-primary rounded hover:bg-white/5 transition-colors" title="Regenerate">
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
+              <MessageBranchActions messageId={message.id} onRegenerate={onRegenerate} />
             )}
             {isUser && hasCheckpoint && onRestore && (
-              <button onClick={() => onRestore(message.id)} className="p-1.5 text-text-muted hover:text-amber-400 rounded hover:bg-white/5 transition-colors" title="Restore">
+              <button onClick={() => onRestore(message.id)} className="p-1.5 text-text-muted hover:text-amber-400 rounded-md hover:bg-white/10 transition-colors" title="Restore Checkpoint">
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
-            <button onClick={handleCopy} className="p-1.5 text-text-muted hover:text-text-primary rounded hover:bg-white/5 transition-colors" title="Copy">
+            <button onClick={handleCopy} className="p-1.5 text-text-muted hover:text-text-primary rounded-md hover:bg-white/10 transition-colors" title="Copy">
               {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
           </div>
         </div >
 
-        {/* Content Row: Full Width */}
-        < div className="pl-0" >
+        {/* Content Row - Full Width (No Padding) */}
+        <div className="w-full">
           {/* Images */}
-          {
-            images.length > 0 && (
-              <div className="flex flex-wrap gap-3 mb-3">
-                {images.map((img, i) => (
-                  <div key={i} className="rounded-lg overflow-hidden border border-border shadow-sm max-w-[200px]">
-                    <img
-                      src={`data:${img.source.media_type};base64,${img.source.data}`}
-                      alt="User upload"
-                      className="max-w-full h-auto"
-                    />
-                  </div>
-                ))}
-              </div>
-            )
-          }
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-3 mb-4">
+              {images.map((img, i) => (
+                <div key={i} className="rounded-xl overflow-hidden border border-border shadow-md max-w-[240px] hover:scale-[1.02] transition-transform">
+                  <img
+                    src={`data:${img.source.media_type};base64,${img.source.data}`}
+                    alt="User upload"
+                    className="max-w-full h-auto"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Editing */}
-          {
-            isEditing ? (
-              <div className="space-y-3 bg-surface/40 p-3 rounded-xl border border-border backdrop-blur-sm">
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full bg-black/20 border border-border rounded-lg px-3 py-2 text-sm text-text-primary resize-none focus:outline-none focus:border-accent/50 transition-colors"
-                  rows={4}
-                  autoFocus
-                  style={{ fontSize: `${fontSize}px` }}
-                />
-                <div className="flex items-center gap-2 justify-end">
-                  <button
-                    onClick={() => setIsEditing(false)}
-                    className="px-3 py-1.5 text-xs text-text-muted hover:text-text-primary rounded-md transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveEdit}
-                    className="px-3 py-1.5 bg-accent text-white text-xs font-medium rounded-md hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20"
-                  >
-                    Save & Resend
-                  </button>
-                </div>
+          {isEditing ? (
+            <div className="space-y-3 bg-surface/20 p-4 rounded-2xl border border-border backdrop-blur-xl animate-scale-in">
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="w-full bg-black/20 border border-border rounded-xl px-4 py-3 text-sm text-text-primary resize-none focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-all custom-scrollbar"
+                rows={4}
+                autoFocus
+                style={{ fontSize: `${fontSize}px` }}
+              />
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  onClick={() => setIsEditing(false)}
+                  className="px-4 py-2 text-xs font-bold text-text-muted hover:text-text-primary rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  className="px-4 py-2 bg-accent text-white text-xs font-bold rounded-lg hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20"
+                >
+                  Save & Resend
+                </button>
               </div>
-            ) : (
-              <div className="space-y-1">
-                {/* User message */}
-                {isUser && <MarkdownContent content={textContent} fontSize={fontSize} />}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {/* User message */}
+              {isUser && <MarkdownContent content={textContent} fontSize={fontSize} />}
 
-                {/* Assistant message - parts 按顺序渲染（包含 text、reasoning、tool_call） */}
-                {isAssistantMessage(message) && message.parts && message.parts.length > 0 && (
-                  <>
-                    {(() => {
-                      // Group consecutive tool calls
-                      const groups: Array<
-                        | { type: 'part'; part: AssistantPart; index: number }
-                        | { type: 'tool_group'; toolCalls: ToolCall[]; startIndex: number }
-                      > = []
+              {/* Assistant message */}
+              {isAssistantMessage(message) && message.parts && message.parts.length > 0 && (
+                <>
+                  {(() => {
+                    const groups: Array<
+                      | { type: 'part'; part: AssistantPart; index: number }
+                      | { type: 'tool_group'; toolCalls: ToolCall[]; startIndex: number }
+                    > = []
 
-                      let currentToolCalls: ToolCall[] = []
-                      let startIndex = -1
+                    let currentToolCalls: ToolCall[] = []
+                    let startIndex = -1
 
-                      message.parts.forEach((part, index) => {
-                        if (isToolCallPart(part)) {
-                          if (currentToolCalls.length === 0) startIndex = index
-                          currentToolCalls.push(part.toolCall)
-                        } else {
-                          if (currentToolCalls.length > 0) {
-                            groups.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
-                            currentToolCalls = []
-                          }
-                          groups.push({ type: 'part', part, index })
+                    message.parts.forEach((part, index) => {
+                      if (isToolCallPart(part)) {
+                        if (currentToolCalls.length === 0) startIndex = index
+                        currentToolCalls.push(part.toolCall)
+                      } else {
+                        if (currentToolCalls.length > 0) {
+                          groups.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
+                          currentToolCalls = []
                         }
-                      })
-
-                      if (currentToolCalls.length > 0) {
-                        groups.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
+                        groups.push({ type: 'part', part, index })
                       }
+                    })
 
-                      return groups.map((group) => {
-                        if (group.type === 'part') {
+                    if (currentToolCalls.length > 0) {
+                      groups.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
+                    }
+
+                    return groups.map((group) => {
+                      if (group.type === 'part') {
+                        return (
+                          <RenderPart
+                            key={`part-${group.index}`}
+                            part={group.part}
+                            index={group.index}
+                            pendingToolId={pendingToolId}
+                            onApproveTool={onApproveTool}
+                            onRejectTool={onRejectTool}
+                            onOpenDiff={onOpenDiff}
+                            fontSize={fontSize}
+                            isStreaming={message.isStreaming}
+                          />
+                        )
+                      } else {
+                        if (group.toolCalls.length === 1) {
                           return (
                             <RenderPart
-                              key={`part-${group.index}`}
-                              part={group.part}
-                              index={group.index}
+                              key={`part-${group.startIndex}`}
+                              part={message.parts![group.startIndex]}
+                              index={group.startIndex}
                               pendingToolId={pendingToolId}
                               onApproveTool={onApproveTool}
                               onRejectTool={onRejectTool}
@@ -486,143 +481,48 @@ const ChatMessage = React.memo(({
                               isStreaming={message.isStreaming}
                             />
                           )
-                        } else {
-                          // If only 1 tool call, render individually
-                          if (group.toolCalls.length === 1) {
-                            return (
-                              <RenderPart
-                                key={`part-${group.startIndex}`}
-                                part={message.parts![group.startIndex]}
-                                index={group.startIndex}
-                                pendingToolId={pendingToolId}
-                                onApproveTool={onApproveTool}
-                                onRejectTool={onRejectTool}
-                                onOpenDiff={onOpenDiff}
-                                fontSize={fontSize}
-                                isStreaming={message.isStreaming}
-                              />
-                            )
-                          }
-
-                          return (
-                            <ToolCallGroup
-                              key={`group-${group.startIndex}`}
-                              toolCalls={group.toolCalls}
-                              pendingToolId={pendingToolId}
-                              onApproveTool={onApproveTool}
-                              onRejectTool={onRejectTool}
-                              onOpenDiff={onOpenDiff}
-                            />
-                          )
                         }
-                      })
-                    })()}
-                  </>
-                )}
-
-                {/* Legacy compatibility */}
-                {isAssistantMessage(message) && (!message.parts || message.parts.length === 0) && (
-                  <>
-                    {textContent && <MarkdownContent content={textContent} fontSize={fontSize} />}
-                    {message.toolCalls && message.toolCalls.length > 0 && (
-                      <div className="mt-3">
-                        {/* 如果有多个工具调用，使用分组显示 */}
-                        {message.toolCalls.length > 1 ? (
+                        return (
                           <ToolCallGroup
-                            toolCalls={message.toolCalls}
+                            key={`group-${group.startIndex}`}
+                            toolCalls={group.toolCalls}
                             pendingToolId={pendingToolId}
                             onApproveTool={onApproveTool}
                             onRejectTool={onRejectTool}
                             onOpenDiff={onOpenDiff}
                           />
-                        ) : (
-                          // 单个工具调用直接显示
-                          message.toolCalls.map((tc, index) => {
-                            const isFileOp = isWriteTool(tc.name)
-                            const isPending = tc.id === pendingToolId
+                        )
+                      }
+                    })
+                  })()}
+                </>
+              )}
 
-                            if (isFileOp) {
-                              return (
-                                <FileChangeCard
-                                  key={`tool-${tc.id}-${index}`}
-                                  toolCall={tc}
-                                  isAwaitingApproval={isPending}
-                                  onApprove={isPending ? onApproveTool : undefined}
-                                  onReject={isPending ? onRejectTool : undefined}
-                                  onOpenInEditor={onOpenDiff}
-                                />
-                              )
-                            }
-
-                            return (
-                              <ToolCallCard
-                                key={`tool-${tc.id}-${index}`}
-                                toolCall={tc}
-                                isAwaitingApproval={isPending}
-                                onApprove={isPending ? onApproveTool : undefined}
-                                onReject={isPending ? onRejectTool : undefined}
-                              />
-                            )
-                          })
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Streaming indicator - 带随机文字的动态效果 */}
-                {isAssistantMessage(message) && message.isStreaming && (
-                  <StreamingIndicator />
-                )}
-              </div>
-            )
-          }
+              {/* Streaming indicator */}
+              {isAssistantMessage(message) && message.isStreaming && (
+                <StreamingIndicator />
+              )}
+            </div>
+          )}
         </div >
       </div >
     </div >
   )
 })
 
-// 流式指示器组件 - 带随机思考文字
-const THINKING_TEXTS = [
-  'Thinking',
-  'Analyzing',
-  'Processing',
-  'Generating',
-  'Composing',
-  'Crafting',
-  'Working',
-  'Computing',
-  'Reasoning',
-  'Pondering'
-]
-
-const THINKING_TEXTS_ZH = [
-  '思考中',
-  '分析中',
-  '处理中',
-  '生成中',
-  '编写中',
-  '构思中',
-  '工作中',
-  '计算中',
-  '推理中',
-  '琢磨中'
-]
+// 流式指示器组件
+const THINKING_TEXTS = ['Thinking', 'Analyzing', 'Processing', 'Generating', 'Composing', 'Crafting']
+const THINKING_TEXTS_ZH = ['思考中', '分析中', '处理中', '生成中', '编写中', '构思中']
 
 function StreamingIndicator() {
   const { language } = useStore()
   const [textIndex, setTextIndex] = useState(() => Math.floor(Math.random() * THINKING_TEXTS.length))
   
-  // 每 3 秒切换一次文字
   useEffect(() => {
     const interval = setInterval(() => {
       setTextIndex(prev => {
         let next = Math.floor(Math.random() * THINKING_TEXTS.length)
-        // 避免连续相同
-        while (next === prev) {
-          next = Math.floor(Math.random() * THINKING_TEXTS.length)
-        }
+        while (next === prev) next = Math.floor(Math.random() * THINKING_TEXTS.length)
         return next
       })
     }, 3000)
@@ -633,25 +533,16 @@ function StreamingIndicator() {
   const currentText = texts[textIndex]
 
   return (
-    <span className="inline-flex items-center gap-1.5 ml-2 text-accent/70 select-none">
-      <span className="text-[12px] font-medium animate-pulse">
-        {currentText}
+    <div className="flex items-center gap-2 mt-2 ml-1 opacity-80">
+      <div className="flex gap-1">
+        <div className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '0ms' }} />
+        <div className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }} />
+        <div className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }} />
+      </div>
+      <span className="text-xs font-bold text-accent tracking-wide animate-pulse">
+        {currentText}...
       </span>
-      <span className="inline-flex items-center gap-[2px]">
-        <span 
-          className="w-1 h-2.5 bg-accent rounded-full animate-bounce" 
-          style={{ animationDelay: '0ms', animationDuration: '600ms' }} 
-        />
-        <span 
-          className="w-1 h-2.5 bg-accent/70 rounded-full animate-bounce" 
-          style={{ animationDelay: '150ms', animationDuration: '600ms' }} 
-        />
-        <span 
-          className="w-1 h-2.5 bg-accent/40 rounded-full animate-bounce" 
-          style={{ animationDelay: '300ms', animationDuration: '600ms' }} 
-        />
-      </span>
-    </span>
+    </div>
   )
 }
 

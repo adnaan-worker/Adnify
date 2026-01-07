@@ -54,11 +54,20 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
 
   // 点击外部关闭菜单
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose()
+    // 延迟添加事件监听，避免右键点击时立即触发关闭
+    const timeoutId = setTimeout(() => {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+          onClose()
+        }
       }
-    }
+      document.addEventListener('mousedown', handleClickOutside)
+      // 保存清理函数的引用
+      ;(window as any).__editorContextMenuCleanup = () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }, 0)
+    
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (callHierarchyResult) {
@@ -68,10 +77,11 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
         }
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
     document.addEventListener('keydown', handleKeyDown)
+    
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
+      clearTimeout(timeoutId)
+      ;(window as any).__editorContextMenuCleanup?.()
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [onClose, callHierarchyResult])
@@ -93,12 +103,67 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
   }, [x, y, callHierarchyResult])
 
   const runAction = (actionId: string) => {
-    // 先聚焦编辑器，某些 action（如 quickOutline）需要编辑器处于焦点状态
-    editor.focus()
-    // 使用 setTimeout 确保焦点已设置
-    setTimeout(() => {
-      editor.getAction(actionId)?.run()
-    }, 0)
+    // 检查编辑器是否仍然有效
+    try {
+      // 先聚焦编辑器，某些 action（如 quickOutline）需要编辑器处于焦点状态
+      editor.focus()
+      // 使用 setTimeout 确保焦点已设置
+      setTimeout(() => {
+        try {
+          editor.getAction(actionId)?.run()
+        } catch (e) {
+          // 编辑器可能已被销毁，忽略错误
+        }
+      }, 0)
+    } catch (e) {
+      // 编辑器可能已被销毁，忽略错误
+    }
+    onClose()
+  }
+
+  // 剪贴板操作 - 使用原生 API
+  const handleCut = async () => {
+    const selection = editor.getSelection()
+    const model = editor.getModel()
+    if (selection && model && !selection.isEmpty()) {
+      const text = model.getValueInRange(selection)
+      await navigator.clipboard.writeText(text)
+      editor.executeEdits('cut', [{
+        range: selection,
+        text: '',
+        forceMoveMarkers: true
+      }])
+    }
+    onClose()
+  }
+
+  const handleCopy = async () => {
+    const selection = editor.getSelection()
+    const model = editor.getModel()
+    if (selection && model && !selection.isEmpty()) {
+      const text = model.getValueInRange(selection)
+      await navigator.clipboard.writeText(text)
+    }
+    onClose()
+  }
+
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text) {
+        editor.focus()
+        const selection = editor.getSelection()
+        if (selection) {
+          editor.executeEdits('paste', [{
+            range: selection,
+            text: text,
+            forceMoveMarkers: true
+          }])
+        }
+      }
+    } catch (e) {
+      console.error('Paste failed:', e)
+    }
     onClose()
   }
 
@@ -199,9 +264,9 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     { id: 'change-all', labelKey: 'ctxChangeAll', shortcut: 'Ctrl+F2', action: () => runAction('editor.action.changeAll') },
     { id: 'format', labelKey: 'ctxFormat', shortcut: 'Shift+Alt+F', action: () => runAction('editor.action.formatDocument'), divider: true },
     // 剪贴板
-    { id: 'cut', labelKey: 'ctxCut', shortcut: 'Ctrl+X', action: () => runAction('editor.action.clipboardCutAction') },
-    { id: 'copy', labelKey: 'ctxCopy', shortcut: 'Ctrl+C', action: () => runAction('editor.action.clipboardCopyAction') },
-    { id: 'paste', labelKey: 'ctxPaste', shortcut: 'Ctrl+V', action: () => runAction('editor.action.clipboardPasteAction'), divider: true },
+    { id: 'cut', labelKey: 'ctxCut', shortcut: 'Ctrl+X', action: handleCut },
+    { id: 'copy', labelKey: 'ctxCopy', shortcut: 'Ctrl+C', action: handleCopy },
+    { id: 'paste', labelKey: 'ctxPaste', shortcut: 'Ctrl+V', action: handlePaste, divider: true },
     // 查找
     { id: 'find', labelKey: 'ctxFind', shortcut: 'Ctrl+F', action: () => runAction('actions.find') },
     { id: 'replace', labelKey: 'ctxReplace', shortcut: 'Ctrl+H', action: () => runAction('editor.action.startFindReplaceAction'), divider: true },

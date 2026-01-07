@@ -1131,6 +1131,7 @@ export default function Editor() {
                   fontSize: getEditorConfig().fontSize,
                   fontFamily: getEditorConfig().fontFamily,
                   fontLigatures: true,
+                  lineHeight: 1.6, // Better breathing room
                   tabSize: getEditorConfig().tabSize,
                   wordWrap: getEditorConfig().wordWrap,
                   minimap: { enabled: getEditorConfig().minimap, scale: getEditorConfig().minimapScale, renderCharacters: false },
@@ -1138,9 +1139,10 @@ export default function Editor() {
                   smoothScrolling: true,
                   cursorBlinking: 'smooth',
                   cursorSmoothCaretAnimation: 'on',
-                  padding: { top: 16 },
+                  padding: { top: 24, bottom: 16 }, // More vertical padding
                   lineNumbers: getEditorConfig().lineNumbers,
                   renderLineHighlight: 'all',
+                  roundedSelection: false,
                   automaticLayout: true,
                   glyphMargin: true, // 启用断点区域
                   
@@ -1216,6 +1218,10 @@ export default function Editor() {
                   renderControlCharacters: true,
                   renderLineHighlightOnlyWhenFocus: false,
                   
+                  // 选区高亮 - 失去焦点时保持选区可见
+                  selectionHighlight: true,
+                  occurrencesHighlight: 'singleFile',
+                  
                   // 滚动和导航
                   stickyScroll: { enabled: true, maxLineCount: 5 },
                   scrollbar: {
@@ -1264,13 +1270,13 @@ export default function Editor() {
                   smartSelect: { selectLeadingAndTrailingWhitespace: true },
                   copyWithSyntaxHighlighting: true,
                   emptySelectionClipboard: true,
-                  columnSelection: true,
+                  columnSelection: false,
                   
                   // 光标
                   cursorStyle: 'line',
                   cursorWidth: 2,
                   
-                  // 禁用自定义右键菜单（使用我们自己的）
+                  // 禁用内置右键菜单（使用自定义菜单）
                   contextmenu: false,
                   ...(activeFileInfo ? getLargeFileEditorOptions(activeFileInfo) : {}),
                 }}

@@ -3,6 +3,7 @@
  */
 import { StateCreator } from 'zustand'
 import type { FileItem } from '@shared/types'
+import { normalizePath } from '@utils/pathUtils'
 
 export interface WorkspaceConfig {
   configPath: string | null
@@ -127,10 +128,12 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
 
   openFile: (path, content, originalContent, options) =>
     set((state) => {
-      const existing = state.openFiles.find((f) => f.path === path)
+      // 使用规范化路径进行比较，避免路径格式不一致导致重复打开
+      const normalizedPath = normalizePath(path)
+      const existing = state.openFiles.find((f) => normalizePath(f.path) === normalizedPath)
       if (existing) {
         const updatedFiles = state.openFiles.map((f) =>
-          f.path === path ? {
+          normalizePath(f.path) === normalizedPath ? {
             ...f,
             content,
             originalContent,
@@ -138,7 +141,8 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
             encoding: options?.encoding,
           } : f
         )
-        return { activeFilePath: path, openFiles: updatedFiles }
+        // 使用已存在文件的路径，保持一致性
+        return { activeFilePath: existing.path, openFiles: updatedFiles }
       }
       return {
         openFiles: [...state.openFiles, {

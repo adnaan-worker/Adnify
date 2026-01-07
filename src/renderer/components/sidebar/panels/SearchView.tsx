@@ -4,7 +4,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useCallback, useMemo } from 'react'
-import { ChevronRight, ChevronDown, FileText, Edit2, Box, MoreHorizontal, Loader2 } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Edit2, Box, MoreHorizontal, Loader2, Search } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import { getFileName } from '@utils/pathUtils'
@@ -431,7 +431,20 @@ export function SearchView() {
         )}
 
         {!isSearching && query && searchResults.length === 0 && (
-          <div className="p-6 text-center text-xs text-text-muted opacity-60">{t('noResults', language)}</div>
+          <div className="flex flex-col items-center justify-center py-12 px-6 text-center animate-fade-in opacity-60">
+            <div className="w-12 h-12 bg-surface/30 rounded-2xl flex items-center justify-center mb-3 border border-border">
+              <Search className="w-6 h-6 text-text-muted" />
+            </div>
+            <p className="text-xs font-medium text-text-secondary">{t('noResults', language)}</p>
+            <p className="text-[10px] text-text-muted mt-1">Try a different keyword or regex</p>
+          </div>
+        )}
+
+        {!isSearching && !query && (
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center animate-fade-in opacity-40 select-none">
+            <Search className="w-8 h-8 text-text-muted mb-2" />
+            <p className="text-xs font-medium text-text-muted">Type to search across files</p>
+          </div>
         )}
       </div>
     </div>

@@ -4,7 +4,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useMemo } from 'react'
-import { ChevronRight, FileText, AlertCircle, AlertTriangle, Info } from 'lucide-react'
+import { ChevronRight, FileText, AlertCircle, AlertTriangle, Info, CheckCircle2 } from 'lucide-react'
 import { useStore } from '@store'
 import type { LspDiagnostic } from '@shared/types'
 import { useDiagnosticsStore } from '@services/diagnosticsStore'
@@ -122,8 +122,16 @@ export function ProblemsView() {
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {filteredDiagnostics.size === 0 ? (
-          <div className="p-6 text-center text-xs text-text-muted">
-            {language === 'zh' ? '没有发现问题' : 'No problems detected'}
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center animate-fade-in select-none">
+            <div className="w-12 h-12 bg-green-500/10 rounded-2xl flex items-center justify-center mb-3 border border-green-500/20 shadow-sm">
+              <CheckCircle2 className="w-6 h-6 text-green-500" />
+            </div>
+            <p className="text-xs font-medium text-text-primary">
+              {language === 'zh' ? '未发现问题' : 'No problems detected'}
+            </p>
+            <p className="text-[10px] text-text-muted mt-1 opacity-60">
+              {language === 'zh' ? '代码看起来很棒！' : 'Your code looks great!'}
+            </p>
           </div>
         ) : (
           Array.from(filteredDiagnostics.entries()).map(([uri, diags]) => {
