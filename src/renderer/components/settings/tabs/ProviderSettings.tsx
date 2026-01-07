@@ -8,21 +8,15 @@
  */
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash, Eye, EyeOff, Check, AlertTriangle, X, Server, Key, Sliders, Box } from 'lucide-react'
+import { Plus, Trash, Eye, EyeOff, Check, AlertTriangle, X, Server, Sliders, Box } from 'lucide-react'
 import { useStore } from '@store'
-import { PROVIDERS, getAdapterConfig, type LLMAdapterConfig } from '@/shared/config/providers'
+import { PROVIDERS, getAdapterConfig, getBuiltinProvider, type LLMAdapterConfig, type AdvancedConfig } from '@/shared/config/providers'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Input, Select } from '@components/ui'
 import { ProviderSettingsProps } from '../types'
 import { CustomProviderEditor } from './CustomProviderEditor'
 import { AdapterOverridesEditor } from '../AdapterOverridesEditor'
 import { isCustomProvider } from '@renderer/types/provider'
-
-/** 高级配置类型 */
-interface AdvancedConfig {
-  request?: { endpoint?: string; bodyTemplate?: Record<string, unknown> }
-  response?: { contentField?: string; reasoningField?: string; toolCallField?: string; doneMarker?: string }
-}
 
 // 内置厂商 ID
 const BUILTIN_PROVIDER_IDS = ['openai', 'anthropic', 'gemini']
@@ -235,11 +229,13 @@ export function ProviderSettings({
 
     if (advanced) {
       const baseConfig = localConfig.adapterConfig || getAdapterConfig(localConfig.provider) || getAdapterConfig('openai')
+      
       const updatedAdapterConfig: LLMAdapterConfig = {
         ...baseConfig,
         request: {
           ...baseConfig.request,
           endpoint: advanced.request?.endpoint || baseConfig.request.endpoint,
+          headers: { ...baseConfig.request.headers, ...advanced.request?.headers },
           bodyTemplate: advanced.request?.bodyTemplate || baseConfig.request.bodyTemplate,
         },
         response: {
@@ -362,10 +358,10 @@ export function ProviderSettings({
 
       {/* 配置区域（非添加模式时显示） */}
       {!isAddingCustom && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 左列：基础配置 */}
-          <div className="space-y-6">
-            {/* 模型设置 */}
+        <div className="space-y-6">
+          {/* 上方两列：模型配置 + 生成参数 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 左列：模型配置 */}
             <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <Box className="w-4 h-4 text-accent" />
@@ -434,51 +430,7 @@ export function ProviderSettings({
               </div>
             </section>
 
-            {/* 认证设置 */}
-            <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Key className="w-4 h-4 text-accent" />
-                <h5 className="text-sm font-medium text-text-primary">
-                  {language === 'zh' ? '认证设置' : 'Authentication'}
-                </h5>
-              </div>
-
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-text-secondary">API Key</label>
-                  <Input
-                    type={showApiKey ? 'text' : 'password'}
-                    value={localConfig.apiKey}
-                    onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
-                    placeholder={PROVIDERS[localConfig.provider]?.auth.placeholder || 'sk-...'}
-                    className="bg-black/20 border-border font-mono text-xs"
-                    rightIcon={
-                      <button onClick={() => setShowApiKey(!showApiKey)} className="text-text-muted hover:text-text-primary">
-                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    }
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <TestConnectionButton localConfig={localConfig} language={language} />
-                  {!isCustomSelected && PROVIDERS[localConfig.provider]?.auth.helpUrl && (
-                    <a 
-                      href={PROVIDERS[localConfig.provider]?.auth.helpUrl} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="text-xs text-text-muted hover:text-accent hover:underline flex items-center gap-1"
-                    >
-                      {language === 'zh' ? '获取 Key' : 'Get Key'} <span className="opacity-50">↗</span>
-                    </a>
-                  )}
-                </div>
-              </div>
-            </section>
-          </div>
-
-          {/* 右列：高级参数 */}
-          <div className="space-y-6">
+            {/* 右列：生成参数 */}
             <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-5">
               <div className="flex items-center gap-2 mb-1">
                 <Sliders className="w-4 h-4 text-accent" />
@@ -559,63 +511,111 @@ export function ProviderSettings({
                 />
               </div>
             </section>
-
-            {/* 网络 & 适配器 */}
-            <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Server className="w-4 h-4 text-accent" />
-                <h5 className="text-sm font-medium text-text-primary">
-                  {language === 'zh' ? '网络 & 适配器' : 'Network & Adapter'}
-                </h5>
-              </div>
-
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-text-secondary">
-                    {language === 'zh' ? 'API 端点' : 'API Endpoint'}
-                  </label>
-                  <Input
-                    value={localConfig.baseUrl || ''}
-                    onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
-                    placeholder="https://api.example.com/v1"
-                    className="bg-black/20 border-border text-xs font-mono"
-                  />
-                </div>
-                
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-text-secondary">
-                    {language === 'zh' ? '超时时间 (秒)' : 'Timeout (seconds)'}
-                  </label>
-                  <Input
-                    type="number"
-                    value={(localConfig.timeout || 120000) / 1000}
-                    onChange={(e) => setLocalConfig({ ...localConfig, timeout: (parseInt(e.target.value) || 120) * 1000 })}
-                    min={10}
-                    max={600}
-                    className="bg-black/20 border-border text-xs w-32"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-border">
-                <details className="group">
-                  <summary className="flex items-center gap-2 text-xs font-medium text-text-muted cursor-pointer hover:text-accent transition-colors select-none py-1">
-                    <span className="group-open:rotate-90 transition-transform">▶</span>
-                    {language === 'zh' ? '适配器高级覆盖' : 'Adapter Overrides'}
-                  </summary>
-                  <div className="mt-3 pl-2 border-l border-border">
-                    <AdapterOverridesEditor
-                      overrides={localProviderConfigs[localConfig.provider]?.advanced || adapterConfigToAdvanced(currentAdapterConfig, isCustomSelected)}
-                      onChange={handleAdvancedConfigChange}
-                      language={language}
-                      defaultEndpoint={getAdapterConfig(localConfig.provider)?.request?.endpoint || '/chat/completions'}
-                      defaultConfig={isCustomSelected ? currentAdapterConfig : getAdapterConfig(localConfig.provider)}
-                    />
-                  </div>
-                </details>
-              </div>
-            </section>
           </div>
+
+          {/* 下方全宽：认证 & 网络适配器 */}
+          <section className="p-6 bg-surface/30 rounded-xl border border-border">
+            <div className="flex items-center gap-2 mb-5">
+              <Server className="w-4 h-4 text-accent" />
+              <h5 className="text-sm font-medium text-text-primary">
+                {language === 'zh' ? '认证 & 网络配置' : 'Authentication & Network'}
+              </h5>
+            </div>
+
+            {/* 基础配置：三列布局 - 输入框对齐 */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+              {/* API Key */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-text-secondary">
+                  API Key
+                </label>
+                <Input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={localConfig.apiKey}
+                  onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
+                  placeholder={PROVIDERS[localConfig.provider]?.auth.placeholder || 'sk-...'}
+                  className="bg-black/20 border-border font-mono text-xs"
+                  rightIcon={
+                    <button onClick={() => setShowApiKey(!showApiKey)} className="text-text-muted hover:text-text-primary">
+                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  }
+                />
+              </div>
+
+              {/* API 端点 */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-text-secondary">
+                  {language === 'zh' ? 'API 端点' : 'API Endpoint'}
+                </label>
+                <Input
+                  value={localConfig.baseUrl || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
+                  placeholder="https://api.example.com/v1"
+                  className="bg-black/20 border-border text-xs font-mono"
+                />
+              </div>
+
+              {/* 超时时间 */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-text-secondary">
+                  {language === 'zh' ? '超时时间 (秒)' : 'Timeout (seconds)'}
+                </label>
+                <Input
+                  type="number"
+                  value={(localConfig.timeout || 120000) / 1000}
+                  onChange={(e) => setLocalConfig({ ...localConfig, timeout: (parseInt(e.target.value) || 120) * 1000 })}
+                  min={10}
+                  max={600}
+                  className="bg-black/20 border-border text-xs"
+                />
+              </div>
+            </div>
+
+            {/* 操作按钮行 */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <TestConnectionButton localConfig={localConfig} language={language} />
+                {!isCustomSelected && PROVIDERS[localConfig.provider]?.auth.helpUrl && (
+                  <a 
+                    href={PROVIDERS[localConfig.provider]?.auth.helpUrl} 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="text-xs text-text-muted hover:text-accent hover:underline flex items-center gap-1"
+                  >
+                    {language === 'zh' ? '获取 Key' : 'Get Key'} <span className="opacity-50">↗</span>
+                  </a>
+                )}
+              </div>
+              <p className="text-[10px] text-text-muted">
+                {language === 'zh' ? '留空端点使用默认值，超时建议 60-300 秒' : 'Leave endpoint empty for default, timeout recommended 60-300s'}
+              </p>
+            </div>
+
+            {/* 高级适配器配置 */}
+            <div className="pt-4 border-t border-border">
+              <details className="group">
+                <summary className="flex items-center gap-2 text-xs font-medium text-text-muted cursor-pointer hover:text-accent transition-colors select-none py-2">
+                  <span className="group-open:rotate-90 transition-transform">▶</span>
+                  {language === 'zh' ? '高级适配器配置' : 'Advanced Adapter Settings'}
+                  <span className="text-[10px] text-text-muted/60 ml-2">
+                    {language === 'zh' ? '(请求体、响应解析、视觉配置等)' : '(body template, response parsing, vision, etc.)'}
+                  </span>
+                </summary>
+                <div className="mt-4">
+                  <AdapterOverridesEditor
+                    overrides={localProviderConfigs[localConfig.provider]?.advanced || adapterConfigToAdvanced(currentAdapterConfig, isCustomSelected)}
+                    onChange={handleAdvancedConfigChange}
+                    language={language}
+                    defaultEndpoint={getAdapterConfig(localConfig.provider)?.request?.endpoint || '/chat/completions'}
+                    defaultConfig={isCustomSelected ? currentAdapterConfig : getAdapterConfig(localConfig.provider)}
+                    defaultSupportsVision={isCustomSelected ? false : (getBuiltinProvider(localConfig.provider)?.features?.vision ?? true)}
+                    fullWidth
+                  />
+                </div>
+              </details>
+            </div>
+          </section>
         </div>
       )}
     </div>

@@ -284,6 +284,7 @@ export function CustomProviderEditor({
                 language={language} 
                 defaultEndpoint="/chat/completions"
                 fullCustomMode={true}
+                defaultSupportsVision={false}
               />
             </div>
           )}

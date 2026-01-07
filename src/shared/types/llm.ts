@@ -3,7 +3,7 @@
  * 单一来源 - 所有 LLM 相关类型从此文件导出
  */
 
-import type { LLMAdapterConfig } from '@/shared/config/providers'
+import type { LLMAdapterConfig, AdvancedConfig } from '@/shared/config/providers'
 
 // ============================================
 // 消息内容类型
@@ -71,24 +71,8 @@ export interface LLMConfig {
     temperature?: number
     topP?: number
     adapterConfig?: LLMAdapterConfig
-    /** 高级配置（认证、请求、响应覆盖） */
-    advanced?: {
-        auth?: {
-            type?: 'bearer' | 'api-key' | 'header' | 'none'
-            headerName?: string
-        }
-        request?: {
-            endpoint?: string
-            headers?: Record<string, string>
-            bodyTemplate?: Record<string, unknown>
-        }
-        response?: {
-            contentField?: string
-            reasoningField?: string
-            toolCallField?: string
-            doneMarker?: string
-        }
-    }
+    /** 高级配置（认证、请求、响应、视觉覆盖） */
+    advanced?: AdvancedConfig
 }
 
 export interface LLMParameters {

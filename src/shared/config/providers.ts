@@ -54,18 +54,6 @@ export interface ResponseConfig {
   argsIsObject?: boolean // 参数是否为对象（Anthropic 是 true，OpenAI 是 false）
 }
 
-/** 图片格式配置 */
-export interface ImageFormatConfig {
-  // 图片内容块的类型字段值，如 'image_url'、'image'
-  type: string
-  // 图片数据的包装结构，支持模板变量：{{url}}, {{base64}}, {{mediaType}}
-  // 例如 OpenAI: { url: '{{url}}' }
-  // 例如 Anthropic: { type: 'base64', media_type: '{{mediaType}}', data: '{{base64}}' }
-  wrapper: Record<string, unknown>
-  // 包装字段名，如 'image_url'、'source'
-  wrapperField: string
-}
-
 /** 消息格式配置（用于 custom 协议） */
 export interface MessageFormatConfig {
   // 系统消息处理
@@ -80,10 +68,21 @@ export interface MessageFormatConfig {
   // 助手消息中的工具调用
   assistantToolCallField: string // 如 'tool_calls'（OpenAI）或 'content'（Anthropic）
   assistantToolCallFormat: 'openai' | 'anthropic' // 工具调用格式
+}
 
-  // 视觉支持
-  supportsVision?: boolean
-  // 图片格式配置（当 supportsVision 为 true 时使用）
+/** 图片格式配置 - 完整的图片内容块模板 */
+export interface ImageFormatConfig {
+  // 完整的图片内容块模板，支持变量：{{url}}, {{base64}}, {{mediaType}}
+  // OpenAI: { "type": "image_url", "image_url": { "url": "{{url}}" } }
+  // Anthropic: { "type": "image", "source": { "type": "base64", "media_type": "{{mediaType}}", "data": "{{base64}}" } }
+  template: Record<string, unknown>
+}
+
+/** 视觉配置（用于所有协议） */
+export interface VisionConfig {
+  // 是否启用图片发送（覆盖 features.vision）
+  enabled?: boolean
+  // 图片格式配置（覆盖默认格式）
   imageFormat?: ImageFormatConfig
 }
 
@@ -167,6 +166,8 @@ export interface AdvancedConfig {
   messageFormat?: Partial<MessageFormatConfig>
   /** 工具格式配置 - 仅用于 custom 协议 */
   toolFormat?: Partial<ToolFormatConfig>
+  /** 视觉配置 - 所有 provider 都可用 */
+  vision?: VisionConfig
 }
 
 /** 用户 Provider 配置（保存到配置文件，覆盖默认值） */
@@ -188,6 +189,16 @@ export interface UserProviderConfig {
 // ============================================
 // 内置适配器预设
 // ============================================
+
+/** OpenAI 风格图片格式（大多数国产厂商兼容） */
+export const OPENAI_IMAGE_FORMAT: ImageFormatConfig = {
+  template: { type: 'image_url', image_url: { url: '{{url}}' } },
+}
+
+/** Anthropic 风格图片格式 */
+export const ANTHROPIC_IMAGE_FORMAT: ImageFormatConfig = {
+  template: { type: 'image', source: { type: 'base64', media_type: '{{mediaType}}', data: '{{base64}}' } },
+}
 
 export const OPENAI_ADAPTER: LLMAdapterConfig = {
   id: 'openai',
@@ -647,6 +658,11 @@ export function cleanAdvancedConfig(providerId: string, advanced?: AdvancedConfi
   // response 配置仅对 custom 协议有效（内置协议使用 SDK 自动解析）
   if (protocol === 'custom' && advanced.response) {
     cleaned.response = advanced.response
+  }
+
+  // vision 配置对所有 provider 都有效
+  if (advanced.vision) {
+    cleaned.vision = advanced.vision
   }
 
   return Object.keys(cleaned).length > 0 ? cleaned : undefined

@@ -215,7 +215,17 @@ function cleanProviderConfig(
   // 自定义 Provider: 保存完整配置
   if (!isBuiltin) {
     if (config.adapterConfig) {
-      cleaned.adapterConfig = config.adapterConfig
+      // 清理 adapterConfig 中的认证头（认证头由 auth 配置在运行时动态生成）
+      const cleanedAdapter = { ...config.adapterConfig }
+      if (cleanedAdapter.request?.headers) {
+        const cleanedHeaders = { ...cleanedAdapter.request.headers }
+        delete cleanedHeaders['Authorization']
+        delete cleanedHeaders['authorization']
+        delete cleanedHeaders['x-api-key']
+        delete cleanedHeaders['X-Api-Key']
+        cleanedAdapter.request = { ...cleanedAdapter.request, headers: cleanedHeaders }
+      }
+      cleaned.adapterConfig = cleanedAdapter
     }
     // 保存自定义厂商的元数据
     if (config.displayName) cleaned.displayName = config.displayName
@@ -459,15 +469,7 @@ class SettingsService {
       }
     }
 
-    if (advanced.auth && config.apiKey) {
-      const authType = advanced.auth.type
-      if (authType === 'bearer') {
-        adapter.request.headers['Authorization'] = `Bearer ${config.apiKey}`
-      } else if (authType === 'header' && advanced.auth.headerName) {
-        adapter.request.headers[advanced.auth.headerName] = config.apiKey
-      }
-    }
-
+    // 不再在这里设置认证头，由 unified.ts 在运行时根据 auth 配置动态生成
     config.advanced = advanced
   }
 

@@ -20,9 +20,10 @@ import {
   Send,
   MessageSquare,
   Wrench,
+  Eye,
 } from 'lucide-react'
 import { Button, Input, Select } from '@components/ui'
-import type { AdvancedConfig, LLMAdapterConfig, ResponseConfig, MessageFormatConfig, ToolFormatConfig } from '@/shared/config/providers'
+import type { AdvancedConfig, LLMAdapterConfig, ResponseConfig, MessageFormatConfig, ToolFormatConfig, VisionConfig } from '@/shared/config/providers'
 
 interface AdapterOverridesEditorProps {
   overrides?: AdvancedConfig
@@ -32,6 +33,10 @@ interface AdapterOverridesEditorProps {
   defaultConfig?: LLMAdapterConfig
   /** 是否为完全自定义模式（显示所有配置项） */
   fullCustomMode?: boolean
+  /** Provider 是否默认支持视觉 */
+  defaultSupportsVision?: boolean
+  /** 是否使用全宽布局 */
+  fullWidth?: boolean
 }
 
 // ============ 选项配置 ============
@@ -73,6 +78,8 @@ export function AdapterOverridesEditor({
   defaultEndpoint = '/chat/completions',
   defaultConfig,
   fullCustomMode = false,
+  defaultSupportsVision = true,
+  fullWidth = false,
 }: AdapterOverridesEditorProps) {
   // 展开状态
   const [showAuth, setShowAuth] = useState(fullCustomMode)
@@ -80,13 +87,16 @@ export function AdapterOverridesEditor({
   const [showResponse, setShowResponse] = useState(fullCustomMode)
   const [showMessageFormat, setShowMessageFormat] = useState(false)
   const [showToolFormat, setShowToolFormat] = useState(false)
+  const [showVision, setShowVision] = useState(false)
   const [showHeaders, setShowHeaders] = useState(false)
 
   // JSON 编辑状态
   const [bodyJsonText, setBodyJsonText] = useState('')
   const [headersJsonText, setHeadersJsonText] = useState('')
+  const [imageFormatJsonText, setImageFormatJsonText] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [headersError, setHeadersError] = useState<string | null>(null)
+  const [imageFormatError, setImageFormatError] = useState<string | null>(null)
 
   // 默认值
   const defaults = {
@@ -132,8 +142,12 @@ export function AdapterOverridesEditor({
       // 初始化 headers JSON
       const headers = overrides?.request?.headers || defaultConfig?.request?.headers || {}
       setHeadersJsonText(JSON.stringify(headers, null, 2))
+      // 初始化图片格式 JSON（只有用户配置了才显示，否则留空）
+      const imageTemplate = overrides?.vision?.imageFormat?.template
+      setImageFormatJsonText(imageTemplate ? JSON.stringify(imageTemplate, null, 2) : '')
       setJsonError(null)
       setHeadersError(null)
+      setImageFormatError(null)
     }
   }, [defaultConfig?.id, lastProviderId])
 
@@ -172,6 +186,19 @@ export function AdapterOverridesEditor({
     onChange({ ...overrides, toolFormat: newFormat as ToolFormatConfig })
   }
 
+  const updateVision = (updates: Partial<VisionConfig>) => {
+    const current = overrides?.vision || {}
+    const newVision = { ...current, ...updates }
+    // 清理空值
+    if (newVision.enabled === undefined) delete newVision.enabled
+    if (!newVision.imageFormat) delete newVision.imageFormat
+    onChange({ ...overrides, vision: Object.keys(newVision).length > 0 ? newVision : undefined })
+  }
+
+  const updateImageFormat = (template: Record<string, unknown>) => {
+    updateVision({ imageFormat: { template } })
+  }
+
   // ============ JSON 处理 ============
 
   const handleBodyJsonChange = (text: string) => {
@@ -206,12 +233,46 @@ export function AdapterOverridesEditor({
     }
   }
 
+  const handleImageFormatJsonChange = (text: string) => {
+    setImageFormatJsonText(text)
+    if (!text.trim()) {
+      setImageFormatError(null)
+      updateVision({ imageFormat: undefined })
+      return
+    }
+    try {
+      const parsed = JSON.parse(text)
+      setImageFormatError(null)
+      updateImageFormat(parsed)
+    } catch (e: any) {
+      setImageFormatError(e.message)
+    }
+  }
+
+  // JSON 失焦时自动格式化
+  const formatJsonOnBlur = (
+    text: string,
+    setText: (t: string) => void,
+    setError: (e: string | null) => void
+  ) => {
+    if (!text.trim()) return
+    try {
+      const parsed = JSON.parse(text)
+      setText(JSON.stringify(parsed, null, 2))
+      setError(null)
+    } catch {
+      // 保持原样，错误已在 onChange 中处理
+    }
+  }
+
   const handleReset = () => {
     onChange(undefined)
     setBodyJsonText(JSON.stringify(defaults.bodyTemplate, null, 2))
     setHeadersJsonText(JSON.stringify(defaults.headers, null, 2))
+    setImageFormatJsonText('')
     setJsonError(null)
     setHeadersError(null)
+    setImageFormatError(null)
   }
 
   const hasOverrides = !!overrides
@@ -260,24 +321,41 @@ export function AdapterOverridesEditor({
     </div>
   )
 
+  // fullWidth 模式下不需要外层边框
+  const containerClass = fullWidth 
+    ? 'space-y-4' 
+    : 'space-y-1 border border-border-subtle rounded-lg bg-surface/20'
+
   return (
-    <div className="space-y-1 border border-border-subtle rounded-lg bg-surface/20">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-surface/30 border-b border-border-subtle">
-        <span className="text-xs font-medium text-text-secondary">
-          {fullCustomMode
-            ? language === 'zh' ? '完整适配器配置' : 'Full Adapter Configuration'
-            : language === 'zh' ? '高级配置' : 'Advanced Config'}
-        </span>
-        {hasOverrides && (
+    <div className={containerClass}>
+      {/* Header - fullWidth 模式下隐藏 */}
+      {!fullWidth && (
+        <div className="flex items-center justify-between px-4 py-2 bg-surface/30 border-b border-border-subtle">
+          <span className="text-xs font-medium text-text-secondary">
+            {fullCustomMode
+              ? language === 'zh' ? '完整适配器配置' : 'Full Adapter Configuration'
+              : language === 'zh' ? '高级配置' : 'Advanced Config'}
+          </span>
+          {hasOverrides && (
+            <Button variant="ghost" size="sm" onClick={handleReset} className="h-6 px-2 text-[10px]">
+              <RotateCcw className="w-3 h-3 mr-1" />
+              {language === 'zh' ? '重置' : 'Reset'}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* fullWidth 模式下显示重置按钮 */}
+      {fullWidth && hasOverrides && (
+        <div className="flex justify-end">
           <Button variant="ghost" size="sm" onClick={handleReset} className="h-6 px-2 text-[10px]">
             <RotateCcw className="w-3 h-3 mr-1" />
-            {language === 'zh' ? '重置' : 'Reset'}
+            {language === 'zh' ? '重置全部' : 'Reset All'}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="px-4 pb-3 space-y-1">
+      <div className={fullWidth ? 'space-y-4' : 'px-4 pb-3 space-y-1'}>
         {/* ============ 认证配置 ============ */}
         <SectionHeader
           icon={Key}
@@ -287,7 +365,7 @@ export function AdapterOverridesEditor({
           hasChanges={!!overrides?.auth}
         />
         {showAuth && (
-          <div className="pl-6 pb-3 space-y-3 border-l-2 border-border-subtle ml-1.5">
+          <div className={fullWidth ? 'pb-4 grid grid-cols-2 md:grid-cols-4 gap-4' : 'pl-6 pb-3 space-y-3 border-l-2 border-border-subtle ml-1.5'}>
             <FieldRow label={language === 'zh' ? '认证方式' : 'Auth Type'}>
               <Select
                 value={overrides?.auth?.type || 'bearer'}
@@ -318,44 +396,82 @@ export function AdapterOverridesEditor({
           hasChanges={!!overrides?.request}
         />
         {showRequest && (
-          <div className="pl-6 pb-3 space-y-3 border-l-2 border-border-subtle ml-1.5">
-            <FieldRow label={language === 'zh' ? 'API 端点' : 'API Endpoint'} hint={language === 'zh' ? '相对于 baseUrl 的路径' : 'Path relative to baseUrl'}>
-              <Input
-                value={overrides?.request?.endpoint ?? defaults.endpoint}
-                onChange={(e) => updateRequest({ endpoint: e.target.value || undefined })}
-                placeholder={defaults.endpoint}
-                className="h-8 text-xs font-mono"
-              />
-            </FieldRow>
-
-            {/* 自定义请求头 */}
-            <div className="space-y-1">
-              <button
-                onClick={() => setShowHeaders(!showHeaders)}
-                className="flex items-center gap-1 text-[10px] text-text-secondary hover:text-text-primary"
-              >
-                {showHeaders ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                {language === 'zh' ? '自定义请求头 (JSON)' : 'Custom Headers (JSON)'}
-              </button>
-              {showHeaders && (
-                <div className="relative">
-                  <textarea
-                    value={headersJsonText}
-                    onChange={(e) => handleHeadersJsonChange(e.target.value)}
-                    className={`w-full px-3 py-2 text-xs font-mono bg-surface/50 border rounded-md focus:outline-none resize-y min-h-[80px] ${
-                      headersError ? 'border-red-500/50' : 'border-border-subtle focus:border-accent'
-                    }`}
-                    placeholder='{ "X-Custom-Header": "value" }'
+          <div className={fullWidth ? 'pb-4 space-y-4' : 'pl-6 pb-3 space-y-3 border-l-2 border-border-subtle ml-1.5'}>
+            {/* fullWidth 模式：端点和请求头并排 */}
+            {fullWidth ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FieldRow label={language === 'zh' ? 'API 端点' : 'API Endpoint'} hint={language === 'zh' ? '相对于 baseUrl 的路径' : 'Path relative to baseUrl'}>
+                  <Input
+                    value={overrides?.request?.endpoint ?? defaults.endpoint}
+                    onChange={(e) => updateRequest({ endpoint: e.target.value || undefined })}
+                    placeholder={defaults.endpoint}
+                    className="h-8 text-xs font-mono"
                   />
-                  {headersError && (
-                    <div className="mt-1 px-2 py-1 text-[10px] text-red-400 bg-red-500/10 rounded flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" />
-                      <span className="truncate">{headersError}</span>
+                </FieldRow>
+                
+                {/* 自定义请求头 */}
+                <FieldRow label={language === 'zh' ? '自定义请求头 (JSON)' : 'Custom Headers (JSON)'}>
+                  <div className="relative">
+                    <textarea
+                      value={headersJsonText}
+                      onChange={(e) => handleHeadersJsonChange(e.target.value)}
+                      onBlur={() => formatJsonOnBlur(headersJsonText, setHeadersJsonText, setHeadersError)}
+                      className={`w-full px-3 py-2 text-xs font-mono bg-surface/50 border rounded-md focus:outline-none resize-y min-h-[80px] ${
+                        headersError ? 'border-red-500/50' : 'border-border-subtle focus:border-accent'
+                      }`}
+                      placeholder='{ "X-Custom-Header": "value" }'
+                    />
+                    {headersError && (
+                      <div className="absolute bottom-2 left-2 right-2 px-2 py-1 text-[10px] text-red-400 bg-red-500/10 rounded flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span className="truncate">{headersError}</span>
+                      </div>
+                    )}
+                  </div>
+                </FieldRow>
+              </div>
+            ) : (
+              <>
+                <FieldRow label={language === 'zh' ? 'API 端点' : 'API Endpoint'} hint={language === 'zh' ? '相对于 baseUrl 的路径' : 'Path relative to baseUrl'}>
+                  <Input
+                    value={overrides?.request?.endpoint ?? defaults.endpoint}
+                    onChange={(e) => updateRequest({ endpoint: e.target.value || undefined })}
+                    placeholder={defaults.endpoint}
+                    className="h-8 text-xs font-mono"
+                  />
+                </FieldRow>
+
+                {/* 自定义请求头 */}
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setShowHeaders(!showHeaders)}
+                    className="flex items-center gap-1 text-[10px] text-text-secondary hover:text-text-primary"
+                  >
+                    {showHeaders ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    {language === 'zh' ? '自定义请求头 (JSON)' : 'Custom Headers (JSON)'}
+                  </button>
+                  {showHeaders && (
+                    <div className="relative">
+                      <textarea
+                        value={headersJsonText}
+                        onChange={(e) => handleHeadersJsonChange(e.target.value)}
+                        onBlur={() => formatJsonOnBlur(headersJsonText, setHeadersJsonText, setHeadersError)}
+                        className={`w-full px-3 py-2 text-xs font-mono bg-surface/50 border rounded-md focus:outline-none resize-y min-h-[80px] ${
+                          headersError ? 'border-red-500/50' : 'border-border-subtle focus:border-accent'
+                        }`}
+                        placeholder='{ "X-Custom-Header": "value" }'
+                      />
+                      {headersError && (
+                        <div className="mt-1 px-2 py-1 text-[10px] text-red-400 bg-red-500/10 rounded flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span className="truncate">{headersError}</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
 
             {/* 请求体模板 */}
             <FieldRow label={language === 'zh' ? '请求体模板 (JSON)' : 'Body Template (JSON)'}>
@@ -363,6 +479,7 @@ export function AdapterOverridesEditor({
                 <textarea
                   value={bodyJsonText}
                   onChange={(e) => handleBodyJsonChange(e.target.value)}
+                  onBlur={() => formatJsonOnBlur(bodyJsonText, setBodyJsonText, setJsonError)}
                   className={`w-full px-3 py-2 text-xs font-mono bg-surface/50 border rounded-md focus:outline-none resize-y min-h-[120px] ${
                     jsonError ? 'border-red-500/50' : 'border-border-subtle focus:border-accent'
                   }`}
@@ -393,8 +510,8 @@ export function AdapterOverridesEditor({
           hasChanges={!!overrides?.response}
         />
         {showResponse && (
-          <div className="pl-6 pb-3 border-l-2 border-border-subtle ml-1.5">
-            <div className="grid grid-cols-2 gap-3">
+          <div className={fullWidth ? 'pb-4' : 'pl-6 pb-3 border-l-2 border-border-subtle ml-1.5'}>
+            <div className={`grid gap-4 ${fullWidth ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 gap-3'}`}>
               {/* SSE 配置 */}
               <FieldRow label="Data Prefix" hint="SSE data 前缀">
                 <Input
@@ -466,7 +583,7 @@ export function AdapterOverridesEditor({
               </FieldRow>
 
               {/* 其他选项 */}
-              <div className="col-span-2 flex items-center gap-4">
+              <div className={`${fullWidth ? 'col-span-4' : 'col-span-2'} flex items-center gap-4`}>
                 <label className="flex items-center gap-2 text-[10px] text-text-secondary">
                   <input
                     type="checkbox"
@@ -493,8 +610,8 @@ export function AdapterOverridesEditor({
               hasChanges={!!overrides?.messageFormat}
             />
             {showMessageFormat && (
-              <div className="pl-6 pb-3 border-l-2 border-border-subtle ml-1.5">
-                <div className="grid grid-cols-2 gap-3">
+              <div className={fullWidth ? 'pb-4' : 'pl-6 pb-3 border-l-2 border-border-subtle ml-1.5'}>
+                <div className={`grid gap-4 ${fullWidth ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2 gap-3'}`}>
                   <FieldRow label={language === 'zh' ? '系统消息处理' : 'System Message Mode'}>
                     <Select
                       value={(overrides?.messageFormat?.systemMessageMode as string) ?? defaults.systemMessageMode}
@@ -560,8 +677,8 @@ export function AdapterOverridesEditor({
               hasChanges={!!overrides?.toolFormat}
             />
             {showToolFormat && (
-              <div className="pl-6 pb-3 border-l-2 border-border-subtle ml-1.5">
-                <div className="grid grid-cols-2 gap-3">
+              <div className={fullWidth ? 'pb-4' : 'pl-6 pb-3 border-l-2 border-border-subtle ml-1.5'}>
+                <div className={`grid gap-4 ${fullWidth ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 gap-3'}`}>
                   <FieldRow label={language === 'zh' ? '包装模式' : 'Wrap Mode'}>
                     <Select
                       value={(overrides?.toolFormat?.wrapMode as string) ?? defaults.wrapMode}
@@ -602,6 +719,79 @@ export function AdapterOverridesEditor({
               </div>
             )}
           </>
+        )}
+
+        {/* ============ 视觉配置（所有模式都可用） ============ */}
+        <SectionHeader
+          icon={Eye}
+          title={language === 'zh' ? '视觉配置' : 'Vision Configuration'}
+          expanded={showVision}
+          onToggle={() => setShowVision(!showVision)}
+          hasChanges={!!overrides?.vision}
+        />
+        {showVision && (
+          <div className={fullWidth ? 'pb-4 space-y-4' : 'pl-6 pb-3 border-l-2 border-border-subtle ml-1.5 space-y-3'}>
+            {/* 启用/禁用视觉 */}
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-xs text-text-secondary">
+                <input
+                  type="checkbox"
+                  checked={overrides?.vision?.enabled ?? defaultSupportsVision}
+                  onChange={(e) => updateVision({ enabled: e.target.checked })}
+                  className="w-3.5 h-3.5"
+                />
+                {language === 'zh' ? '启用图片发送' : 'Enable Image Input'}
+                <span className="text-text-muted">
+                  ({language === 'zh' ? `默认: ${defaultSupportsVision ? '启用' : '禁用'}` : `Default: ${defaultSupportsVision ? 'enabled' : 'disabled'}`})
+                </span>
+              </label>
+            </div>
+
+            {/* 图片格式配置（仅当启用视觉时显示） */}
+            {(overrides?.vision?.enabled ?? defaultSupportsVision) && (
+              <div className={fullWidth ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : ''}>
+                <FieldRow label={language === 'zh' ? '图片格式模板 (JSON)' : 'Image Format Template (JSON)'}>
+                  <div className="relative">
+                    <textarea
+                      value={imageFormatJsonText}
+                      onChange={(e) => handleImageFormatJsonChange(e.target.value)}
+                      onBlur={() => formatJsonOnBlur(imageFormatJsonText, setImageFormatJsonText, setImageFormatError)}
+                      className={`w-full px-3 py-2 text-xs font-mono bg-surface/50 border rounded-md focus:outline-none resize-y min-h-[120px] ${
+                        imageFormatError ? 'border-red-500/50' : 'border-border-subtle focus:border-accent'
+                      }`}
+                      placeholder='{ "type": "image_url", "image_url": { "url": "{{url}}" } }'
+                    />
+                    {imageFormatError && (
+                      <div className="absolute bottom-2 left-2 right-2 px-2 py-1 text-[10px] text-red-400 bg-red-500/10 rounded flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span className="truncate">{imageFormatError}</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[9px] text-text-muted">
+                    {language === 'zh'
+                      ? '留空使用默认格式，可用变量: {{url}}, {{base64}}, {{mediaType}}'
+                      : 'Leave empty for default. Variables: {{url}}, {{base64}}, {{mediaType}}'}
+                  </p>
+                </FieldRow>
+                {fullWidth && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-text-secondary">{language === 'zh' ? '常用格式示例' : 'Common Format Examples'}</label>
+                    <div className="space-y-2 text-[10px] font-mono text-text-muted bg-black/20 rounded-md p-3">
+                      <div>
+                        <span className="text-accent">OpenAI / 智谱:</span>
+                        <pre className="mt-1 text-text-secondary whitespace-pre-wrap">{`{ "type": "image_url", "image_url": { "url": "{{url}}" } }`}</pre>
+                      </div>
+                      <div className="pt-2 border-t border-border-subtle">
+                        <span className="text-accent">Anthropic:</span>
+                        <pre className="mt-1 text-text-secondary whitespace-pre-wrap">{`{ "type": "image", "source": { "type": "base64", "media_type": "{{mediaType}}", "data": "{{base64}}" } }`}</pre>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

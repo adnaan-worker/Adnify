@@ -168,27 +168,29 @@ body {
 /* Text Shimmer/Sweep Effect for running tool cards */
 @keyframes text-shimmer {
   0% {
-    background-position: -100% 0;
+    background-position: 200% 0;
   }
   100% {
-    background-position: 200% 0;
+    background-position: -200% 0;
   }
 }
 
 .text-shimmer {
   background: linear-gradient(
     90deg,
-    rgb(var(--text-secondary)) 0%,
-    rgb(var(--text-secondary)) 40%,
-    rgb(var(--accent-subtle)) 50%,
-    rgb(var(--text-secondary)) 60%,
-    rgb(var(--text-secondary)) 100%
+    rgb(var(--text-muted)) 0%,
+    rgb(var(--text-muted)) 30%,
+    rgb(var(--accent)) 45%,
+    rgb(var(--text-primary)) 50%,
+    rgb(var(--accent)) 55%,
+    rgb(var(--text-muted)) 70%,
+    rgb(var(--text-muted)) 100%
   );
-  background-size: 200% 100%;
+  background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: text-shimmer 2s ease-in-out infinite;
+  animation: text-shimmer 1.5s ease-in-out infinite;
 }
 
 /* Scroll shadow for thinking block */

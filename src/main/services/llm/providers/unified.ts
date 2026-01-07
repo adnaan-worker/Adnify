@@ -11,7 +11,7 @@ import { ToolAdapter } from '../adapters/toolAdapter'
 import { ResponseParser } from '../adapters/responseParser'
 import { ChatParams, LLMToolCall, LLMErrorClass, LLMErrorCode, LLMConfig } from '../types'
 import { AGENT_DEFAULTS } from '@shared/constants'
-import { getBuiltinProvider, type LLMAdapterConfig, type ApiProtocol } from '@shared/config/providers'
+import { getBuiltinProvider, type LLMAdapterConfig, type ApiProtocol, type VisionConfig } from '@shared/config/providers'
 import { logger } from '@shared/utils/Logger'
 
 // SDK imports
@@ -27,6 +27,7 @@ export class UnifiedProvider extends BaseProvider {
   private config: LLMConfig
   private protocol: ApiProtocol
   private adapterConfig: LLMAdapterConfig
+  private visionConfig: VisionConfig
 
   // SDK 客户端（按需创建）
   private openaiClient?: OpenAI
@@ -41,6 +42,13 @@ export class UnifiedProvider extends BaseProvider {
     this.config = config
     this.protocol = protocol
     this.adapterConfig = config.adapterConfig || providerDef?.adapter || this.getDefaultAdapter()
+    
+    // 构建 visionConfig：优先使用用户配置，否则使用 provider 默认值
+    const defaultVisionEnabled = providerDef?.features?.vision ?? (protocol !== 'custom')
+    this.visionConfig = {
+      enabled: config.advanced?.vision?.enabled ?? defaultVisionEnabled,
+      imageFormat: config.advanced?.vision?.imageFormat,
+    }
 
     this.log('info', 'Initialized', {
       provider: config.provider,
@@ -119,7 +127,7 @@ export class UnifiedProvider extends BaseProvider {
       const client = this.getOpenAIClient()
 
       // 转换消息和工具
-      const converted = MessageAdapter.convert(messages, systemPrompt, 'openai', this.adapterConfig)
+      const converted = MessageAdapter.convert(messages, systemPrompt, 'openai', this.adapterConfig, this.visionConfig)
       const convertedTools = ToolAdapter.convert(tools, 'openai')
 
       // 构建请求
@@ -334,7 +342,7 @@ export class UnifiedProvider extends BaseProvider {
       const client = this.getAnthropicClient()
 
       // 转换消息和工具
-      const converted = MessageAdapter.convert(messages, systemPrompt, 'anthropic')
+      const converted = MessageAdapter.convert(messages, systemPrompt, 'anthropic', undefined, this.visionConfig)
       const convertedTools = ToolAdapter.convert(tools, 'anthropic') as Anthropic.Tool[] | undefined
 
       // 构建请求
@@ -739,7 +747,7 @@ export class UnifiedProvider extends BaseProvider {
       this.log('info', 'Chat (Custom)', { model, messageCount: messages.length, stream })
 
       // 转换消息和工具（使用配置的 messageFormat 和 toolFormat）
-      const converted = MessageAdapter.convert(messages, systemPrompt, 'custom', this.adapterConfig)
+      const converted = MessageAdapter.convert(messages, systemPrompt, 'custom', this.adapterConfig, this.visionConfig)
       const convertedTools = ToolAdapter.convert(tools, 'custom', this.adapterConfig)
 
       // 构建请求

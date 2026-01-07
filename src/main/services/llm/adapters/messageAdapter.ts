@@ -5,7 +5,8 @@
  */
 
 import type { LLMMessage, MessageContent } from '@/shared/types'
-import type { LLMAdapterConfig, ApiProtocol } from '@/shared/config/providers'
+import type { LLMAdapterConfig, ApiProtocol, VisionConfig, ImageFormatConfig } from '@/shared/config/providers'
+import { OPENAI_IMAGE_FORMAT, ANTHROPIC_IMAGE_FORMAT } from '@/shared/config/providers'
 import type { OpenAIMessage, AnthropicMessage, AnthropicContentBlock, ConvertedRequest } from './types'
 
 /**
@@ -19,17 +20,18 @@ export class MessageAdapter {
     messages: LLMMessage[],
     systemPrompt: string | undefined,
     protocol: ApiProtocol,
-    config?: LLMAdapterConfig
+    config?: LLMAdapterConfig,
+    visionConfig?: VisionConfig
   ): ConvertedRequest {
     switch (protocol) {
       case 'anthropic':
-        return this.convertToAnthropic(messages, systemPrompt)
+        return this.convertToAnthropic(messages, systemPrompt, visionConfig)
       case 'custom':
-        return this.convertToCustom(messages, systemPrompt, config)
+        return this.convertToCustom(messages, systemPrompt, config, visionConfig)
       case 'openai':
       case 'gemini':
       default:
-        return this.convertToOpenAI(messages, systemPrompt, config)
+        return this.convertToOpenAI(messages, systemPrompt, config, visionConfig)
     }
   }
 
@@ -39,68 +41,40 @@ export class MessageAdapter {
   private static convertToOpenAI(
     messages: LLMMessage[],
     systemPrompt: string | undefined,
-    config?: LLMAdapterConfig
+    config?: LLMAdapterConfig,
+    visionConfig?: VisionConfig
   ): ConvertedRequest {
     const result: OpenAIMessage[] = []
+    const supportsVision = visionConfig?.enabled !== false
+    const imageFormat = visionConfig?.imageFormat || OPENAI_IMAGE_FORMAT
 
     // 系统消息处理
     const systemMode = config?.messageFormat?.systemMessageMode || 'message'
-    let pendingSystemContent = systemPrompt || ''
+    const pendingSystemContent = this.collectSystemContent(messages, systemPrompt)
 
-    // 收集消息中的系统消息
-    for (const msg of messages) {
-      if (msg.role === 'system') {
-        const content = this.extractTextContent(msg.content)
-        pendingSystemContent = pendingSystemContent
-          ? `${pendingSystemContent}\n\n${content}`
-          : content
-      }
+    if (pendingSystemContent && systemMode === 'message') {
+      result.push({ role: 'system', content: pendingSystemContent })
     }
 
-    // 根据模式处理系统消息
-    if (pendingSystemContent) {
-      if (systemMode === 'message') {
-        result.push({ role: 'system', content: pendingSystemContent })
-      }
-      // 'parameter' 和 'first-user' 模式在后面处理
-    }
-
-    // 转换其他消息
+    // 转换消息
     let firstUserProcessed = false
     for (const msg of messages) {
-      if (msg.role === 'system') continue // 已处理
+      if (msg.role === 'system') continue
 
       if (msg.role === 'user') {
-        let content = this.convertContent(msg.content)
-        
-        // first-user 模式：将系统消息合并到第一条用户消息
-        if (systemMode === 'first-user' && pendingSystemContent && !firstUserProcessed) {
-          if (typeof content === 'string') {
-            content = `${pendingSystemContent}\n\n${content}`
-          }
+        const converted = supportsVision
+          ? this.convertContent(msg.content, imageFormat) as OpenAIMessage['content']
+          : this.extractTextContent(msg.content)
+
+        let content = converted
+        if (systemMode === 'first-user' && pendingSystemContent && !firstUserProcessed && typeof converted === 'string') {
+          content = `${pendingSystemContent}\n\n${converted}`
           firstUserProcessed = true
         }
-        
+
         result.push({ role: 'user', content })
       } else if (msg.role === 'assistant') {
-        const assistantMsg: OpenAIMessage = {
-          role: 'assistant',
-          content: this.extractTextContent(msg.content),
-        }
-
-        // 处理工具调用
-        if (msg.tool_calls && msg.tool_calls.length > 0) {
-          assistantMsg.tool_calls = msg.tool_calls.map(tc => ({
-            id: tc.id,
-            type: 'function' as const,
-            function: {
-              name: tc.function.name,
-              arguments: tc.function.arguments,
-            },
-          }))
-        }
-
-        result.push(assistantMsg)
+        result.push(this.convertAssistantMessage(msg))
       } else if (msg.role === 'tool') {
         const toolCallId = msg.tool_call_id || msg.toolCallId
         if (toolCallId) {
@@ -121,31 +95,22 @@ export class MessageAdapter {
 
   /**
    * 转换为自定义协议格式
-   * 根据 messageFormat 配置灵活处理
    */
   private static convertToCustom(
     messages: LLMMessage[],
     systemPrompt: string | undefined,
-    config?: LLMAdapterConfig
+    config?: LLMAdapterConfig,
+    visionConfig?: VisionConfig
   ): ConvertedRequest {
     const messageFormat = config?.messageFormat
+    const supportsVision = visionConfig?.enabled === true // 自定义协议默认不支持
+    const imageFormat = visionConfig?.imageFormat || OPENAI_IMAGE_FORMAT
     const result: Array<Record<string, unknown>> = []
 
     // 系统消息处理
     const systemMode = messageFormat?.systemMessageMode || 'message'
-    let pendingSystemContent = systemPrompt || ''
+    const pendingSystemContent = this.collectSystemContent(messages, systemPrompt)
 
-    // 收集消息中的系统消息
-    for (const msg of messages) {
-      if (msg.role === 'system') {
-        const content = this.extractTextContent(msg.content)
-        pendingSystemContent = pendingSystemContent
-          ? `${pendingSystemContent}\n\n${content}`
-          : content
-      }
-    }
-
-    // 根据模式处理系统消息
     if (pendingSystemContent && systemMode === 'message') {
       result.push({ role: 'system', content: pendingSystemContent })
     }
@@ -155,22 +120,21 @@ export class MessageAdapter {
     const toolResultIdField = messageFormat?.toolResultIdField || 'tool_call_id'
     const toolResultWrapper = messageFormat?.toolResultWrapper
 
-    // 转换其他消息
+    // 转换消息
     let firstUserProcessed = false
     for (const msg of messages) {
       if (msg.role === 'system') continue
 
       if (msg.role === 'user') {
-        let content: string | Array<Record<string, unknown>> = this.convertContent(msg.content) as string | Array<Record<string, unknown>>
-        
-        // first-user 模式
-        if (systemMode === 'first-user' && pendingSystemContent && !firstUserProcessed) {
-          if (typeof content === 'string') {
-            content = `${pendingSystemContent}\n\n${content}`
-          }
+        let content = supportsVision
+          ? this.convertContent(msg.content, imageFormat)
+          : this.extractTextContent(msg.content)
+
+        if (systemMode === 'first-user' && pendingSystemContent && !firstUserProcessed && typeof content === 'string') {
+          content = `${pendingSystemContent}\n\n${content}`
           firstUserProcessed = true
         }
-        
+
         result.push({ role: 'user', content })
       } else if (msg.role === 'assistant') {
         const assistantMsg: Record<string, unknown> = {
@@ -178,49 +142,18 @@ export class MessageAdapter {
           content: this.extractTextContent(msg.content),
         }
 
-        // 处理工具调用
-        if (msg.tool_calls && msg.tool_calls.length > 0) {
+        if (msg.tool_calls?.length) {
           const toolCallField = messageFormat?.assistantToolCallField || 'tool_calls'
           assistantMsg[toolCallField] = msg.tool_calls.map(tc => ({
             id: tc.id,
             type: 'function',
-            function: {
-              name: tc.function.name,
-              arguments: tc.function.arguments,
-            },
+            function: { name: tc.function.name, arguments: tc.function.arguments },
           }))
         }
 
         result.push(assistantMsg)
       } else if (msg.role === 'tool') {
-        const toolCallId = msg.tool_call_id || msg.toolCallId
-        const toolContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-
-        if (toolResultWrapper) {
-          // Anthropic 风格：包装在 content 数组中
-          result.push({
-            role: toolResultRole,
-            content: [{
-              type: toolResultWrapper,
-              [toolResultIdField]: toolCallId,
-              content: toolContent,
-            }],
-          })
-        } else if (toolResultRole === 'function') {
-          // 百度 ERNIE 风格
-          result.push({
-            role: 'function',
-            name: msg.toolName || toolCallId,
-            content: toolContent,
-          })
-        } else {
-          // OpenAI 风格
-          result.push({
-            role: toolResultRole,
-            content: toolContent,
-            [toolResultIdField]: toolCallId,
-          })
-        }
+        result.push(this.convertToolMessage(msg, toolResultRole, toolResultIdField, toolResultWrapper))
       }
     }
 
@@ -235,77 +168,27 @@ export class MessageAdapter {
    */
   private static convertToAnthropic(
     messages: LLMMessage[],
-    systemPrompt: string | undefined
+    systemPrompt: string | undefined,
+    visionConfig?: VisionConfig
   ): ConvertedRequest {
     const result: AnthropicMessage[] = []
-    let systemContent = systemPrompt || ''
+    const supportsVision = visionConfig?.enabled !== false
+    const systemContent = this.collectSystemContent(messages, systemPrompt)
 
-    // 收集系统消息
-    for (const msg of messages) {
-      if (msg.role === 'system') {
-        const content = this.extractTextContent(msg.content)
-        systemContent = systemContent ? `${systemContent}\n\n${content}` : content
-      }
-    }
-
-    // 转换其他消息
     for (const msg of messages) {
       if (msg.role === 'system') continue
 
       if (msg.role === 'user') {
-        result.push({
-          role: 'user',
-          content: this.convertContentToAnthropic(msg.content),
-        })
+        const content = supportsVision
+          ? this.convertContent(msg.content, ANTHROPIC_IMAGE_FORMAT) as string | AnthropicContentBlock[]
+          : this.extractTextContent(msg.content)
+        result.push({ role: 'user', content })
       } else if (msg.role === 'assistant') {
-        const contentBlocks: AnthropicContentBlock[] = []
-
-        // 文本内容
-        const textContent = this.extractTextContent(msg.content)
-        if (textContent) {
-          contentBlocks.push({ type: 'text', text: textContent })
-        }
-
-        // 工具调用（OpenAI 格式转 Anthropic 格式）
-        if (msg.tool_calls && msg.tool_calls.length > 0) {
-          for (const tc of msg.tool_calls) {
-            let input: Record<string, unknown> = {}
-            try {
-              input = JSON.parse(tc.function.arguments || '{}')
-            } catch {
-              // 忽略解析错误
-            }
-            contentBlocks.push({
-              type: 'tool_use',
-              id: tc.id,
-              name: tc.function.name,
-              input,
-            })
-          }
-        }
-
-        // 旧格式的工具调用
-        if (msg.toolName && msg.toolCallId) {
-          let input: Record<string, unknown> = {}
-          const contentStr = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-          try {
-            input = JSON.parse(contentStr || '{}')
-          } catch {
-            // 忽略解析错误
-          }
-          contentBlocks.push({
-            type: 'tool_use',
-            id: msg.toolCallId,
-            name: msg.toolName,
-            input,
-          })
-        }
-
+        const contentBlocks = this.convertAssistantToAnthropic(msg)
         if (contentBlocks.length > 0) {
           result.push({ role: 'assistant', content: contentBlocks })
         }
       } else if (msg.role === 'tool') {
-        // Anthropic 的工具结果是 user 消息中的 tool_result 块
         const toolCallId = msg.tool_call_id || msg.toolCallId
         if (toolCallId) {
           result.push({
@@ -320,68 +203,29 @@ export class MessageAdapter {
       }
     }
 
-    // Anthropic 的 system 是数组格式
-    const systemArray = systemContent ? [{ type: 'text', text: systemContent }] : undefined
-
     return {
       messages: result,
-      systemPrompt: systemArray,
+      systemPrompt: systemContent ? [{ type: 'text', text: systemContent }] : undefined,
     }
   }
 
-  /**
-   * 转换内容为 OpenAI 格式
-   */
-  private static convertContent(
-    content: MessageContent
-  ): string | Array<{ type: string; text?: string; image_url?: { url: string } }> {
-    if (typeof content === 'string') return content
-    if (!content?.length) return ''
+  // ============================================
+  // 通用辅助方法
+  // ============================================
 
-    return content.map(part => {
-      if (part.type === 'text') {
-        return { type: 'text', text: part.text ?? '' }
+  /** 收集系统消息内容 */
+  private static collectSystemContent(messages: LLMMessage[], systemPrompt?: string): string {
+    let content = systemPrompt || ''
+    for (const msg of messages) {
+      if (msg.role === 'system') {
+        const text = this.extractTextContent(msg.content)
+        content = content ? `${content}\n\n${text}` : text
       }
-      // 图片
-      const url = part.source.type === 'base64'
-        ? `data:${part.source.media_type};base64,${part.source.data}`
-        : part.source.data
-      return { type: 'image_url', image_url: { url } }
-    })
+    }
+    return content
   }
 
-  /**
-   * 转换内容为 Anthropic 格式
-   */
-  private static convertContentToAnthropic(
-    content: MessageContent
-  ): string | AnthropicContentBlock[] {
-    if (typeof content === 'string') return content
-    if (!content?.length) return ''
-
-    return content.map(part => {
-      if (part.type === 'text') {
-        return { type: 'text' as const, text: part.text ?? '' }
-      }
-      // 图片
-      if (part.source.type === 'base64') {
-        return {
-          type: 'image' as const,
-          source: {
-            type: 'base64' as const,
-            media_type: part.source.media_type,
-            data: part.source.data,
-          },
-        }
-      }
-      // URL 图片不支持，转为文本提示
-      return { type: 'text' as const, text: '[Image URL not supported]' }
-    })
-  }
-
-  /**
-   * 提取文本内容
-   */
+  /** 提取文本内容 */
   private static extractTextContent(content: MessageContent): string {
     if (typeof content === 'string') return content
     if (!content?.length) return ''
@@ -389,5 +233,116 @@ export class MessageAdapter {
       .filter(p => p.type === 'text')
       .map(p => (p as { type: 'text'; text: string }).text)
       .join('')
+  }
+
+  /** 转换内容（支持自定义图片格式） */
+  private static convertContent(
+    content: MessageContent,
+    imageFormat: ImageFormatConfig
+  ): string | Array<Record<string, unknown>> {
+    if (typeof content === 'string') return content
+    if (!content?.length) return ''
+
+    return content.map(part => {
+      if (part.type === 'text') {
+        return { type: 'text', text: part.text ?? '' }
+      }
+
+      // 图片处理 - 直接使用完整模板
+      const isBase64 = part.source.type === 'base64'
+      const url = isBase64
+        ? `data:${part.source.media_type};base64,${part.source.data}`
+        : part.source.data
+
+      const vars = {
+        '{{url}}': url,
+        '{{base64}}': isBase64 ? part.source.data : '',
+        '{{mediaType}}': part.source.media_type || 'image/png',
+      }
+
+      return this.processTemplate(imageFormat.template, vars) as Record<string, unknown>
+    })
+  }
+
+  /** 处理模板变量 */
+  private static processTemplate(obj: unknown, vars: Record<string, string>): unknown {
+    if (typeof obj === 'string') {
+      return Object.entries(vars).reduce((s, [k, v]) => s.replace(k, v), obj)
+    }
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.processTemplate(item, vars))
+    }
+    if (obj && typeof obj === 'object') {
+      const result: Record<string, unknown> = {}
+      for (const [key, value] of Object.entries(obj)) {
+        result[key] = this.processTemplate(value, vars)
+      }
+      return result
+    }
+    return obj
+  }
+
+  /** 转换助手消息（OpenAI 格式） */
+  private static convertAssistantMessage(msg: LLMMessage): OpenAIMessage {
+    const assistantMsg: OpenAIMessage = {
+      role: 'assistant',
+      content: this.extractTextContent(msg.content),
+    }
+
+    if (msg.tool_calls?.length) {
+      assistantMsg.tool_calls = msg.tool_calls.map(tc => ({
+        id: tc.id,
+        type: 'function' as const,
+        function: { name: tc.function.name, arguments: tc.function.arguments },
+      }))
+    }
+
+    return assistantMsg
+  }
+
+  /** 转换助手消息为 Anthropic 格式 */
+  private static convertAssistantToAnthropic(msg: LLMMessage): AnthropicContentBlock[] {
+    const blocks: AnthropicContentBlock[] = []
+
+    const textContent = this.extractTextContent(msg.content)
+    if (textContent) {
+      blocks.push({ type: 'text', text: textContent })
+    }
+
+    if (msg.tool_calls?.length) {
+      for (const tc of msg.tool_calls) {
+        let input: Record<string, unknown> = {}
+        try { input = JSON.parse(tc.function.arguments || '{}') } catch { /* ignore */ }
+        blocks.push({ type: 'tool_use', id: tc.id, name: tc.function.name, input })
+      }
+    }
+
+    // 兼容旧格式
+    if (msg.toolName && msg.toolCallId) {
+      let input: Record<string, unknown> = {}
+      try { input = JSON.parse(typeof msg.content === 'string' ? msg.content : '{}') } catch { /* ignore */ }
+      blocks.push({ type: 'tool_use', id: msg.toolCallId, name: msg.toolName, input })
+    }
+
+    return blocks
+  }
+
+  /** 转换工具消息（自定义协议） */
+  private static convertToolMessage(
+    msg: LLMMessage,
+    role: string,
+    idField: string,
+    wrapper?: string
+  ): Record<string, unknown> {
+    const toolCallId = msg.tool_call_id || msg.toolCallId
+    const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+
+    if (wrapper) {
+      return { role, content: [{ type: wrapper, [idField]: toolCallId, content }] }
+    }
+    if (role === 'function') {
+      return { role: 'function', name: msg.toolName || toolCallId, content }
+    }
+    return { role, content, [idField]: toolCallId }
   }
 }

@@ -94,11 +94,13 @@ const cleanStreamingContent = (text: string): string => {
   return cleaned.trim()
 }
 
-// ThinkingBlock 组件 - 高级折叠样式
+// ThinkingBlock 组件 - 扁平化折叠样式
 const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: { content: string; startTime?: number; isStreaming: boolean; fontSize: number }) => {
   const [isExpanded, setIsExpanded] = useState(isStreaming)
   const [elapsed, setElapsed] = useState<number>(0)
   const lastElapsed = React.useRef<number>(0)
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const [shadowClass, setShadowClass] = useState('')
 
   useEffect(() => {
     setIsExpanded(isStreaming)
@@ -114,39 +116,65 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
     return () => clearInterval(timer)
   }, [startTime, isStreaming])
 
+  // 检测滚动位置，显示/隐藏阴影
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !isExpanded) return
+    const checkScroll = () => {
+      const hasTop = el.scrollTop > 0
+      const hasBottom = el.scrollTop < el.scrollHeight - el.clientHeight - 1
+      setShadowClass([hasTop ? 'shadow-top' : '', hasBottom ? 'shadow-bottom' : ''].filter(Boolean).join(' '))
+    }
+    checkScroll()
+    el.addEventListener('scroll', checkScroll)
+    return () => el.removeEventListener('scroll', checkScroll)
+  }, [isExpanded, content])
+
+  // 流式输出时自动滚动到底部
+  useEffect(() => {
+    if (isStreaming && isExpanded && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [content, isStreaming, isExpanded])
+
   const durationText = !isStreaming
     ? (lastElapsed.current > 0 ? `Thought for ${lastElapsed.current}s` : 'Thought')
     : `Thinking for ${elapsed}s...`
 
   return (
-    <div className="my-4 group/think">
+    <div className="my-3 group/think">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface/30 border border-border hover:bg-surface/50 transition-all text-text-muted/80 hover:text-text-secondary select-none"
+        className="flex items-center gap-1.5 text-text-muted/60 hover:text-text-muted transition-colors select-none"
       >
-        <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}>
-          <ChevronDown className="w-3.5 h-3.5" />
+        <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}>
+          <ChevronDown className="w-3 h-3" />
         </div>
-        <span className="text-xs font-bold tracking-wide">
+        <span className="text-[11px] font-medium">
           {durationText}
         </span>
       </button>
 
       {isExpanded && (
-        <div className="mt-3 pl-4 border-l-2 border-border/50 space-y-2 animate-slide-down">
-          {content ? (
-            <div
-              style={{ fontSize: `${fontSize - 1}px` }}
-              className="text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans italic"
-            >
-              {content}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-text-muted/30 italic text-xs py-1">
-              <RefreshCw className="w-3 h-3 animate-spin" />
-              <span>Analyzing...</span>
-            </div>
-          )}
+        <div className={`mt-2 pl-3 border-l border-border/30 animate-slide-down scroll-shadow-container ${shadowClass}`}>
+          <div
+            ref={scrollRef}
+            className="max-h-[200px] overflow-y-auto scrollbar-none"
+          >
+            {content ? (
+              <div
+                style={{ fontSize: `${fontSize - 1}px` }}
+                className="text-text-muted/60 leading-relaxed whitespace-pre-wrap font-sans thinking-content"
+              >
+                {content}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-text-muted/30 italic text-xs py-1">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Analyzing...</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
