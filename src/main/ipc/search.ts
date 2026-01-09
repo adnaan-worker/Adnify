@@ -121,6 +121,7 @@ function buildRipgrepArgs(query: string, rootPath: string, options: SearchFilesO
  */
 function parseRipgrepOutput(output: string, rootPath: string): SearchFileResult[] {
   const results: SearchFileResult[] = []
+  const normalizedRoot = rootPath.toLowerCase().replace(/\\/g, '/')
 
   for (const line of output.split('\n')) {
     if (!line.trim()) continue
@@ -128,8 +129,9 @@ function parseRipgrepOutput(output: string, rootPath: string): SearchFileResult[
       const json = JSON.parse(line)
       if (json.type === 'match') {
         let filePath = json.data.path.text
-        // 转换为相对路径
-        if (filePath.startsWith(rootPath)) {
+        // 转换为相对路径（忽略大小写）
+        const normalizedFilePath = filePath.toLowerCase().replace(/\\/g, '/')
+        if (normalizedFilePath.startsWith(normalizedRoot)) {
           filePath = filePath.slice(rootPath.length).replace(/^[/\\]+/, '')
         }
         results.push({

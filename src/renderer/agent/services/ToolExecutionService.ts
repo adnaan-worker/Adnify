@@ -18,6 +18,7 @@ import { isWriteTool } from '@/shared/config/tools'
 import { getAgentConfig } from '../utils/AgentConfig'
 import { truncateToolResult as compressToolResult } from '../context/MessageTruncator'
 import { streamingEditService } from './streamingEditService'
+import { pathStartsWith, joinPath } from '@shared/utils/pathUtils'
 
 export interface ToolExecutionContext {
   workspacePath: string | null
@@ -89,7 +90,7 @@ export class ToolExecutionService {
     if (isWriteTool(name)) {
       const filePath = args.path as string
       if (filePath && workspacePath) {
-        fullPath = filePath.startsWith(workspacePath) ? filePath : `${workspacePath}/${filePath}`
+        fullPath = pathStartsWith(filePath, workspacePath) ? filePath : joinPath(workspacePath, filePath)
         originalContent = await api.file.read(fullPath)
         store.addSnapshotToCurrentCheckpoint(fullPath, originalContent)
 

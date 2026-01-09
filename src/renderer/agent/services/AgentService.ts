@@ -5,7 +5,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { normalizePath } from '@shared/utils/pathUtils'
+import { normalizePath, pathStartsWith, joinPath } from '@shared/utils/pathUtils'
 import { performanceMonitor, CacheService, withRetry, isRetryableError } from '@shared/utils'
 import { AppError, formatErrorMessage } from '@/shared/errors'
 import { useAgentStore } from '../store/AgentStore'
@@ -641,7 +641,7 @@ class AgentServiceClass {
       .filter(tc => isFileEditTool(tc.name))
       .map(tc => {
         const filePath = tc.arguments.path as string
-        return filePath.startsWith(workspacePath) ? filePath : `${workspacePath}/${filePath}`.replace(/\/+/g, '/')
+        return pathStartsWith(filePath, workspacePath) ? filePath : joinPath(workspacePath, filePath)
       })
       .filter(path => !path.endsWith('/'))
 

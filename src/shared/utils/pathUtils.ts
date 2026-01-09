@@ -61,8 +61,14 @@ export function pathEquals(path1: string, path2: string): boolean {
   return normalizePath(path1).toLowerCase() === normalizePath(path2).toLowerCase()
 }
 
+/** 路径前缀比较（忽略大小写和分隔符差异） */
 export function pathStartsWith(path: string, prefix: string): boolean {
-  return normalizePath(path).startsWith(normalizePath(prefix))
+  const normalizedPath = normalizePath(path).toLowerCase()
+  const normalizedPrefix = normalizePath(prefix).toLowerCase()
+  // 确保前缀以 / 结尾或完全匹配
+  if (normalizedPath === normalizedPrefix) return true
+  const prefixWithSlash = normalizedPrefix.endsWith('/') ? normalizedPrefix : normalizedPrefix + '/'
+  return normalizedPath.startsWith(prefixWithSlash)
 }
 
 export function getPathSeparator(path: string): string {

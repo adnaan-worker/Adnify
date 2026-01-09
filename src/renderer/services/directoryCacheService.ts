@@ -7,6 +7,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'
+import { pathEquals, pathStartsWith, getDirname } from '@shared/utils/pathUtils'
 import type { FileItem } from '@shared/types'
 
 class DirectoryCacheService {
@@ -80,7 +81,7 @@ class DirectoryCacheService {
         const keysToDelete: string[] = []
         
         for (const key of this.cache.keys()) {
-            if (key === path || key.startsWith(path + '/') || key.startsWith(path + '\\')) {
+            if (pathEquals(key, path) || pathStartsWith(key, path)) {
                 keysToDelete.push(key)
             }
         }
@@ -93,7 +94,7 @@ class DirectoryCacheService {
      */
     handleFileChange(eventPath: string, eventType: 'create' | 'update' | 'delete') {
         // 获取父目录路径
-        const parentPath = this.getParentPath(eventPath)
+        const parentPath = getDirname(eventPath)
         
         if (eventType === 'create' || eventType === 'delete') {
             // 创建或删除文件时，需要刷新父目录
@@ -106,22 +107,6 @@ class DirectoryCacheService {
         if (eventType === 'delete') {
             this.invalidateTree(eventPath)
         }
-    }
-
-    /**
-     * 获取父目录路径
-     */
-    private getParentPath(filePath: string): string | null {
-        const separatorIndex = Math.max(
-            filePath.lastIndexOf('/'),
-            filePath.lastIndexOf('\\')
-        )
-        
-        if (separatorIndex > 0) {
-            return filePath.substring(0, separatorIndex)
-        }
-        
-        return null
     }
 
     /**

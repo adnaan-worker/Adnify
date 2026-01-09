@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { FolderOpen, Plus, RefreshCw, FolderPlus, GitBranch, FilePlus, ExternalLink, Crosshair } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
-import { joinPath } from '@shared/utils/pathUtils'
+import { joinPath, pathStartsWith } from '@shared/utils/pathUtils'
 import { gitService } from '@renderer/agent/services/gitService'
 import { getEditorConfig } from '@renderer/config/editorConfig'
 import { toast } from '../../common/ToastProvider'
@@ -87,7 +87,7 @@ export function ExplorerView() {
     let pendingChanges: Array<{ path: string; event: string }> = []
 
     const unsubscribe = api.file.onChanged((event: { event: 'create' | 'update' | 'delete'; path: string }) => {
-      if (event.path.startsWith(workspacePath)) {
+      if (pathStartsWith(event.path, workspacePath)) {
         pendingChanges.push({ path: event.path, event: event.event })
 
         if (debounceTimer) clearTimeout(debounceTimer)
