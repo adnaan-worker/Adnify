@@ -22,6 +22,7 @@ export interface ProviderSettingsProps {
 }
 
 export interface EditorSettingsState {
+    // 编辑器外观
     fontSize: number
     tabSize: number
     wordWrap: 'on' | 'off' | 'wordWrapColumn'
@@ -32,16 +33,32 @@ export interface EditorSettingsState {
     autoSave: 'off' | 'afterDelay' | 'onFocusChange'
     autoSaveDelay: number
     theme: string
+    
+    // AI 补全
     completionEnabled: boolean
     completionDebounceMs: number
     completionMaxTokens: number
     completionTriggerChars: string[]
+    
+    // 终端
+    terminalScrollback: number
+    terminalMaxOutputLines: number
+    
+    // LSP
+    lspTimeoutMs: number
+    lspCompletionTimeoutMs: number
+    
+    // 性能
     largeFileWarningThresholdMB: number
+    largeFileLineCount: number
     commandTimeoutMs: number
-    // 新增性能配置
+    workerTimeoutMs: number
+    healthCheckTimeoutMs: number
     maxProjectFiles: number
     maxFileTreeDepth: number
-    terminalScrollback: number
+    maxSearchResults: number
+    saveDebounceMs: number
+    flushIntervalMs: number
 }
 
 export interface EditorSettingsProps {

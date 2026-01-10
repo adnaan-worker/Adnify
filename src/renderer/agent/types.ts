@@ -212,8 +212,10 @@ export interface ChatThread {
     messages: ChatMessage[]
     contextItems: ContextItem[]
     state: ThreadState
-    /** 上下文压缩摘要（每个线程独立） */
-    contextSummary?: string | null
+    /** Handoff 上下文（从上一个会话继承，用于注入 system prompt） */
+    handoffContext?: string
+    /** 上下文压缩摘要 */
+    contextSummary?: import('./context/types').StructuredSummary | null
 }
 
 /** 流阶段 */

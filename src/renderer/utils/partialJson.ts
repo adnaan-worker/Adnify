@@ -166,48 +166,7 @@ function extractKnownFields(jsonString: string): Record<string, unknown> {
   return result
 }
 
-/**
- * 工具结果截断配置
- */
-interface TruncateConfig {
-  maxLength: number
-  headRatio: number  // 保留开头的比例
-  tailRatio: number  // 保留结尾的比例
-}
-
-/**
- * 工具特定的截断配置
- */
-const TOOL_TRUNCATE_CONFIG: Record<string, TruncateConfig> = {
-  // 文件读取：保留更多内容，开头更重要
-  read_file: { maxLength: 20000, headRatio: 0.8, tailRatio: 0.15 },
-  read_multiple_files: { maxLength: 30000, headRatio: 0.8, tailRatio: 0.15 },
-
-  // 搜索结果：开头最相关
-  search_files: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
-  codebase_search: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
-  find_references: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
-  grep_search: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
-
-  // 目录结构：开头更重要
-  get_dir_tree: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
-  list_directory: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
-
-  // 命令输出：结尾更重要（错误信息通常在最后）
-  run_command: { maxLength: 15000, headRatio: 0.2, tailRatio: 0.75 },
-  execute_command: { maxLength: 15000, headRatio: 0.2, tailRatio: 0.75 },
-
-  // 符号/定义：均衡
-  get_document_symbols: { maxLength: 8000, headRatio: 0.6, tailRatio: 0.35 },
-  get_definition: { maxLength: 5000, headRatio: 0.7, tailRatio: 0.25 },
-  get_hover_info: { maxLength: 3000, headRatio: 0.7, tailRatio: 0.25 },
-
-  // Lint 错误：开头更重要
-  get_lint_errors: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
-
-  // 默认配置
-  default: { maxLength: 12000, headRatio: 0.7, tailRatio: 0.25 },
-}
+import { getToolTruncateConfig } from '@shared/config/agentConfig'
 
 /**
  * 智能截断工具结果
@@ -220,7 +179,7 @@ export function truncateToolResult(
 ): string {
   if (!result) return ''
 
-  const config = TOOL_TRUNCATE_CONFIG[toolName] || TOOL_TRUNCATE_CONFIG.default
+  const config = getToolTruncateConfig(toolName)
   const limit = maxLength || config.maxLength
 
   if (result.length <= limit) {

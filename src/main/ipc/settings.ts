@@ -7,6 +7,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import Store from 'electron-store'
 import { getUserConfigDir, setUserConfigDir } from '../services/configPath'
+import { cleanConfigValue } from '@shared/config/configCleaner'
 
 // 安全模块接口
 interface SecurityModuleRef {
@@ -31,13 +32,16 @@ export function registerSettingsHandlers(
   // 获取设置
   ipcMain.handle('settings:get', (_, key: string) => mainStore.get(key))
 
-  // 设置值
+  // 设置值（自动清理无效字段）
   ipcMain.handle('settings:set', (_event, key: string, value: unknown) => {
+    // 清理配置值，移除不存在的字段
+    const cleanedValue = cleanConfigValue(key, value)
+
     // electron-store 不允许设置 undefined，需要使用 delete
-    if (value === undefined) {
+    if (cleanedValue === undefined) {
       mainStore.delete(key as any)
     } else {
-      mainStore.set(key, value)
+      mainStore.set(key, cleanedValue)
     }
 
     // 广播给所有窗口

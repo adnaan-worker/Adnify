@@ -18,8 +18,8 @@ import {
 
 // 导出类型
 export type { OpenFile, WorkspaceConfig, LargeFileInfo } from './slices'
-export type { ProviderType, LLMConfig, LLMParameters, AutoApproveSettings, SecuritySettings, AgentConfig } from './slices'
-export type { ProviderModelConfig } from '@app-types/provider'
+export type { ProviderType, LLMConfig, LLMParameters, AutoApproveSettings, AgentConfig, ProviderModelConfig } from './slices'
+export type { SecuritySettings } from '@shared/config/types'
 export type { ThemeName } from './slices'
 export type { ToolCallLogEntry } from './slices'
 export type { McpSlice } from './slices'

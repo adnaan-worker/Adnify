@@ -10,7 +10,9 @@ import { toast } from '@components/common/ToastProvider'
 import { Button, Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
 import { useStore } from '@store'
-import { downloadSettings, importSettingsFromJSON, type AppSettings } from '@services/settingsService'
+import { downloadSettings, importSettingsFromJSON, settingsService } from '@renderer/settings'
+import type { RuntimeSettings } from '@shared/config/types'
+import type { ProviderModelConfig } from '@renderer/store/slices/settingsSlice'
 
 interface SystemSettingsProps {
     language: Language
@@ -32,16 +34,10 @@ export function SystemSettings({ language }: SystemSettingsProps) {
     const store = useStore()
 
     // 构建当前设置对象
-    const getCurrentSettings = (): AppSettings => ({
-        llmConfig: store.llmConfig,
-        language: store.language,
-        autoApprove: store.autoApprove,
-        promptTemplateId: store.promptTemplateId,
-        agentConfig: store.agentConfig,
-        providerConfigs: store.providerConfigs,
-        aiInstructions: store.aiInstructions,
-        onboardingCompleted: store.onboardingCompleted,
-    })
+    const getCurrentSettings = (): RuntimeSettings => {
+        const cached = settingsService.getCached()
+        return cached || settingsService.getDefaultSettings()
+    }
 
     const handleExport = () => {
         try {
@@ -82,7 +78,7 @@ export function SystemSettings({ language }: SystemSettingsProps) {
             // 应用 provider 配置
             if (settings.providerConfigs) {
                 for (const [id, config] of Object.entries(settings.providerConfigs)) {
-                    store.setProviderConfig(id, config)
+                    store.setProviderConfig(id, config as ProviderModelConfig)
                 }
             }
 
@@ -92,7 +88,6 @@ export function SystemSettings({ language }: SystemSettingsProps) {
                     ...store.llmConfig,
                     provider: settings.llmConfig.provider || store.llmConfig.provider,
                     model: settings.llmConfig.model || store.llmConfig.model,
-                    parameters: settings.llmConfig.parameters || store.llmConfig.parameters,
                 })
             }
 
@@ -128,13 +123,14 @@ export function SystemSettings({ language }: SystemSettingsProps) {
     const handleReset = async () => {
         if (confirm(language === 'zh' ? '确定要重置所有设置吗？这将丢失所有自定义配置。' : 'Are you sure you want to reset all settings? This will lose all custom configurations.')) {
             await api.settings.set('llmConfig', undefined)
-            await api.settings.set('editorSettings', undefined)
             await api.settings.set('editorConfig', undefined)
             await api.settings.set('autoApprove', undefined)
             await api.settings.set('providerConfigs', undefined)
             await api.settings.set('promptTemplateId', undefined)
             await api.settings.set('aiInstructions', undefined)
             await api.settings.set('currentTheme', undefined)
+            await api.settings.set('app-settings', undefined)
+            await api.settings.set('securitySettings', undefined)
             localStorage.clear()
             window.location.reload()
         }

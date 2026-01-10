@@ -15,8 +15,8 @@ import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import { BrowserWindow } from 'electron'
-import { SERVICE_DEFAULTS } from '@shared/constants'
 import { LanguageId } from '@shared/languages'
+import { LSP_DEFAULTS } from '@shared/config/defaults'
 import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'
 import {
@@ -413,9 +413,9 @@ class LspManager {
   private idleCheckInterval: NodeJS.Timeout | null = null
   private static readonly IDLE_TIMEOUT_MS = 5 * 60 * 1000 // 5 分钟无活动则关闭
 
-  // 自动重启配置（使用 constants.ts 中的值）
+  // 自动重启配置
   private static readonly MAX_CRASH_COUNT = 3
-  private static readonly CRASH_COOLDOWN_MS = SERVICE_DEFAULTS.LSP_CRASH_COOLDOWN_MS
+  private static readonly CRASH_COOLDOWN_MS = LSP_DEFAULTS.crashCooldownMs
 
   // waitForDiagnostics 相关
   private diagnosticsWaiters: Map<string, { resolve: () => void; timeout: NodeJS.Timeout }[]> = new Map()

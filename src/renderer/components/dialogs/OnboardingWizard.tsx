@@ -13,7 +13,7 @@ import { useStore, LLMConfig } from '@store'
 import { Language } from '@renderer/i18n'
 import { themeManager, Theme } from '@renderer/config/themeConfig'
 import { PROVIDERS } from '@/shared/config/providers'
-import { LLM_DEFAULTS } from '@/shared/constants'
+import { LLM_DEFAULTS } from '@shared/config/defaults'
 import { Logo } from '../common/Logo'
 import { workspaceManager } from '@services/WorkspaceManager'
 import { Button, Input, Select } from '../ui'
@@ -43,9 +43,9 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
     model: 'gpt-4o',
     apiKey: '',
     parameters: {
-      temperature: LLM_DEFAULTS.TEMPERATURE,
-      topP: LLM_DEFAULTS.TOP_P,
-      maxTokens: LLM_DEFAULTS.MAX_TOKENS,
+      temperature: LLM_DEFAULTS.temperature,
+      topP: LLM_DEFAULTS.topP,
+      maxTokens: LLM_DEFAULTS.maxTokens,
     },
   })
   const [showApiKey, setShowApiKey] = useState(false)
@@ -75,7 +75,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   }
 
   const handleComplete = async () => {
-    const { settingsService, defaultAgentConfig, defaultAutoApprove } = await import('@services/settingsService')
+    const { settingsService, defaultAgentConfig, defaultAutoApprove, defaultEditorConfig, defaultSecuritySettings } = await import('@renderer/settings')
 
     setLanguage(selectedLanguage)
     setLLMConfig(providerConfig)
@@ -92,6 +92,8 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
       providerConfigs: {},
       aiInstructions: '',
       onboardingCompleted: true,
+      editorConfig: defaultEditorConfig,
+      securitySettings: defaultSecuritySettings,
     })
 
     setIsExiting(true)

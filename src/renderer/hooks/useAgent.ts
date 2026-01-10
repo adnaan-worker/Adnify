@@ -19,7 +19,6 @@ import {
 import { AgentService } from '@/renderer/agent/services/AgentService'
 import { MessageContent, ChatThread, ToolCall } from '@/renderer/agent/types'
 import { buildAgentSystemPrompt } from '@/renderer/agent/prompts/prompts'
-import { AGENT_DEFAULTS } from '@/shared/constants'
 
 export function useAgent() {
   // 从主 store 获取配置
@@ -80,11 +79,15 @@ export function useAgent() {
   const restoreToCheckpoint = useAgentStore(state => state.restoreToCheckpoint)
   const getCheckpointForMessage = useAgentStore(state => state.getCheckpointForMessage)
   
-  // 清空消息（包括工具调用日志）
+  // 清空消息（包括工具调用日志和 handoff 状态）
   const clearMessages = useCallback(() => {
     clearMessagesAction()
     // 同时清理工具调用日志
     useStore.getState().clearToolCallLogs()
+    // 重置 handoff 状态
+    useAgentStore.getState().setHandoffRequired(false)
+    useAgentStore.getState().setHandoffDocument(null)
+    useAgentStore.getState().setCompressionStats(null)
   }, [clearMessagesAction])
   const clearCheckpoints = useAgentStore(state => state.clearMessageCheckpoints)
 
@@ -134,33 +137,6 @@ export function useAgent() {
       chatMode
     )
   }, [llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath])
-
-  // 检测上下文是否过长（在用户发送消息前调用）
-  // 使用累计 token 数判断，而非字符数
-  const checkContextLength = useCallback((): { needsCompact: boolean; messageCount: number; tokenCount: number } => {
-    const messages = useAgentStore.getState().getMessages()
-    // 只统计 user + assistant 消息（不含 tool），更符合用户直觉
-    const userAssistantMessages = messages.filter(m => m.role === 'user' || m.role === 'assistant')
-
-    // 计算累计 token 数（从 assistant 消息的 usage 中获取）
-    let tokenCount = 0
-    for (const msg of messages) {
-      if (msg.role === 'assistant' && 'usage' in msg && msg.usage) {
-        tokenCount += msg.usage.totalTokens || 0
-      }
-    }
-
-    // 从用户配置读取阈值，警告阈值设为配置值的 80%
-    const { agentConfig } = useStore.getState()
-    const WARN_MESSAGE_THRESHOLD = Math.floor((agentConfig.maxHistoryMessages ?? AGENT_DEFAULTS.MAX_HISTORY_MESSAGES) * 0.8)
-    const WARN_TOKEN_THRESHOLD = Math.floor((agentConfig.maxContextTokens ?? AGENT_DEFAULTS.MAX_CONTEXT_TOKENS) * 0.8)
-
-    return {
-      needsCompact: userAssistantMessages.length > WARN_MESSAGE_THRESHOLD || tokenCount > WARN_TOKEN_THRESHOLD,
-      messageCount: userAssistantMessages.length,
-      tokenCount,
-    }
-  }, [])
 
   // 中止
   const abort = useCallback(() => {
@@ -215,7 +191,6 @@ export function useAgent() {
     abort,
     clearMessages,
     deleteMessagesAfter,
-    checkContextLength,  // 上下文长度检测
 
     // 工具审批
     approveCurrentTool,

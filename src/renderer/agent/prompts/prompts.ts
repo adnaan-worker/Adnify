@@ -6,16 +6,17 @@ import { WorkMode } from '@/renderer/modes/types'
 import { rulesService } from '../services/rulesService'
 import { memoryService } from '../services/memoryService'
 import { useAgentStore } from '../store/AgentStore'
-import { FILE_LIMITS } from '@shared/constants'
+import { DEFAULT_AGENT_CONFIG } from '@shared/config/agentConfig'
+import { PERFORMANCE_DEFAULTS } from '@shared/config/defaults'
 import { buildSystemPrompt, buildChatPrompt, type PromptContext } from './PromptBuilder'
 import { getPromptTemplateById, getDefaultPromptTemplate } from './promptTemplates'
 
-// 限制常量导出
-export const MAX_FILE_CHARS = FILE_LIMITS.MAX_FILE_CHARS
-export const MAX_DIR_ITEMS = FILE_LIMITS.MAX_DIR_ITEMS
-export const MAX_SEARCH_RESULTS = FILE_LIMITS.MAX_SEARCH_RESULTS
-export const MAX_TERMINAL_OUTPUT = FILE_LIMITS.MAX_TERMINAL_OUTPUT
-export const MAX_CONTEXT_CHARS = FILE_LIMITS.MAX_CONTEXT_CHARS
+// 限制常量导出（从配置获取）
+export const MAX_FILE_CHARS = DEFAULT_AGENT_CONFIG.maxFileContentChars
+export const MAX_DIR_ITEMS = 150  // 目录列表条目数，固定值
+export const MAX_SEARCH_RESULTS = PERFORMANCE_DEFAULTS.maxSearchResults
+export const MAX_TERMINAL_OUTPUT = DEFAULT_AGENT_CONFIG.maxTerminalChars
+export const MAX_CONTEXT_CHARS = DEFAULT_AGENT_CONFIG.maxTotalContextChars
 
 /**
  * 主系统提示词构建器

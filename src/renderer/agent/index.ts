@@ -17,11 +17,15 @@ export {
     selectBranches,
     selectActiveBranch,
     selectIsOnBranch,
-    selectContextSummary,
-    selectIsCompacting,
     selectContextStats,
     selectInputPrompt,
     selectCurrentSessionId,
+    selectCompressionStats,
+    selectHandoffDocument,
+    selectHandoffRequired,
+    selectContextSummary,
+    selectCompressionPhase,
+    selectIsCompacting,
 } from './store/AgentStore'
 export type { ContextStats } from './store/AgentStore'
 
@@ -48,9 +52,12 @@ export type { MemoryItem } from './services/memoryService'
 export { composerService } from './services/composerService'
 
 // 新增服务
-export { contextCompactionService } from './services/ContextCompactionService'
 export { executeToolCallsIntelligently, getExecutionStats } from './services/ParallelToolExecutor'
 export { toolExecutionService } from './services/ToolExecutionService'
+
+// 上下文管理
+export { contextManager, COMPRESSION_LEVELS } from './context'
+export type { CompressionStats, CompressionLevel } from './context'
 
 // LLM 相关
 export { buildContextContent, buildUserContent, calculateContextStats } from './llm/ContextBuilder'

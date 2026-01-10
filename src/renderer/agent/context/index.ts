@@ -1,14 +1,29 @@
 /**
  * 上下文管理模块
  * 
- * 统一的上下文管理架构：
- * - ContextManager: 核心管理器，协调所有上下文操作
- * - TokenEstimator: Token 估算
- * - MessageTruncator: 消息截断策略
- * - SummaryGenerator: 摘要生成（LLM）
+ * 提供多级压缩策略，确保永不丢失关键信息
  */
 
-export { ContextManager, contextManager } from './ContextManager'
-export { estimateTokens, estimateMessageTokens } from './TokenEstimator'
+export { contextManager, ContextManager } from './ContextManager'
+export type { CompressionStats } from './ContextManager'
+export { estimateTokens, estimateMessageTokens, estimateTotalTokens } from './TokenEstimator'
 export { truncateToolResult, truncateMessage } from './MessageTruncator'
-export type { ContextConfig, ContextStats, OptimizedContext } from './types'
+export { scoreMessage, scoreMessageGroup, extractDecisionPoints, extractFileChanges } from './ImportanceScorer'
+export { generateQuickSummary, generateHandoffDocument, handoffToSystemPrompt, buildSummaryPrompt } from './SummaryGenerator'
+export { buildHandoffContext, buildWelcomeMessage } from './HandoffManager'
+
+export type {
+  CompressionLevel,
+  LevelConfig,
+  MessageImportance,
+  DecisionPoint,
+  FileChangeRecord,
+  StructuredSummary,
+  HandoffDocument,
+  ContextConfig,
+  ContextStats,
+  OptimizedContext,
+  MessageGroup,
+} from './types'
+
+export { COMPRESSION_LEVELS, DEFAULT_CONTEXT_CONFIG } from './types'

@@ -8,7 +8,7 @@ import { api } from '@renderer/services/electronAPI'
 import { getFileName } from '@shared/utils/pathUtils'
 import { toast } from '@renderer/components/common/ToastProvider'
 import { t } from '@renderer/i18n'
-import { getEditorConfig } from '@renderer/config/editorConfig'
+import { getEditorConfig } from '@renderer/settings'
 import { monaco } from '@renderer/monacoWorker'
 
 /** 获取文件对应的 Monaco model 版本号 */

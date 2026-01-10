@@ -23,6 +23,9 @@ import {
     type Branch,
 } from './slices'
 import type { ChatMessage, ContextItem } from '../types'
+import type { CompressionStats } from '../context'
+import type { HandoffDocument } from '../context/types'
+import { buildHandoffContext, buildWelcomeMessage } from '../context/HandoffManager'
 
 // ===== Store 类型 =====
 
@@ -48,15 +51,36 @@ interface UIState {
     setCurrentSessionId: (id: string | null) => void
 }
 
-// 上下文摘要状态
-interface ContextSummaryState {
-    contextSummary: string | null
-    isCompacting: boolean
-    setContextSummary: (summary: string | null) => void
-    setIsCompacting: (isCompacting: boolean) => void
+// Handoff 会话创建结果
+interface HandoffSessionResult {
+    threadId: string
+    autoResume: boolean
+    objective: string
+    pendingSteps: string[]
+    fileChanges: Array<{ action: string; path: string; summary: string }>
 }
 
-export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & PlanSlice & StreamSlice & BranchSlice & ContextSummaryState & UIState
+// 压缩阶段
+type CompressionPhase = 'idle' | 'analyzing' | 'compressing' | 'summarizing' | 'done'
+
+// 上下文压缩状态
+interface ContextCompressionState {
+    compressionStats: CompressionStats | null
+    handoffDocument: HandoffDocument | null
+    handoffRequired: boolean  // 是否需要强制 Handoff（L4 触发后为 true，阻止继续对话）
+    contextSummary: import('../context/types').StructuredSummary | null  // 上下文摘要
+    isCompacting: boolean  // 是否正在压缩
+    compressionPhase: CompressionPhase  // 压缩阶段
+    setCompressionStats: (stats: CompressionStats | null) => void
+    setHandoffDocument: (doc: HandoffDocument | null) => void
+    setCompressionPhase: (phase: CompressionPhase) => void
+    setHandoffRequired: (required: boolean) => void
+    setContextSummary: (summary: import('../context/types').StructuredSummary | null) => void
+    setIsCompacting: (compacting: boolean) => void
+    createHandoffSession: () => HandoffSessionResult | null
+}
+
+export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & PlanSlice & StreamSlice & BranchSlice & ContextCompressionState & UIState
 
 // ===== 流式响应节流优化 =====
 
@@ -149,32 +173,75 @@ export const useAgentStore = create<AgentStore>()(
             const streamSlice = createStreamSlice(...args)
             const branchSlice = createBranchSlice(...args)
 
-            // 上下文摘要状态
+            // 上下文压缩状态
             const [set, get] = args
-            const contextSummaryState: ContextSummaryState = {
+            const contextCompressionState: ContextCompressionState = {
+                compressionStats: null,
+                handoffDocument: null,
+                handoffRequired: false,
                 contextSummary: null,
                 isCompacting: false,
-                setContextSummary: (summary) => {
+                compressionPhase: 'idle',
+                setCompressionStats: (stats) => set({ compressionStats: stats } as any),
+                setHandoffDocument: (doc) => set({ handoffDocument: doc } as any),
+                setHandoffRequired: (required) => set({ handoffRequired: required } as any),
+                setContextSummary: (summary) => set({ contextSummary: summary } as any),
+                setIsCompacting: (compacting) => set({ isCompacting: compacting } as any),
+                setCompressionPhase: (phase) => set({ compressionPhase: phase } as any),
+                createHandoffSession: () => {
                     const state = get() as any
-                    const currentThreadId = state.currentThreadId
+                    const handoff = state.handoffDocument as HandoffDocument | null
                     
-                    // 更新全局状态
-                    set({ contextSummary: summary } as any)
+                    if (!handoff) {
+                        logger.agent.warn('[AgentStore] No handoff document to create session from')
+                        return null
+                    }
                     
-                    // 同时更新当前线程的 contextSummary
-                    if (currentThreadId && state.threads[currentThreadId]) {
-                        set((s: any) => ({
-                            threads: {
-                                ...s.threads,
-                                [currentThreadId]: {
-                                    ...s.threads[currentThreadId],
-                                    contextSummary: summary,
-                                }
-                            }
-                        }))
+                    // 创建新线程（会自动切换到新线程）
+                    const newThreadId = threadSlice.createThread()
+                    
+                    // 构建 handoff 上下文（用于注入到 system prompt）
+                    const handoffContext = buildHandoffContext(handoff)
+                    
+                    // 不再显示欢迎消息，直接准备自动继续
+                    // 摘要信息会在底部栏的弹窗中显示
+                    
+                    // 清除 handoff 状态，但保留 compressionStats 用于 UI 显示
+                    set({ 
+                        handoffDocument: null, 
+                        handoffRequired: false,
+                        // 保留 contextSummary 用于底部栏显示
+                        contextSummary: handoff.summary,
+                    } as any)
+                    
+                    // 重置 contextManager 并设置 handoff 摘要
+                    import('../context').then(({ contextManager }) => {
+                        contextManager.clear()
+                        contextManager.setSummary(handoff.summary)
+                        contextManager.setSessionId(newThreadId)
+                    })
+                    
+                    // 存储 handoff 上下文到线程元数据
+                    const threads = (get() as any).threads
+                    if (threads[newThreadId]) {
+                        threads[newThreadId].handoffContext = handoffContext
+                        // 存储待完成任务，用于自动继续
+                        threads[newThreadId].pendingObjective = handoff.summary.objective
+                        threads[newThreadId].pendingSteps = handoff.summary.pendingSteps
+                        set({ threads: { ...threads } } as any)
+                    }
+                    
+                    logger.agent.info('[AgentStore] Created handoff session:', newThreadId)
+                    
+                    // 返回包含自动继续信息的对象
+                    return {
+                        threadId: newThreadId,
+                        autoResume: true,
+                        objective: handoff.summary.objective,
+                        pendingSteps: handoff.summary.pendingSteps,
+                        fileChanges: handoff.summary.fileChanges,
                     }
                 },
-                setIsCompacting: (isCompacting) => set({ isCompacting } as any),
             }
 
             // UI 状态（从 chatSlice 迁移）
@@ -206,7 +273,7 @@ export const useAgentStore = create<AgentStore>()(
                 ...planSlice,
                 ...streamSlice,
                 ...branchSlice,
-                ...contextSummaryState,
+                ...contextCompressionState,
                 ...uiState,
             }
         },
@@ -219,8 +286,8 @@ export const useAgentStore = create<AgentStore>()(
                 plan: state.plan,
                 branches: state.branches,
                 activeBranchId: state.activeBranchId,
-                contextSummary: state.contextSummary,
                 messageCheckpoints: state.messageCheckpoints,
+                compressionStats: state.compressionStats,
             }),
         }
     )
@@ -287,11 +354,15 @@ export const selectIsOnBranch = (state: AgentStore) => {
     return state.activeBranchId[threadId] != null
 }
 
-export const selectContextSummary = (state: AgentStore) => state.contextSummary
-export const selectIsCompacting = (state: AgentStore) => state.isCompacting
 export const selectContextStats = (state: AgentStore) => state.contextStats
 export const selectInputPrompt = (state: AgentStore) => state.inputPrompt
 export const selectCurrentSessionId = (state: AgentStore) => state.currentSessionId
+export const selectCompressionStats = (state: AgentStore) => state.compressionStats
+export const selectHandoffDocument = (state: AgentStore) => state.handoffDocument
+export const selectHandoffRequired = (state: AgentStore) => state.handoffRequired
+export const selectContextSummary = (state: AgentStore) => state.contextSummary
+export const selectCompressionPhase = (state: AgentStore) => state.compressionPhase
+export const selectIsCompacting = (state: AgentStore) => state.isCompacting
 
 // ===== StreamingBuffer 初始化 =====
 
@@ -314,20 +385,20 @@ export async function initializeAgentStore(): Promise<void> {
         await initializeTools()
         logger.agent.info('[AgentStore] Tools initialized')
         
-        // 监听线程切换，重置压缩服务状态
-        const { contextCompactionService } = await import('../services/ContextCompactionService')
+        // 监听线程切换，重置压缩状态
+        const { contextManager } = await import('../context')
         let lastThreadId = useAgentStore.getState().currentThreadId
         
         useAgentStore.subscribe((state) => {
             if (state.currentThreadId !== lastThreadId) {
                 lastThreadId = state.currentThreadId
-                // 重置压缩服务状态
-                contextCompactionService.reset()
-                // 从新线程恢复摘要
-                if (state.currentThreadId) {
-                    contextCompactionService.restoreFromStore()
-                }
-                logger.agent.info('[AgentStore] Thread changed, compaction service reset')
+                // 重置压缩状态
+                contextManager.clear()
+                // 重置 handoff 状态
+                useAgentStore.getState().setHandoffRequired(false)
+                useAgentStore.getState().setHandoffDocument(null)
+                useAgentStore.getState().setCompressionStats(null)
+                logger.agent.info('[AgentStore] Thread changed, context manager reset')
             }
         })
     } catch (error) {

@@ -13,7 +13,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
-import { getEditorConfig } from '@renderer/config/editorConfig'
+import { getEditorConfig } from '@renderer/settings'
 import { getLanguageFromPath as sharedGetLanguageFromPath } from '@shared/languages'
 import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'

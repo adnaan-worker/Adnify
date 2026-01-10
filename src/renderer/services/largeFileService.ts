@@ -3,7 +3,7 @@
  * 提供大文件的分块加载、虚拟滚动支持、性能优化
  */
 
-import { getEditorConfig } from '@renderer/config/editorConfig'
+import { getEditorConfig } from '@renderer/settings'
 
 // 文件大小阈值（字节）- 从配置获取
 function getLargeFileThreshold(): number {
@@ -11,9 +11,14 @@ function getLargeFileThreshold(): number {
   return (config.performance.largeFileWarningThresholdMB || 5) * 1024 * 1024
 }
 
-// 行数阈值
-const LARGE_LINE_COUNT = 10000
-const VERY_LARGE_LINE_COUNT = 50000
+// 行数阈值 - 从配置获取
+function getLargeLineCount(): number {
+  return getEditorConfig().performance.largeFileLineCount
+}
+
+function getVeryLargeLineCount(): number {
+  return getEditorConfig().performance.veryLargeFileLineCount
+}
 
 const CHUNK_SIZE = 64 * 1024 // 64KB per chunk
 
@@ -52,7 +57,7 @@ export function isLargeFile(content: string): boolean {
   const threshold = getLargeFileThreshold()
   if (content.length > threshold * 0.2) return true
   if (content.length > 100000) { // 只有超过 100KB 才检查行数
-    return estimateLineCount(content) > LARGE_LINE_COUNT
+    return estimateLineCount(content) > getLargeLineCount()
   }
   return false
 }
@@ -64,7 +69,7 @@ export function isVeryLargeFile(content: string): boolean {
   const threshold = getLargeFileThreshold()
   if (content.length > threshold) return true
   if (content.length > 500000) { // 只有超过 500KB 才检查行数
-    return estimateLineCount(content) > VERY_LARGE_LINE_COUNT
+    return estimateLineCount(content) > getVeryLargeLineCount()
   }
   return false
 }
@@ -87,8 +92,8 @@ export function getFileInfo(path: string, content: string): LargeFileInfo {
   
   if (!isSizeVeryLarge && size > 100000) {
     lineCount = estimateLineCount(content)
-    isLineLarge = lineCount > LARGE_LINE_COUNT
-    isLineVeryLarge = lineCount > VERY_LARGE_LINE_COUNT
+    isLineLarge = lineCount > getLargeLineCount()
+    isLineVeryLarge = lineCount > getVeryLargeLineCount()
   } else if (isSizeVeryLarge) {
     // 超大文件不计算行数，直接标记
     lineCount = -1 // 表示未计算

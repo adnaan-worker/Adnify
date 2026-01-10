@@ -2,7 +2,7 @@
  * 面板拖拽调整大小 Hook
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { LAYOUT_LIMITS } from '@shared/constants'
+import { LAYOUT } from '@shared/constants'
 
 type ResizeDirection = 'left' | 'right'
 
@@ -36,7 +36,7 @@ export function useResizePanel(config: ResizeConfig): ResizeState {
     const handleMouseMove = (e: MouseEvent) => {
       // left: 从左边计算宽度，right: 从右边计算宽度
       const newSize = direction === 'left'
-        ? e.clientX - LAYOUT_LIMITS.ACTIVITY_BAR_WIDTH
+        ? e.clientX - LAYOUT.ACTIVITY_BAR_WIDTH
         : window.innerWidth - e.clientX
 
       if (newSize > minSize && newSize < maxSize) {
@@ -71,8 +71,8 @@ export function useResizePanel(config: ResizeConfig): ResizeState {
 export function useSidebarResize(onResize: (width: number) => void) {
   const config = useMemo(() => ({
     direction: 'left' as const,
-    minSize: LAYOUT_LIMITS.SIDEBAR_MIN_WIDTH,
-    maxSize: LAYOUT_LIMITS.SIDEBAR_MAX_WIDTH,
+    minSize: LAYOUT.SIDEBAR_MIN_WIDTH,
+    maxSize: LAYOUT.SIDEBAR_MAX_WIDTH,
     onResize,
   }), [onResize])
   
@@ -83,8 +83,8 @@ export function useSidebarResize(onResize: (width: number) => void) {
 export function useChatResize(onResize: (width: number) => void) {
   const config = useMemo(() => ({
     direction: 'right' as const,
-    minSize: LAYOUT_LIMITS.CHAT_MIN_WIDTH,
-    maxSize: LAYOUT_LIMITS.CHAT_MAX_WIDTH,
+    minSize: LAYOUT.CHAT_MIN_WIDTH,
+    maxSize: LAYOUT.CHAT_MAX_WIDTH,
     onResize,
   }), [onResize])
   

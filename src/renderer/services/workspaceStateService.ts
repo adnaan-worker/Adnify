@@ -8,6 +8,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
+import { getEditorConfig } from '@renderer/settings'
 import { adnifyDir, WorkspaceStateData } from './adnifyDirService'
 
 /**
@@ -94,10 +95,10 @@ export function scheduleStateSave(): void {
   if (saveTimeout) {
     clearTimeout(saveTimeout)
   }
-  // 延迟 2 秒保存，避免频繁写入
+  // 延迟保存，避免频繁写入
   saveTimeout = setTimeout(() => {
     saveWorkspaceState()
-  }, 2000)
+  }, getEditorConfig().performance.saveDebounceMs)
 }
 
 /**

@@ -6,7 +6,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { useState } from 'react'
 import { Layout, Type, Sparkles, Terminal, Check, Settings2, Zap } from 'lucide-react'
 import { useStore } from '@store'
-import { getEditorConfig, saveEditorConfig, EditorConfig } from '@renderer/config/editorConfig'
+import { getEditorConfig, saveEditorConfig, type EditorConfig } from '@renderer/settings'
 import { themes } from '@components/editor/ThemeManager'
 import { Input, Select, Switch } from '@components/ui'
 import { EditorSettingsProps } from '../types'
@@ -308,6 +308,10 @@ export function EditorSettings({ settings, setSettings, language }: EditorSettin
                                 <Input type="number" value={settings.largeFileWarningThresholdMB} onChange={(e) => setSettings({ ...settings, largeFileWarningThresholdMB: parseFloat(e.target.value) || 5 })} min={1} max={50} step={1} className="w-28 bg-black/20 border-border text-xs h-8 rounded-lg" />
                             </div>
                             <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-text-secondary ml-1">{language === 'zh' ? '大文件行数阈值' : 'Large File Line Count'}</label>
+                                <Input type="number" value={settings.largeFileLineCount} onChange={(e) => setSettings({ ...settings, largeFileLineCount: parseInt(e.target.value) || 10000 })} min={1000} max={100000} step={1000} className="w-28 bg-black/20 border-border text-xs h-8 rounded-lg" />
+                            </div>
+                            <div className="flex items-center justify-between">
                                 <label className="text-xs font-bold text-text-secondary ml-1">{language === 'zh' ? '命令超时 (秒)' : 'Command Timeout (s)'}</label>
                                 <Input type="number" value={settings.commandTimeoutMs / 1000} onChange={(e) => setSettings({ ...settings, commandTimeoutMs: (parseInt(e.target.value) || 30) * 1000 })} min={10} max={300} step={10} className="w-28 bg-black/20 border-border text-xs h-8 rounded-lg" />
                             </div>
@@ -318,6 +322,10 @@ export function EditorSettings({ settings, setSettings, language }: EditorSettin
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-bold text-text-secondary ml-1">{language === 'zh' ? '文件树最大深度' : 'File Tree Max Depth'}</label>
                                 <Input type="number" value={settings.maxFileTreeDepth} onChange={(e) => setSettings({ ...settings, maxFileTreeDepth: parseInt(e.target.value) || 5 })} min={2} max={15} step={1} className="w-28 bg-black/20 border-border text-xs h-8 rounded-lg" />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-text-secondary ml-1">{language === 'zh' ? '最大搜索结果数' : 'Max Search Results'}</label>
+                                <Input type="number" value={settings.maxSearchResults} onChange={(e) => setSettings({ ...settings, maxSearchResults: parseInt(e.target.value) || 1000 })} min={100} max={5000} step={100} className="w-28 bg-black/20 border-border text-xs h-8 rounded-lg" />
                             </div>
                         </div>
                     </section>

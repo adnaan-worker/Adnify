@@ -299,14 +299,56 @@ export function AgentSettings({
                                             className="bg-black/20 border-border text-xs"
                                         />
                                     </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-text-secondary">{t('压缩阈值', 'Compress Threshold')}</label>
-                                        <Input
-                                            type="number"
-                                            value={agentConfig.contextCompressThreshold ?? 60000}
-                                            onChange={(e) => setAgentConfig({ ...agentConfig, contextCompressThreshold: parseInt(e.target.value) || 60000 })}
-                                            step={10000}
-                                            className="bg-black/20 border-border text-xs"
+                                </div>
+
+                                {/* 上下文压缩 */}
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-text-secondary">{t('上下文压缩', 'Context Compression')}</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-text-muted">{t('保留最近轮次', 'Keep Recent Turns')}</label>
+                                            <Input
+                                                type="number"
+                                                value={agentConfig.keepRecentTurns ?? 5}
+                                                onChange={(e) => setAgentConfig({ ...agentConfig, keepRecentTurns: parseInt(e.target.value) || 5 })}
+                                                min={2}
+                                                max={20}
+                                                className="bg-black/20 border-border text-xs"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-text-muted">{t('深度压缩轮次', 'Deep Compression Turns')}</label>
+                                            <Input
+                                                type="number"
+                                                value={agentConfig.deepCompressionTurns ?? 2}
+                                                onChange={(e) => setAgentConfig({ ...agentConfig, deepCompressionTurns: parseInt(e.target.value) || 2 })}
+                                                min={1}
+                                                max={5}
+                                                className="bg-black/20 border-border text-xs"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-text-muted">{t('重要旧轮次', 'Important Old Turns')}</label>
+                                            <Input
+                                                type="number"
+                                                value={agentConfig.maxImportantOldTurns ?? 3}
+                                                onChange={(e) => setAgentConfig({ ...agentConfig, maxImportantOldTurns: parseInt(e.target.value) || 3 })}
+                                                min={0}
+                                                max={10}
+                                                className="bg-black/20 border-border text-xs"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4 mt-2">
+                                        <Switch
+                                            label={t('启用 LLM 摘要', 'Enable LLM Summary')}
+                                            checked={agentConfig.enableLLMSummary ?? true}
+                                            onChange={(e) => setAgentConfig({ ...agentConfig, enableLLMSummary: e.target.checked })}
+                                        />
+                                        <Switch
+                                            label={t('自动会话交接', 'Auto Handoff')}
+                                            checked={agentConfig.autoHandoff ?? true}
+                                            onChange={(e) => setAgentConfig({ ...agentConfig, autoHandoff: e.target.checked })}
                                         />
                                     </div>
                                 </div>

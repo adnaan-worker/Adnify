@@ -10,9 +10,9 @@
  *   └── rules.md            # 项目 AI 规则
  */
 
-// 目录名常量
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
+import { getEditorConfig } from '@renderer/settings'
 
 export const ADNIFY_DIR_NAME = '.adnify'
 
@@ -132,7 +132,6 @@ class AdnifyDirService {
 
   // 定时刷盘
   private flushTimer: ReturnType<typeof setTimeout> | null = null
-  private readonly FLUSH_INTERVAL = 5000 // 5秒
 
   /**
    * 初始化指定根目录的 .adnify 结构
@@ -231,7 +230,7 @@ class AdnifyDirService {
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null
       this.flush().catch(err => logger.system.error('[AdnifyDir] Flush error:', err))
-    }, this.FLUSH_INTERVAL)
+    }, getEditorConfig().performance.flushIntervalMs)
   }
 
   isInitialized(): boolean {

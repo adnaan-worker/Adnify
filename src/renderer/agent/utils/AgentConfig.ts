@@ -42,9 +42,12 @@ export function getAgentConfig(): AgentRuntimeConfig {
         toolTimeoutMs: agentConfig.toolTimeoutMs ?? DEFAULT_AGENT_CONFIG.toolTimeoutMs,
         enableAutoFix: agentConfig.enableAutoFix ?? DEFAULT_AGENT_CONFIG.enableAutoFix,
 
-        // 上下文压缩阈值
-        contextCompressThreshold: agentConfig.contextCompressThreshold ?? DEFAULT_AGENT_CONFIG.contextCompressThreshold,
+        // 上下文压缩
         keepRecentTurns: agentConfig.keepRecentTurns ?? DEFAULT_AGENT_CONFIG.keepRecentTurns,
+        deepCompressionTurns: agentConfig.deepCompressionTurns ?? DEFAULT_AGENT_CONFIG.deepCompressionTurns,
+        maxImportantOldTurns: agentConfig.maxImportantOldTurns ?? DEFAULT_AGENT_CONFIG.maxImportantOldTurns,
+        enableLLMSummary: agentConfig.enableLLMSummary ?? DEFAULT_AGENT_CONFIG.enableLLMSummary,
+        autoHandoff: agentConfig.autoHandoff ?? DEFAULT_AGENT_CONFIG.autoHandoff,
 
         // 循环检测配置
         loopDetection: {

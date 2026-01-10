@@ -1,50 +1,45 @@
 /**
- * 设置相关状态切片
- * 统一管理所有应用设置
+ * 设置状态切片
+ * 
+ * 管理 Zustand 状态，委托实际的加载/保存逻辑给 settingsService
  */
 import { logger } from '@utils/Logger'
 import { StateCreator } from 'zustand'
-import { SECURITY_DEFAULTS, AGENT_DEFAULTS } from '@/shared/constants'
-import { saveEditorConfig, getEditorConfig, defaultEditorConfig } from '@renderer/config/editorConfig'
-import { ProviderModelConfig } from '@app-types/provider'
-import { BUILTIN_PROVIDERS, getAdapterConfig } from '@/shared/config/providers'
+import { BUILTIN_PROVIDERS, getAdapterConfig } from '@shared/config/providers'
 import {
   settingsService,
-  type LLMConfig as ServiceLLMConfig,
-  type LLMParameters,
-  type AutoApproveSettings as ServiceAutoApprove,
-  type AgentConfig as ServiceAgentConfig,
-  defaultLLMConfig as serviceDefaultLLMConfig,
-  defaultAutoApprove as serviceDefaultAutoApprove,
-  defaultAgentConfig as serviceDefaultAgentConfig,
-} from '@services/settingsService'
+  getEditorConfig,
+  saveEditorConfig,
+} from '@renderer/settings'
+import type {
+  LLMConfig,
+  LLMParameters,
+  AgentConfig,
+  AutoApproveSettings,
+  EditorConfig,
+  ProviderConfig,
+  SecuritySettings,
+} from '@shared/config/types'
+import type { ApiProtocol } from '@shared/config/providers'
+import {
+  defaultLLMConfig,
+  defaultAgentConfig,
+  defaultAutoApprove,
+  defaultEditorConfig,
+  defaultSecuritySettings,
+} from '@renderer/settings'
+import { SECURITY_DEFAULTS } from '@shared/constants'
 
 // ============ 导出类型 ============
 
 export type ProviderType = string
+export type { LLMConfig, LLMParameters, AgentConfig, AutoApproveSettings, EditorConfig, ProviderConfig }
 
-export type { LLMParameters }
+// ============ Provider 模型配置 ============
 
-// LLMConfig 扩展 ServiceLLMConfig
-export interface LLMConfig extends ServiceLLMConfig {
-  parameters: LLMParameters
-}
-
-
-export type AutoApproveSettings = ServiceAutoApprove
-
-// 安全设置（特定于此 slice）
-export interface SecuritySettings {
-  enablePermissionConfirm: boolean
-  enableAuditLog: boolean
-  strictWorkspaceMode: boolean
-  allowedShellCommands?: string[]
-  showSecurityWarnings?: boolean
-}
-
-// Agent 配置（完整类型，与 ServiceAgentConfig 一致）
-export interface AgentConfig extends ServiceAgentConfig {
-  // 继承所有 ServiceAgentConfig 的属性
+export interface ProviderModelConfig extends Omit<ProviderConfig, 'protocol'> {
+  customModels?: string[]
+  protocol?: ApiProtocol
 }
 
 // ============ Slice 接口 ============
@@ -57,7 +52,7 @@ export interface SettingsSlice {
   providerConfigs: Record<string, ProviderModelConfig>
   securitySettings: SecuritySettings
   agentConfig: AgentConfig
-  editorConfig: import('../../config/editorConfig').EditorConfig
+  editorConfig: EditorConfig
   onboardingCompleted: boolean
   hasExistingConfig: boolean
   aiInstructions: string
@@ -73,28 +68,16 @@ export interface SettingsSlice {
   removeCustomModel: (providerId: string, model: string) => void
   setSecuritySettings: (settings: Partial<SecuritySettings>) => void
   setAgentConfig: (config: Partial<AgentConfig>) => void
-  setEditorConfig: (config: Partial<import('../../config/editorConfig').EditorConfig>) => void
+  setEditorConfig: (config: Partial<EditorConfig>) => void
   setOnboardingCompleted: (completed: boolean) => void
   setHasExistingConfig: (hasConfig: boolean) => void
   setAiInstructions: (instructions: string) => void
   loadSettings: (isEmptyWindow?: boolean) => Promise<void>
-  
-  // 自定义厂商便捷方法
   getCustomProviders: () => Array<{ id: string; config: ProviderModelConfig }>
 }
 
-// ============ 默认值（从 settingsService 派生） ============
+// ============ 默认 Provider 配置 ============
 
-const defaultLLMConfig: LLMConfig = {
-  ...serviceDefaultLLMConfig,
-  provider: 'openai',
-  parameters: serviceDefaultLLMConfig.parameters!,
-  adapterConfig: getAdapterConfig('openai'),
-}
-
-const defaultAutoApprove = serviceDefaultAutoApprove
-
-// 从统一配置生成默认 Provider 配置
 function generateDefaultProviderConfigs(): Record<string, ProviderModelConfig> {
   const configs: Record<string, ProviderModelConfig> = {}
   for (const [id, provider] of Object.entries(BUILTIN_PROVIDERS)) {
@@ -110,29 +93,18 @@ function generateDefaultProviderConfigs(): Record<string, ProviderModelConfig> {
 
 const defaultProviderConfigs = generateDefaultProviderConfigs()
 
-const defaultSecuritySettings: SecuritySettings = {
-  enablePermissionConfirm: true,
-  enableAuditLog: true,
-  strictWorkspaceMode: true,
-  allowedShellCommands: [...SECURITY_DEFAULTS.SHELL_COMMANDS],
-  showSecurityWarnings: true,
-}
-
-const defaultAgentConfig: AgentConfig = {
-  ...serviceDefaultAgentConfig,
-  maxToolLoops: AGENT_DEFAULTS.MAX_TOOL_LOOPS,
-  maxFileContentChars: AGENT_DEFAULTS.MAX_FILE_CONTENT_CHARS,
-}
-
 // ============ Slice 创建 ============
 
 export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSlice> = (set, get) => ({
-  llmConfig: defaultLLMConfig,
+  llmConfig: { ...defaultLLMConfig, adapterConfig: getAdapterConfig('openai') },
   language: 'en',
   autoApprove: defaultAutoApprove,
   promptTemplateId: 'default',
   providerConfigs: defaultProviderConfigs,
-  securitySettings: defaultSecuritySettings,
+  securitySettings: {
+    ...defaultSecuritySettings,
+    allowedShellCommands: [...SECURITY_DEFAULTS.SHELL_COMMANDS],
+  },
   agentConfig: defaultAgentConfig,
   editorConfig: defaultEditorConfig,
   onboardingCompleted: true,
@@ -141,30 +113,22 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
 
   setLLMConfig: (config) =>
     set((state) => {
-      // 如果 API Key 或 baseUrl 变更，使 Provider 缓存失效
       if (config.apiKey !== undefined || config.baseUrl !== undefined) {
         window.electronAPI?.invalidateProviders?.()
       }
-      return {
-        llmConfig: { ...state.llmConfig, ...config },
-      }
+      return { llmConfig: { ...state.llmConfig, ...config } }
     }),
 
   setLanguage: (lang) => set({ language: lang }),
 
   setAutoApprove: (settings) =>
-    set((state) => ({
-      autoApprove: { ...state.autoApprove, ...settings },
-    })),
+    set((state) => ({ autoApprove: { ...state.autoApprove, ...settings } })),
 
   setPromptTemplateId: (id) => set({ promptTemplateId: id }),
 
   setProviderConfig: (providerId, config) =>
     set((state) => ({
-      providerConfigs: {
-        ...state.providerConfigs,
-        [providerId]: config,
-      },
+      providerConfigs: { ...state.providerConfigs, [providerId]: config },
     })),
 
   updateProviderConfig: (providerId, updates) =>
@@ -210,14 +174,10 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
     }),
 
   setSecuritySettings: (settings) =>
-    set((state) => ({
-      securitySettings: { ...state.securitySettings, ...settings },
-    })),
+    set((state) => ({ securitySettings: { ...state.securitySettings, ...settings } })),
 
   setAgentConfig: (config) =>
-    set((state) => ({
-      agentConfig: { ...state.agentConfig, ...config },
-    })),
+    set((state) => ({ agentConfig: { ...state.agentConfig, ...config } })),
 
   setEditorConfig: (config) => {
     const newConfig = { ...get().editorConfig, ...config }
@@ -231,25 +191,25 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
 
   loadSettings: async (_isEmptyWindow = false) => {
     try {
-      // 使用统一的 settingsService 加载设置
       const settings = await settingsService.loadAll()
 
-      logger.settings.info('[SettingsSlice] loadSettings via settingsService:', {
+      logger.settings.info('[SettingsSlice] loadSettings:', {
         hasAdapterConfig: !!settings.llmConfig.adapterConfig,
         provider: settings.llmConfig.provider,
       })
 
-      // 转换 providerConfigs 类型，确保 customModels 是数组
+      // 转换 providerConfigs，确保 customModels 是数组，并正确转换类型
       const providerConfigs: Record<string, ProviderModelConfig> = {}
       for (const [id, config] of Object.entries(settings.providerConfigs)) {
-        providerConfigs[id] = {
-          ...config,
+        providerConfigs[id] = { 
+          ...config, 
           customModels: config.customModels || [],
+          protocol: config.protocol as ApiProtocol | undefined,
         }
       }
 
       set({
-        llmConfig: settings.llmConfig as LLMConfig,
+        llmConfig: settings.llmConfig,
         language: (settings.language as 'en' | 'zh') || 'en',
         autoApprove: { ...defaultAutoApprove, ...settings.autoApprove },
         providerConfigs,
@@ -259,6 +219,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
         hasExistingConfig: !!settings.llmConfig?.apiKey,
         aiInstructions: settings.aiInstructions || '',
         editorConfig: getEditorConfig(),
+        securitySettings: settings.securitySettings,
       })
     } catch (e) {
       logger.settings.error('[SettingsSlice] Failed to load settings:', e)

@@ -7,8 +7,7 @@ import { useState, useEffect } from 'react'
 import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode } from 'lucide-react'
 import { useStore } from '@store'
 import { PROVIDERS } from '@/shared/config/providers'
-import { getEditorConfig, saveEditorConfig } from '@renderer/config/editorConfig'
-import { settingsService } from '@services/settingsService'
+import { getEditorConfig, saveEditorConfig, settingsService } from '@renderer/settings'
 import KeybindingPanel from '@components/panels/KeybindingPanel'
 import { Button, Modal, Select } from '@components/ui'
 import { SettingsTab, EditorSettingsState, LANGUAGES } from './types'
@@ -46,6 +45,7 @@ export default function SettingsModal() {
 
     const editorConfig = getEditorConfig()
     const [editorSettings, setEditorSettings] = useState<EditorSettingsState>({
+        // 编辑器外观
         fontSize: editorConfig.fontSize,
         tabSize: editorConfig.tabSize,
         wordWrap: editorConfig.wordWrap,
@@ -56,16 +56,28 @@ export default function SettingsModal() {
         autoSave: editorConfig.autoSave,
         autoSaveDelay: editorConfig.autoSaveDelay,
         theme: 'adnify-dark',
+        // AI 补全
         completionEnabled: editorConfig.ai.completionEnabled,
         completionDebounceMs: editorConfig.performance.completionDebounceMs,
         completionMaxTokens: editorConfig.ai.completionMaxTokens,
         completionTriggerChars: editorConfig.ai.completionTriggerChars,
+        // 终端
+        terminalScrollback: editorConfig.terminal.scrollback,
+        terminalMaxOutputLines: editorConfig.terminal.maxOutputLines,
+        // LSP
+        lspTimeoutMs: editorConfig.lsp.timeoutMs,
+        lspCompletionTimeoutMs: editorConfig.lsp.completionTimeoutMs,
+        // 性能
         largeFileWarningThresholdMB: editorConfig.performance.largeFileWarningThresholdMB,
+        largeFileLineCount: editorConfig.performance.largeFileLineCount,
         commandTimeoutMs: editorConfig.performance.commandTimeoutMs,
-        // 新增性能配置
+        workerTimeoutMs: editorConfig.performance.workerTimeoutMs,
+        healthCheckTimeoutMs: editorConfig.performance.healthCheckTimeoutMs,
         maxProjectFiles: editorConfig.performance.maxProjectFiles,
         maxFileTreeDepth: editorConfig.performance.maxFileTreeDepth,
-        terminalScrollback: editorConfig.terminal.scrollback,
+        maxSearchResults: editorConfig.performance.maxSearchResults,
+        saveDebounceMs: editorConfig.performance.saveDebounceMs,
+        flushIntervalMs: editorConfig.performance.flushIntervalMs,
     })
 
     // Sync store state to local state
@@ -106,6 +118,15 @@ export default function SettingsModal() {
         }
 
         // 使用 settingsService 统一保存
+        const currentEditorConfig = getEditorConfig()
+        const currentSecuritySettings = settingsService.getCached()?.securitySettings || {
+            enablePermissionConfirm: true,
+            enableAuditLog: true,
+            strictWorkspaceMode: true,
+            allowedShellCommands: [],
+            showSecurityWarnings: true,
+        }
+        
         await settingsService.saveAll({
             llmConfig: localConfig as any,
             language: localLanguage,
@@ -115,6 +136,8 @@ export default function SettingsModal() {
             providerConfigs: finalProviderConfigs as any,
             aiInstructions: localAiInstructions,
             onboardingCompleted: true,
+            editorConfig: currentEditorConfig,
+            securitySettings: currentSecuritySettings,
         })
 
         // 编辑器配置独立保存到 editorConfig（localStorage + 文件）
@@ -138,14 +161,26 @@ export default function SettingsModal() {
             terminal: {
                 ...getEditorConfig().terminal,
                 scrollback: editorSettings.terminalScrollback,
+                maxOutputLines: editorSettings.terminalMaxOutputLines,
+            },
+            lsp: {
+                ...getEditorConfig().lsp,
+                timeoutMs: editorSettings.lspTimeoutMs,
+                completionTimeoutMs: editorSettings.lspCompletionTimeoutMs,
             },
             performance: {
                 ...getEditorConfig().performance,
                 completionDebounceMs: editorSettings.completionDebounceMs,
                 largeFileWarningThresholdMB: editorSettings.largeFileWarningThresholdMB,
+                largeFileLineCount: editorSettings.largeFileLineCount,
                 commandTimeoutMs: editorSettings.commandTimeoutMs,
+                workerTimeoutMs: editorSettings.workerTimeoutMs,
+                healthCheckTimeoutMs: editorSettings.healthCheckTimeoutMs,
                 maxProjectFiles: editorSettings.maxProjectFiles,
                 maxFileTreeDepth: editorSettings.maxFileTreeDepth,
+                maxSearchResults: editorSettings.maxSearchResults,
+                saveDebounceMs: editorSettings.saveDebounceMs,
+                flushIntervalMs: editorSettings.flushIntervalMs,
             }
         }
         saveEditorConfig(newEditorConfig)

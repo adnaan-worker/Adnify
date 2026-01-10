@@ -2,7 +2,7 @@
  * Store Slices 导出
  */
 export { createFileSlice, type FileSlice, type OpenFile, type WorkspaceConfig, type LargeFileInfo } from './fileSlice'
-export { createSettingsSlice, type SettingsSlice, type ProviderType, type LLMConfig, type LLMParameters, type AutoApproveSettings, type SecuritySettings, type AgentConfig } from './settingsSlice'
+export { createSettingsSlice, type SettingsSlice, type ProviderType, type LLMConfig, type LLMParameters, type AutoApproveSettings, type AgentConfig, type ProviderModelConfig } from './settingsSlice'
 export { createThemeSlice, type ThemeSlice, type ThemeName } from './themeSlice'
 export { createLogSlice, type LogSlice, type ToolCallLogEntry } from './logSlice'
 export { createMcpSlice, type McpSlice } from './mcpSlice'

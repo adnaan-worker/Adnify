@@ -18,6 +18,7 @@ import type {
     AssistantPart,
     ReasoningPart,
 } from '../../types'
+import { contextManager } from '../../context'
 import type { ThreadSlice } from './threadSlice'
 
 // ===== 类型定义 =====
@@ -309,6 +310,9 @@ export const createMessageSlice: StateCreator<
         const threadId = get().currentThreadId
         if (!threadId) return
 
+        // 重置 ContextManager 状态（清除摘要、handoff 等）
+        contextManager.clear()
+
         set(state => {
             const thread = state.threads[threadId]
             if (!thread) return state
@@ -339,6 +343,9 @@ export const createMessageSlice: StateCreator<
         const threadId = get().currentThreadId
         if (!threadId) return
 
+        // 重置 handoff 状态（回退消息后可能不再需要 handoff）
+        contextManager.clear()
+
         set(state => {
             const thread = state.threads[threadId]
             if (!thread) return state
@@ -355,6 +362,10 @@ export const createMessageSlice: StateCreator<
                         lastModified: Date.now(),
                     },
                 },
+                // 重置 handoff 相关状态
+                handoffRequired: false,
+                handoffDocument: null,
+                compressionStats: null,
             }
         })
     },

@@ -285,9 +285,66 @@ class AgentServiceClass {
       }
 
       // 上下文优化（在循环中持续压缩）
-      const { messages: optimizedMessages } = contextManager.optimize(llmMessages)
+      store.setCompressionPhase('analyzing')
+      const optimizeResult = contextManager.optimize(llmMessages)
+      
+      // 根据压缩级别更新阶段
+      if (optimizeResult.stats.compressionLevel >= 2) {
+        store.setCompressionPhase('compressing')
+      }
+      if (optimizeResult.stats.compressionLevel >= 3) {
+        store.setCompressionPhase('summarizing')
+      }
+      
       llmMessages.length = 0
-      llmMessages.push(...optimizedMessages)
+      llmMessages.push(...optimizeResult.messages)
+      
+      store.setCompressionPhase('done')
+      // 短暂延迟后重置为 idle
+      setTimeout(() => store.setCompressionPhase('idle'), 500)
+
+      // 安全检查：确保消息不为空
+      if (llmMessages.length === 0) {
+        logger.agent.error('[Agent] No messages after optimization, aborting')
+        store.appendToAssistant(this.currentAssistantId!, '\n\n❌ Error: No messages to send')
+        break
+      }
+
+      // 检查是否需要 Handoff（Level 4）
+      if (optimizeResult.stats.needsHandoff && optimizeResult.handoff) {
+        logger.agent.warn('[Agent] Context overflow, triggering session handoff')
+        
+        // 添加友好提示消息，避免 AI 回复为空
+        const { language } = useStore.getState()
+        const handoffMessage = language === 'zh'
+          ? '⚠️ **上下文已满**\n\n当前对话已达到上下文限制，正在自动创建新会话并转移任务进度...\n\n请稍候，系统将自动继续您的任务。'
+          : '⚠️ **Context Limit Reached**\n\nThis conversation has reached its context limit. Creating a new session and transferring task progress...\n\nPlease wait, the system will automatically continue your task.'
+        
+        store.appendToAssistant(this.currentAssistantId!, handoffMessage)
+        
+        // 保存 Handoff 文档到 store
+        store.setHandoffDocument(optimizeResult.handoff)
+        // 设置 handoffRequired=true 阻止继续对话
+        store.setHandoffRequired(true)
+        
+        // 更新压缩统计
+        const stats = contextManager.getStats()
+        if (stats) {
+          store.setCompressionStats(stats)
+        }
+        
+        // 强制停止循环，UI 会自动显示过渡动画
+        break
+      }
+
+      // 更新压缩统计（用于 UI 显示）
+      const compressionStats = contextManager.getStats()
+      if (compressionStats) {
+        logger.agent.info(`[Agent] Setting compression stats: Level ${compressionStats.level}`)
+        store.setCompressionStats(compressionStats)
+      } else {
+        logger.agent.warn('[Agent] No compression stats available')
+      }
 
       const result = await this.callLLMWithRetry(config, llmMessages, chatMode)
 

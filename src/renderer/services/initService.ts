@@ -8,7 +8,7 @@ import { logger } from '@utils/Logger'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 import { useStore } from '../store'
 import { useAgentStore, initializeAgentStore } from '@renderer/agent/store/AgentStore'
-import { initEditorConfig } from '../config/editorConfig'
+import { settingsService } from '@renderer/settings'
 import { themeManager } from '../config/themeConfig'
 import { keybindingService } from './keybindingService'
 import { registerCoreCommands } from '../config/commands'
@@ -51,7 +51,7 @@ async function initCoreModules(): Promise<void> {
   await Promise.all([
     keybindingService.init(),
     initializeAgentStore(),
-    initEditorConfig(),
+    settingsService.loadAll(), // 初始化设置服务
     themeManager.init(),
     snippetService.init(), // snippet 必须在编辑器可用前初始化
   ])

@@ -3,7 +3,7 @@
  */
 import { useCallback, useEffect, useRef } from 'react'
 import { completionService } from '@services/completionService'
-import { getEditorConfig } from '@renderer/config/editorConfig'
+import { getEditorConfig } from '@renderer/settings'
 
 const SUPPORTED_LANGUAGES = [
   'typescript', 'javascript', 'typescriptreact', 'javascriptreact',

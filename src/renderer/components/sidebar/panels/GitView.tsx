@@ -15,7 +15,7 @@ import {
 import { useStore } from '@store'
 import { t, type TranslationKey } from '@renderer/i18n'
 import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry } from '@renderer/agent/services/gitService'
-import { getEditorConfig } from '@renderer/config/editorConfig'
+import { getEditorConfig } from '@renderer/settings'
 import { toast } from '@components/common/ToastProvider'
 import { keybindingService } from '@services/keybindingService'
 import { Input, Button, Modal } from '@components/ui'

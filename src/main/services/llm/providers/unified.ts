@@ -10,7 +10,7 @@ import { MessageAdapter } from '../adapters/messageAdapter'
 import { ToolAdapter } from '../adapters/toolAdapter'
 import { ResponseParser } from '../adapters/responseParser'
 import { ChatParams, LLMToolCall, LLMErrorClass, LLMErrorCode, LLMConfig } from '../types'
-import { AGENT_DEFAULTS } from '@shared/constants'
+import { LLM_DEFAULTS } from '@shared/config/defaults'
 import { getBuiltinProvider, type LLMAdapterConfig, type ApiProtocol, type VisionConfig } from '@shared/config/providers'
 import { logger } from '@shared/utils/Logger'
 
@@ -104,7 +104,7 @@ export class UnifiedProvider extends BaseProvider {
       const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
         apiKey: this.config.apiKey || 'ollama',
         baseURL: this.config.baseUrl,
-        timeout: this.config.timeout || AGENT_DEFAULTS.DEFAULT_LLM_TIMEOUT,
+        timeout: this.config.timeout || LLM_DEFAULTS.timeout,
         maxRetries: 0,
       }
 
@@ -134,7 +134,7 @@ export class UnifiedProvider extends BaseProvider {
       const requestBody: Record<string, unknown> = {
         model,
         messages: converted.messages,
-        max_tokens: maxTokens || AGENT_DEFAULTS.DEFAULT_MAX_TOKENS,
+        max_tokens: maxTokens || LLM_DEFAULTS.maxTokens,
         stream,
       }
 
@@ -325,7 +325,7 @@ export class UnifiedProvider extends BaseProvider {
 
       this.anthropicClient = new Anthropic({
         apiKey: this.config.apiKey,
-        timeout: this.config.timeout || AGENT_DEFAULTS.DEFAULT_LLM_TIMEOUT,
+        timeout: this.config.timeout || LLM_DEFAULTS.timeout,
         ...(baseUrl ? { baseURL: baseUrl } : {}),
         defaultHeaders,
       })
@@ -348,7 +348,7 @@ export class UnifiedProvider extends BaseProvider {
       // 构建请求
       const requestParams: Record<string, unknown> = {
         model,
-        max_tokens: maxTokens || AGENT_DEFAULTS.DEFAULT_MAX_TOKENS,
+        max_tokens: maxTokens || LLM_DEFAULTS.maxTokens,
         messages: converted.messages,
       }
 
@@ -851,7 +851,7 @@ export class UnifiedProvider extends BaseProvider {
         messages: converted.messages,
         tools: convertedTools,
         systemPrompt: converted.systemPrompt,
-        maxTokens: maxTokens || AGENT_DEFAULTS.DEFAULT_MAX_TOKENS,
+        maxTokens: maxTokens || LLM_DEFAULTS.maxTokens,
         temperature,
         topP,
         stream,
@@ -859,7 +859,7 @@ export class UnifiedProvider extends BaseProvider {
 
       // 发送请求
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout || AGENT_DEFAULTS.DEFAULT_LLM_TIMEOUT)
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout || LLM_DEFAULTS.timeout)
       if (signal) signal.addEventListener('abort', () => controller.abort())
 
       try {

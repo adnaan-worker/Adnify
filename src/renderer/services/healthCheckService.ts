@@ -5,6 +5,7 @@
 
 import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'
+import { getEditorConfig } from '@renderer/settings'
 
 export interface HealthCheckResult {
     provider: string
@@ -50,7 +51,7 @@ export async function checkProviderHealth(
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json'
             },
-            signal: AbortSignal.timeout(10000)  // 10 秒超时
+            signal: AbortSignal.timeout(getEditorConfig().performance.healthCheckTimeoutMs)
         })
 
         const latency = Date.now() - startTime

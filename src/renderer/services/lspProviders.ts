@@ -4,6 +4,7 @@
  */
 
 import { logger } from '@utils/Logger'
+import { getEditorConfig } from '@renderer/settings'
 import type * as Monaco from 'monaco-editor'
 
 // 扩展 CompletionItem 类型以支持 LSP data 字段
@@ -167,7 +168,7 @@ export function registerLspProviders(monaco: typeof Monaco) {
       const filePath = lspUriToPath(model.uri.toString())
       
       // 添加超时，避免 LSP 响应慢时阻塞补全
-      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000))
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), getEditorConfig().lsp.completionTimeoutMs))
       const completionPromise = getCompletions(
         filePath,
         position.lineNumber - 1,

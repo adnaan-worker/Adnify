@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Logo } from '@/renderer/components/common/Logo'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useAgent } from '@/renderer/hooks/useAgent'
-import { useAgentStore } from '@/renderer/agent'
+import { useAgentStore, selectHandoffRequired } from '@/renderer/agent'
 import { t } from '@/renderer/i18n'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import {
@@ -89,7 +89,6 @@ export default function ChatPanel() {
     getCheckpointForMessage,
     addContextItem,
     removeContextItem,
-    checkContextLength,
     regenerateFromMessage,
   } = useAgent()
 
@@ -106,8 +105,53 @@ export default function ChatPanel() {
   // 斜杠命令状态
   const [showSlashCommand, setShowSlashCommand] = useState(false)
   const [slashCommandQuery, setSlashCommandQuery] = useState('')
-  const [showContextWarning, setShowContextWarning] = useState(false)
   const [showBranches, setShowBranches] = useState(false)
+
+  // Handoff 状态
+  const handoffRequired = useAgentStore(selectHandoffRequired)
+
+  // 监听 Handoff 自动继续事件
+  useEffect(() => {
+    const handleAutoResume = (event: CustomEvent<{ 
+      objective: string
+      pendingSteps: string[]
+      fileChanges: Array<{ action: string; path: string; summary: string }>
+    }>) => {
+      const { objective, pendingSteps, fileChanges } = event.detail
+      
+      // 构建自动继续的消息，包含文件变更信息
+      let resumeMessage = ''
+      
+      // 添加文件变更信息（重要：让 AI 知道之前修改了哪些文件）
+      if (fileChanges && fileChanges.length > 0) {
+        const fileList = fileChanges.slice(-10).map(f => `- [${f.action}] ${f.path}`).join('\n')
+        resumeMessage += language === 'zh'
+          ? `**之前修改的文件**:\n${fileList}\n\n`
+          : `**Previously modified files**:\n${fileList}\n\n`
+      }
+      
+      // 添加待完成步骤
+      if (pendingSteps && pendingSteps.length > 0) {
+        resumeMessage += language === 'zh'
+          ? `请继续完成以下待完成的步骤：\n${pendingSteps.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}`
+          : `Please continue with the following pending steps:\n${pendingSteps.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}`
+      } else if (objective) {
+        resumeMessage += language === 'zh'
+          ? `请继续完成目标：${objective}`
+          : `Please continue with the objective: ${objective}`
+      } else {
+        resumeMessage += language === 'zh' 
+          ? '请继续完成之前的任务。' 
+          : 'Please continue with the previous task.'
+      }
+      
+      // 发送消息继续任务
+      sendMessage(resumeMessage)
+    }
+    
+    window.addEventListener('handoff-auto-resume', handleAutoResume as EventListener)
+    return () => window.removeEventListener('handoff-auto-resume', handleAutoResume as EventListener)
+  }, [language, sendMessage])
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputContainerRef = useRef<HTMLDivElement>(null)
@@ -470,11 +514,8 @@ export default function ChatPanel() {
   const handleSubmit = useCallback(async () => {
     if ((!input.trim() && images.length === 0) || isStreaming) return
 
-    const contextCheck = checkContextLength()
-    if (contextCheck.needsCompact) {
-      setShowContextWarning(true)
-      return
-    }
+    // Handoff 现在由 StatusBar 自动处理，不再阻止发送
+    // 如果正在过渡中，等待完成后会自动继续
 
     let userMessage: string | Array<{ type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }> = input.trim()
 
@@ -513,7 +554,7 @@ export default function ChatPanel() {
     setInput('')
     setImages([])
     await sendMessage(userMessage)
-  }, [input, images, isStreaming, sendMessage, checkContextLength, activeFilePath, selectedCode, workspacePath, setChatMode])
+  }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, handoffRequired])
 
   // 编辑消息
   const handleEditMessage = useCallback(async (messageId: string, content: string) => {
@@ -674,66 +715,6 @@ export default function ChatPanel() {
       onDrop={handleDrop}
     >
       <div className="flex flex-col h-full">
-        {/* Context Length Warning Modal */}
-        {showContextWarning && (
-          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center animate-fade-in">
-            <div className="max-w-md p-6 rounded-2xl border border-warning/20 bg-surface/95 shadow-2xl shadow-warning/10 animate-scale-in">
-              <div className="flex items-start gap-4 mb-4">
-                <div className="p-2 rounded-full bg-warning/10 border border-warning/20">
-                  <AlertTriangle className="w-5 h-5 text-warning" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-text-primary mb-1">
-                    {language === 'zh' ? '对话较长' : 'Long Conversation'}
-                  </h3>
-                  <p className="text-sm text-text-muted leading-relaxed">
-                    {language === 'zh'
-                      ? '当前对话已较长，继续可能影响响应质量。建议开始新对话以获得最佳效果。'
-                      : 'This conversation is getting long. Starting a new chat may improve response quality.'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3 justify-end">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setShowContextWarning(false)
-                    const submitWithoutCheck = async () => {
-                      let userMessage: string | Array<{ type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }> = input.trim()
-                      if (images.length > 0) {
-                        const readyImages = images.filter(img => img.base64)
-                        userMessage = [
-                          { type: 'text' as const, text: input.trim() },
-                          ...readyImages.map(img => ({
-                            type: 'image' as const,
-                            source: { type: 'base64' as const, media_type: img.file.type, data: img.base64! },
-                          })),
-                        ]
-                      }
-                      setInput('')
-                      setImages([])
-                      await sendMessage(userMessage)
-                    }
-                    submitWithoutCheck()
-                  }}
-                >
-                  {language === 'zh' ? '继续发送' : 'Continue Anyway'}
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    setShowContextWarning(false)
-                    createThread()
-                    toast.success(language === 'zh' ? '已创建新对话' : 'New chat created')
-                  }}
-                >
-                  <Plus className="w-4 h-4 mr-1" />
-                  {language === 'zh' ? '开始新对话' : 'Start New Chat'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Header - 简洁版 */}
         <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/80 backdrop-blur-xl select-none transition-all duration-300">

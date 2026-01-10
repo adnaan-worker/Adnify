@@ -5,6 +5,7 @@
 
 import type { StateCreator } from 'zustand'
 import type { ChatThread } from '../../types'
+import { contextManager } from '../../context'
 
 // ===== 类型定义 =====
 
@@ -71,6 +72,9 @@ export const createThreadSlice: StateCreator<
                 }))
             }
         }
+        
+        // 重置 ContextManager 状态（新线程从空白开始）
+        contextManager.clear()
         
         const thread = createEmptyThread()
         set(state => ({

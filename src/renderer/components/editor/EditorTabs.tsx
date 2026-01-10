@@ -57,7 +57,9 @@ export const EditorTabs = memo(function EditorTabs({
 
             {/* 已删除文件图标 */}
             {file.isDeleted && (
-              <FileX className="w-3.5 h-3.5 text-status-error flex-shrink-0" title="文件已被删除" />
+              <span title="文件已被删除">
+                <FileX className="w-3.5 h-3.5 text-status-error flex-shrink-0" />
+              </span>
             )}
 
             <span className={`text-[13px] truncate flex-1 ${file.isDeleted ? 'line-through text-text-muted' : ''}`}>{fileName}</span>

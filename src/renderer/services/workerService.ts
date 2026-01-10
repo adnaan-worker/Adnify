@@ -4,11 +4,11 @@
  */
 
 import { logger } from '@utils/Logger'
+import { getEditorConfig } from '@renderer/settings'
 import type { WorkerRequest, WorkerResponse, WorkerMessageType } from '../workers/computeWorker'
 
 // Worker 池配置
 const POOL_SIZE = Math.max(1, (navigator.hardwareConcurrency || 4) - 1)
-const TASK_TIMEOUT = 30000 // 30 秒超时
 
 interface PendingTask {
   resolve: (result: unknown) => void
@@ -73,10 +73,11 @@ class WorkerService {
     const request: WorkerRequest = { id, type, payload }
 
     return new Promise<T>((resolve, reject) => {
+      const taskTimeout = getEditorConfig().performance.workerTimeoutMs
       const timeout = setTimeout(() => {
         this.pendingTasks.delete(id)
-        reject(new Error(`Task ${type} timed out after ${TASK_TIMEOUT}ms`))
-      }, TASK_TIMEOUT)
+        reject(new Error(`Task ${type} timed out after ${taskTimeout}ms`))
+      }, taskTimeout)
 
       this.pendingTasks.set(id, {
         resolve: resolve as (result: unknown) => void,

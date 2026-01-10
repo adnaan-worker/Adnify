@@ -6,7 +6,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import type * as Monaco from 'monaco-editor'
-import { getEditorConfig } from '@renderer/config/editorConfig'
+import { getEditorConfig } from '@renderer/settings'
 import { getAgentConfig } from '@renderer/agent/utils/AgentConfig'
 
 // Monaco 实例引用

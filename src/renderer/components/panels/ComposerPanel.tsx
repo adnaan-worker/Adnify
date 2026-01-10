@@ -22,7 +22,7 @@ import { getFileName } from '@shared/utils/pathUtils'
 import DiffViewer from '../editor/DiffViewer'
 import { t } from '@renderer/i18n'
 import { composerService, FileChange } from '@renderer/agent/services/composerService'
-import { getEditorConfig } from '@renderer/config/editorConfig'
+import { getEditorConfig } from '@renderer/settings'
 
 interface FileEdit {
   path: string
