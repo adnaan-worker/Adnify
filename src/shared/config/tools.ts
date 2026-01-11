@@ -565,17 +565,66 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     update_plan: {
         name: 'update_plan',
         displayName: 'Update Plan',
-        description: 'Update plan status or items.',
+        description: 'Update plan item status. Use after completing or failing a step.',
+        detailedDescription: `Update the status of plan items.
+- Use items array to update specific item statuses
+- Each item needs: id (or index like "1", "2") and status ("completed", "in_progress", "failed")
+- Example: items=[{id:"1", status:"completed"}] to mark step 1 as done`,
         category: 'plan',
         approvalType: 'none',
         parallel: false,
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            status: { type: 'string', description: 'Plan status', enum: ['active', 'completed', 'failed'] },
-            items: { type: 'array', description: 'Updated items' },
-            currentStepId: { type: 'string', description: 'Current step ID' },
-            title: { type: 'string', description: 'Plan title' },
+            items: { 
+                type: 'array', 
+                description: 'Items to update. Each item: {id: "1", status: "completed"|"in_progress"|"failed"}',
+                required: true,
+            },
+            status: { type: 'string', description: 'Overall plan status (optional)', enum: ['active', 'completed', 'failed'] },
+        },
+    },
+
+    ask_user: {
+        name: 'ask_user',
+        displayName: 'Ask User',
+        description: 'Ask user to select from options. Use in Plan mode to gather requirements before creating task templates.',
+        detailedDescription: `Present interactive options to the user and wait for their selection.
+- Use to gather requirements, preferences, or confirmations
+- Options are displayed as clickable cards
+- Supports single or multiple selection
+- The tool blocks until user makes a selection`,
+        examples: [
+            'ask_user question="What type of task?" options=[{id:"feature",label:"New Feature"},{id:"bugfix",label:"Bug Fix"}]',
+            'ask_user question="Which files to modify?" options=[...] multiSelect=true',
+        ],
+        criticalRules: [
+            'Use this tool in Plan mode to gather requirements before creating task templates',
+            'Keep options concise and clear',
+            'Provide descriptions for complex options',
+        ],
+        category: 'plan',
+        approvalType: 'none',
+        parallel: false,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            question: { type: 'string', description: 'Question to ask the user', required: true },
+            options: {
+                type: 'array',
+                description: 'Options for user to select from',
+                required: true,
+                items: {
+                    type: 'object',
+                    description: 'Option item',
+                    properties: {
+                        id: { type: 'string', description: 'Unique option ID', required: true },
+                        label: { type: 'string', description: 'Display label', required: true },
+                        description: { type: 'string', description: 'Optional description' },
+                    },
+                },
+            },
+            multiSelect: { type: 'boolean', description: 'Allow multiple selections (default: false)', default: false },
         },
     },
 

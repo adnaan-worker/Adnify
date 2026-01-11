@@ -4,13 +4,8 @@
 import { useEffect, useCallback } from 'react'
 import { useStore } from '@store'
 import { api } from '@renderer/services/electronAPI'
-import { keybindingService } from '@services/keybindingService'
 
-interface ShortcutHandlers {
-  onShowKeyboardShortcuts?: () => void
-}
-
-export function useGlobalShortcuts(handlers: ShortcutHandlers = {}) {
+export function useGlobalShortcuts() {
   const {
     setShowSettings,
     setShowCommandPalette,

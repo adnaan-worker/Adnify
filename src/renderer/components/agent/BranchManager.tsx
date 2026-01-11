@@ -273,37 +273,6 @@ export function BranchSelector({
 }
 
 /**
- * 分支指示器 - 简化版，只在有分支时显示
- * @deprecated 使用 BranchSelector 替代
- */
-export function BranchIndicator({ 
-  language = 'en',
-  onClick 
-}: { 
-  language?: 'zh' | 'en'
-  onClick?: () => void 
-}) {
-  const activeBranch = useAgentStore(selectActiveBranch)
-  const branches = useAgentStore(selectBranches)
-
-  if (!activeBranch && branches.length === 0) return null
-
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-accent/10 border border-accent/20 text-accent text-xs hover:bg-accent/20 transition-colors"
-    >
-      <GitBranch className="w-3 h-3" />
-      {activeBranch ? (
-        <span className="truncate max-w-[100px]">{activeBranch.name}</span>
-      ) : (
-        <span>{branches.length} {language === 'zh' ? '个分支' : 'branches'}</span>
-      )}
-    </button>
-  )
-}
-
-/**
  * 消息操作按钮 - 创建分支/重新生成
  */
 export function MessageBranchActions({

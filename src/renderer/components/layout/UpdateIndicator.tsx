@@ -8,17 +8,20 @@ import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2, ExternalLink, X
 import { motion, AnimatePresence } from 'framer-motion'
 import { updaterService, UpdateStatus } from '@services/updaterService'
 import { useStore } from '@store'
+import { api } from '@/renderer/services/electronAPI'
 
 export default function UpdateIndicator() {
   const { language } = useStore()
   const [status, setStatus] = useState<UpdateStatus | null>(null)
   const [showPopover, setShowPopover] = useState(false)
+  const [currentVersion, setCurrentVersion] = useState<string>('')
   const popoverRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     updaterService.initialize()
     const unsubscribe = updaterService.subscribe(setStatus)
     updaterService.getStatus().then(setStatus)
+    api.getAppVersion().then(setCurrentVersion)
     return () => unsubscribe()
   }, [])
 
@@ -148,12 +151,12 @@ export default function UpdateIndicator() {
                   <div className="flex items-center justify-center gap-2 text-xs">
                      {status?.version && hasUpdate ? (
                        <>
-                        <span className="text-text-muted line-through opacity-50">v{updaterService.currentVersion}</span>
+                        <span className="text-text-muted line-through opacity-50">v{currentVersion}</span>
                         <span className="text-text-muted">→</span>
                         <span className="font-mono font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">v{status.version}</span>
                        </>
                      ) : (
-                       <span className="text-text-muted font-mono">v{updaterService.currentVersion}</span>
+                       <span className="text-text-muted font-mono">v{currentVersion}</span>
                      )}
                   </div>
                 </div>

@@ -153,6 +153,41 @@ export default function ChatPanel() {
     return () => window.removeEventListener('handoff-auto-resume', handleAutoResume as EventListener)
   }, [language, sendMessage])
 
+  // 监听选项卡片选择事件
+  useEffect(() => {
+    const handleOptionSelect = (event: CustomEvent<{ content: string; messageId: string }>) => {
+      const { content } = event.detail
+      if (content) {
+        sendMessage(content)
+      }
+    }
+    
+    const handleUpdateInteractive = (event: CustomEvent<{ messageId: string; selectedIds: string[] }>) => {
+      const { messageId, selectedIds } = event.detail
+      // 更新消息的 interactive.selectedIds
+      const store = useAgentStore.getState()
+      const thread = store.getCurrentThread()
+      if (thread) {
+        const msg = thread.messages.find(m => m.id === messageId)
+        if (msg && msg.role === 'assistant' && (msg as any).interactive) {
+          store.updateMessage(messageId, {
+            interactive: {
+              ...(msg as any).interactive,
+              selectedIds,
+            },
+          } as any)
+        }
+      }
+    }
+    
+    window.addEventListener('chat-send-message', handleOptionSelect as EventListener)
+    window.addEventListener('chat-update-interactive', handleUpdateInteractive as EventListener)
+    return () => {
+      window.removeEventListener('chat-send-message', handleOptionSelect as EventListener)
+      window.removeEventListener('chat-update-interactive', handleUpdateInteractive as EventListener)
+    }
+  }, [sendMessage])
+
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputContainerRef = useRef<HTMLDivElement>(null)
 

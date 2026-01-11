@@ -92,6 +92,8 @@ export interface AssistantMessage {
     reasoning?: string
     reasoningStartTime?: number
     usage?: TokenUsage
+    /** 交互式内容（选项卡片等） */
+    interactive?: InteractiveContent
 }
 
 /** 工具结果消息 */
@@ -133,6 +135,27 @@ export type ChatMessage =
     | InterruptedToolMessage
 
 // ============================================
+// 交互式内容类型（用于 Plan 模式问答）
+// ============================================
+
+/** 选项 */
+export interface InteractiveOption {
+    id: string
+    label: string
+    icon?: string
+    description?: string
+}
+
+/** 交互式选项内容 */
+export interface InteractiveContent {
+    type: 'interactive'
+    question: string
+    options: InteractiveOption[]
+    multiSelect?: boolean
+    selectedIds?: string[]
+}
+
+// ============================================
 // Plan 相关类型
 // ============================================
 
@@ -158,6 +181,21 @@ export interface Plan {
     currentStepId: string | null
     createdAt: number
     updatedAt: number
+}
+
+/** 计划文件 JSON 格式（用于持久化存储） */
+export interface PlanFileData {
+    version: 1
+    title: string
+    status: PlanStatus
+    createdAt: number
+    updatedAt: number
+    items: Array<{
+        id: string
+        title: string
+        description?: string
+        status: PlanItemStatus
+    }>
 }
 
 // ============================================
@@ -188,9 +226,6 @@ export type ContextItem =
     | SymbolsContext
     | WebContext
     | ProblemsContext
-    | GitContext
-    | TerminalContext
-    | SymbolsContext
 
 // ============================================
 // 线程和流状态类型

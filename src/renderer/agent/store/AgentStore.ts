@@ -25,7 +25,7 @@ import {
 import type { ChatMessage, ContextItem } from '../types'
 import type { CompressionStats } from '../context'
 import type { HandoffDocument } from '../context/types'
-import { buildHandoffContext, buildWelcomeMessage } from '../context/HandoffManager'
+import { buildHandoffContext } from '../context/HandoffManager'
 
 // ===== Store 类型 =====
 

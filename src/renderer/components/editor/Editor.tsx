@@ -307,19 +307,15 @@ export default function Editor() {
         {activeFile && (
           <>
             {/* Markdown 工具栏 */}
-            {activeFileType === 'markdown' && (
+            {activeFileType === 'markdown' && !isPlanFile(activeFile.path) && (
               <div className="absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-1 bg-surface/80 backdrop-blur-sm rounded-bl-lg border-l border-b border-border">
-                {!isPlanFile(activeFile.path) && (
-                  <>
-                    <button onClick={() => setMarkdownMode('edit')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'edit' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title="编辑模式">
-                      <Edit className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => setMarkdownMode('split')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'split' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title="分屏模式">
-                      <Columns className="w-3.5 h-3.5" />
-                    </button>
-                  </>
-                )}
-                <button onClick={() => setMarkdownMode('preview')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'preview' || isPlanFile(activeFile.path) ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title="预览模式" disabled={isPlanFile(activeFile.path)}>
+                <button onClick={() => setMarkdownMode('edit')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'edit' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title="编辑模式">
+                  <Edit className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => setMarkdownMode('split')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'split' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title="分屏模式">
+                  <Columns className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => setMarkdownMode('preview')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'preview' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title="预览模式">
                   <Eye className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -329,12 +325,10 @@ export default function Editor() {
               <ImagePreview path={activeFile.path} />
             ) : activeFileType === 'binary' ? (
               <UnsupportedFile path={activeFile.path} fileType="binary" />
-            ) : activeFileType === 'markdown' && (markdownMode === 'preview' || isPlanFile(activeFile.path)) ? (
-              isPlanFile(activeFile.path) ? (
-                <PlanPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} filePath={activeFile.path} />
-              ) : (
-                <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
-              )
+            ) : isPlanFile(activeFile.path) ? (
+              <PlanPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
+            ) : activeFileType === 'markdown' && markdownMode === 'preview' ? (
+              <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
             ) : activeFileType === 'markdown' && markdownMode === 'split' ? (
               <div className="flex h-full">
                 <div className="flex-1 border-r border-border">

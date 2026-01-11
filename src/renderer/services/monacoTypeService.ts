@@ -8,6 +8,15 @@ import { logger } from '@utils/Logger'
 import type * as Monaco from 'monaco-editor'
 import { getEditorConfig } from '@renderer/settings'
 import { getAgentConfig } from '@renderer/agent/utils/AgentConfig'
+// Monaco 0.55+ 需要单独导入 TypeScript 语言服务
+import {
+  typescriptDefaults,
+  javascriptDefaults,
+  ScriptTarget,
+  ModuleKind,
+  ModuleResolutionKind,
+  JsxEmit,
+} from 'monaco-editor/esm/vs/language/typescript/monaco.contribution'
 
 // Monaco 实例引用
 let monacoInstance: typeof Monaco | null = null
@@ -50,11 +59,11 @@ export function initMonacoTypeService(monaco: typeof Monaco) {
   isInitialized = true
 
   // 配置 TypeScript 编译选项
-  const compilerOptions: Monaco.languages.typescript.CompilerOptions = {
-    target: monaco.languages.typescript.ScriptTarget.ESNext,
-    module: monaco.languages.typescript.ModuleKind.ESNext,
-    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-    jsx: monaco.languages.typescript.JsxEmit.React,
+  const compilerOptions = {
+    target: ScriptTarget.ESNext,
+    module: ModuleKind.ESNext,
+    moduleResolution: ModuleResolutionKind.NodeJs,
+    jsx: JsxEmit.React,
     jsxImportSource: 'react',
     allowJs: true,
     checkJs: false,
@@ -73,27 +82,27 @@ export function initMonacoTypeService(monaco: typeof Monaco) {
     },
   }
 
-  monaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions)
-  monaco.languages.typescript.javascriptDefaults.setCompilerOptions(compilerOptions)
+  typescriptDefaults.setCompilerOptions(compilerOptions)
+  javascriptDefaults.setCompilerOptions(compilerOptions)
 
   // 设置诊断选项
   // 禁用语义验证以避免跨文件解析时的 URI 不匹配错误
   // 跳转功能通过 Editor.tsx 中的 LinkProvider 实现
-  monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+  typescriptDefaults.setDiagnosticsOptions({
     noSemanticValidation: true,
     noSyntaxValidation: false,
     noSuggestionDiagnostics: true,
   })
 
-  monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+  javascriptDefaults.setDiagnosticsOptions({
     noSemanticValidation: true,
     noSyntaxValidation: false,
     noSuggestionDiagnostics: true,
   })
 
   // 启用 eager model sync - 关键！这让 TypeScript 服务能看到所有模型
-  monaco.languages.typescript.typescriptDefaults.setEagerModelSync(true)
-  monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true)
+  typescriptDefaults.setEagerModelSync(true)
+  javascriptDefaults.setEagerModelSync(true)
 
   logger.system.info('[MonacoTypeService] Initialized with eager model sync')
 }
@@ -133,12 +142,12 @@ export function addFileToTypeService(filePath: string, content: string) {
   let disposable: Monaco.IDisposable | undefined
 
   if (isTypeScript) {
-    disposable = monacoInstance.languages.typescript.typescriptDefaults.addExtraLib(
+    disposable = typescriptDefaults.addExtraLib(
       content,
       uriString
     )
   } else if (isJavaScript) {
-    disposable = monacoInstance.languages.typescript.javascriptDefaults.addExtraLib(
+    disposable = javascriptDefaults.addExtraLib(
       content,
       uriString
     )

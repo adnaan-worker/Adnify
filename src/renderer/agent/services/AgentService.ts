@@ -430,6 +430,19 @@ class AgentServiceClass {
 
       userRejected = rejected
 
+      // 检查是否有 ask_user 工具需要等待用户响应
+      const waitingForUser = toolResults.some(r => r.result.meta?.waitingForUser === true)
+      if (waitingForUser) {
+        // ask_user 工具被调用，停止循环等待用户选择
+        logger.agent.info('[Agent] ask_user called, waiting for user response')
+        // 完成当前消息，设置 isStreaming: false 以便渲染选项卡片
+        if (this.currentAssistantId) {
+          store.finalizeAssistant(this.currentAssistantId)
+        }
+        store.setStreamPhase('idle')
+        break
+      }
+
       // 将工具结果添加到消息历史
       for (const { toolCall, result: toolResult } of toolResults) {
         llmMessages.push({

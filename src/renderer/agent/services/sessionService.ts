@@ -179,59 +179,6 @@ class SessionService {
 	}
 
 	/**
-	 * 保存会话（兼容旧接口）
-	 * @deprecated 使用 saveCurrentThread 或 saveThread
-	 */
-	async saveSession(
-		messages: ChatMessage[],
-		mode: WorkMode,
-		existingId?: string,
-		config?: Partial<LLMConfig>
-	): Promise<string> {
-		const data = await api.settings.get(SESSIONS_KEY)
-		let sessions: ChatSession[] = data && typeof data === 'string' ? JSON.parse(data) : []
-		
-		const now = Date.now()
-		
-		if (existingId) {
-			// 更新现有会话
-			const idx = sessions.findIndex(s => s.id === existingId)
-			if (idx >= 0) {
-				sessions[idx] = {
-					...sessions[idx],
-					messages,
-					mode,
-					updatedAt: now,
-					config,
-				}
-				await api.settings.set(SESSIONS_KEY, JSON.stringify(sessions))
-				return existingId
-			}
-		}
-		
-		// 创建新会话
-		const newSession: ChatSession = {
-			id: crypto.randomUUID(),
-			name: generateSessionName(messages),
-			mode,
-			messages,
-			createdAt: now,
-			updatedAt: now,
-			config,
-		}
-		
-		sessions.unshift(newSession)
-		
-		// 限制会话数量
-		if (sessions.length > MAX_SESSIONS) {
-			sessions = sessions.slice(0, MAX_SESSIONS)
-		}
-		
-		await api.settings.set(SESSIONS_KEY, JSON.stringify(sessions))
-		return newSession.id
-	}
-
-	/**
 	 * 删除会话
 	 */
 	async deleteSession(id: string): Promise<boolean> {

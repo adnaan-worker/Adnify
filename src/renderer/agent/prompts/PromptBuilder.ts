@@ -115,6 +115,31 @@ If a plan exists:
 5. ALWAYS keep the plan status in sync with your actions`
 }
 
+/**
+ * Plan 模式引导指令
+ */
+function buildPlanModeGuidelines(): string {
+  return `## Plan Mode Workflow
+
+**Phase 1: Gather Requirements**
+- Use \`ask_user\` to understand what the user wants
+- After calling \`ask_user\`, STOP and wait for user selection
+- Continue asking until you have enough information
+
+**Phase 2: Create Plan**
+- Only after user answers your questions, use \`create_plan\`
+- Do NOT create plan before gathering requirements
+
+**Phase 3: Execute**
+- Execute plan steps one by one
+- Use \`update_plan\` to mark each step as completed/failed
+
+**Rules:**
+- Never skip Phase 1
+- Never create plan immediately
+- Always wait for user response after \`ask_user\``
+}
+
 // ============================================
 // 主构建函数
 // ============================================
@@ -136,6 +161,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
     buildCustomInstructions(ctx.customInstructions),
+    ctx.mode === 'plan' ? buildPlanModeGuidelines() : null,
     ctx.mode === 'plan' ? buildPlanSection(ctx.plan) : null,
   ]
   

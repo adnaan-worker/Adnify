@@ -8,6 +8,7 @@ declare global {
       getState: typeof useStore.getState
     }
     __settingsUnsubscribe?: () => void
+    __errorUnsubscribe?: () => void
     electronAPI?: {
       invalidateProviders?: () => void
     }

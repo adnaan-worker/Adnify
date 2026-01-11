@@ -1,6 +1,6 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import {
   GitBranch,
   AlertCircle,
@@ -15,7 +15,6 @@ import {
   Minimize2,
   MessageSquare,
   Bug,
-  ArrowRight,
   Zap,
 } from 'lucide-react'
 import { useStore } from '@store'

@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react'
-import { ChevronDown, Plus, Zap, X, Save, Code2, Wand2 } from 'lucide-react'
+import { ChevronDown, Plus, X, Save, Code2, Wand2 } from 'lucide-react'
 import { Button, Input, Select } from '@components/ui'
 import { useStore } from '@store'
 import type { AdvancedConfig, ApiProtocol, LLMAdapterConfig } from '@shared/config/providers'

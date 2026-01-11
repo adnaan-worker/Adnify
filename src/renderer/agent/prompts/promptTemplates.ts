@@ -67,10 +67,17 @@ export const SECURITY_RULES = `## Security Rules
 
 export const PLANNING_TOOLS_DESC = `### Planning Tools
 - **create_plan** - Create execution plan for complex multi-step tasks
-  - Parameters: items (required array with title, description)
+  - Parameters: items (required array with title, description), title (optional)
 
-- **update_plan** - Update plan status or items
-  - Parameters: status, items, currentStepId
+- **update_plan** - Update plan item status after completing a step
+  - Parameters: items (required array, e.g. [{id:"1", status:"completed"}])
+  - Status values: "completed", "in_progress", "failed"
+  - Use step index (1, 2, 3...) as id
+
+- **ask_user** - Ask user to select from options (use to gather requirements)
+  - Parameters: question (required), options (required array with id, label, description), multiSelect (optional)
+  - The tool will display clickable options to the user
+  - User's selection will be sent as a message, then continue based on their choice
 `
 
 /**
@@ -368,11 +375,18 @@ const BASE_SYSTEM_INFO_ZH = `## 环境
 [用户定义的自定义指令]`
 
 const PLANNING_TOOLS_DESC_ZH = `### 计划工具
-21. **create_plan** - 创建执行计划
-    - 参数：items（必需，包含 title、description 的数组）
+- **create_plan** - 创建执行计划
+  - 参数：items（必需，包含 title、description 的数组）、title（可选）
 
-22. **update_plan** - 更新计划状态/项目
-    - 参数：status、items、currentStepId
+- **update_plan** - 完成步骤后更新计划项状态
+  - 参数：items（必需，如 [{id:"1", status:"completed"}]）
+  - status 值："completed"、"in_progress"、"failed"
+  - 使用步骤索引（1、2、3...）作为 id
+
+- **ask_user** - 向用户提问并让其选择（用于收集需求）
+  - 参数：question（必需）、options（必需，包含 id、label、description 的数组）、multiSelect（可选）
+  - 该工具会向用户显示可点击的选项卡片
+  - 用户的选择会作为消息发送，然后根据其选择继续
 `
 
 /** 人格中文翻译映射 */

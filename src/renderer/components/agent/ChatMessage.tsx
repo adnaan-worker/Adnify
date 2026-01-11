@@ -26,6 +26,7 @@ import {
 import FileChangeCard from './FileChangeCard'
 import ToolCallCard from './ToolCallCard'
 import ToolCallGroup from './ToolCallGroup'
+import { OptionCard } from './OptionCard'
 import { isWriteTool } from '@/shared/config/tools'
 import { useStore } from '@store'
 import { MessageBranchActions } from './BranchManager'
@@ -38,6 +39,7 @@ interface ChatMessageProps {
   onApproveTool?: () => void
   onRejectTool?: () => void
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
+  onSelectOption?: (messageId: string, selectedIds: string[]) => void
   pendingToolId?: string
   hasCheckpoint?: boolean
 }
@@ -529,6 +531,31 @@ const ChatMessage = React.memo(({
               {/* Streaming indicator */}
               {isAssistantMessage(message) && message.isStreaming && (
                 <StreamingIndicator />
+              )}
+
+              {/* Interactive content (options) */}
+              {isAssistantMessage(message) && message.interactive && !message.isStreaming && (
+                <OptionCard
+                  content={message.interactive}
+                  onSelect={(selectedIds) => {
+                    // 将选择结果作为用户消息发送
+                    const selectedLabels = message.interactive!.options
+                      .filter(opt => selectedIds.includes(opt.id))
+                      .map(opt => opt.label)
+                    const response = selectedLabels.join(', ')
+                    
+                    // 更新消息的 selectedIds 防止重复选择
+                    window.dispatchEvent(new CustomEvent('chat-update-interactive', {
+                      detail: { messageId: message.id, selectedIds }
+                    }))
+                    
+                    // 通过 window 事件通知 ChatPanel 发送消息
+                    window.dispatchEvent(new CustomEvent('chat-send-message', { 
+                      detail: { content: response, messageId: message.id }
+                    }))
+                  }}
+                  disabled={!!message.interactive.selectedIds?.length}
+                />
               )}
             </div>
           )}

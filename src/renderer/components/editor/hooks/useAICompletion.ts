@@ -53,8 +53,8 @@ export function useAICompletion(activeFilePath: string | null) {
             return { items: [] }
           }
         },
-        freeInlineCompletions() {},
         // Monaco 0.55+ 需要这个方法
+        handleItemDidShow() {},
         disposeInlineCompletions() {}
       }
     )

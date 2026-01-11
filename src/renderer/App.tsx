@@ -80,9 +80,7 @@ function AppContent() {
   })
 
   // 全局快捷键
-  useGlobalShortcuts({
-    onShowKeyboardShortcuts: () => setShowKeyboardShortcuts(true)
-  })
+  useGlobalShortcuts()
 
   // 面板拖拽
   const { startResize: startSidebarResize } = useSidebarResize(setSidebarWidth)

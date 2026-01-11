@@ -79,6 +79,7 @@ const CORE_TOOLS: string[] = [
 const PLAN_TOOLS: string[] = [
   'create_plan',
   'update_plan',
+  'ask_user',
 ]
 
 /** UI/UX 工具 - uiux-designer 角色专用 */
