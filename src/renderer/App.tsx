@@ -50,6 +50,7 @@ function AppContent() {
   // Zustand 会自动优化这些独立的 selector，只订阅相关状态变化
   const workspace = useStore((state) => state.workspace)
   const showSettings = useStore((state) => state.showSettings)
+  const setShowSettings = useStore((state) => state.setShowSettings)
   const activeSidePanel = useStore((state) => state.activeSidePanel)
   const showComposer = useStore((state) => state.showComposer)
   const setShowComposer = useStore((state) => state.setShowComposer)
@@ -175,7 +176,7 @@ function AppContent() {
         <Suspense fallback={
           <Modal 
             isOpen 
-            onClose={() => {}} 
+            onClose={() => setShowSettings(false)} 
             title="" 
             size="5xl" 
             noPadding

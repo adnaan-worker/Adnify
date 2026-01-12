@@ -45,7 +45,7 @@ export class ToolExecutionService {
     const approvalType = toolManager.getApprovalType(name)
     const { autoApprove } = useStore.getState()
     // 只有 terminal 和 dangerous 类型需要审批，none 类型不需要
-    const needsApproval = approvalType !== 'none' && !(autoApprove as any)[approvalType]
+    const needsApproval = approvalType !== 'none' && approvalType in autoApprove && !autoApprove[approvalType as keyof typeof autoApprove]
 
     // 更新工具状态
     if (currentAssistantId) {

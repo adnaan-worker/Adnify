@@ -655,18 +655,21 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                     const msgIndex = thread.messages.findIndex(m => m.id === targetMessageId)
                     if (msgIndex !== -1) {
                         const newMessages = [...thread.messages]
-                        newMessages[msgIndex] = {
-                            ...newMessages[msgIndex],
-                            interactive: { type: 'interactive', question, options, multiSelect },
-                            isStreaming: false,
-                        } as any
-                        
-                        useAgentStore.setState({
-                            threads: {
-                                ...state.threads,
-                                [threadId]: { ...thread, messages: newMessages, lastModified: Date.now() },
-                            },
-                        } as any)
+                        const message = newMessages[msgIndex]
+                        if (message.role === 'assistant') {
+                            newMessages[msgIndex] = {
+                                ...message,
+                                interactive: { type: 'interactive', question, options, multiSelect },
+                                isStreaming: false,
+                            }
+                            
+                            useAgentStore.setState({
+                                threads: {
+                                    ...state.threads,
+                                    [threadId]: { ...thread, messages: newMessages, lastModified: Date.now() },
+                                },
+                            })
+                        }
                     }
                 }
             }
