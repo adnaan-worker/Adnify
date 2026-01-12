@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useCallback } from 'react'
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo } from 'react'
 import { useStore } from './store'
 import { useWindowTitle, useAppInit, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize } from './hooks'
 import TitleBar from './components/layout/TitleBar'
@@ -12,7 +12,6 @@ import { ThemeManager } from './components/editor/ThemeManager'
 import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
 import { Modal } from './components/ui'
 import { startupMetrics } from '@shared/utils/startupMetrics'
-import { useEffect } from 'react'
 
 startupMetrics.mark('app-module-loaded')
 
@@ -36,9 +35,6 @@ const QuickOpen = lazy(() => import('./components/dialogs/QuickOpen'))
 const AboutDialog = lazy(() => import('./components/dialogs/AboutDialog'))
 const WelcomePage = lazy(() => import('./components/welcome/WelcomePage'))
 
-// 暴露 store 给插件系统
-window.__ADNIFY_STORE__ = { getState: () => useStore.getState() }
-
 // Toast 初始化
 function ToastInitializer() {
   const toastContext = useToast()
@@ -50,18 +46,32 @@ function ToastInitializer() {
 
 // 主应用内容
 function AppContent() {
-  const {
-    workspace,
-    showSettings,
-    activeSidePanel, showComposer, setShowComposer,
-    sidebarWidth, setSidebarWidth, chatWidth, setChatWidth,
-    showQuickOpen, setShowQuickOpen, showAbout, setShowAbout,
-    showCommandPalette, setShowCommandPalette
-  } = useStore()
+  // 使用 selector 优化性能，避免不必要的重渲染
+  // Zustand 会自动优化这些独立的 selector，只订阅相关状态变化
+  const workspace = useStore((state) => state.workspace)
+  const showSettings = useStore((state) => state.showSettings)
+  const activeSidePanel = useStore((state) => state.activeSidePanel)
+  const showComposer = useStore((state) => state.showComposer)
+  const setShowComposer = useStore((state) => state.setShowComposer)
+  const sidebarWidth = useStore((state) => state.sidebarWidth)
+  const setSidebarWidth = useStore((state) => state.setSidebarWidth)
+  const chatWidth = useStore((state) => state.chatWidth)
+  const setChatWidth = useStore((state) => state.setChatWidth)
+  const showQuickOpen = useStore((state) => state.showQuickOpen)
+  const setShowQuickOpen = useStore((state) => state.setShowQuickOpen)
+  const showAbout = useStore((state) => state.showAbout)
+  const setShowAbout = useStore((state) => state.setShowAbout)
+  const showCommandPalette = useStore((state) => state.showCommandPalette)
+  const setShowCommandPalette = useStore((state) => state.setShowCommandPalette)
 
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
+
+  // 暴露 store 给插件系统（在组件挂载时设置，避免 SSR 问题）
+  useEffect(() => {
+    window.__ADNIFY_STORE__ = { getState: () => useStore.getState() }
+  }, [])
 
   // 窗口标题
   useWindowTitle()
@@ -89,7 +99,8 @@ function AppContent() {
   const handleCloseKeyboardShortcuts = useCallback(() => setShowKeyboardShortcuts(false), [])
   const handleCloseOnboarding = useCallback(() => setShowOnboarding(false), [])
 
-  const hasWorkspace = workspace && workspace.roots.length > 0
+  // Memoize hasWorkspace 计算
+  const hasWorkspace = useMemo(() => workspace && workspace.roots.length > 0, [workspace])
 
   return (
     <div className="h-screen flex flex-col bg-transparent overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative">
@@ -161,7 +172,17 @@ function AppContent() {
 
       {/* 模态框 */}
       {showSettings && (
-        <Suspense fallback={<Modal isOpen onClose={() => {}} title="" size="5xl" noPadding><SettingsSkeleton /></Modal>}>
+        <Suspense fallback={
+          <Modal 
+            isOpen 
+            onClose={() => {}} 
+            title="" 
+            size="5xl" 
+            noPadding
+          >
+            <SettingsSkeleton />
+          </Modal>
+        }>
           <SettingsModal />
         </Suspense>
       )}

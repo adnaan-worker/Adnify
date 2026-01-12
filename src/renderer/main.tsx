@@ -30,7 +30,8 @@ root.render(
 
 // 空闲时预加载 Monaco
 if ('requestIdleCallback' in window) {
-  (window as any).requestIdleCallback(() => initMonaco(), { timeout: 2000 })
+  const requestIdleCallback = (window as Window & { requestIdleCallback: typeof globalThis.requestIdleCallback }).requestIdleCallback
+  requestIdleCallback(() => initMonaco(), { timeout: 2000 })
 } else {
   setTimeout(initMonaco, 100)
 }
