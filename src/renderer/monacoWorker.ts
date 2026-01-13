@@ -20,8 +20,9 @@ import {
 } from 'monaco-editor/esm/vs/language/typescript/monaco.contribution'
 
 // 配置 Monaco 环境
-self.MonacoEnvironment = {
-  getWorker(_, label) {
+// 使用 globalThis 替代 self，确保在浏览器和 Worker 环境中都能正常工作
+;(globalThis as any).MonacoEnvironment = {
+  getWorker(_: unknown, label: string): Worker {
     if (label === 'json') {
       return new jsonWorker()
     }
@@ -39,6 +40,8 @@ self.MonacoEnvironment = {
 }
 
 // 配置 TypeScript/JavaScript 语言服务
+// 注意：这些配置会在 monacoTypeService.ts 的 initMonacoTypeService 中被覆盖
+// 这里只做基础配置，避免在初始化前出现错误
 // 完全禁用内置诊断，因为我们使用外部 LSP 服务
 // Monaco 内置的 TS worker 无法正确处理 Electron 的文件路径
 typescriptDefaults.setDiagnosticsOptions({
@@ -54,6 +57,7 @@ javascriptDefaults.setDiagnosticsOptions({
 })
 
 // 禁用 eager model sync，减少 inmemory model 被提前处理的情况
+// 注意：这会在 initMonacoTypeService 中被设置为 true
 typescriptDefaults.setEagerModelSync(false)
 javascriptDefaults.setEagerModelSync(false)
 
