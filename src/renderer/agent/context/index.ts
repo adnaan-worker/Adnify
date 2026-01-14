@@ -2,20 +2,30 @@
  * 上下文管理模块
  */
 
-// 压缩模块
+// 新的压缩管理器（推荐使用）
+export {
+  prepareMessages,
+  updateStats,
+  calculateLevel,
+  estimateTokens,
+  estimateMessagesTokens,
+  LEVEL_NAMES,
+  type CompressionLevel,
+  type CompressionStats,
+  type PrepareResult,
+} from './CompressionManager'
+
+// 旧的压缩模块（保留兼容）
 export {
   pruneMessages,
   getCompressionLevel,
   isOverflow,
-  estimateTokens,
   estimateTotalTokens,
   getMessageContent,
   COMPRESSION_LEVEL_NAMES,
   getPruneMinimum,
   getPruneProtect,
   type CompactionResult,
-  type CompressionLevel,
-  type CompressionStats,
 } from './compaction'
 
 // 摘要服务

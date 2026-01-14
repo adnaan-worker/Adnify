@@ -215,9 +215,9 @@ export class LoopDetector {
     }
 
     // 检测同一工具的过度调用（即使参数不同）
-    // 读操作允许更多（复杂任务可能需要读取很多文件）
+    // 复杂任务可能需要多次编辑不同文件，所以阈值要合理
     const sameToolCalls = this.history.filter(h => h.name === record.name)
-    const maxSameToolCalls = isReadOp ? 50 : 15
+    const maxSameToolCalls = isReadOp ? 50 : 25  // 写操作允许 25 次
     if (sameToolCalls.length >= maxSameToolCalls) {
       return {
         isLoop: true,

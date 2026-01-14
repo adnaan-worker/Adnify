@@ -45,9 +45,9 @@ export interface LoopCheckResult {
   suggestion?: string
 }
 
-// ===== 压缩统计（从 context/compaction 重新导出） =====
+// ===== 压缩统计（从 CompressionManager 导出） =====
 
-export type { CompressionStats } from '../context/compaction'
+export type { CompressionStats, CompressionLevel } from '../context/CompressionManager'
 
 // ===== 工具执行结果 =====
 

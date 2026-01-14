@@ -47,6 +47,13 @@ export class ResponseParser {
       return []
     }
 
+    // 检查是否是错误响应
+    if (parsed.error) {
+      const error = parsed.error as Record<string, unknown>
+      const message = (error.message || error.msg || JSON.stringify(error)) as string
+      return [{ type: 'error', content: message }]
+    }
+
     return this.parseChunk(parsed)
   }
 

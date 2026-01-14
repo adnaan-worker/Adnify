@@ -76,7 +76,7 @@ export interface AnthropicTool {
 
 /** 解析后的流式块 */
 export interface ParsedStreamChunk {
-  type: 'text' | 'reasoning' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_end' | 'usage' | 'done'
+  type: 'text' | 'reasoning' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_end' | 'usage' | 'done' | 'error'
   content?: string
   toolCall?: {
     index?: number

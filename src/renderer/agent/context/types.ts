@@ -79,21 +79,14 @@ export interface HandoffDocument {
   suggestedNextSteps: string[]
 }
 
-/** 上下文统计 */
-export interface ContextStats {
-  originalTokens: number
-  finalTokens: number
-  savedPercent: number
-  compressionLevel: CompressionLevel
-  keptTurns: number
-  compactedTurns: number
-  needsHandoff: boolean
-}
+/** 上下文统计（使用新的 CompressionStats） */
+import type { CompressionStats } from './CompressionManager'
+export type ContextStats = CompressionStats
 
 /** 优化后的上下文 */
 export interface OptimizedContext {
   messages: OpenAIMessage[]
   summary: StructuredSummary | null
-  stats: ContextStats
+  stats: CompressionStats
   handoff?: HandoffDocument
 }

@@ -10,7 +10,6 @@
 
 import { logger } from '@utils/Logger'
 import type { ChatMessage, ToolResultMessage, AssistantMessage } from '../types'
-import type { StructuredSummary } from './types'
 import { getAgentConfig } from '../utils/AgentConfig'
 
 // ===== 配置获取 =====
@@ -45,18 +44,8 @@ export interface CompactionResult {
 
 export type CompressionLevel = 0 | 1 | 2 | 3 | 4
 
-export interface CompressionStats {
-  level: CompressionLevel
-  levelName: string
-  originalTokens: number
-  finalTokens: number
-  savedPercent: number
-  keptTurns: number
-  compactedTurns: number
-  needsHandoff: boolean
-  lastOptimizedAt: number
-  summary?: StructuredSummary
-}
+// CompressionStats 已移至 CompressionManager.ts
+export type { CompressionStats } from './CompressionManager'
 
 // ===== 核心函数 =====
 

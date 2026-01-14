@@ -65,10 +65,11 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 ### Output Format
 Lines are numbered: "LINE_NUMBER: CONTENT"
 
-### CRITICAL
+### ⚠️ CRITICAL
 - ALWAYS read a file before using edit_file on it
 - If edit_file fails, read the file again before retrying
-- Use line numbers from output when using replace_file_content`,
+- Use line numbers from output when using replace_file_content
+- The file content may have changed since your last read`,
         detailedDescription: `Read file contents from the filesystem with line numbers (1-indexed).
 - Returns content in "line_number: content" format
 - Default: reads entire file
@@ -287,7 +288,11 @@ Lines are numbered: "LINE_NUMBER: CONTENT"
         displayName: 'Edit File',
         description: `Edit file by replacing old_string with new_string. MUST read file first.
 
-### CRITICAL REQUIREMENTS
+### ⚠️ CRITICAL: READ BEFORE EDIT
+You MUST use read_file at least once before using edit_file on ANY file.
+If edit_file fails, READ THE FILE AGAIN before retrying.
+
+### REQUIREMENTS
 1. old_string must UNIQUELY identify the location (include 3-5 lines of context)
 2. old_string must match EXACTLY including whitespace and indentation
 3. If multiple matches exist, the edit will FAIL - include more context
@@ -299,7 +304,14 @@ Lines are numbered: "LINE_NUMBER: CONTENT"
 ### When NOT to Use
 - Creating new files → use write_file
 - Replacing by line numbers → use replace_file_content
-- File doesn't exist → use write_file`,
+- File doesn't exist → use write_file
+
+### Error Recovery
+If edit fails with "old_string not found":
+1. Use read_file to get current file content
+2. Copy the EXACT text including all whitespace
+3. Include MORE surrounding context (3-5 lines before and after)
+4. If still failing, use replace_file_content with line numbers instead`,
         detailedDescription: `Smart string replacement with multiple fallback matching strategies.
 
 **Matching Strategies (tried in order):**
@@ -336,10 +348,12 @@ Reason: Too short, may match multiple locations.`,
             'Include 3-5 lines of surrounding context to ensure unique match',
             'If edit fails, read the file again - content may have changed',
             'For new files, use write_file instead',
+            'If stuck, try replace_file_content with line numbers as alternative',
         ],
         commonErrors: [
-            { error: 'old_string not found', solution: 'Read the file again with read_file, copy exact content including whitespace' },
-            { error: 'Multiple matches found', solution: 'Include more surrounding context to make old_string unique' },
+            { error: 'old_string not found', solution: 'Read the file again with read_file, copy exact content including whitespace. The file may have changed.' },
+            { error: 'Multiple matches found', solution: 'Include more surrounding context (3-5 lines before and after) to make old_string unique' },
+            { error: 'File not found', solution: 'Use write_file to create new files, not edit_file' },
         ],
         category: 'write',
         approvalType: 'none',

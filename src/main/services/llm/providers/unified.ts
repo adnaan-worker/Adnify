@@ -1039,20 +1039,39 @@ export class UnifiedProvider extends BaseProvider {
     let fullReasoning = ''
     const toolCalls: LLMToolCall[] = []
     let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined
+    let lineCount = 0
 
     try {
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          this.log('info', 'Stream ended', { lineCount, contentLength: fullContent.length, toolCallCount: toolCalls.length })
+          break
+        }
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
 
         for (const line of lines) {
+          lineCount++
           const chunks = parser.parseLine(line)
+          
+          // 如果第一行没有解析出任何内容，记录原始数据用于调试
+          if (lineCount <= 3 && chunks.length === 0 && line.trim()) {
+            this.log('info', 'Unparsed line', { lineCount, line: line.slice(0, 200) })
+          }
+          
           for (const chunk of chunks) {
             switch (chunk.type) {
+              case 'error':
+                // API 返回的错误（如 token 超限）
+                throw new LLMErrorClass(
+                  chunk.content || 'API returned an error',
+                  LLMErrorCode.INVALID_REQUEST,
+                  400,
+                  false
+                )
               case 'text':
                 fullContent += chunk.content || ''
                 onStream({ type: 'text', content: chunk.content || '' })

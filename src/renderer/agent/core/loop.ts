@@ -24,13 +24,10 @@ import { createStreamProcessor } from './stream'
 import { executeTools } from './tools'
 import { EventBus } from './EventBus'
 import { 
-  pruneMessages, 
-  getCompressionLevel, 
-  COMPRESSION_LEVEL_NAMES,
-  estimateTokens,
   generateSummary,
   generateHandoffDocument,
 } from '../context'
+import { updateStats, LEVEL_NAMES } from '../context/CompressionManager'
 import type { OpenAIMessage } from '../llm/MessageConverter'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext } from './types'
@@ -158,6 +155,11 @@ interface CompressionCheckResult {
   needsHandoff: boolean
 }
 
+/**
+ * 检查并处理压缩
+ * 
+ * 在 LLM 返回后调用，根据真实 token 使用量更新压缩统计
+ */
 async function checkAndHandleCompression(
   usage: { input: number; output: number },
   contextLimit: number,
@@ -167,61 +169,52 @@ async function checkAndHandleCompression(
   enableLLMSummary: boolean,
   autoHandoff: boolean
 ): Promise<CompressionCheckResult> {
-  const totalUsed = usage.input + usage.output
-  const ratio = totalUsed / contextLimit
-  const level = getCompressionLevel(ratio)
-
   const thread = store.getCurrentThread()
-  const userTurns = thread?.messages.filter(m => m.role === 'user').length || 0
-
-  logger.agent.info(`[Compression] Level ${level} (${COMPRESSION_LEVEL_NAMES[level]}), ratio: ${(ratio * 100).toFixed(1)}%, tokens: ${totalUsed}/${contextLimit}`)
-
-  // 记录本次新增节省的 token 数
-  let newSavedTokens = 0
+  const messageCount = thread?.messages.length || 0
   
-  // 计算已经压缩的 token 数（之前 prune 过的）
-  let alreadySavedTokens = 0
-  if (thread) {
-    for (const msg of thread.messages) {
-      if (msg.role === 'tool') {
-        const toolMsg = msg as import('../types').ToolResultMessage
-        if (toolMsg.compactedAt) {
-          // 已压缩的工具结果，估算其原始大小
-          const content = typeof toolMsg.content === 'string' ? toolMsg.content : ''
-          // 如果内容是占位符，估算原始大小（假设平均 2000 token）
-          if (content === '[Old tool result content cleared]' || content.length < 100) {
-            alreadySavedTokens += 2000
-          } else {
-            alreadySavedTokens += estimateTokens(content)
-          }
-        }
-      }
-    }
-  }
-
-  // L2+: 执行 prune 并标记当前 assistant 消息为压缩点
-  if (level >= 2 && thread) {
-    // 标记压缩点
-    store.updateMessage(assistantId, { compactedAt: Date.now() } as any)
-    
-    // 执行 prune
-    const pruneResult = pruneMessages(thread.messages)
-    if (pruneResult.prunedCount > 0) {
-      for (const msgId of pruneResult.messagesToCompact) {
-        store.updateMessage(msgId, { compactedAt: Date.now() } as any)
-      }
-      newSavedTokens = pruneResult.pruned
-      logger.agent.info(`[Compression] Pruned ${pruneResult.prunedCount} tool results, saved ~${pruneResult.pruned} tokens`)
-      EventBus.emit({ type: 'context:prune', prunedCount: pruneResult.prunedCount, savedTokens: pruneResult.pruned })
-    }
-  }
+  // 使用 CompressionManager 更新统计
+  const previousStats = store.compressionStats
+  const newStats = updateStats(
+    { promptTokens: usage.input, completionTokens: usage.output },
+    contextLimit,
+    previousStats,
+    messageCount
+  )
   
-  // 总节省 = 已压缩 + 本次新增
-  const totalSavedTokens = alreadySavedTokens + newSavedTokens
+  // 使用真实 usage 计算的等级
+  // 注意：这里不再强制"只升不降"，让 MessageBuilder 在发送前动态调整
+  // 但如果之前应用了更高等级的压缩，保留那个等级用于 L3/L4 的特殊处理
+  const previousLevel = (previousStats?.level ?? 0) as 0 | 1 | 2 | 3 | 4
+  const calculatedLevel = newStats.level
+  
+  // 只有 L3/L4 需要特殊处理（生成摘要/handoff），其他情况用计算出的等级
+  const finalLevel = calculatedLevel >= 3 || previousLevel >= 3
+    ? Math.max(previousLevel, calculatedLevel) as 0 | 1 | 2 | 3 | 4
+    : calculatedLevel
+  
+  // 更新为最终等级
+  newStats.level = finalLevel
+  newStats.levelName = LEVEL_NAMES[finalLevel]
+  newStats.needsHandoff = finalLevel >= 4
+  
+  const { ratio, inputTokens, outputTokens } = newStats
+  
+  logger.agent.info(
+    `[Compression] L${finalLevel} (${LEVEL_NAMES[finalLevel]}), ` +
+    `ratio: ${(ratio * 100).toFixed(1)}%, ` +
+    `tokens: ${inputTokens + outputTokens}/${contextLimit}` +
+    (calculatedLevel !== finalLevel ? ` (kept from L${previousLevel})` : '')
+  )
+
+  // 更新 store
+  store.setCompressionStats(newStats as any)
+  store.setCompressionPhase('idle')
 
   // L3: 生成 LLM 摘要
-  if (level >= 3 && enableLLMSummary && thread) {
+  if (finalLevel >= 3 && enableLLMSummary && thread) {
+    store.setCompressionPhase('summarizing')
     try {
+      const userTurns = thread.messages.filter(m => m.role === 'user').length
       const summaryResult = await generateSummary(thread.messages, { type: 'detailed' })
       store.setContextSummary({
         objective: summaryResult.objective,
@@ -238,11 +231,13 @@ async function checkAndHandleCompression(
     } catch {
       // 摘要生成失败，不影响主流程
     }
+    store.setCompressionPhase('idle')
   }
 
-  // L4: 生成 Handoff 文档（仅当 autoHandoff 启用时）
-  if (level >= 4) {
+  // L4: 生成 Handoff 文档
+  if (finalLevel >= 4) {
     if (autoHandoff && thread && context.workspacePath) {
+      store.setCompressionPhase('summarizing')
       try {
         const handoff = await generateHandoffDocument(thread.id, thread.messages, context.workspacePath)
         store.setHandoffDocument(handoff)
@@ -250,54 +245,20 @@ async function checkAndHandleCompression(
       } catch {
         // Handoff 生成失败，不影响主流程
       }
+      store.setCompressionPhase('idle')
     }
 
     const { language } = useStore.getState()
     const msg = language === 'zh'
-      ? '⚠️ **上下文已满**\n\n当前对话已达到上下文限制。我已保存对话摘要，您可以开始新会话继续。'
-      : '⚠️ **Context Limit Reached**\n\nI have saved a summary of our conversation. Please start a new session to continue.'
+      ? '⚠️ **上下文已满**\n\n当前对话已达到上下文限制。请开始新会话继续。'
+      : '⚠️ **Context Limit Reached**\n\nPlease start a new session to continue.'
     store.appendToAssistant(assistantId, msg)
     store.setHandoffRequired(true)
   }
 
-  // 更新压缩统计（使用配置中的轮次设置）
-  const agentConfig = getAgentConfig()
-  const keptTurns = Math.min(
-    userTurns, 
-    level === 0 ? userTurns 
-      : level === 1 ? agentConfig.keepRecentTurns * 2  // L1: 保留更多
-      : level === 2 ? agentConfig.keepRecentTurns      // L2: 使用 keepRecentTurns
-      : level === 3 ? agentConfig.deepCompressionTurns // L3: 使用 deepCompressionTurns
-      : agentConfig.deepCompressionTurns               // L4: 最少保留
-  )
-  const compactedTurns = Math.max(0, userTurns - keptTurns)
+  EventBus.emit({ type: 'context:level', level: finalLevel, tokens: inputTokens + outputTokens, ratio })
 
-  // 计算原始 token 数（当前使用 + 已节省的）
-  const originalTokens = totalUsed + totalSavedTokens
-  // 当前 token 数就是 LLM 返回的真实使用量
-  const finalTokens = totalUsed
-  // 节省百分比
-  const savedPercent = totalSavedTokens > 0 ? Math.round((totalSavedTokens / originalTokens) * 100) : 0
-
-  store.setCompressionStats({
-    level,
-    levelName: COMPRESSION_LEVEL_NAMES[level],
-    originalTokens,
-    finalTokens,
-    savedPercent,
-    keptTurns,
-    compactedTurns,
-    needsHandoff: level >= 4,
-    lastOptimizedAt: Date.now(),
-  })
-
-  if (totalSavedTokens > 0) {
-    logger.agent.info(`[Compression] Stats: original=${originalTokens}, final=${finalTokens}, saved=${savedPercent}%`)
-  }
-
-  EventBus.emit({ type: 'context:level', level, tokens: totalUsed, ratio })
-
-  return { level, needsHandoff: level >= 4 }
+  return { level: finalLevel, needsHandoff: finalLevel >= 4 }
 }
 
 // ===== 主循环 =====

@@ -13,4 +13,3 @@ export { PlanPreview } from './PlanPreview'
 
 // 新增组件
 export { default as BranchManager, BranchSelector, MessageBranchActions } from './BranchManager'
-export { default as ContextCompactionIndicator, CompactionProgressBar } from './ContextCompactionIndicator'
