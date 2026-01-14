@@ -49,7 +49,7 @@ async function callLLM(
   await initializeTools()
   const templateId = useStore.getState().promptTemplateId
   setToolLoadingContext({
-    mode: chatMode === 'plan' ? 'plan' : chatMode === 'chat' ? 'chat' : 'code',
+    mode: chatMode,
     templateId,
   })
   const tools = chatMode === 'chat' ? [] : toolManager.getAllToolDefinitions()

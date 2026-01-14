@@ -3,22 +3,21 @@
  * 
  * 架构设计：
  * - 工具组：按功能分组的工具集合
- * - 模式工具：不同工作模式（code/plan/chat）加载不同工具
+ * - 模式工具：不同工作模式（agent/plan/chat）加载不同工具
  * - 角色工具：不同角色（模板）可以扩展额外工具
  * 
  * 加载规则：
  * - chat 模式：无工具
- * - code 模式：core 工具组
+ * - agent 模式：core 工具组
  * - plan 模式：core + plan 工具组
  * - 角色扩展：在模式基础上添加角色专属工具组
  */
 
+import type { WorkMode } from '@/renderer/modes/types'
+
 // ============================================
 // 类型定义
 // ============================================
-
-/** 工作模式 */
-export type WorkMode = 'code' | 'plan' | 'chat'
 
 /** 工具组配置 */
 export interface ToolGroupConfig {
@@ -134,7 +133,7 @@ export function getToolGroup(id: string): string[] | undefined {
  * 
  * 加载规则：
  * - chat: 空（无工具）
- * - code: core
+ * - agent: core
  * - plan: core + plan
  * - 角色: 在模式基础上 + 角色专属工具组
  */

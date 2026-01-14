@@ -1,14 +1,21 @@
 /**
- * 结构化提示词构建器
+ * 提示词构建器
+ * 
+ * 职责：
+ * 1. 构建系统提示词（buildAgentSystemPrompt）
+ * 2. 格式化用户消息和工具结果
  * 
  * 从 promptTemplates.ts 导入静态常量，动态构建完整提示词
- * 不依赖字符串占位符替换
  */
 
 import { WorkMode } from '@/renderer/modes/types'
-import { generateAllToolsPromptDescription } from '@/shared/config/tools'
-import type { MemoryItem } from '../services/memoryService'
-import type { ProjectRules } from '../services/rulesService'
+import { generateToolsPromptDescriptionFiltered, type ToolCategory } from '@/shared/config/tools'
+import { getToolsForContext } from '@/shared/config/toolGroups'
+import { DEFAULT_AGENT_CONFIG } from '@shared/config/agentConfig'
+import { PERFORMANCE_DEFAULTS } from '@shared/config/defaults'
+import { rulesService, type ProjectRules } from '../services/rulesService'
+import { memoryService, type MemoryItem } from '../services/memoryService'
+import { useAgentStore } from '../store/AgentStore'
 import type { Plan } from '../types'
 
 // 从 promptTemplates 导入静态常量
@@ -21,7 +28,19 @@ import {
   OUTPUT_FORMAT,
   TOOL_GUIDELINES,
   PLANNING_TOOLS_DESC,
+  getPromptTemplateById,
+  getDefaultPromptTemplate,
 } from './promptTemplates'
+
+// ============================================
+// 常量导出
+// ============================================
+
+export const MAX_FILE_CHARS = DEFAULT_AGENT_CONFIG.maxFileContentChars
+export const MAX_DIR_ITEMS = 150
+export const MAX_SEARCH_RESULTS = PERFORMANCE_DEFAULTS.maxSearchResults
+export const MAX_TERMINAL_OUTPUT = DEFAULT_AGENT_CONFIG.maxTerminalChars
+export const MAX_CONTEXT_CHARS = DEFAULT_AGENT_CONFIG.maxTotalContextChars
 
 // ============================================
 // 类型定义
@@ -39,14 +58,30 @@ export interface PromptContext {
   memories: MemoryItem[]
   customInstructions: string | null
   plan: Plan | null
+  templateId?: string
 }
 
 // ============================================
 // 动态部分构建函数
 // ============================================
 
-function buildTools(mode: WorkMode): string {
-  const baseTools = generateAllToolsPromptDescription()
+/**
+ * 构建工具描述部分
+ * 
+ * 工具过滤逻辑：
+ * 1. 根据模式排除类别（agent 模式排除 plan 类别）
+ * 2. 根据 getToolsForContext 获取允许的工具列表（包含角色专属工具）
+ * 3. 只生成允许工具的描述
+ */
+function buildTools(mode: WorkMode, templateId?: string): string {
+  // 根据模式确定要排除的类别
+  const excludeCategories: ToolCategory[] = mode === 'plan' ? [] : ['plan']
+  
+  // 获取当前上下文允许的工具列表（包含角色专属工具）
+  const allowedTools = getToolsForContext({ mode, templateId })
+  
+  // 生成工具描述（双重过滤：类别 + 允许列表）
+  const baseTools = generateToolsPromptDescriptionFiltered(excludeCategories, allowedTools)
   const planningSection = mode === 'plan' ? `\n\n${PLANNING_TOOLS_DESC}` : ''
   
   return `## Available Tools
@@ -164,7 +199,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     ctx.mode === 'plan' ? buildPlanSection(ctx.plan) : null,
     PROFESSIONAL_OBJECTIVITY,
     SECURITY_RULES,
-    buildTools(ctx.mode),
+    buildTools(ctx.mode, ctx.templateId),
     CODE_CONVENTIONS,
     WORKFLOW_GUIDELINES,
     OUTPUT_FORMAT,
@@ -195,4 +230,119 @@ export function buildChatPrompt(ctx: PromptContext): string {
   ]
   
   return sections.filter(Boolean).join('\n\n')
+}
+
+// ============================================
+// 主入口函数
+// ============================================
+
+/**
+ * 构建 Agent 系统提示词
+ * 
+ * 这是提示词系统的主入口，负责：
+ * 1. 加载模板
+ * 2. 获取动态内容（规则、记忆）
+ * 3. 构建完整提示词
+ */
+export async function buildAgentSystemPrompt(
+  mode: WorkMode,
+  workspacePath: string | null,
+  options?: {
+    openFiles?: string[]
+    activeFile?: string
+    customInstructions?: string
+    promptTemplateId?: string
+  }
+): Promise<string> {
+  const { openFiles = [], activeFile, customInstructions, promptTemplateId } = options || {}
+
+  // 获取模板
+  const template = promptTemplateId
+    ? getPromptTemplateById(promptTemplateId)
+    : getDefaultPromptTemplate()
+
+  if (!template) {
+    throw new Error(`Template not found: ${promptTemplateId}`)
+  }
+
+  // 并行加载动态内容
+  const [projectRules, memories] = await Promise.all([
+    rulesService.getRules(),
+    memoryService.getMemories(),
+  ])
+
+  // 获取 Plan（仅 plan 模式）
+  const plan = mode === 'plan' ? useAgentStore.getState().plan : null
+
+  // 构建上下文
+  const ctx: PromptContext = {
+    os: getOS(),
+    workspacePath,
+    activeFile: activeFile || null,
+    openFiles,
+    date: new Date().toLocaleDateString(),
+    mode,
+    personality: template.personality,
+    projectRules,
+    memories,
+    customInstructions: customInstructions || null,
+    plan,
+    templateId: template.id,
+  }
+
+  // 根据模式选择构建器
+  return mode === 'chat' ? buildChatPrompt(ctx) : buildSystemPrompt(ctx)
+}
+
+// ============================================
+// 工具函数
+// ============================================
+
+function getOS(): string {
+  if (typeof navigator !== 'undefined') {
+    return (navigator as any).userAgentData?.platform || navigator.platform || 'Unknown'
+  }
+  return 'Unknown'
+}
+
+/**
+ * 格式化用户消息
+ */
+export function formatUserMessage(
+  message: string,
+  context?: {
+    selections?: Array<{
+      type: 'file' | 'code' | 'folder'
+      path: string
+      content?: string
+      range?: [number, number]
+    }>
+  }
+): string {
+  let formatted = message
+
+  if (context?.selections && context.selections.length > 0) {
+    const selectionsStr = context.selections
+      .map((s) => {
+        if (s.type === 'code' && s.content && s.range) {
+          return `**${s.path}** (lines ${s.range[0]}-${s.range[1]}):\n\`\`\`\n${s.content}\n\`\`\``
+        } else if (s.type === 'file' && s.content) {
+          return `**${s.path}**:\n\`\`\`\n${s.content}\n\`\`\``
+        } else {
+          return `**${s.path}**`
+        }
+      })
+      .join('\n\n')
+
+    formatted += `\n\n---\n**Context:**\n${selectionsStr}`
+  }
+
+  return formatted
+}
+
+/**
+ * 格式化工具结果
+ */
+export function formatToolResult(toolName: string, result: string, success: boolean): string {
+  return success ? result : `Error executing ${toolName}: ${result}`
 }

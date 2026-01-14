@@ -20,7 +20,7 @@ export class BuiltinToolProvider implements ToolProvider {
   readonly id = 'builtin'
   readonly name = 'Built-in Tools'
 
-  private context: ToolLoadingContext = { mode: 'code' }
+  private context: ToolLoadingContext = { mode: 'agent' }
 
   /**
    * 设置工具加载上下文

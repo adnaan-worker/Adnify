@@ -1021,9 +1021,15 @@ export function generateToolPromptDescription(config: ToolConfig): string {
 }
 
 /**
- * 生成所有工具的提示词描述（按类别分组）
+ * 生成工具提示词描述（可排除指定类别和指定工具）
+ * 
+ * @param excludeCategories 要排除的工具类别
+ * @param allowedTools 允许的工具列表（如果提供，只包含这些工具）
  */
-export function generateAllToolsPromptDescription(): string {
+export function generateToolsPromptDescriptionFiltered(
+    excludeCategories: ToolCategory[] = [],
+    allowedTools?: string[]
+): string {
     const categories: Record<ToolCategory, ToolConfig[]> = {
         read: [],
         search: [],
@@ -1036,14 +1042,18 @@ export function generateAllToolsPromptDescription(): string {
     
     // 按类别分组
     for (const config of Object.values(TOOL_CONFIGS)) {
-        if (config.enabled) {
+        // 检查是否启用、类别是否被排除、是否在允许列表中
+        const isEnabled = config.enabled
+        const categoryAllowed = !excludeCategories.includes(config.category)
+        const toolAllowed = !allowedTools || allowedTools.includes(config.name)
+        
+        if (isEnabled && categoryAllowed && toolAllowed) {
             categories[config.category].push(config)
         }
     }
     
     const sections: string[] = []
     
-    // 文件读取
     if (categories.read.length > 0) {
         sections.push('## File Reading Tools')
         for (const config of categories.read) {
@@ -1051,7 +1061,6 @@ export function generateAllToolsPromptDescription(): string {
         }
     }
     
-    // 搜索
     if (categories.search.length > 0) {
         sections.push('## Search Tools')
         sections.push(SEARCH_DECISION_GUIDE)
@@ -1060,7 +1069,6 @@ export function generateAllToolsPromptDescription(): string {
         }
     }
     
-    // 文件编辑
     if (categories.write.length > 0) {
         sections.push('## File Editing Tools')
         sections.push(FILE_EDIT_DECISION_GUIDE)
@@ -1069,7 +1077,6 @@ export function generateAllToolsPromptDescription(): string {
         }
     }
     
-    // 终端
     if (categories.terminal.length > 0) {
         sections.push('## Terminal Tools')
         for (const config of categories.terminal) {
@@ -1077,7 +1084,6 @@ export function generateAllToolsPromptDescription(): string {
         }
     }
     
-    // LSP
     if (categories.lsp.length > 0) {
         sections.push('## Code Intelligence Tools')
         for (const config of categories.lsp) {
@@ -1085,7 +1091,6 @@ export function generateAllToolsPromptDescription(): string {
         }
     }
     
-    // 网络
     if (categories.network.length > 0) {
         sections.push('## Network Tools')
         for (const config of categories.network) {
@@ -1093,7 +1098,6 @@ export function generateAllToolsPromptDescription(): string {
         }
     }
     
-    // 计划
     if (categories.plan.length > 0) {
         sections.push('## Planning Tools')
         for (const config of categories.plan) {

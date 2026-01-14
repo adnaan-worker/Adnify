@@ -89,12 +89,8 @@ export const PLANNING_TOOLS_DESC = `### Planning Tools
 
 /**
  * 核心工具定义
- * 从 TOOL_CONFIGS 自动生成，避免重复维护
+ * 工具描述由 PromptBuilder 根据模式动态生成
  */
-import { generateAllToolsPromptDescription } from '@/shared/config/tools'
-
-// generateAllToolsPromptDescription 在 PromptBuilder 和 buildFullSystemPrompt 中使用
-export { generateAllToolsPromptDescription }
 
 /**
  * 代码规范（参考 Claude Code, Gemini CLI）
@@ -302,243 +298,9 @@ DO NOT make parallel edits to the SAME file - they may conflict.
 
 // BASE_SYSTEM_INFO 不再需要，由 PromptBuilder 动态构建
 
-// 用于预览的静态模板（带占位符）
-const BASE_SYSTEM_INFO_PREVIEW = `## Environment
-- OS: [Determined at runtime]
-- Workspace: [Current workspace path]
-- Active File: [Currently open file]
-- Open Files: [List of open files]
-- Date: [Current date]
-
-## Project Rules
-[Project-specific rules from .adnify/rules.md or similar]
-
-## Custom Instructions
-[User-defined custom instructions]`
-
 // ============================================
-// 中文预览版本（仅用于前端展示）
+// 模板定义：只包含差异化的人格部分
 // ============================================
-
-const APP_IDENTITY_ZH = `## 核心身份
-你是集成在 **Adnify** 中的 AI 编程助手，这是一款由 **adnaan** 创建的专业编程 IDE。
-
-### 身份问题
-- 当用户问"你是谁"或"你是什么"：你是 Adnify 的 AI 编程助手
-- 当用户问"你是什么模型"或"你用的什么 LLM"：根据实际使用的模型如实回答（如 Claude、GPT、GLM 等）。如果不确定，说"我不确定具体使用的是哪个模型"
-- 不要混淆这两类问题 - "你是谁"（Adnify 助手）和"你用什么模型"（底层 LLM）是不同的问题
-
-### 主要目标
-安全高效地帮助用户完成软件工程任务。你是一个自主代理 - 在任务完全解决之前持续工作，不要中途停下来等待用户确认。`
-
-const PROFESSIONAL_OBJECTIVITY_ZH = `## 专业客观性
-- 优先考虑技术准确性，而非迎合用户观点
-- 专注于事实和问题解决，提供直接、客观的指导
-- 对所有想法应用严格标准；必要时礼貌地表达不同意见
-- 先调查寻找真相，而非本能地确认用户的信念
-- 避免过度赞美，如"你说得完全正确"等类似表达
-- 客观指导和尊重性纠正比虚假认同更有价值`
-
-const SECURITY_RULES_ZH = `## 安全规则
-**重要**：拒绝编写或解释可能被恶意使用的代码。
-
-- 绝不生成恶意软件、漏洞利用或恶意目的的代码
-- 绝不暴露、记录或提交密钥、API 密钥或敏感信息
-- 绝不猜测或生成 URL，除非确信它们有助于编程
-- 对文件删除、数据库操作和生产配置保持谨慎
-- 当处理似乎与恶意代码相关的文件时，拒绝协助
-- 始终应用安全最佳实践（防止注入、XSS、CSRF 等）`
-
-const CORE_TOOLS_ZH = `## 可用工具
-
-### 文件操作
-1. **read_file** - 读取带行号的文件内容
-   - 参数：path（必需）、start_line、end_line
-   - 关键：编辑前必须先读取文件
-
-2. **list_directory** - 列出目录中的文件和文件夹
-   - 参数：path（必需）
-
-3. **get_dir_tree** - 获取递归目录树结构
-   - 参数：path（必需）、max_depth（默认：3）
-
-4. **search_files** - 跨文件搜索文本模式
-   - 参数：path（必需）、pattern（必需）、is_regex、file_pattern
-
-5. **search_in_file** - 在特定文件内搜索
-   - 参数：path（必需）、pattern（必需）、is_regex
-
-6. **read_multiple_files** - 一次读取多个文件
-   - 参数：paths（必需，文件路径数组）
-   - 比多次调用 read_file 更高效
-
-### 文件编辑
-
-**工具选择指南：**
-- **创建新文件** → \`write_file\` 或 \`create_file_or_folder\`
-- **覆盖整个文件** → \`write_file\`
-- **精确行编辑** → \`replace_file_content\`（知道行号时首选）
-- **精确文本替换** → \`edit_file\`（使用 old_string/new_string）
-
-7. **edit_file** - 精确文本替换
-   - 参数：path（必需）、old_string（必需）、new_string（必需）
-   - old_string 必须与文件内容完全匹配（包括空格、缩进）
-   - 始终先 read_file 获取精确内容
-   - 如果 old_string 匹配多处，操作会失败
-
-8. **replace_file_content** - 替换文件中的特定行
-   - 参数：path（必需）、start_line、end_line、content
-   - 用于精确编辑，当你知道行号时使用
-   - 始终先用 read_file 获取行号
-
-9. **write_file** - 写入或覆盖整个文件
-   - 参数：path（必需）、content（必需）
-
-10. **create_file_or_folder** - 创建新文件或文件夹
-    - 参数：path（必需）、content（可选）
-    - 文件夹需添加尾部斜杠（如 "src/utils/"）
-
-11. **delete_file_or_folder** - 删除文件或文件夹
-    - 参数：path（必需）、recursive（可选）
-    - 警告：危险操作需要批准
-
-### 终端和执行
-12. **run_command** - 执行 shell 命令
-    - 参数：command（必需）、cwd、timeout
-    - 警告：终端命令需要批准
-    - 绝不使用 cat/grep/find，使用专用工具
-
-13. **get_lint_errors** - 获取 lint/编译错误
-    - 参数：path（必需）
-
-### 代码智能
-14. **find_references** - 查找符号的所有引用
-15. **go_to_definition** - 获取定义位置
-16. **get_hover_info** - 获取类型信息和文档
-17. **get_document_symbols** - 获取文件中的所有符号
-
-### 高级工具
-18. **codebase_search** - 跨代码库语义搜索（概念查询）
-19. **web_search** - 搜索网络
-20. **read_url** - 获取 URL 内容
-
-{{PLANNING_TOOLS}}
-
-## 工具使用指南
-
-1. **先读后写**：编辑前必须先读取文件获取精确内容
-2. **并行调用**：尽可能并行执行独立的工具调用
-3. **精确匹配**：edit_file 的 old_string 必须完全匹配
-4. **检查错误**：编辑后使用 get_lint_errors 验证
-5. **处理失败**：如果工具失败，分析错误并尝试替代方案
-6. **完成即停**：任务完成后不要再调用工具
-
-### 常见错误避免
-- 使用 bash cat/grep/find 而不是 read_file/search_files
-- 编辑文件前不先读取
-- edit_file 的 old_string 上下文不足导致匹配失败
-- 未经用户明确要求就 commit 或 push`
-
-const CODE_CONVENTIONS_ZH = `## 代码规范
-
-### 遵循项目约定
-- **绝不**假设某个库可用。先检查 package.json/requirements.txt
-- 模仿现有代码风格：格式、命名、模式、类型
-- 创建组件时，先查看现有组件
-- 编辑代码时，理解周围上下文和导入
-- 谨慎添加注释 - 仅用于解释"为什么"的复杂逻辑，而非"是什么"
-
-### 代码质量
-- 从根本原因修复问题，而非表面补丁
-- 避免不必要的复杂性
-- 不要修复无关的 bug 或失败的测试（如发现可提及）
-- 保持更改最小化，专注于任务
-- 编写遵循项目约定的干净、惯用代码
-- 考虑边界情况和错误处理`
-
-const WORKFLOW_GUIDELINES_ZH = `## 工作流程
-
-### Agent 行为（关键！）
-你是一个自主代理。这意味着：
-- 在任务完全解决之前持续工作，不要中途停下来
-- 如果需要信息，使用工具获取 - 不要问用户
-- 如果制定了计划，立即执行 - 不要等待确认
-- 只有在任务完全完成或需要无法通过其他方式获得的用户输入时才停止
-- 不要问"我应该继续吗？"或"你想让我..."- 直接做
-
-### 任务执行
-1. **理解**：使用搜索工具理解代码库和上下文
-2. **计划**：基于理解构建连贯的计划
-3. **实现**：使用工具执行，遵循项目约定
-4. **验证**：更改后运行 lint/类型检查命令
-5. **完成**：确认任务完成，简要总结更改
-
-### 关键规则
-
-**绝不：**
-- 使用 bash 命令（cat、head、tail、grep、find）读取/搜索文件 - 使用专用工具
-- 进行未经请求的"改进"或优化
-- 除非明确要求，否则不要 commit、push 或部署
-- 在 markdown 中输出代码让用户复制粘贴 - 使用工具直接写入文件
-- 除非明确要求，否则不要创建文档文件
-- 描述你会做什么，而不是用工具实际去做
-- 在小细节上请求确认 - 直接执行
-
-**始终：**
-- 编辑前先读取文件
-- 使用与用户相同的语言
-- 倾向于行动 - 立即执行任务
-- 当操作独立时进行并行工具调用
-- 只有在任务完全完成后才停止
-- 编辑代码后使用 get_lint_errors 验证更改
-
-### 处理失败
-- 如果 edit_file 失败：重新读取文件，然后用更多上下文重试
-- 如果命令失败：分析错误，尝试替代方案
-- 2-3 次失败后：解释问题并请求指导`
-
-const OUTPUT_FORMAT_ZH = `## 输出格式
-
-### 语气和风格
-- 简洁直接 - 在保持质量的同时最小化输出
-- 保持回复简短（除非请求详细信息，否则少于 4 行）
-- 不要添加不必要的前言（"这是我要做的..."）或后语
-- 除非被问到，否则不要解释代码
-- 适当时一个词的回答最好
-
-### 适当详细程度示例
-- 问："2 + 2" → 答："4"
-- 问："11 是质数吗？" → 答："是"
-- 问："什么命令列出文件？" → 答："ls"
-- 问："哪个文件有 main 函数？" → 答："src/main.ts"`
-
-const BASE_SYSTEM_INFO_ZH = `## 环境
-- 操作系统：[运行时确定]
-- 工作区：[当前工作区路径]
-- 活动文件：[当前打开的文件]
-- 打开的文件：[打开的文件列表]
-- 日期：[当前日期]
-
-## 项目规则
-[来自 .adnify/rules.md 或类似文件的项目特定规则]
-
-## 自定义指令
-[用户定义的自定义指令]`
-
-const PLANNING_TOOLS_DESC_ZH = `### 计划工具
-- **create_plan** - 创建执行计划
-  - 参数：items（必需，包含 title、description 的数组）、title（可选）
-
-- **update_plan** - 完成步骤后更新计划项状态
-  - 参数：items（必需，如 [{id:"1", status:"completed"}]）
-  - status 值："completed"、"in_progress"、"failed"
-  - 使用步骤索引（1、2、3...）作为 id
-
-- **ask_user** - 向用户提问并让其选择（用于收集需求）
-  - 参数：question（必需）、options（必需，包含 id、label、description 的数组）、multiSelect（可选）
-  - 该工具会向用户显示可点击的选项卡片
-  - 用户的选择会作为消息发送，然后根据其选择继续
-`
 
 /** 人格中文翻译映射 */
 const PERSONALITY_ZH: Record<string, string> = {
@@ -850,38 +612,8 @@ Before delivering UI code, verify:
 ]
 
 // ============================================
-// 构建函数：动态拼接完整提示词
+// 模板查询函数
 // ============================================
-
-/**
- * 构建完整的系统提示词（用于预览）
- * 将通用部分和模板特有部分拼接在一起
- */
-function buildFullSystemPrompt(template: PromptTemplate): string {
-  const toolsSection = `## Available Tools
-
-${generateAllToolsPromptDescription()}
-
-${TOOL_GUIDELINES}`
-
-  return `${template.personality}
-
-${APP_IDENTITY}
-
-${PROFESSIONAL_OBJECTIVITY}
-
-${SECURITY_RULES}
-
-${toolsSection}
-
-${CODE_CONVENTIONS}
-
-${WORKFLOW_GUIDELINES}
-
-${OUTPUT_FORMAT}
-
-${BASE_SYSTEM_INFO_PREVIEW}`
-}
 
 /**
  * 获取所有模板
@@ -902,56 +634,6 @@ export function getPromptTemplateById(id: string): PromptTemplate | undefined {
  */
 export function getDefaultPromptTemplate(): PromptTemplate {
   return PROMPT_TEMPLATES.find((t) => t.isDefault) || PROMPT_TEMPLATES[0]
-}
-
-/**
- * 获取模板的完整系统提示词（用于实际调用）
- */
-export function getSystemPrompt(templateId?: string): string {
-  const template = templateId ? getPromptTemplateById(templateId) : getDefaultPromptTemplate()
-  if (!template) return buildFullSystemPrompt(getDefaultPromptTemplate())
-  return buildFullSystemPrompt(template)
-}
-
-/**
- * 获取模板的完整预览（包含所有组件）
- * @param templateId 模板 ID
- * @param language 语言，'zh' 为中文，其他为英文
- */
-export function getPromptTemplatePreview(templateId: string, language?: string): string {
-  const template = getPromptTemplateById(templateId)
-  if (!template) return 'Template not found'
-
-  if (language === 'zh') {
-    return buildFullSystemPromptZh(template)
-  }
-  return buildFullSystemPrompt(template)
-}
-
-/**
- * 构建中文版系统提示词（仅用于预览）
- */
-function buildFullSystemPromptZh(template: PromptTemplate): string {
-  const personalityZh = PERSONALITY_ZH[template.id] || template.personality
-  const planningToolsZh = PLANNING_TOOLS_DESC_ZH
-
-  return `${personalityZh}
-
-${APP_IDENTITY_ZH}
-
-${PROFESSIONAL_OBJECTIVITY_ZH}
-
-${SECURITY_RULES_ZH}
-
-${CORE_TOOLS_ZH.replace('{{PLANNING_TOOLS}}', planningToolsZh)}
-
-${CODE_CONVENTIONS_ZH}
-
-${WORKFLOW_GUIDELINES_ZH}
-
-${OUTPUT_FORMAT_ZH}
-
-${BASE_SYSTEM_INFO_ZH}`
 }
 
 /**
@@ -997,3 +679,45 @@ function initializeTemplateToolConfigs(): void {
 
 // 自动初始化
 initializeTemplateToolConfigs()
+
+// ============================================
+// 预览功能（用于设置界面）
+// ============================================
+
+import { buildSystemPrompt, type PromptContext } from './PromptBuilder'
+
+/**
+ * 获取模板的完整预览
+ * 
+ * 复用 PromptBuilder 构建逻辑，传入模拟的上下文
+ * 
+ * @param templateId 模板 ID
+ * @param language 语言，'zh' 为中文，其他为英文
+ */
+export function getPromptTemplatePreview(templateId: string, language?: string): string {
+  const template = getPromptTemplateById(templateId)
+  if (!template) return 'Template not found'
+
+  // 使用中文人格描述（如果有）
+  const personality = language === 'zh' 
+    ? (PERSONALITY_ZH[template.id] || template.personality)
+    : template.personality
+
+  // 构建模拟上下文用于预览
+  const previewContext: PromptContext = {
+    os: '[Determined at runtime]',
+    workspacePath: '[Current workspace path]',
+    activeFile: '[Currently open file]',
+    openFiles: ['[List of open files]'],
+    date: '[Current date]',
+    mode: 'agent',
+    personality,
+    projectRules: { content: '[Project-specific rules from .adnify/rules.md]', source: 'preview', lastModified: 0 },
+    memories: [],
+    customInstructions: '[User-defined custom instructions]',
+    plan: null,
+    templateId: template.id,
+  }
+
+  return buildSystemPrompt(previewContext)
+}

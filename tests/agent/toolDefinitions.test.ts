@@ -25,8 +25,8 @@ describe('Tool Definitions', () => {
   })
 
   describe('getToolDefinitions with context', () => {
-    it('should return core tools in code mode', () => {
-      setToolLoadingContext({ mode: 'code' })
+    it('should return core tools in agent mode', () => {
+      setToolLoadingContext({ mode: 'agent' })
       const tools = builtinToolProvider.getToolDefinitions()
       expect(tools.length).toBeGreaterThan(0)
       expect(tools.find(t => t.name === 'read_file')).toBeDefined()
@@ -41,8 +41,8 @@ describe('Tool Definitions', () => {
       expect(tools.find(t => t.name === 'update_plan')).toBeDefined()
     })
 
-    it('should exclude plan tools in code mode', () => {
-      setToolLoadingContext({ mode: 'code' })
+    it('should exclude plan tools in agent mode', () => {
+      setToolLoadingContext({ mode: 'agent' })
       const tools = builtinToolProvider.getToolDefinitions()
       expect(tools.find(t => t.name === 'create_plan')).toBeUndefined()
       expect(tools.find(t => t.name === 'update_plan')).toBeUndefined()
@@ -55,13 +55,13 @@ describe('Tool Definitions', () => {
     })
 
     it('should include role-specific tools when templateId is set', () => {
-      setToolLoadingContext({ mode: 'code', templateId: 'uiux-designer' })
+      setToolLoadingContext({ mode: 'agent', templateId: 'uiux-designer' })
       const tools = builtinToolProvider.getToolDefinitions()
       expect(tools.find(t => t.name === 'uiux_search')).toBeDefined()
     })
 
     it('should not include role-specific tools without templateId', () => {
-      setToolLoadingContext({ mode: 'code' })
+      setToolLoadingContext({ mode: 'agent' })
       const tools = builtinToolProvider.getToolDefinitions()
       expect(tools.find(t => t.name === 'uiux_search')).toBeUndefined()
     })

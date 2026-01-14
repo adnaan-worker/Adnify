@@ -18,7 +18,7 @@ import {
 } from '@/renderer/agent/store/AgentStore'
 import { Agent, getAgentConfig } from '@/renderer/agent'
 import { MessageContent, ChatThread, ToolCall } from '@/renderer/agent/types'
-import { buildAgentSystemPrompt } from '@/renderer/agent/prompts/prompts'
+import { buildAgentSystemPrompt } from '@/renderer/agent/prompts/PromptBuilder'
 
 export function useAgent() {
   // 从主 store 获取配置
