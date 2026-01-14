@@ -3,6 +3,7 @@
  */
 
 import { ipcMain, BrowserWindow, app } from 'electron'
+import { logger } from '@shared/utils/Logger'
 
 // 标记是否已注册基础窗口控制
 let basicHandlersRegistered = false
@@ -45,7 +46,7 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
       const win = BrowserWindow.fromWebContents(event.sender)
       if (win && !win.isDestroyed()) {
         // 窗口已经显示，这里只是日志记录
-        console.log('[Window] Renderer ready for window:', win.id)
+        logger.system.info('[Window] Renderer ready for window:', { windowId: win.id })
       }
     })
 

@@ -9,6 +9,7 @@ import { useStore } from '@store'
 import { api } from '@/renderer/services/electronAPI'
 import { getLanguageId, isLanguageSupported } from '@/renderer/services/lspService'
 import BottomBarPopover from '../ui/BottomBarPopover'
+import { logger } from '@shared/utils/Logger'
 
 interface LspServerStatus {
   installed: boolean
@@ -92,10 +93,10 @@ export default function LspStatusIndicator() {
         const newStatus = await api.lsp.getServerStatus()
         setServerStatus(newStatus)
       } else {
-        console.error('Install failed:', result.error)
+        logger.lsp.error('Install failed:', result.error)
       }
     } catch (error) {
-      console.error('Install error:', error)
+      logger.lsp.error('Install error:', error)
     } finally {
       setInstalling(null)
     }

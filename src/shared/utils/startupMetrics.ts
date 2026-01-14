@@ -3,6 +3,8 @@
  * 用于测量和记录应用启动各阶段的耗时
  */
 
+import { logger } from './Logger'
+
 interface StartupMetric {
   name: string
   startTime: number
@@ -69,18 +71,18 @@ class StartupMetrics {
    * 打印启动报告
    */
   printReport(): void {
-    console.group('🚀 Startup Performance Report')
-    console.log(`Total startup time: ${this.getTotalStartupTime()}ms`)
-    console.log('---')
+    const totalTime = this.getTotalStartupTime()
+    logger.perf.info('🚀 Startup Performance Report', { totalTime })
     
     const sortedMetrics = this.getMetrics().sort((a, b) => a.startTime - b.startTime)
+    const metrics: Record<string, number> = {}
     for (const metric of sortedMetrics) {
       if (metric.duration !== undefined) {
-        console.log(`${metric.name}: ${metric.duration}ms`)
+        metrics[metric.name] = metric.duration
       }
     }
     
-    console.groupEnd()
+    logger.perf.info('Startup metrics:', metrics)
   }
 
   /**

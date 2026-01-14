@@ -4,6 +4,7 @@
  */
 
 import { ChatMessage, isUserMessage, isAssistantMessage, isToolResultMessage, MessageContent, ToolResultMessage } from '../types'
+import { logger } from '@shared/utils/Logger'
 
 // ===== OpenAI 格式消息 =====
 
@@ -46,7 +47,7 @@ export function buildOpenAIMessages(
     if (isUserMessage(msg)) {
       // 验证用户消息内容
       if (msg.content === undefined || msg.content === null) {
-        console.warn('[MessageConverter] Skipping user message with invalid content:', msg.id)
+        logger.agent.warn('[MessageConverter] Skipping user message with invalid content:', { messageId: msg.id })
         continue
       }
       result.push({

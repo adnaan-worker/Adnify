@@ -10,6 +10,7 @@ import {
   DEFAULT_EMBEDDING_MODELS,
   EMBEDDING_ENDPOINTS,
 } from './types'
+import { logger } from '@shared/utils/Logger'
 
 // 每个 provider 支持的模型前缀/关键词
 const PROVIDER_MODEL_PATTERNS: Record<string, RegExp> = {
@@ -87,7 +88,7 @@ export class EmbeddingService {
 
     const pattern = PROVIDER_MODEL_PATTERNS[provider]
     if (pattern && !pattern.test(model)) {
-      console.warn(
+      logger.index.warn(
         `[EmbeddingService] Model "${model}" doesn't match provider "${provider}", using default: ${DEFAULT_EMBEDDING_MODELS[provider as keyof typeof DEFAULT_EMBEDDING_MODELS]}`
       )
       return DEFAULT_EMBEDDING_MODELS[provider as keyof typeof DEFAULT_EMBEDDING_MODELS] || ''
@@ -168,7 +169,7 @@ export class EmbeddingService {
         // 429 错误需要等待更长时间
         if (lastError.message.includes('429')) {
           const waitTime = Math.pow(2, attempt + 1) * 20000 // 20s, 40s, 80s
-          console.warn(`[EmbeddingService] Rate limited, waiting ${waitTime / 1000}s before retry...`)
+          logger.index.warn(`[EmbeddingService] Rate limited, waiting ${waitTime / 1000}s before retry...`)
           await this.sleep(waitTime)
         } else if (attempt < maxRetries - 1) {
           // 其他错误短暂等待后重试

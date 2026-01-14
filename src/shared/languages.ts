@@ -415,5 +415,5 @@ export function isLspSupported(languageId: string): boolean {
  * 检查目录是否应被忽略
  */
 export function shouldIgnoreDirectory(dirName: string): boolean {
-    return IGNORED_DIRECTORIES.includes(dirName as any)
+    return (IGNORED_DIRECTORIES as readonly string[]).includes(dirName)
 }

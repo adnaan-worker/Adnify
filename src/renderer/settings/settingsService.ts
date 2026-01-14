@@ -504,13 +504,17 @@ export function saveEditorConfig(config: Partial<EditorConfig>): void {
   const current = settingsService.getCached()
   if (current) {
     const merged = deepMerge(current.editorConfig, config)
-    settingsService.save('editorConfig', merged).catch(console.error)
+    settingsService.save('editorConfig', merged).catch((err) => {
+      logger.settings.error('Failed to save editor config:', err)
+    })
   }
 }
 
 /** 重置编辑器配置 */
 export function resetEditorConfig(): void {
-  settingsService.save('editorConfig', defaultEditorConfig).catch(console.error)
+  settingsService.save('editorConfig', defaultEditorConfig).catch((err) => {
+    logger.settings.error('Failed to reset editor config:', err)
+  })
 }
 
 // 重新导出类型和默认值

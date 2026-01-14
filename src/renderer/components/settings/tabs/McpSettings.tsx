@@ -5,6 +5,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect } from 'react'
+import { logger } from '@shared/utils/Logger'
 import {
   Server,
   RefreshCw,
@@ -88,7 +89,7 @@ export default function McpSettings({ language }: McpSettingsProps) {
       }
       return success
     } catch (err) {
-      console.error('Failed to add server:', err)
+      logger.settings.error('Failed to add server:', err)
       return false
     }
   }
@@ -101,7 +102,7 @@ export default function McpSettings({ language }: McpSettingsProps) {
         await mcpService.reloadConfig()
       }
     } catch (err) {
-      console.error('Failed to delete server:', err)
+      logger.settings.error('Failed to delete server:', err)
     }
     setActionLoading(null)
     setDeleteConfirm(null)
@@ -113,7 +114,7 @@ export default function McpSettings({ language }: McpSettingsProps) {
       await mcpService.toggleServer(serverId, disabled)
       await mcpService.reloadConfig()
     } catch (err) {
-      console.error('Failed to toggle server:', err)
+      logger.settings.error('Failed to toggle server:', err)
     }
     setActionLoading(null)
   }
@@ -122,7 +123,7 @@ export default function McpSettings({ language }: McpSettingsProps) {
     try {
       await api.file.showInFolder(path)
     } catch (err) {
-      console.error('Failed to open config file:', err)
+      logger.settings.error('Failed to open config file:', err)
     }
   }
 
@@ -160,7 +161,7 @@ export default function McpSettings({ language }: McpSettingsProps) {
     try {
       await mcpService.startOAuth(serverId)
     } catch (err) {
-      console.error('Failed to start OAuth:', err)
+      logger.settings.error('Failed to start OAuth:', err)
     }
     setActionLoading(null)
   }

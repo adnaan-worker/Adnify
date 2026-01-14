@@ -5,6 +5,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect, useCallback } from 'react'
+import { logger } from '@shared/utils/Logger'
 import {
     ClipboardList,
     CheckCircle2,
@@ -194,7 +195,7 @@ export default function PlanListContent({ language }: PlanListContentProps) {
                 }
             }
         } catch (err) {
-            console.error('Failed to delete task:', err)
+            logger.ui.error('Failed to delete task:', err)
         }
     }
 

@@ -6,6 +6,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
 import { AppError, formatErrorMessage } from '@/shared/errors'
+import { logger } from '@shared/utils/Logger'
 
 interface Props {
   children: ReactNode
@@ -41,8 +42,8 @@ export class ErrorBoundary extends Component<Props, State> {
     this.props.onError?.(error, errorInfo)
 
     // 记录错误日志
-    console.error('[ErrorBoundary] Caught error:', error)
-    console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack)
+    logger.ui.error('[ErrorBoundary] Caught error:', error)
+    logger.ui.error('[ErrorBoundary] Component stack:', { componentStack: errorInfo.componentStack })
   }
 
   handleRetry = (): void => {

@@ -15,6 +15,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import * as Diff from 'diff'
 import { CodeSkeleton } from '../ui/Loading'
+import { logger } from '@shared/utils/Logger'
 
 export interface DiffLine {
     type: 'add' | 'remove' | 'unchanged'
@@ -193,7 +194,7 @@ function useAsyncDiff(
                 const result = computeFullDiff(oldContent, newContent)
                 setDiffLines(result)
             } catch (err) {
-                console.error("Diff calculation failed:", err)
+                logger.ui.error("Diff calculation failed:", err)
                 setError("Diff calculation too complex or timed out.")
             } finally {
                 setIsLoading(false)

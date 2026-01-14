@@ -13,6 +13,7 @@ import {
   STACK_CONFIG,
   AVAILABLE_STACKS,
 } from './types'
+import { logger } from '@shared/utils/Logger'
 
 /** 数据文件映射 */
 const DATA_FILES: Record<UiuxDomain, string> = {
@@ -73,7 +74,7 @@ class UiuxDatabase {
       this.dataCache.set(cacheKey, data)
       return data
     } catch (error) {
-      console.error(`[UiuxDatabase] Failed to load ${domain} data:`, error)
+      logger.tool.error(`[UiuxDatabase] Failed to load ${domain} data:`, error)
       return []
     }
   }
@@ -93,7 +94,7 @@ class UiuxDatabase {
       this.dataCache.set(cacheKey, data)
       return data
     } catch (error) {
-      console.error(`[UiuxDatabase] Failed to load ${stack} stack data:`, error)
+      logger.tool.error(`[UiuxDatabase] Failed to load ${stack} stack data:`, error)
       return []
     }
   }
@@ -107,10 +108,10 @@ class UiuxDatabase {
       if (result.success && result.data) {
         return result.data
       }
-      console.error(`[UiuxDatabase] Failed to load ${relativePath}:`, result.error)
+      logger.tool.error(`[UiuxDatabase] Failed to load ${relativePath}:`, result.error)
       return []
     } catch (error) {
-      console.error(`[UiuxDatabase] Failed to load ${relativePath}:`, error)
+      logger.tool.error(`[UiuxDatabase] Failed to load ${relativePath}:`, error)
       return []
     }
   }
