@@ -27,6 +27,25 @@ interface MenuItem {
   hidden?: boolean
 }
 
+interface CallHierarchyItem {
+  from?: {
+    name: string
+    uri: string
+    range?: {
+      start: { line: number; character: number }
+      end?: { line: number; character: number }
+    }
+  }
+  to?: {
+    name: string
+    uri: string
+    range?: {
+      start: { line: number; character: number }
+      end?: { line: number; character: number }
+    }
+  }
+}
+
 interface CallHierarchyResult {
   type: 'callers' | 'callees'
   items: Array<{
@@ -184,7 +203,7 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
       if (results && results.length > 0) {
         setCallHierarchyResult({
           type: 'callers',
-          items: results.map((r: any) => ({
+          items: results.map((r: CallHierarchyItem) => ({
             name: r.from?.name || 'Unknown',
             uri: r.from?.uri || '',
             line: r.from?.range?.start?.line || 0,
@@ -215,7 +234,7 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
       if (results && results.length > 0) {
         setCallHierarchyResult({
           type: 'callees',
-          items: results.map((r: any) => ({
+          items: results.map((r: CallHierarchyItem) => ({
             name: r.to?.name || 'Unknown',
             uri: r.to?.uri || '',
             line: r.to?.range?.start?.line || 0,

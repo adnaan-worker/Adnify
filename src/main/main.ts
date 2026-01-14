@@ -6,6 +6,7 @@
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import * as path from 'path'
 import { logger } from '@shared/utils/Logger'
+import type Store from 'electron-store'
 
 // ==========================================
 // 常量定义
@@ -42,9 +43,8 @@ const SECURITY_DEFAULTS = {
 // ==========================================
 // Store（延迟初始化）
 // ==========================================
-
-let bootstrapStore: any
-let mainStore: any
+let bootstrapStore: Store<Record<string, unknown>>
+let mainStore: Store<Record<string, unknown>>
 
 async function initStores() {
   const fs = await import('fs')
@@ -52,7 +52,7 @@ async function initStores() {
   
   bootstrapStore = new Store({ name: 'bootstrap' })
   const customConfigPath = bootstrapStore.get('customConfigPath') as string | undefined
-  const storeOptions: any = { name: 'config' }
+  const storeOptions: { name: string; cwd?: string } = { name: 'config' }
   if (customConfigPath && fs.existsSync(customConfigPath)) {
     storeOptions.cwd = customConfigPath
   }
@@ -274,7 +274,7 @@ async function initializeModules(firstWin: BrowserWindow) {
     createWindow,
     mainStore,
     bootstrapStore,
-    setMainStore: (store: any) => { mainStore = store },
+    setMainStore: (store: Store<Record<string, unknown>>) => { mainStore = store },
     findWindowByWorkspace,
     setWindowWorkspace: (id: number, roots: string[]) => windowWorkspaces.set(id, roots),
     getWindowWorkspace: (id: number) => windowWorkspaces.get(id) || null,

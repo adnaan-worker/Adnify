@@ -132,6 +132,9 @@ export interface LspCompletionItem {
     documentation?: string | { kind: string; value: string }
     insertText?: string
     insertTextFormat?: number
+    sortText?: string
+    filterText?: string
+    preselect?: boolean
 }
 
 export interface LspCompletionList {
