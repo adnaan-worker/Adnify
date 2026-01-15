@@ -172,7 +172,7 @@ async function executeSingle(
 
     const duration = Date.now() - startTime
     const rawContent = result.success
-      ? (result.result || 'Success')
+      ? (result.result !== undefined && result.result !== null ? result.result : 'Success')
       : `Error: ${result.error || 'Unknown error'}`
 
     // 截断过长的工具结果（防止单轮对话过长）

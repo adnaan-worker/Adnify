@@ -15,11 +15,23 @@ export const isSensitivePath = sharedIsSensitivePath
 
 export function isPathInWorkspace(path: string, workspacePath: string): boolean {
   if (!workspacePath) return false
-  const normalizedPath = normalizePath(path)
+  
+  // 清理路径中的 "./" 前缀
+  let cleanPath = path
+  if (cleanPath.startsWith('./') || cleanPath.startsWith('.\\')) {
+    cleanPath = cleanPath.slice(2)
+  }
+  
+  const normalizedPath = normalizePath(cleanPath)
   const normalizedWorkspace = normalizePath(workspacePath)
-  const resolvedPath = normalizedPath.startsWith(normalizedWorkspace)
-    ? normalizedPath
-    : normalizePath(toFullPath(path, workspacePath))
+  
+  // 如果路径已经是绝对路径且在 workspace 内
+  if (normalizedPath.startsWith(normalizedWorkspace)) {
+    return true
+  }
+  
+  // 如果是相对路径，转换为绝对路径后检查
+  const resolvedPath = normalizePath(toFullPath(cleanPath, workspacePath))
   return resolvedPath.startsWith(normalizedWorkspace)
 }
 
@@ -107,9 +119,27 @@ export function joinPath(...parts: string[]): string {
 
 export function toFullPath(relativePath: string, workspacePath: string | null): string {
   if (!workspacePath) return relativePath
+  
+  // 已经是绝对路径
   if (relativePath.startsWith('/') || /^[a-zA-Z]:/.test(relativePath)) return relativePath
+  
+  // 处理 "./" 和 "." 开头的路径
+  let cleanPath = relativePath
+  if (cleanPath === '.') {
+    return workspacePath
+  }
+  if (cleanPath.startsWith('./')) {
+    cleanPath = cleanPath.slice(2)
+  }
+  if (cleanPath.startsWith('.\\')) {
+    cleanPath = cleanPath.slice(2)
+  }
+  
+  // 如果清理后是空字符串，返回 workspace 路径
+  if (!cleanPath) return workspacePath
+  
   const sep = getPathSeparator(workspacePath)
-  return `${workspacePath}${sep}${relativePath}`
+  return `${workspacePath}${sep}${cleanPath}`
 }
 
 export function toRelativePath(fullPath: string, workspacePath: string | null): string {

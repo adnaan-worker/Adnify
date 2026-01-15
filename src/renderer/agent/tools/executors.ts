@@ -142,13 +142,17 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         const path = resolvePath(args.path, ctx.workspacePath, true)
         const items = await api.file.readDir(path)
         if (!items) return { success: false, result: '', error: `Directory not found: ${path}` }
-        return { success: true, result: items.map(item => `${item.isDirectory ? '📁' : '📄'} ${item.name}`).join('\n') }
+        const result = items.map(item => `${item.isDirectory ? '📁' : '📄'} ${item.name}`).join('\n')
+        logger.agent.info(`[list_directory] Path: ${path}, Items: ${items.length}, Result length: ${result.length}`)
+        return { success: true, result: result || 'Empty directory' }
     },
 
     async get_dir_tree(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath, true)
         const tree = await buildDirTree(path, (args.max_depth as number) || 3)
-        return { success: true, result: formatDirTree(tree) }
+        const result = formatDirTree(tree)
+        logger.agent.info(`[get_dir_tree] Path: ${path}, Tree nodes: ${tree.length}, Result length: ${result.length}`)
+        return { success: true, result: result || 'Empty directory tree' }
     },
 
     async search_files(args, ctx) {
