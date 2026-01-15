@@ -436,13 +436,14 @@ export function registerSecureTerminalHandlers(
 
     // 检查终端数量限制
     if (terminals.size >= MAX_TERMINALS && !terminals.has(id)) {
-      logger.security.warn(`[Terminal] Max terminals (${MAX_TERMINALS}) reached, rejecting new terminal`)
       return { success: false, error: `Maximum number of terminals (${MAX_TERMINALS}) reached` }
     }
 
-    // 限制只能在工作区内使用终端
-    const targetCwd = cwd || (workspace ? workspace.roots[0] : process.cwd())
-    if (workspace && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
+    // 确定工作目录
+    const targetCwd = (cwd && cwd.trim()) || workspace?.roots?.[0] || process.cwd()
+
+    // 验证工作区边界
+    if (workspace && workspace.roots.length > 0 && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', false, {
         reason: '路径在工作区外',
         cwd: targetCwd,

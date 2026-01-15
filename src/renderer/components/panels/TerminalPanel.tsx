@@ -143,11 +143,18 @@ export default function TerminalPanel() {
         loadShells()
     }, [])
 
+    // 工作区切换时更新 selectedRoot 并清理旧终端
     useEffect(() => {
-        if (workspace?.roots?.[0] && !selectedRoot) {
-            setSelectedRoot(workspace.roots[0])
+        const newRoot = workspace?.roots?.[0]
+        if (newRoot && newRoot !== selectedRoot) {
+            // 工作区变化，更新 selectedRoot
+            setSelectedRoot(newRoot)
+            
+            // 清理旧工作区的终端（它们的 cwd 已经不在新工作区内了）
+            const oldTerminals = managerState.terminals.filter(t => !workspace?.roots?.includes(t.cwd))
+            oldTerminals.forEach(t => terminalManager.closeTerminal(t.id))
         }
-    }, [workspace?.roots, selectedRoot])
+    }, [workspace?.roots?.[0]])
 
     useEffect(() => {
         const loadScripts = async () => {
@@ -167,10 +174,12 @@ export default function TerminalPanel() {
 
     // 自动创建第一个终端
     useEffect(() => {
-        if (terminalVisible && managerState.terminals.length === 0 && availableShells.length > 0) {
+        // 确保有有效的工作区根目录才创建终端
+        const hasValidWorkspace = selectedRoot || (workspace?.roots && workspace.roots.length > 0)
+        if (terminalVisible && managerState.terminals.length === 0 && availableShells.length > 0 && hasValidWorkspace) {
             createTerminal()
         }
-    }, [terminalVisible, managerState.terminals.length, availableShells.length])
+    }, [terminalVisible, managerState.terminals.length, availableShells.length, selectedRoot, workspace?.roots])
 
     // ===== 窗口大小调整 =====
     
@@ -238,6 +247,8 @@ export default function TerminalPanel() {
     
     const createTerminal = async (shellPath?: string, shellName?: string) => {
         const cwd = selectedRoot || workspace?.roots?.[0] || ''
+        if (!cwd) return
+        
         await terminalManager.createTerminal({
             name: shellName || availableShells[0]?.label || 'Terminal',
             cwd,

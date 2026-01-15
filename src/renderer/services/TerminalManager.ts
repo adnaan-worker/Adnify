@@ -211,8 +211,8 @@ class TerminalManagerClass {
     this.pendingPtyCreation.set(id, ptyPromise)
 
     try {
-      await ptyPromise
-      this.ptyReady.set(id, true)
+      const success = await ptyPromise
+      this.ptyReady.set(id, success)
     } catch {
       this.ptyReady.set(id, false)
     } finally {
@@ -225,7 +225,7 @@ class TerminalManagerClass {
   private async createPty(id: string, cwd: string, shell?: string): Promise<boolean> {
     try {
       const result = await api.terminal.create({ id, cwd, shell })
-      return !!result
+      return result?.success === true
     } catch {
       return false
     }
