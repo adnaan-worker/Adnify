@@ -218,6 +218,16 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { conten
     h1: ({ children }: any) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight">{children}</h1>,
     h2: ({ children }: any) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight">{children}</h2>,
     h3: ({ children }: any) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary">{children}</h3>,
+    table: ({ children }: any) => (
+      <div className="overflow-x-auto my-4">
+        <table className="min-w-full border-collapse border border-border">{children}</table>
+      </div>
+    ),
+    thead: ({ children }: any) => <thead className="bg-surface/50">{children}</thead>,
+    tbody: ({ children }: any) => <tbody>{children}</tbody>,
+    tr: ({ children }: any) => <tr className="border-b border-border hover:bg-white/5 transition-colors">{children}</tr>,
+    th: ({ children }: any) => <th className="border border-border px-4 py-2 text-left font-semibold text-text-primary">{children}</th>,
+    td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
   }), [fontSize])
 
   if (!cleanedContent) return null
