@@ -3,7 +3,7 @@
 > **Connect AI to Your Code.**
 > 一个拥有极致视觉体验、深度集成 AI Agent 的下一代代码编辑器。
 
-![License](https://img.shields.io/badge/license-Custom%20License-blue.svg) ![Electron](https://img.shields.io/badge/Electron-33.0-blueviolet) ![React](https://img.shields.io/badge/React-18-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
+![License](https://img.shields.io/badge/license-Custom%20License-blue.svg) ![Electron](https://img.shields.io/badge/Electron-39.0-blueviolet) ![React](https://img.shields.io/badge/React-18-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 
 Adnify 不仅仅是一个编辑器，它是你的**智能编程伴侣**。它复刻并超越了传统 IDE 的体验，融合了 Cyberpunk 玻璃拟态设计风格，内置强大的 AI Agent，支持从代码生成到文件操作的全流程自动化。
 
@@ -588,7 +588,7 @@ adnify/
 
 ## 🛠 技术栈
 
-- **框架**: Electron 33 + React 18 + TypeScript 5
+- **框架**: Electron 39 + React 18 + TypeScript 5
 - **构建**: Vite 6 + electron-builder
 - **编辑器**: Monaco Editor
 - **终端**: xterm.js + node-pty + WebGL Addon
