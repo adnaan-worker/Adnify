@@ -94,12 +94,17 @@ interface LoggerConfig {
   maxFiles: number     // 最大文件数量（轮转）
 }
 
+// 全局类型扩展（用于生产环境标记）
+interface GlobalWithProd {
+  __PROD__?: boolean
+}
+
 // 检测是否为生产环境
 function isProduction(): boolean {
   // 1. Renderer 进程 - 检查 window.__PROD__ 标记（由 main.tsx 注入）
   // 这个值来自 import.meta.env.PROD，在 Vite 构建时会被正确替换
   if (typeof globalThis !== 'undefined') {
-    const prodFlag = (globalThis as any).__PROD__
+    const prodFlag = (globalThis as unknown as GlobalWithProd).__PROD__
     if (prodFlag === true) {
       return true
     }

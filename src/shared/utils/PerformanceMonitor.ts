@@ -140,13 +140,25 @@ class PerformanceMonitorClass {
           external: mem.external,
           rss: mem.rss,
         }
-      } else if (typeof performance !== 'undefined' && (performance as any).memory) {
-        const mem = (performance as any).memory
-        snapshot = {
-          timestamp: Date.now(),
-          heapUsed: mem.usedJSHeapSize,
-          heapTotal: mem.totalJSHeapSize,
-          external: 0,
+      } else if (typeof performance !== 'undefined' && 'memory' in performance) {
+        // Chrome 特有的 performance.memory API
+        const perfWithMemory = performance as Performance & {
+          memory?: {
+            usedJSHeapSize: number
+            totalJSHeapSize: number
+            jsHeapSizeLimit: number
+          }
+        }
+        const mem = perfWithMemory.memory
+        if (mem) {
+          snapshot = {
+            timestamp: Date.now(),
+            heapUsed: mem.usedJSHeapSize,
+            heapTotal: mem.totalJSHeapSize,
+            external: 0,
+          }
+        } else {
+          return // 不支持内存监控
         }
       } else {
         return // 不支持内存监控

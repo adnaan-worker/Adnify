@@ -320,8 +320,12 @@ class McpService {
       const validStatuses: import('@shared/types/mcp').McpServerStatus[] = [
         'disconnected', 'connecting', 'connected', 'error', 'needs_auth', 'needs_registration'
       ]
-      const status: import('@shared/types/mcp').McpServerStatus = validStatuses.includes(event.status as any) 
-        ? event.status as import('@shared/types/mcp').McpServerStatus
+      // 类型守卫函数
+      const isValidStatus = (status: string): status is import('@shared/types/mcp').McpServerStatus => {
+        return validStatuses.includes(status as import('@shared/types/mcp').McpServerStatus)
+      }
+      const status: import('@shared/types/mcp').McpServerStatus = isValidStatus(event.status) 
+        ? event.status
         : 'error'
       store.updateMcpServerStatus(event.serverId, status, event.error)
     })

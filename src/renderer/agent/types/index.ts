@@ -72,7 +72,16 @@ export function getModifiedFilesFromMessages(messages: ChatMessage[]): string[] 
         if (isToolCallPart(part)) {
           const tc = part.toolCall
           if (isFileEditTool(tc.name)) {
-            const path = (tc.arguments.path || (tc.arguments._meta as any)?.filePath) as string
+            // 安全地访问 path 和 _meta.filePath
+            let path: string | undefined
+            if (typeof tc.arguments.path === 'string') {
+              path = tc.arguments.path
+            } else if (tc.arguments._meta && typeof tc.arguments._meta === 'object' && '_meta' in tc.arguments._meta) {
+              const meta = tc.arguments._meta as { filePath?: unknown }
+              if (typeof meta.filePath === 'string') {
+                path = meta.filePath
+              }
+            }
             if (path) files.add(path)
           }
         }
