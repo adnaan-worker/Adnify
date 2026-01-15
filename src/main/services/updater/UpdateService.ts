@@ -197,13 +197,105 @@ class UpdateService {
 
     try {
       this.updateStatus({ status: 'checking' })
-      await autoUpdater.checkForUpdates()
+      logger.system.info('[Updater] Starting update check...')
+      
+      // 设置超时（30秒）
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('更新检查超时，请检查网络连接'))
+        }, 30 * 1000)
+      })
+
+      // autoUpdater 的事件监听器已经在 setupAutoUpdater 中设置
+      // checkForUpdates() 返回 UpdateCheckResult，但事件是异步触发的
+      const checkPromise = autoUpdater.checkForUpdates().then(async (result) => {
+        logger.system.info('[Updater] checkForUpdates() resolved, result:', result ? JSON.stringify({
+          updateInfo: result.updateInfo ? { version: result.updateInfo.version } : null,
+          cancellationToken: result.cancellationToken ? 'present' : null
+        }) : 'null')
+        
+        // 如果返回了结果，检查是否有更新信息
+        if (result?.updateInfo) {
+          logger.system.info(`[Updater] Update info found: ${result.updateInfo.version}`)
+          // 如果事件还没触发，手动更新状态
+          if (this.status.status === 'checking') {
+            this.updateStatus({
+              status: 'available',
+              version: result.updateInfo.version,
+              releaseNotes: this.formatReleaseNotes(result.updateInfo.releaseNotes),
+              releaseDate: result.updateInfo.releaseDate as string | undefined,
+            })
+          }
+          return
+        }
+        
+        // 如果返回 null，可能是找不到 yml 文件，回退到 GitHub API 检查
+        if (!result) {
+          logger.system.warn('[Updater] checkForUpdates() returned null, falling back to GitHub API check')
+          // 等待一下看是否有事件触发
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          
+          // 如果状态还是 checking，说明事件没有触发，使用 GitHub API
+          if (this.status.status === 'checking') {
+            logger.system.info('[Updater] No event triggered, using GitHub API as fallback')
+            // 不重复设置 checking 状态，直接调用便携版检查
+            return this.checkForUpdatesPortable(false)
+          }
+          return
+        }
+        
+        // 如果没有更新信息，等待事件触发（最多 5 秒）
+        return new Promise<void>((resolve) => {
+          const startTime = Date.now()
+          const checkInterval = setInterval(() => {
+            // 如果状态不再是 checking，说明事件已触发
+            if (this.status.status !== 'checking') {
+              clearInterval(checkInterval)
+              logger.system.info(`[Updater] Status changed to: ${this.status.status}`)
+              resolve()
+              return
+            }
+            
+            // 如果等待超过 5 秒，认为事件可能不会触发了
+            if (Date.now() - startTime > 5000) {
+              clearInterval(checkInterval)
+              // 如果状态还是 checking，可能是事件没有触发，回退到 GitHub API
+              if (this.status.status === 'checking') {
+                logger.system.warn('[Updater] No event triggered after checkForUpdates() resolved, falling back to GitHub API')
+                // 使用 GitHub API 作为后备方案，不重复设置 checking 状态
+                this.checkForUpdatesPortable(false).then(() => resolve()).catch(() => {
+                  this.updateStatus({ status: 'not-available' })
+                  resolve()
+                })
+              } else {
+                resolve()
+              }
+            }
+          }, 200) // 每 200ms 检查一次状态
+        })
+      }).catch((err) => {
+        logger.system.error('[Updater] checkForUpdates() rejected:', err)
+        // 如果出错，也尝试使用 GitHub API 作为后备
+        logger.system.info('[Updater] Falling back to GitHub API due to error')
+        // 如果状态还是 checking，尝试使用 GitHub API，否则直接抛出错误
+        if (this.status.status === 'checking') {
+          return this.checkForUpdatesPortable(false).catch(() => {
+            throw err
+          })
+        }
+        throw err
+      })
+
+      await Promise.race([checkPromise, timeoutPromise])
     } catch (err: any) {
       logger.system.error('[Updater] Check failed:', err)
-      this.updateStatus({
-        status: 'error',
-        error: err.message,
-      })
+      // 如果状态还是 checking，说明超时或出错了
+      if (this.status.status === 'checking') {
+        this.updateStatus({
+          status: 'error',
+          error: err.message || '更新检查失败',
+        })
+      }
     }
 
     return this.status
@@ -211,66 +303,86 @@ class UpdateService {
 
   /**
    * 检查更新（便携版）
+   * @param setCheckingStatus 是否设置 checking 状态（默认 true，从外部调用时设为 false 避免重复设置）
    */
-  async checkForUpdatesPortable(): Promise<UpdateStatus> {
+  async checkForUpdatesPortable(setCheckingStatus = true): Promise<UpdateStatus> {
     try {
-      this.updateStatus({ status: 'checking' })
+      if (setCheckingStatus) {
+        this.updateStatus({ status: 'checking' })
+      }
 
-      // 从 GitHub API 获取最新 release
-      const response = await fetch(
-        'https://api.github.com/repos/adnaan-worker/adnify/releases/latest',
-        {
-          headers: {
-            Accept: 'application/vnd.github.v3+json',
-            'User-Agent': 'Adnify-Updater',
-          },
-        }
-      )
+      // 创建 AbortController 用于超时控制
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => {
+        controller.abort()
+      }, 30 * 1000) // 30秒超时
 
-      if (!response.ok) {
-        // 403 通常是速率限制，404 是仓库不存在或无 release
-        if (response.status === 403) {
-          const remaining = response.headers.get('X-RateLimit-Remaining')
-          const resetTime = response.headers.get('X-RateLimit-Reset')
-          logger.system.warn(`[Updater] Rate limited. Remaining: ${remaining}, Reset: ${resetTime}`)
-          throw new Error('GitHub API 请求频率超限，请稍后再试')
+      try {
+        // 从 GitHub API 获取最新 release
+        const response = await fetch(
+          'https://api.github.com/repos/adnaan-worker/adnify/releases/latest',
+          {
+            headers: {
+              Accept: 'application/vnd.github.v3+json',
+              'User-Agent': 'Adnify-Updater',
+            },
+            signal: controller.signal,
+          }
+        )
+        
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          // 403 通常是速率限制，404 是仓库不存在或无 release
+          if (response.status === 403) {
+            const remaining = response.headers.get('X-RateLimit-Remaining')
+            const resetTime = response.headers.get('X-RateLimit-Reset')
+            logger.system.warn(`[Updater] Rate limited. Remaining: ${remaining}, Reset: ${resetTime}`)
+            throw new Error('GitHub API 请求频率超限，请稍后再试')
+          }
+          if (response.status === 404) {
+            // 仓库不存在或没有 release，静默处理
+            this.updateStatus({ status: 'not-available' })
+            return this.status
+          }
+          throw new Error(`GitHub API error: ${response.status}`)
         }
-        if (response.status === 404) {
-          // 仓库不存在或没有 release，静默处理
+
+        const release = (await response.json()) as {
+          tag_name: string
+          body: string
+          published_at: string
+          assets: Array<{ name: string; browser_download_url: string }>
+        }
+        const latestVersion = release.tag_name.replace(/^v/, '')
+        const currentVersion = app.getVersion()
+
+        if (this.isNewerVersion(latestVersion, currentVersion)) {
+          // 找到对应平台的下载链接
+          const downloadUrl = this.findDownloadUrl(release.assets)
+
+          this.updateStatus({
+            status: 'available',
+            version: latestVersion,
+            releaseNotes: release.body,
+            releaseDate: release.published_at,
+            downloadUrl,
+          })
+        } else {
           this.updateStatus({ status: 'not-available' })
-          return this.status
         }
-        throw new Error(`GitHub API error: ${response.status}`)
-      }
-
-      const release = (await response.json()) as {
-        tag_name: string
-        body: string
-        published_at: string
-        assets: Array<{ name: string; browser_download_url: string }>
-      }
-      const latestVersion = release.tag_name.replace(/^v/, '')
-      const currentVersion = app.getVersion()
-
-      if (this.isNewerVersion(latestVersion, currentVersion)) {
-        // 找到对应平台的下载链接
-        const downloadUrl = this.findDownloadUrl(release.assets)
-
-        this.updateStatus({
-          status: 'available',
-          version: latestVersion,
-          releaseNotes: release.body,
-          releaseDate: release.published_at,
-          downloadUrl,
-        })
-      } else {
-        this.updateStatus({ status: 'not-available' })
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId)
+        if (fetchErr.name === 'AbortError') {
+          throw new Error('更新检查超时，请检查网络连接')
+        }
+        throw fetchErr
       }
     } catch (err: any) {
       logger.system.error('[Updater] Portable check failed:', err)
       this.updateStatus({
         status: 'error',
-        error: err.message,
+        error: err.message || '更新检查失败',
       })
     }
 
