@@ -699,7 +699,11 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
             // 如果指定了 stack，搜索技术栈指南
             if (stack) {
-                const result = await uiuxDatabase.searchStack(query, stack as any, maxResults)
+                // 验证 stack 类型
+                const validStacks = ['html-tailwind', 'react', 'nextjs', 'vue', 'svelte', 'swiftui', 'react-native', 'flutter'] as const
+                const techStack = validStacks.includes(stack as any) ? stack as import('./uiux').TechStack : 'react'
+                
+                const result = await uiuxDatabase.searchStack(query, techStack, maxResults)
                 if (result.count === 0) {
                     return { 
                         success: true, 
@@ -718,7 +722,11 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             }
 
             // 否则搜索域数据
-            const result = await uiuxDatabase.search(query, domain as any, maxResults)
+            // 验证 domain 类型
+            const validDomains = ['style', 'color', 'typography', 'chart', 'landing', 'product', 'ux', 'prompt'] as const
+            const uiuxDomain = domain && validDomains.includes(domain as any) ? domain as import('./uiux').UiuxDomain : undefined
+            
+            const result = await uiuxDatabase.search(query, uiuxDomain, maxResults)
             if (result.count === 0) {
                 return { 
                     success: true, 

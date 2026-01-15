@@ -36,6 +36,12 @@ import {
   defaultSecuritySettings,
   defaultProviderConfigs,
 } from './defaults'
+import {
+  TERMINAL_DEFAULTS,
+  LSP_DEFAULTS,
+  PERFORMANCE_DEFAULTS,
+  AI_COMPLETION_DEFAULTS,
+} from '@shared/config/defaults'
 
 // ============================================
 // 存储 Key
@@ -112,11 +118,16 @@ function cleanEditorConfig(config: EditorConfig): EditorConfig {
     formatOnSave: config.formatOnSave,
     autoSave: config.autoSave,
     autoSaveDelay: config.autoSaveDelay,
-    terminal: { ...config.terminal },
-    git: { ...config.git },
-    lsp: { ...config.lsp },
-    performance: { ...config.performance },
-    ai: { ...config.ai },
+    terminal: config.terminal ? { ...config.terminal } : { ...TERMINAL_DEFAULTS },
+    git: config.git ? { autoRefresh: config.git.autoRefresh } : { autoRefresh: true },
+    lsp: config.lsp ? { ...config.lsp } : { ...LSP_DEFAULTS },
+    performance: config.performance ? { ...config.performance } : { ...PERFORMANCE_DEFAULTS },
+    ai: config.ai ? { ...config.ai } : {
+      completionEnabled: AI_COMPLETION_DEFAULTS.enabled,
+      completionMaxTokens: AI_COMPLETION_DEFAULTS.maxTokens,
+      completionTemperature: AI_COMPLETION_DEFAULTS.temperature,
+      completionTriggerChars: [...AI_COMPLETION_DEFAULTS.triggerChars],
+    },
   }
 }
 

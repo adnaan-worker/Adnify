@@ -316,7 +316,14 @@ class McpService {
 
     // 服务器状态变更
     const cleanupStatus = api.mcp.onServerStatus((event: { serverId: string; status: string; error?: string }) => {
-      store.updateMcpServerStatus(event.serverId, event.status, event.error)
+      // 验证状态值是否有效
+      const validStatuses: import('@shared/types/mcp').McpServerStatus[] = [
+        'disconnected', 'connecting', 'connected', 'error', 'needs_auth', 'needs_registration'
+      ]
+      const status: import('@shared/types/mcp').McpServerStatus = validStatuses.includes(event.status as any) 
+        ? event.status as import('@shared/types/mcp').McpServerStatus
+        : 'error'
+      store.updateMcpServerStatus(event.serverId, status, event.error)
     })
     this.cleanupFns.push(cleanupStatus)
 

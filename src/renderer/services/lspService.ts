@@ -15,12 +15,29 @@ const openedDocuments = new Set<string>()
 // ===== 内部辅助函数 =====
 
 /**
+ * LSP 请求参数类型
+ */
+interface LspRequestParams {
+  uri: string
+  workspacePath: string | null
+}
+
+interface LspPositionParams extends LspRequestParams {
+  line: number
+  character: number
+}
+
+interface LspDocumentParams extends LspRequestParams {
+  text: string
+}
+
+/**
  * 执行 LSP 请求的通用包装器
  * 处理 URI 转换、工作区路径获取、错误处理
  */
 async function executeLspRequest<T>(
   filePath: string,
-  request: (params: { uri: string; workspacePath: string | null }) => Promise<T>,
+  request: (params: LspRequestParams) => Promise<T>,
   defaultValue: T
 ): Promise<T> {
   const uri = pathToLspUri(filePath)
@@ -39,7 +56,7 @@ async function executeLspPositionRequest<T>(
   filePath: string,
   line: number,
   character: number,
-  request: (params: { uri: string; line: number; character: number; workspacePath: string | null }) => Promise<T>,
+  request: (params: LspPositionParams) => Promise<T>,
   defaultValue: T
 ): Promise<T> {
   const uri = pathToLspUri(filePath)
@@ -170,13 +187,14 @@ export async function didOpenDocument(filePath: string, content: string): Promis
   
   // 使用智能根目录检测启动服务器
   // 这会根据语言类型找到最佳的项目根目录
-  await api.lsp.didOpen({
+  const params: LspDocumentParams & { languageId: string; version: number } = {
     uri,
     languageId,
     version,
     text: content,
     workspacePath,
-  } as any)
+  }
+  await api.lsp.didOpen(params)
 }
 
 /**
@@ -191,12 +209,13 @@ export async function didChangeDocument(filePath: string, content: string): Prom
   documentVersions.set(uri, newVersion)
 
   const workspacePath = getFileWorkspaceRoot(filePath)
-  await api.lsp.didChange({
+  const params: LspDocumentParams & { version: number } = {
     uri,
     version: newVersion,
     text: content,
     workspacePath,
-  } as any)
+  }
+  await api.lsp.didChange(params)
 }
 
 /**
@@ -211,10 +230,11 @@ export async function didCloseDocument(filePath: string): Promise<void> {
   openedDocuments.delete(uri)
 
   const workspacePath = getFileWorkspaceRoot(filePath)
-  await api.lsp.didClose({
+  const params: LspRequestParams = {
     uri,
     workspacePath,
-  } as any)
+  }
+  await api.lsp.didClose(params)
 }
 
 /**
@@ -226,11 +246,12 @@ export async function didSaveDocument(filePath: string, content?: string): Promi
   if (!isLanguageSupported(languageId)) return
 
   const workspacePath = getFileWorkspaceRoot(filePath)
-  await api.lsp.didSave?.({
+  const params: LspRequestParams & { text?: string } = {
     uri,
     text: content, // 可选：一些 LSP 需要保存时的文本内容
     workspacePath,
-  } as any)
+  }
+  await api.lsp.didSave?.(params)
 }
 
 /**
@@ -244,7 +265,7 @@ export async function goToDefinition(
   return executeLspPositionRequest(
     filePath, line, character,
     async (params) => {
-      const result = await api.lsp.definition(params as any)
+      const result = await api.lsp.definition(params)
       if (!result) return null
       return Array.isArray(result) ? result : [result]
     },
@@ -262,7 +283,7 @@ export async function findReferences(
 ): Promise<{ uri: string; range: any }[] | null> {
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => api.lsp.references(params as any),
+    (params) => api.lsp.references(params),
     null
   )
 }
@@ -277,7 +298,7 @@ export async function getHoverInfo(
 ): Promise<{ contents: any; range?: any } | null> {
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => api.lsp.hover(params as any),
+    (params) => api.lsp.hover(params),
     null
   )
 }
@@ -292,7 +313,7 @@ export async function getCompletions(
 ): Promise<any> {
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => api.lsp.completion(params as any),
+    (params) => api.lsp.completion(params),
     null
   )
 }
@@ -309,7 +330,14 @@ export async function renameSymbol(
   const uri = pathToLspUri(filePath)
   const workspacePath = getFileWorkspaceRoot(filePath)
   try {
-    return await api.lsp.rename({ uri, line, character, newName, workspacePath } as any)
+    const params: LspPositionParams & { newName: string } = {
+      uri,
+      line,
+      character,
+      newName,
+      workspacePath,
+    }
+    return await api.lsp.rename(params)
   } catch {
     return null
   }
@@ -337,7 +365,7 @@ export async function goToTypeDefinition(
   return executeLspPositionRequest(
     filePath, line, character,
     async (params) => {
-      const result = await api.lsp.typeDefinition(params as any)
+      const result = await api.lsp.typeDefinition(params)
       if (!result) return null
       return Array.isArray(result) ? result : [result]
     },
@@ -356,7 +384,7 @@ export async function goToImplementation(
   return executeLspPositionRequest(
     filePath, line, character,
     async (params) => {
-      const result = await api.lsp.implementation(params as any)
+      const result = await api.lsp.implementation(params)
       if (!result) return null
       return Array.isArray(result) ? result : [result]
     },
@@ -374,7 +402,7 @@ export async function getSignatureHelp(
 ): Promise<any> {
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => api.lsp.signatureHelp(params as any),
+    (params) => api.lsp.signatureHelp(params),
     null
   )
 }
@@ -389,7 +417,7 @@ export async function prepareRename(
 ): Promise<{ range: any; placeholder: string } | null> {
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => api.lsp.prepareRename(params as any),
+    (params) => api.lsp.prepareRename(params),
     null
   )
 }
@@ -400,7 +428,7 @@ export async function prepareRename(
 export async function getDocumentSymbols(filePath: string): Promise<any[]> {
   return executeLspRequest(
     filePath,
-    (params) => api.lsp.documentSymbol(params as any),
+    (params) => api.lsp.documentSymbol(params),
     []
   ) as Promise<any[]>
 }
@@ -426,7 +454,7 @@ export async function getCodeActions(
 ): Promise<any[]> {
   return executeLspRequest(
     filePath,
-    (params) => api.lsp.codeAction({ ...params, range, diagnostics } as any),
+    (params) => api.lsp.codeAction({ ...params, range, diagnostics }),
     []
   ) as Promise<any[]>
 }
@@ -440,7 +468,7 @@ export async function formatDocument(
 ): Promise<any[]> {
   return executeLspRequest(
     filePath,
-    (params) => api.lsp.formatting({ ...params, options } as any),
+    (params) => api.lsp.formatting({ ...params, options }),
     []
   ) as Promise<any[]>
 }
@@ -455,7 +483,7 @@ export async function formatRange(
 ): Promise<any[]> {
   return executeLspRequest(
     filePath,
-    (params) => api.lsp.rangeFormatting({ ...params, range, options } as any),
+    (params) => api.lsp.rangeFormatting({ ...params, range, options }),
     []
   ) as Promise<any[]>
 }
@@ -470,7 +498,7 @@ export async function getDocumentHighlights(
 ): Promise<any[]> {
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => api.lsp.documentHighlight(params as any),
+    (params) => api.lsp.documentHighlight(params),
     []
   ) as Promise<any[]>
 }
@@ -481,7 +509,7 @@ export async function getDocumentHighlights(
 export async function getFoldingRanges(filePath: string): Promise<any[]> {
   return executeLspRequest(
     filePath,
-    (params) => api.lsp.foldingRange(params as any),
+    (params) => api.lsp.foldingRange(params),
     []
   ) as Promise<any[]>
 }
@@ -506,7 +534,7 @@ export async function getInlayHints(
 ): Promise<any[]> {
   return executeLspRequest(
     filePath,
-    (params) => api.lsp.inlayHint({ ...params, range } as any),
+    (params) => api.lsp.inlayHint({ ...params, range }),
     []
   ) as Promise<any[]>
 }
@@ -522,9 +550,14 @@ export async function prepareCallHierarchy(
   line: number,
   character: number
 ): Promise<any[] | null> {
+  // 使用类型扩展来访问可能存在的 Call Hierarchy API
+  type LspApiWithCallHierarchy = typeof api.lsp & {
+    prepareCallHierarchy?: (params: LspPositionParams) => Promise<any[] | null>
+  }
+  
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => (api.lsp as any).prepareCallHierarchy(params),
+    (params) => (api.lsp as LspApiWithCallHierarchy).prepareCallHierarchy?.(params) ?? Promise.resolve(null),
     null
   )
 }
@@ -537,9 +570,13 @@ export async function getIncomingCalls(
   line: number,
   character: number
 ): Promise<any[] | null> {
+  type LspApiWithCallHierarchy = typeof api.lsp & {
+    incomingCalls?: (params: LspPositionParams) => Promise<any[] | null>
+  }
+  
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => (api.lsp as any).incomingCalls(params),
+    (params) => (api.lsp as LspApiWithCallHierarchy).incomingCalls?.(params) ?? Promise.resolve(null),
     null
   )
 }
@@ -552,9 +589,13 @@ export async function getOutgoingCalls(
   line: number,
   character: number
 ): Promise<any[] | null> {
+  type LspApiWithCallHierarchy = typeof api.lsp & {
+    outgoingCalls?: (params: LspPositionParams) => Promise<any[] | null>
+  }
+  
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => (api.lsp as any).outgoingCalls(params),
+    (params) => (api.lsp as LspApiWithCallHierarchy).outgoingCalls?.(params) ?? Promise.resolve(null),
     null
   )
 }

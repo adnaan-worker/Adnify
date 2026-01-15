@@ -289,7 +289,7 @@ class PathLinkService {
           if (activeFilePath) {
             await this.handlePathClick(linkPath, activeFilePath)
           }
-          return undefined as any
+          return undefined
         }
         
         return link

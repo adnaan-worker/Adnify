@@ -55,7 +55,12 @@ async function callLLM(
   const tools = chatMode === 'chat' ? [] : toolManager.getAllToolDefinitions()
 
   // 发送请求
-  api.llm.send({ config: config as any, messages: messages as any, tools, systemPrompt: '' }).catch(() => {
+  api.llm.send({ 
+    config: config as import('@shared/types/llm').LLMConfig, 
+    messages: messages as import('../llm/MessageConverter').OpenAIMessage[], 
+    tools, 
+    systemPrompt: '' 
+  }).catch(() => {
     processor.cleanup()
   })
 
@@ -64,7 +69,9 @@ async function callLLM(
 
   // 更新 usage
   if (assistantId && result.usage) {
-    useAgentStore.getState().updateMessage(assistantId, { usage: result.usage } as any)
+    useAgentStore.getState().updateMessage(assistantId, { 
+      usage: result.usage 
+    } as Partial<import('../types').AssistantMessage>)
   }
 
   return result
@@ -207,7 +214,7 @@ async function checkAndHandleCompression(
   )
 
   // 更新 store
-  store.setCompressionStats(newStats as any)
+  store.setCompressionStats(newStats as import('../context/CompressionManager').CompressionStats)
   store.setCompressionPhase('idle')
 
   // L3: 生成 LLM 摘要
@@ -370,9 +377,10 @@ export async function runLoop(
     // 添加工具调用到 UI
     const currentMsg = store.getMessages().find(m => m.id === assistantId)
     if (currentMsg?.role === 'assistant') {
-      const existing = (currentMsg as any).toolCalls || []
+      const assistantMsg = currentMsg as import('../types').AssistantMessage
+      const existing = assistantMsg.toolCalls || []
       for (const tc of result.toolCalls) {
-        if (!existing.find((e: any) => e.id === tc.id)) {
+        if (!existing.find((e) => e.id === tc.id)) {
           store.addToolCallPart(assistantId, { id: tc.id, name: tc.name, arguments: tc.arguments })
         }
       }

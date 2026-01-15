@@ -116,7 +116,8 @@ class AgentClass {
       if (thread) {
         const msg = thread.messages.find(m => m.id === this.currentAssistantId)
         if (msg?.role === 'assistant') {
-          for (const tc of (msg as any).toolCalls || []) {
+          const assistantMsg = msg as import('../types').AssistantMessage
+          for (const tc of assistantMsg.toolCalls || []) {
             if (['running', 'awaiting', 'pending'].includes(tc.status)) {
               store.updateToolCall(this.currentAssistantId, tc.id, {
                 status: 'error',
@@ -133,8 +134,11 @@ class AgentClass {
     const thread = store.getCurrentThread()
     if (thread) {
       for (const msg of thread.messages) {
-        if (msg.role === 'assistant' && (msg as any).isStreaming) {
-          store.finalizeAssistant(msg.id)
+        if (msg.role === 'assistant') {
+          const assistantMsg = msg as import('../types').AssistantMessage
+          if (assistantMsg.isStreaming) {
+            store.finalizeAssistant(msg.id)
+          }
         }
       }
     }

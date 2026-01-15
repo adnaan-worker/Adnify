@@ -12,6 +12,7 @@ import { useStore } from '@store'
 import { getAdapterConfig } from '@/shared/config/providers'
 import type { StructuredSummary, HandoffDocument, FileChangeRecord } from './types'
 import type { ChatMessage, AssistantMessage, UserMessage } from '../types'
+import { getMessageText } from '../types'
 
 // ===== Prompts =====
 
@@ -106,9 +107,7 @@ function extractUserRequests(messages: ChatMessage[]): string[] {
   for (const msg of messages) {
     if (msg.role === 'user') {
       const userMsg = msg as UserMessage
-      const content = typeof userMsg.content === 'string' 
-        ? userMsg.content 
-        : userMsg.content.filter(p => p.type === 'text').map(p => (p as any).text).join('')
+      const content = getMessageText(userMsg.content)
       
       if (content.trim()) {
         requests.push(content.slice(0, 200))

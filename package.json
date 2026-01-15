@@ -69,6 +69,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
     "@electron/rebuild": "^3.6.0",
     "@types/adm-zip": "^0.5.7",
     "@types/diff": "^7.0.2",
@@ -152,7 +153,8 @@
         "dmg",
         "zip"
       ],
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "identity": null
     },
     "linux": {
       "icon": "resources/icon.png",

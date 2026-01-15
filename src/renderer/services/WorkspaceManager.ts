@@ -304,9 +304,11 @@ class WorkspaceManager {
     }
     
     // 5. 重新加载 AgentStore 持久化数据
-    const persistApi = (useAgentStore as any).persist
-    if (persistApi) {
-      await persistApi.rehydrate()
+    const store = useAgentStore as typeof useAgentStore & {
+      persist?: { rehydrate: () => Promise<void> }
+    }
+    if (store.persist) {
+      await store.persist.rehydrate()
       logger.agent.info('[WorkspaceManager] Agent store rehydrated')
     }
     

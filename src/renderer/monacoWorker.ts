@@ -21,7 +21,8 @@ import {
 
 // 配置 Monaco 环境
 // 使用 globalThis 替代 self，确保在浏览器和 Worker 环境中都能正常工作
-;(globalThis as any).MonacoEnvironment = {
+// Monaco 已经定义了 Environment 类型，我们直接使用
+globalThis.MonacoEnvironment = {
   getWorker(_: unknown, label: string): Worker {
     if (label === 'json') {
       return new jsonWorker()

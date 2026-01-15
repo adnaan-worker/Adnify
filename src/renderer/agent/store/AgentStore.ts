@@ -178,15 +178,15 @@ export const useAgentStore = create<AgentStore>()(
                 contextSummary: null,
                 isCompacting: false,
                 compressionPhase: 'idle',
-                setCompressionStats: (stats) => set({ compressionStats: stats } as any),
-                setHandoffDocument: (doc) => set({ handoffDocument: doc } as any),
-                setHandoffRequired: (required) => set({ handoffRequired: required } as any),
-                setContextSummary: (summary) => set({ contextSummary: summary } as any),
-                setIsCompacting: (compacting) => set({ isCompacting: compacting } as any),
-                setCompressionPhase: (phase) => set({ compressionPhase: phase } as any),
+                setCompressionStats: (stats) => set({ compressionStats: stats }),
+                setHandoffDocument: (doc) => set({ handoffDocument: doc }),
+                setHandoffRequired: (required) => set({ handoffRequired: required }),
+                setContextSummary: (summary) => set({ contextSummary: summary }),
+                setIsCompacting: (compacting) => set({ isCompacting: compacting }),
+                setCompressionPhase: (phase) => set({ compressionPhase: phase }),
                 createHandoffSession: () => {
-                    const state = get() as any
-                    const handoff = state.handoffDocument as HandoffDocument | null
+                    const state = get()
+                    const handoff = state.handoffDocument
                     
                     if (!handoff) {
                         logger.agent.warn('[AgentStore] No handoff document to create session from')
@@ -208,16 +208,16 @@ export const useAgentStore = create<AgentStore>()(
                         handoffRequired: false,
                         // 保留 contextSummary 用于底部栏显示
                         contextSummary: handoff.summary,
-                    } as any)
+                    })
                     
                     // 存储 handoff 上下文到线程元数据
-                    const threads = (get() as any).threads
+                    const threads = get().threads
                     if (threads[newThreadId]) {
                         threads[newThreadId].handoffContext = handoffContext
                         // 存储待完成任务，用于自动继续
                         threads[newThreadId].pendingObjective = handoff.summary.objective
                         threads[newThreadId].pendingSteps = handoff.summary.pendingSteps
-                        set({ threads: { ...threads } } as any)
+                        set({ threads: { ...threads } })
                     }
                     
                     logger.agent.info('[AgentStore] Created handoff session:', newThreadId)
@@ -238,9 +238,9 @@ export const useAgentStore = create<AgentStore>()(
                 contextStats: null,
                 inputPrompt: '',
                 currentSessionId: null,
-                setContextStats: (stats) => set({ contextStats: stats } as any),
-                setInputPrompt: (prompt) => set({ inputPrompt: prompt } as any),
-                setCurrentSessionId: (id) => set({ currentSessionId: id } as any),
+                setContextStats: (stats) => set({ contextStats: stats }),
+                setInputPrompt: (prompt) => set({ inputPrompt: prompt }),
+                setCurrentSessionId: (id) => set({ currentSessionId: id }),
             }
 
             // 重写 appendToAssistant 使用 StreamingBuffer
@@ -364,9 +364,12 @@ streamingBuffer.setFlushCallback((messageId: string, content: string) => {
 
 export async function initializeAgentStore(): Promise<void> {
     try {
-        const persistApi = (useAgentStore as any).persist
-        if (persistApi) {
-            await persistApi.rehydrate()
+        // 使用类型安全的方式访问 persist API
+        const store = useAgentStore as typeof useAgentStore & {
+            persist?: { rehydrate: () => Promise<void> }
+        }
+        if (store.persist) {
+            await store.persist.rehydrate()
             logger.agent.info('[AgentStore] Rehydrated from project storage')
         }
 

@@ -156,8 +156,8 @@ export async function initializeApp(
     const savedTheme = await loadUserSettings(isEmptyWindow)
     
     // 应用主题
-    if (savedTheme) {
-      useStore.getState().setTheme(savedTheme as any)
+    if (savedTheme && isThemeName(savedTheme)) {
+      useStore.getState().setTheme(savedTheme)
     }
     
     // 获取引导状态
@@ -207,22 +207,46 @@ export function registerSettingsSync(): () => void {
     logger.system.debug(`[Init] Setting changed: ${key}`)
     switch (key) {
       case 'llmConfig':
-        setLLMConfig(value as any)
+        if (isLLMConfig(value)) {
+          setLLMConfig(value)
+        }
         break
       case 'language':
-        setLanguage(value as any)
+        if (value === 'en' || value === 'zh') {
+          setLanguage(value)
+        }
         break
       case 'autoApprove':
-        setAutoApprove(value as any)
+        if (isAutoApproveSettings(value)) {
+          setAutoApprove(value)
+        }
         break
       case 'promptTemplateId':
-        setPromptTemplateId(value as any)
+        if (typeof value === 'string') {
+          setPromptTemplateId(value)
+        }
         break
       case 'currentTheme':
-        setTheme(value as any)
+        if (isThemeName(value)) {
+          setTheme(value)
+        }
         break
     }
   })
+}
+
+// 类型守卫函数
+function isLLMConfig(value: unknown): value is Partial<import('@store').LLMConfig> {
+  return typeof value === 'object' && value !== null
+}
+
+function isAutoApproveSettings(value: unknown): value is Partial<import('@store').AutoApproveSettings> {
+  return typeof value === 'object' && value !== null
+}
+
+function isThemeName(value: unknown): value is import('@store').ThemeName {
+  const validThemes = ['adnify-dark', 'midnight', 'cyberpunk', 'dawn']
+  return typeof value === 'string' && validThemes.includes(value)
 }
 
 /**

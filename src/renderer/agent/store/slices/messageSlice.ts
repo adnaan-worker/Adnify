@@ -493,14 +493,15 @@ export const createMessageSlice: StateCreator<
             const messages = thread.messages.map(msg => {
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
-                    const newPart: ReasoningPart & { id?: string } = {
+                    const newPart: ReasoningPart = {
                         type: 'reasoning',
                         content: '',
                         startTime: Date.now(),
                         isStreaming: true,
                     }
-                    newPart.id = partId
-                    return { ...assistantMsg, parts: [...assistantMsg.parts, newPart as ReasoningPart] }
+                    // 临时添加 id 用于查找，但不包含在类型中
+                    const partWithId = { ...newPart, id: partId }
+                    return { ...assistantMsg, parts: [...assistantMsg.parts, partWithId as ReasoningPart] }
                 }
                 return msg
             })
@@ -529,7 +530,9 @@ export const createMessageSlice: StateCreator<
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newParts = assistantMsg.parts.map(part => {
-                        if (part.type === 'reasoning' && (part as any).id === partId) {
+                        // 使用临时 id 属性进行匹配
+                        const partWithId = part as ReasoningPart & { id?: string }
+                        if (part.type === 'reasoning' && partWithId.id === partId) {
                             return { ...part, content: (part as ReasoningPart).content + content, isStreaming }
                         }
                         return part
@@ -561,7 +564,9 @@ export const createMessageSlice: StateCreator<
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newParts = assistantMsg.parts.map(part => {
-                        if (part.type === 'reasoning' && (part as any).id === partId) {
+                        // 使用临时 id 属性进行匹配
+                        const partWithId = part as ReasoningPart & { id?: string }
+                        if (part.type === 'reasoning' && partWithId.id === partId) {
                             return { ...part, isStreaming: false }
                         }
                         return part

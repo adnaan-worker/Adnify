@@ -27,6 +27,10 @@ export interface ChatThread {
   handoffContext?: string
   /** 上下文压缩摘要 */
   contextSummary?: StructuredSummary | null
+  /** 待完成的目标（从 Handoff 继承） */
+  pendingObjective?: string
+  /** 待完成的步骤（从 Handoff 继承） */
+  pendingSteps?: string[]
 }
 
 /** 流阶段 */

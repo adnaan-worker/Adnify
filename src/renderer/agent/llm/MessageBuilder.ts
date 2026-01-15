@@ -35,10 +35,12 @@ export async function buildLLMMessages(
 
   // 检查是否有 handoff 上下文需要注入
   let enhancedSystemPrompt = systemPrompt
-  if (currentThread && (currentThread as any).handoffContext) {
-    const handoffContext = (currentThread as any).handoffContext
-    enhancedSystemPrompt = `${systemPrompt}\n\n${handoffContext}`
-    logger.agent.info('[MessageBuilder] Injected handoff context')
+  if (currentThread) {
+    const threadWithHandoff = currentThread as import('../types').ChatThread & { handoffContext?: string }
+    if (threadWithHandoff.handoffContext) {
+      enhancedSystemPrompt = `${systemPrompt}\n\n${threadWithHandoff.handoffContext}`
+      logger.agent.info('[MessageBuilder] Injected handoff context')
+    }
   }
 
   // 预估当前用户消息的 token（包括 context）
@@ -103,10 +105,10 @@ export async function buildLLMMessages(
     : preparedMessages
 
   // 转换为 OpenAI 格式
-  const openaiMessages = buildOpenAIMessages(messagesToConvert as any, enhancedSystemPrompt)
+  const openaiMessages = buildOpenAIMessages(messagesToConvert, enhancedSystemPrompt)
 
   // 添加当前用户消息（复用已构建的 userContent）
-  openaiMessages.push({ role: 'user', content: userContent as any })
+  openaiMessages.push({ role: 'user', content: userContent })
 
   // 验证消息格式
   const validation = validateOpenAIMessages(openaiMessages)

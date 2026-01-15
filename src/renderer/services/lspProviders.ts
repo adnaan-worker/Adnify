@@ -12,6 +12,20 @@ interface CompletionItemWithData extends Monaco.languages.CompletionItem {
   data?: unknown
 }
 
+// LSP WorkspaceEdit 类型
+interface LspTextEdit {
+  range: {
+    start: { line: number; character: number }
+    end: { line: number; character: number }
+  }
+  newText: string
+}
+
+interface LspWorkspaceEdit {
+  changes?: Record<string, LspTextEdit[]>
+  documentChanges?: unknown[]
+}
+
 import {
   lspUriToPath,
   getHoverInfo,
@@ -196,7 +210,7 @@ export function registerLspProviders(monaco: typeof Monaco) {
           insertTextRules: item.insertTextFormat === 2 
             ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet 
             : undefined,
-          range: undefined as any, // Monaco 会自动计算
+          range: undefined!, // Monaco 会自动计算，使用 undefined! 表示运行时会被填充
           sortText: item.sortText,
           filterText: item.filterText,
           preselect: item.preselect,
@@ -546,13 +560,13 @@ export function registerLspProviders(monaco: typeof Monaco) {
  */
 function convertWorkspaceEdit(
   monaco: typeof Monaco,
-  edit: any
+  edit: LspWorkspaceEdit
 ): Monaco.languages.WorkspaceEdit {
   const edits: Monaco.languages.IWorkspaceTextEdit[] = []
 
   if (edit.changes) {
     Object.entries(edit.changes).forEach(([uri, textEdits]) => {
-      (textEdits as any[]).forEach((textEdit) => {
+      textEdits.forEach((textEdit) => {
         edits.push({
           resource: monaco.Uri.parse(uri),
           textEdit: {

@@ -136,7 +136,9 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
             if (assistantId) {
               // 创建 ReasoningPart 并获取 partId
               reasoningPartId = store.addReasoningPart(assistantId)
-              store.updateMessage(assistantId, { reasoningStartTime: Date.now() } as any)
+              store.updateMessage(assistantId, { 
+                reasoningStartTime: Date.now() 
+              } as Partial<import('../types').AssistantMessage>)
             }
             EventBus.emit({ type: 'stream:reasoning', text: '', phase: 'start' })
           }
@@ -144,7 +146,9 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
           if (assistantId && reasoningPartId) {
             // 更新 ReasoningPart 内容
             store.updateReasoningPart(assistantId, reasoningPartId, reasoningContent, true)
-            store.updateMessage(assistantId, { reasoning } as any)
+            store.updateMessage(assistantId, { 
+              reasoning 
+            } as Partial<import('../types').AssistantMessage>)
           }
           EventBus.emit({ type: 'stream:reasoning', text: reasoningContent, phase: 'delta' })
         }

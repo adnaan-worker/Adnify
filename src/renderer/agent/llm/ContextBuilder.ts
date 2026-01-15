@@ -404,7 +404,9 @@ export async function calculateContextStats(
   // 1. 计算消息历史长度
   for (const msg of filteredMessages) {
     if (msg.role === 'user' || msg.role === 'assistant') {
-      const content = (msg as any).content
+      const content = msg.role === 'user' 
+        ? (msg as import('../types').UserMessage).content
+        : (msg as import('../types').AssistantMessage).content
       if (typeof content === 'string') {
         totalChars += content.length
       } else if (Array.isArray(content)) {
@@ -413,7 +415,8 @@ export async function calculateContextStats(
         }
       }
     } else if (msg.role === 'tool') {
-      totalChars += (msg as any).content.length
+      const toolMsg = msg as import('../types').ToolResultMessage
+      totalChars += typeof toolMsg.content === 'string' ? toolMsg.content.length : 0
     }
   }
 
@@ -424,7 +427,8 @@ export async function calculateContextStats(
   for (const item of contextItems) {
     if (item.type === 'File') {
       fileCount++
-      const filePath = (item as any).uri
+      const fileItem = item as { uri?: string }
+      const filePath = fileItem.uri
       if (filePath) {
         // 复用 fileContentCache，避免重复读取
         const content = fileContentCache.get(filePath)

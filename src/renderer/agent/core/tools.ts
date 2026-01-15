@@ -105,7 +105,8 @@ async function saveFileSnapshots(
 function needsApproval(toolName: string): boolean {
   const { agentConfig } = useStore.getState()
   // 检查 autoApprove 设置
-  if ((agentConfig as any)?.autoApprove) return false
+  const config = agentConfig as { autoApprove?: boolean } | undefined
+  if (config?.autoApprove) return false
   
   // 使用工具配置中的 approvalType
   const approvalType = getToolApprovalType(toolName)
@@ -210,11 +211,20 @@ async function executeSingle(
       })
       store.addToolResult(toolCall.id, toolCall.name, content, result.success ? 'success' : 'tool_error')
     }
-    EventBus.emit({
-      type: result.success ? 'tool:completed' : 'tool:error',
-      id: toolCall.id,
-      ...(result.success ? { result: content, meta, richContent } : { error: content }),
-    } as any)
+    if (result.success) {
+      EventBus.emit({
+        type: 'tool:completed',
+        id: toolCall.id,
+        result: content,
+        meta,
+      })
+    } else {
+      EventBus.emit({
+        type: 'tool:error',
+        id: toolCall.id,
+        error: content,
+      })
+    }
 
     return { toolCall, result: { content, meta, richContent } }
   } catch (error) {

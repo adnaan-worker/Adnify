@@ -9,7 +9,7 @@
 
 import { logger } from '@utils/Logger'
 import { getAgentConfig } from '../utils/AgentConfig'
-import type { ChatMessage, AssistantMessage, ToolResultMessage, ToolCall } from '../types'
+import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall } from '../types'
 
 // ===== 类型 =====
 
@@ -168,9 +168,9 @@ export function prepareMessages(
       }
       
       // 处理 parts 中的 tool_call
-      let newParts = (assistantMsg as any).parts
+      let newParts = assistantMsg.parts
       if (newParts?.length) {
-        newParts = newParts.map((part: any) => {
+        newParts = newParts.map((part) => {
           if (part.type === 'tool_call' && part.toolCall) {
             const { tc: newTc, truncated } = truncateToolCallArgs(part.toolCall, threshold)
             if (truncated) { truncatedToolCalls++; hasChanges = true }
@@ -285,9 +285,10 @@ export function estimateMessagesTokens(messages: ChatMessage[]): number {
   
   for (const msg of messages) {
     if (msg.role === 'user') {
-      const content = typeof (msg as any).content === 'string' 
-        ? (msg as any).content 
-        : JSON.stringify((msg as any).content || '')
+      const userMsg = msg as UserMessage
+      const content = typeof userMsg.content === 'string' 
+        ? userMsg.content 
+        : JSON.stringify(userMsg.content || '')
       total += estimateTokens(content)
     } else if (msg.role === 'assistant') {
       const assistantMsg = msg as AssistantMessage

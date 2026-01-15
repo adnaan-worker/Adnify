@@ -3,7 +3,7 @@
  */
 
 import { StateCreator } from 'zustand'
-import type { McpServerState, McpTool, McpResource } from '@shared/types/mcp'
+import type { McpServerState, McpServerStatus, McpTool, McpResource } from '@shared/types/mcp'
 
 export interface McpSlice {
   // 状态
@@ -17,7 +17,7 @@ export interface McpSlice {
   setMcpInitialized: (initialized: boolean) => void
   setMcpLoading: (loading: boolean) => void
   setMcpError: (error: string | null) => void
-  updateMcpServerStatus: (serverId: string, status: string, error?: string) => void
+  updateMcpServerStatus: (serverId: string, status: McpServerStatus, error?: string) => void
   updateMcpServerTools: (serverId: string, tools: McpTool[]) => void
   updateMcpServerResources: (serverId: string, resources: McpResource[]) => void
 
@@ -47,7 +47,7 @@ export const createMcpSlice: StateCreator<McpSlice, [], [], McpSlice> = (set, ge
   updateMcpServerStatus: (serverId, status, error) => set((state) => ({
     mcpServers: state.mcpServers.map(server =>
       server.id === serverId
-        ? { ...server, status: status as any, error }
+        ? { ...server, status, error }
         : server
     ),
   })),

@@ -38,6 +38,9 @@ export const createEmptyThread = (): ChatThread => ({
         isStreaming: false,
     },
     contextSummary: null,
+    handoffContext: undefined,
+    pendingObjective: undefined,
+    pendingSteps: undefined,
 })
 
 // ===== Slice 创建器 =====
@@ -54,19 +57,20 @@ export const createThreadSlice: StateCreator<
 
     // 创建线程
     createThread: () => {
-        const currentState = get() as any
-        const currentThreadId = currentState.currentThreadId
+        const state = get()
+        const currentThreadId = state.currentThreadId
         
         // 保存当前线程的压缩状态
-        if (currentThreadId && currentState.threads[currentThreadId]) {
-            const currentSummary = currentState.contextSummary
+        if (currentThreadId && state.threads[currentThreadId]) {
+            const stateWithCompression = state as ThreadSlice & { contextSummary?: unknown }
+            const currentSummary = stateWithCompression.contextSummary
             if (currentSummary) {
-                set(state => ({
+                set(s => ({
                     threads: {
-                        ...state.threads,
+                        ...s.threads,
                         [currentThreadId]: {
-                            ...state.threads[currentThreadId],
-                            contextSummary: currentSummary,
+                            ...s.threads[currentThreadId],
+                            contextSummary: currentSummary as import('../../context/types').StructuredSummary,
                         }
                     }
                 }))
@@ -76,44 +80,46 @@ export const createThreadSlice: StateCreator<
         // 新线程从空白开始
         
         const thread = createEmptyThread()
-        set(state => ({
-            threads: { ...state.threads, [thread.id]: thread },
+        set(s => ({
+            threads: { ...s.threads, [thread.id]: thread },
             currentThreadId: thread.id,
             // 新线程没有压缩状态
-            contextSummary: null,
-            isCompacting: false,
-        } as any))
+            ...(('contextSummary' in s) ? { contextSummary: null, isCompacting: false } : {})
+        }))
         return thread.id
     },
 
     // 切换线程
     switchThread: (threadId) => {
-        const currentState = get() as any
-        const currentThreadId = currentState.currentThreadId
+        const state = get()
+        const currentThreadId = state.currentThreadId
         
-        if (!currentState.threads[threadId]) return
+        if (!state.threads[threadId]) return
         
         // 保存当前线程的压缩状态
-        if (currentThreadId && currentState.threads[currentThreadId]) {
-            const currentSummary = currentState.contextSummary
-            set(state => ({
+        if (currentThreadId && state.threads[currentThreadId]) {
+            const stateWithCompression = state as ThreadSlice & { contextSummary?: unknown }
+            const currentSummary = stateWithCompression.contextSummary
+            set(s => ({
                 threads: {
-                    ...state.threads,
+                    ...s.threads,
                     [currentThreadId]: {
-                        ...state.threads[currentThreadId],
-                        contextSummary: currentSummary || null,
+                        ...s.threads[currentThreadId],
+                        contextSummary: (currentSummary as import('../../context/types').StructuredSummary) || null,
                     }
                 }
             }))
         }
         
         // 切换到目标线程，恢复其压缩状态
-        const targetThread = currentState.threads[threadId]
+        const targetThread = state.threads[threadId]
         set({ 
             currentThreadId: threadId,
-            contextSummary: targetThread.contextSummary || null,
-            isCompacting: false,
-        } as any)
+            ...(('contextSummary' in state) ? { 
+                contextSummary: targetThread.contextSummary || null,
+                isCompacting: false 
+            } : {})
+        })
     },
 
     // 删除线程
