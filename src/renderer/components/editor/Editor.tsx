@@ -303,7 +303,7 @@ export default function Editor() {
       )}
 
       {/* 编辑器主体 */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-0 overflow-hidden">
         {activeFile && (
           <>
             {/* Markdown 工具栏 */}
@@ -355,7 +355,7 @@ export default function Editor() {
                   <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
                 </div>
               </div>
-            ) : activeFile.originalContent ? (
+            ) : activeFile.originalContent !== undefined ? (
               <SafeDiffEditor
                 language={activeLanguage}
                 original={activeFile.originalContent}

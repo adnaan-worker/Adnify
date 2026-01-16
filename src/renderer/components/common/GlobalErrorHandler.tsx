@@ -33,6 +33,11 @@ export function GlobalErrorHandler({ children }: GlobalErrorHandlerProps) {
       if (error?.message?.includes('inmemory://model')) {
         return
       }
+
+      // 忽略 Monaco DiffEditor 的 TextModel disposed 错误
+      if (error?.message?.includes('TextModel got disposed before DiffEditorWidget')) {
+        return
+      }
       
       const appError = AppError.fromError(error)
       
@@ -58,6 +63,11 @@ export function GlobalErrorHandler({ children }: GlobalErrorHandlerProps) {
 
       // 忽略 Monaco Editor 的 inmemory model 错误（DiffEditor 卸载时的已知问题）
       if (event.message?.includes('inmemory://model')) {
+        return
+      }
+
+      // 忽略 Monaco DiffEditor 的 TextModel disposed 错误
+      if (event.message?.includes('TextModel got disposed before DiffEditorWidget')) {
         return
       }
 

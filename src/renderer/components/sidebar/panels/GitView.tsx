@@ -842,22 +842,43 @@ Commit message:`
     }
 
     // 文件点击处理 - 打开 diff
-    const handleFileClick = async (path: string, fileStatus: string, _staged: boolean) => {
+    const handleFileClick = async (path: string, fileStatus: string, staged: boolean) => {
         try {
             const fullPath = `${workspacePath}/${path}`.replace(/\\/g, '/')
-            const content = await api.file.read(fullPath) || ''
+            
+            // 尝试读取文件内容
+            const content = await api.file.read(fullPath)
+            
+            // 如果读取失败，可能是目录或不存在
+            if (content === null) {
+                return
+            }
 
-            // 获取 HEAD 版本内容用于 diff
+            // 根据文件状态决定是否显示 diff
             if (fileStatus === 'modified' || fileStatus === 'renamed') {
+                // 修改的文件：显示 HEAD 版本 vs 当前版本
                 const original = await gitService.getHeadFileContent(fullPath)
-                if (original !== null && original !== content) {
+                if (original !== null) {
                     openFile(fullPath, content, original)
+                    setActiveFile(fullPath)
+                    return
+                }
+            } else if (fileStatus === 'added' || fileStatus === 'untracked') {
+                // 新文件：显示空内容 vs 当前内容
+                openFile(fullPath, content, '')
+                setActiveFile(fullPath)
+                return
+            } else if (fileStatus === 'deleted') {
+                // 删除的文件：显示原内容 vs 空内容
+                const original = await gitService.getHeadFileContent(fullPath)
+                if (original !== null) {
+                    openFile(fullPath, '', original)
                     setActiveFile(fullPath)
                     return
                 }
             }
 
-            // 新文件或无法获取原始内容，直接打开
+            // 其他情况，直接打开文件
             openFile(fullPath, content)
             setActiveFile(fullPath)
         } catch (e) {

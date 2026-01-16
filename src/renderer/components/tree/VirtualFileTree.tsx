@@ -24,6 +24,7 @@ import { Input, ContextMenu, ContextMenuItem } from '../ui'
 import { directoryCacheService } from '@services/directoryCacheService'
 import { keybindingService } from '@services/keybindingService'
 import FileIcon from '../common/FileIcon'
+import { getFileType } from '../editor/FilePreview'
 
 // 每个节点的高度（像素）
 const ITEM_HEIGHT = 28
@@ -320,14 +321,22 @@ export function VirtualFileTree({
         loadChildren(node.item.path)
       }
     } else {
-      const content = await api.file.read(node.item.path)
-      if (content !== null) {
-        openFile(node.item.path, content)
+      // 检查文件类型
+      const fileType = getFileType(node.item.path)
+      
+      if (fileType === 'image' || fileType === 'binary') {
+        // 图片和二进制文件不需要读取内容，直接打开
+        openFile(node.item.path, '')
         setActiveFile(node.item.path)
       } else {
-        // 文件读取失败，可能是二进制文件或权限问题
-        // 尝试用空内容打开，让编辑器显示
-        toast.warning(t('error.fileNotFound', language, { path: node.item.name }))
+        const content = await api.file.read(node.item.path)
+        if (content !== null) {
+          openFile(node.item.path, content)
+          setActiveFile(node.item.path)
+        } else {
+          // 文件读取失败，可能是二进制文件或权限问题
+          toast.warning(t('error.fileNotFound', language, { path: node.item.name }))
+        }
       }
     }
   }, [renamingPath, toggleFolder, expandedFolders, loadChildren, openFile, setActiveFile, language])
@@ -514,10 +523,24 @@ export function VirtualFileTree({
         key={item.path}
         onClick={() => handleNodeClick(node)}
         onContextMenu={(e) => handleContextMenu(e, node)}
+        draggable={!isRenaming}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'copy'
+          e.dataTransfer.setData('application/adnify-file-path', item.path)
+          e.dataTransfer.setData('text/uri-list', `file:///${item.path.replace(/\\/g, '/')}`)
+          e.dataTransfer.setData('text/plain', item.path)
+          // 设置拖动时的图标
+          const dragImage = document.createElement('div')
+          dragImage.textContent = item.name
+          dragImage.style.cssText = 'position: absolute; top: -1000px; padding: 4px 8px; background: var(--surface); border-radius: 4px; font-size: 12px; color: var(--text-primary);'
+          document.body.appendChild(dragImage)
+          e.dataTransfer.setDragImage(dragImage, 0, 0)
+          setTimeout(() => document.body.removeChild(dragImage), 0)
+        }}
         className={`
           group flex items-center gap-2 pr-2 cursor-pointer transition-all duration-150 relative select-none rounded-md mx-2 my-0.5
-          ${isActive 
-            ? 'bg-accent/10 text-text-primary font-bold' 
+          ${isActive
+            ? 'bg-accent/10 text-text-primary font-bold'
             : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
           }
         `}

@@ -159,8 +159,8 @@ class GitService {
                 // 没有上游分支
             }
 
-            // 获取状态 (porcelain v1 格式)
-            const statusResult = await this.exec(['status', '--porcelain=v1'], rootPath)
+            // 获取状态 (porcelain v1 格式, -uall 显示所有未跟踪文件而非目录)
+            const statusResult = await this.exec(['status', '--porcelain=v1', '-uall'], rootPath)
 
             const staged: GitFileChange[] = []
             const unstaged: GitFileChange[] = []
@@ -186,7 +186,10 @@ class GitService {
                     }
 
                     if (indexStatus === '?' && workTreeStatus === '?') {
-                        untracked.push(filePath)
+                        // 过滤掉文件夹（以 / 结尾的路径）
+                        if (!filePath.endsWith('/')) {
+                            untracked.push(filePath)
+                        }
                         continue
                     }
 

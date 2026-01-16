@@ -352,14 +352,64 @@ export default function ChatPanel() {
     e.stopPropagation()
     setIsDragging(false)
 
+    // 图片扩展名
+    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'svg']
+
     // 辅助函数：检测路径是否是文件夹
-    const isDirectory = async (path: string): Promise<boolean> => {
+    const checkIsDirectory = async (path: string): Promise<boolean> => {
       try {
+        // 先尝试读取文件，如果成功则是文件
+        const content = await api.file.read(path)
+        if (content !== null) {
+          return false // 是文件
+        }
+        // 读取失败，尝试读取目录
         const result = await api.file.readDir(path)
-        return Array.isArray(result)
+        return Array.isArray(result) && result.length >= 0
       } catch {
         return false
       }
+    }
+
+    // 辅助函数：检测是否是图片文件
+    const isImageFile = (path: string): boolean => {
+      const ext = path.split('.').pop()?.toLowerCase() || ''
+      return imageExtensions.includes(ext)
+    }
+
+    // 辅助函数：将文件路径转换为图片并添加
+    const addImageFromPath = async (path: string) => {
+      try {
+        const base64 = await api.file.readBinary(path)
+        if (base64) {
+          const ext = path.split('.').pop()?.toLowerCase() || 'png'
+          const mimeTypes: Record<string, string> = {
+            png: 'image/png',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            gif: 'image/gif',
+            webp: 'image/webp',
+            svg: 'image/svg+xml',
+            bmp: 'image/bmp',
+            ico: 'image/x-icon',
+          }
+          const mimeType = mimeTypes[ext] || 'image/png'
+          const dataUrl = `data:${mimeType};base64,${base64}`
+          const fileName = path.split(/[/\\]/).pop() || 'image'
+          const id = crypto.randomUUID()
+          // 直接添加到 images 状态
+          setImages(prev => [...prev, {
+            id,
+            file: new File([], fileName, { type: mimeType }),
+            previewUrl: dataUrl,
+            base64
+          }])
+          return true
+        }
+      } catch (err) {
+        console.error('Failed to load image:', err)
+      }
+      return false
     }
 
     // 获取拖放的文件
@@ -376,12 +426,18 @@ export default function ChatPanel() {
       for (const file of files) {
         const filePath = (file as any).path
         if (filePath) {
+          // 检查是否是图片文件
+          if (isImageFile(filePath)) {
+            await addImageFromPath(filePath)
+            continue
+          }
+
           const exists = contextItems.some((s: ContextItem) =>
             (s.type === 'File' && (s as FileContext).uri === filePath) ||
             (s.type === 'Folder' && (s as any).uri === filePath)
           )
           if (!exists) {
-            const isDir = await isDirectory(filePath)
+            const isDir = await checkIsDirectory(filePath)
             if (isDir) {
               addContextItem({ type: 'Folder', uri: filePath })
             } else {
@@ -423,12 +479,18 @@ export default function ChatPanel() {
     }
 
     if (filePath) {
+      // 检查是否是图片文件
+      if (isImageFile(filePath)) {
+        await addImageFromPath(filePath)
+        return
+      }
+
       const exists = contextItems.some((s: ContextItem) =>
         (s.type === 'File' && (s as FileContext).uri === filePath) ||
         (s.type === 'Folder' && (s as any).uri === filePath)
       )
       if (!exists) {
-        const isDir = await isDirectory(filePath)
+        const isDir = await checkIsDirectory(filePath)
         if (isDir) {
           addContextItem({ type: 'Folder', uri: filePath })
         } else {
@@ -436,7 +498,7 @@ export default function ChatPanel() {
         }
       }
     }
-  }, [addImage, contextItems, addContextItem, language])
+  }, [addImage, contextItems, addContextItem, setImages])
 
   // 输入变化处理
   const handleInputChange = useCallback(async (e: React.ChangeEvent<HTMLTextAreaElement>) => {

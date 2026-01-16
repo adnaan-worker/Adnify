@@ -4,7 +4,7 @@
  */
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -130,15 +130,24 @@ interface ImagePreviewProps {
 
 export function ImagePreview({ path }: ImagePreviewProps) {
     const [error, setError] = useState(false)
-    const [zoom, setZoom] = useState(1)
+    const [zoom, setZoom] = useState<number | 'fit'>('fit') // 默认自适应
     const [imageSrc, setImageSrc] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
+    const containerRef = useRef<HTMLDivElement>(null)
+    const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null)
+    
+    // 拖动状态
+    const [position, setPosition] = useState({ x: 0, y: 0 })
+    const isDraggingRef = useRef(false)
+    const dragStart = useRef({ x: 0, y: 0 })
 
     // 使用 Electron API 读取图片为 base64
     useEffect(() => {
         const loadImage = async () => {
             try {
                 setLoading(true)
+                setZoom('fit') // 重置为自适应
+                setPosition({ x: 0, y: 0 }) // 重置位置
                 // 读取文件为 base64 (已经是 base64 编码)
                 const base64 = await api.file.readBinary(path)
                 if (base64) {
@@ -169,6 +178,60 @@ export function ImagePreview({ path }: ImagePreviewProps) {
         loadImage()
     }, [path])
 
+    // 计算自适应缩放比例
+    const fitScale = useMemo(() => {
+        if (!containerRef.current || !imageSize) return 1
+        const container = containerRef.current
+        const containerWidth = container.clientWidth - 32 // padding
+        const containerHeight = container.clientHeight - 32
+        const scaleX = containerWidth / imageSize.width
+        const scaleY = containerHeight / imageSize.height
+        return Math.min(scaleX, scaleY, 1) // 不超过 100%
+    }, [imageSize])
+
+    const actualZoom = zoom === 'fit' ? fitScale : zoom
+    const displayZoom = zoom === 'fit' ? Math.round(fitScale * 100) : Math.round(zoom * 100)
+
+    // 拖动处理
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        if (zoom === 'fit') return // 自适应模式不需要拖动
+        e.preventDefault()
+        isDraggingRef.current = true
+        dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y }
+    }, [zoom, position])
+
+    const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        if (!isDraggingRef.current) return
+        e.preventDefault()
+        setPosition({
+            x: e.clientX - dragStart.current.x,
+            y: e.clientY - dragStart.current.y
+        })
+    }, [])
+
+    const handleMouseUp = useCallback(() => {
+        isDraggingRef.current = false
+    }, [])
+
+    // 切换缩放时重置位置
+    const handleZoomChange = useCallback((newZoom: number | 'fit') => {
+        setZoom(newZoom)
+        if (newZoom === 'fit') {
+            setPosition({ x: 0, y: 0 })
+        }
+    }, [])
+
+    // 滚轮缩放
+    const handleWheel = useCallback((e: React.WheelEvent) => {
+        e.preventDefault()
+        const delta = e.deltaY > 0 ? -0.1 : 0.1
+        setZoom(z => {
+            const current = z === 'fit' ? fitScale : z
+            const newZoom = Math.max(0.1, Math.min(5, current + delta))
+            return newZoom
+        })
+    }, [fitScale])
+
     if (error) {
         return (
             <div className="h-full flex items-center justify-center bg-background">
@@ -196,16 +259,22 @@ export function ImagePreview({ path }: ImagePreviewProps) {
                 <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setZoom(z => Math.max(0.1, z - 0.25))}
+                    onClick={() => {
+                        const current = zoom === 'fit' ? fitScale : zoom
+                        handleZoomChange(Math.max(0.1, current - 0.25))
+                    }}
                     className="h-7 px-2 text-xs"
                 >
                     −
                 </Button>
-                <span className="text-xs text-text-muted w-16 text-center">{Math.round(zoom * 100)}%</span>
+                <span className="text-xs text-text-muted w-16 text-center">{displayZoom}%</span>
                 <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setZoom(z => Math.min(5, z + 0.25))}
+                    onClick={() => {
+                        const current = zoom === 'fit' ? fitScale : zoom
+                        handleZoomChange(Math.min(5, current + 0.25))
+                    }}
                     className="h-7 px-2 text-xs"
                 >
                     +
@@ -213,21 +282,45 @@ export function ImagePreview({ path }: ImagePreviewProps) {
                 <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setZoom(1)}
-                    className="h-7 px-2 text-xs"
+                    onClick={() => handleZoomChange('fit')}
+                    className={`h-7 px-2 text-xs ${zoom === 'fit' ? 'bg-accent/20 text-accent' : ''}`}
+                >
+                    适应
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleZoomChange(1)}
+                    className={`h-7 px-2 text-xs ${zoom === 1 ? 'bg-accent/20 text-accent' : ''}`}
                 >
                     100%
                 </Button>
             </div>
 
             {/* 图片显示 */}
-            <div className="flex-1 overflow-auto flex items-center justify-center p-4 custom-scrollbar">
+            <div
+                ref={containerRef}
+                className={`flex-1 overflow-hidden flex items-center justify-center p-4 ${zoom !== 'fit' ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onWheel={handleWheel}
+            >
                 {imageSrc && (
                     <img
                         src={imageSrc}
                         alt={getFileName(path)}
-                        className="max-w-none transition-transform"
-                        style={{ transform: `scale(${zoom})` }}
+                        className="max-w-none select-none pointer-events-none"
+                        draggable={false}
+                        style={{
+                            transform: `translate(${position.x}px, ${position.y}px) scale(${actualZoom})`,
+                            transformOrigin: 'center'
+                        }}
+                        onLoad={(e) => {
+                            const img = e.currentTarget
+                            setImageSize({ width: img.naturalWidth, height: img.naturalHeight })
+                        }}
                         onError={() => setError(true)}
                     />
                 )}
