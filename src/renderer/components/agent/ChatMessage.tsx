@@ -8,6 +8,7 @@ import React, { useState, useCallback, useEffect } from 'react'
 import { User, Copy, Check, RefreshCw, Edit2, RotateCcw, ChevronDown } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import aiAvatar from '../../assets/icon/ai-avatar.gif'
@@ -253,8 +254,7 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { conten
   return (
     <div style={{ fontSize: `${fontSize}px` }} className="text-text-primary/90 leading-relaxed tracking-wide overflow-hidden">
       <ReactMarkdown
-        className="prose prose-invert max-w-none break-words overflow-hidden"
-        remarkPlugins={[remarkGfm]}
+        className="prose prose-invert max-w-none"
         components={markdownComponents}
       >
         {cleanedContent}

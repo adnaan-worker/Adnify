@@ -25,7 +25,9 @@
     "test": "vitest --run",
     "test:watch": "vitest",
     "test:coverage": "vitest --run --coverage",
-    "postinstall": "node scripts/download-wasm.js"
+    "postinstall": "node scripts/download-wasm.js",
+    "rebuild": "npx electron-rebuild -f -w node-pty",
+    "rebuild:all": "npx electron-rebuild -f -w"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

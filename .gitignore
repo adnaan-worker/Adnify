@@ -36,3 +36,6 @@ out/
 /.kiro
 /.kiro
 /ui-ux-pro-max-skill-main
+
+# package-lock.json
+package-lock.json

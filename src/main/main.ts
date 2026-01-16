@@ -290,6 +290,35 @@ async function initializeModules(firstWin: BrowserWindow) {
 }
 
 // ==========================================
+// 错误处理（捕获原生模块异常）
+// ==========================================
+
+// 捕获未处理的异常（包括原生模块异常）
+process.on('uncaughtException', (error: Error) => {
+  logger.system.error('[Main] Uncaught Exception:', error)
+  
+  // 如果是 node-pty 相关的错误，提供更友好的提示
+  if (error.message?.includes('Napi::Error') || error.message?.includes('node-pty')) {
+    logger.system.error('[Main] node-pty native module error detected. Please run: npm run rebuild')
+  }
+  
+  // 不退出应用，让用户继续使用其他功能
+  // 只在开发模式下显示错误
+  if (!app.isPackaged) {
+    console.error('Uncaught exception:', error)
+  }
+})
+
+// 捕获未处理的 Promise 拒绝
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  logger.system.error('[Main] Unhandled Rejection:', reason)
+  
+  if (!app.isPackaged) {
+    console.error('Unhandled rejection at:', promise, 'reason:', reason)
+  }
+})
+
+// ==========================================
 // 应用生命周期
 // ==========================================
 

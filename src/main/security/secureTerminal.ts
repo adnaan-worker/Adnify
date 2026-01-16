@@ -414,9 +414,32 @@ export function registerSecureTerminalHandlers(
   // Try to load node-pty
   try {
     pty = require('node-pty')
-    logger.security.info('[Terminal] node-pty loaded successfully')
-  } catch (e) {
+    
+    // 验证 node-pty 是否可用
+    try {
+      // 只验证模块加载，不实际创建进程
+      if (typeof pty.spawn !== 'function') {
+        throw new Error('node-pty.spawn is not a function')
+      }
+      logger.security.info('[Terminal] node-pty loaded and verified successfully')
+    } catch (verifyError: any) {
+      logger.security.error('[Terminal] node-pty verification failed:', verifyError)
+      logger.security.error('[Terminal] This usually means node-pty needs to be rebuilt for Electron.')
+      logger.security.error('[Terminal] Please run: npm run rebuild')
+      pty = null
+    }
+  } catch (e: any) {
+    const errorMsg = e?.message || e?.toString() || 'Unknown error'
     logger.security.warn('[Terminal] node-pty not available, interactive terminal disabled')
+    logger.security.warn('[Terminal] Error:', errorMsg)
+    
+    // 检查是否是原生模块加载错误
+    if (errorMsg.includes('Cannot find module') || errorMsg.includes('module') || errorMsg.includes('native')) {
+      logger.security.error('[Terminal] node-pty native module may need to be rebuilt.')
+      logger.security.error('[Terminal] Please run: npm run rebuild')
+    }
+    
+    pty = null
   }
 
   /**
@@ -493,17 +516,67 @@ export function registerSecureTerminalHandlers(
 
       logger.security.info(`[Terminal] Spawning PTY: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
 
-      const ptyProcess = pty.spawn(shellPath, shellArgs, {
-        name: 'xterm-256color',
-        cols: 80,
-        rows: 24,
-        cwd: targetCwd,
-        env: {
-          ...process.env,
-          TERM: 'xterm-256color',
-          COLORTERM: 'truecolor',
-        },
-      })
+      // 验证 shell 路径存在
+      const fs = require('fs')
+      if (!fs.existsSync(shellPath)) {
+        const error = `Shell not found: ${shellPath}`
+        logger.security.error(`[Terminal] ${error}`)
+        return { success: false, error }
+      }
+
+      // 验证工作目录存在
+      if (!fs.existsSync(targetCwd)) {
+        const error = `Working directory not found: ${targetCwd}`
+        logger.security.error(`[Terminal] ${error}`)
+        return { success: false, error }
+      }
+
+      // 使用 Promise 包装 spawn，以便更好地处理可能的异步错误
+      let ptyProcess: any
+      try {
+        // 使用 setImmediate 确保在下一个事件循环中执行，给错误处理更多机会
+        await new Promise<void>((resolve, reject) => {
+          setImmediate(() => {
+            try {
+              ptyProcess = pty.spawn(shellPath, shellArgs, {
+                name: 'xterm-256color',
+                cols: 80,
+                rows: 24,
+                cwd: targetCwd,
+                env: {
+                  ...process.env,
+                  TERM: 'xterm-256color',
+                  COLORTERM: 'truecolor',
+                },
+              })
+              
+              // 验证 ptyProcess 是否有效
+              if (!ptyProcess) {
+                reject(new Error('PTY process is null after spawn'))
+                return
+              }
+              
+              resolve()
+            } catch (spawnError: any) {
+              reject(spawnError)
+            }
+          })
+        })
+      } catch (spawnError: any) {
+        // 捕获原生模块异常
+        const errorMsg = spawnError?.message || spawnError?.toString() || 'Unknown spawn error'
+        logger.security.error(`[Terminal] PTY spawn failed: ${errorMsg}`, spawnError)
+        
+        // 检查是否是原生模块问题
+        if (errorMsg.includes('Napi::Error') || errorMsg.includes('native') || errorMsg.includes('module') || errorMsg.includes('libc++abi')) {
+          return { 
+            success: false, 
+            error: 'node-pty native module error. The module may need to be rebuilt for this Electron version. Please run: npm run rebuild' 
+          }
+        }
+        
+        return { success: false, error: `Failed to spawn terminal: ${errorMsg}` }
+      }
 
       terminals.set(id, ptyProcess)
 

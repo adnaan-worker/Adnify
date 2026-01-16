@@ -225,8 +225,30 @@ class TerminalManagerClass {
   private async createPty(id: string, cwd: string, shell?: string): Promise<boolean> {
     try {
       const result = await api.terminal.create({ id, cwd, shell })
-      return result?.success === true
-    } catch {
+      if (!result?.success) {
+        const errorMsg = result?.error || 'Unknown error'
+        logger.system.error(`[TerminalManager] Failed to create PTY for ${id}:`, errorMsg)
+        
+        // 显示错误信息到终端
+        const xterm = this.xtermInstances.get(id)
+        if (xterm?.terminal) {
+          xterm.terminal.write(`\r\n\x1b[31m[Error: ${errorMsg}]\x1b[0m\r\n`)
+          if (errorMsg.includes('rebuild')) {
+            xterm.terminal.write(`\x1b[33mPlease run: npm run rebuild\x1b[0m\r\n`)
+          }
+        }
+        return false
+      }
+      return true
+    } catch (error: any) {
+      logger.system.error(`[TerminalManager] Exception creating PTY for ${id}:`, error)
+      
+      // 显示错误信息到终端
+      const xterm = this.xtermInstances.get(id)
+      if (xterm?.terminal) {
+        const errorMsg = error?.message || 'Failed to create terminal'
+        xterm.terminal.write(`\r\n\x1b[31m[Error: ${errorMsg}]\x1b[0m\r\n`)
+      }
       return false
     }
   }
