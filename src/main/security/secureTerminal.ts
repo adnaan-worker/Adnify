@@ -518,7 +518,10 @@ export function registerSecureTerminalHandlers(
 
       // 验证 shell 路径存在
       const fs = require('fs')
-      if (!fs.existsSync(shellPath)) {
+      const pathModule = require('path')
+      
+      // 只验证绝对路径，系统命令（如 powershell.exe, cmd.exe）跳过验证
+      if (pathModule.isAbsolute(shellPath) && !fs.existsSync(shellPath)) {
         const error = `Shell not found: ${shellPath}`
         logger.security.error(`[Terminal] ${error}`)
         return { success: false, error }
