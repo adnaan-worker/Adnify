@@ -208,6 +208,9 @@ export const SETTINGS = {
   onboardingCompleted: {
     default: false as boolean,
   },
+  enableFileLogging: {
+    default: false as boolean,
+  },
 }
 
 // ============================================
@@ -234,6 +237,7 @@ export type SettingsState = {
   mcpConfig: McpConfig
   aiInstructions: string
   onboardingCompleted: boolean
+  enableFileLogging: boolean
 }
 
 // ============================================
@@ -260,6 +264,7 @@ export function getAllDefaults(): SettingsState {
     mcpConfig: SETTINGS.mcpConfig.default,
     aiInstructions: SETTINGS.aiInstructions.default,
     onboardingCompleted: SETTINGS.onboardingCompleted.default,
+    enableFileLogging: SETTINGS.enableFileLogging.default,
   }
 }
 

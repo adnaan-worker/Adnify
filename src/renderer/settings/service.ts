@@ -252,6 +252,7 @@ class SettingsService {
         onboardingCompleted: settings.onboardingCompleted,
         webSearchConfig: settings.webSearchConfig,
         mcpConfig: settings.mcpConfig,
+        enableFileLogging: settings.enableFileLogging,
       }
 
       // 更新缓存
@@ -322,6 +323,9 @@ class SettingsService {
       onboardingCompleted: typeof saved.onboardingCompleted === 'boolean' 
         ? saved.onboardingCompleted 
         : defaults.onboardingCompleted,
+      enableFileLogging: typeof saved.enableFileLogging === 'boolean'
+        ? saved.enableFileLogging
+        : defaults.enableFileLogging,
     }
   }
 
@@ -362,6 +366,7 @@ class SettingsService {
         securitySettings: settings.securitySettings,
         webSearchConfig: settings.webSearchConfig,
         mcpConfig: settings.mcpConfig,
+        enableFileLogging: settings.enableFileLogging,
       }))
     } catch {
       // ignore

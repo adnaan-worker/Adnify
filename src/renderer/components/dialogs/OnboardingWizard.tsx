@@ -97,6 +97,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
       webSearchConfig: defaultWebSearchConfig,
       mcpConfig: defaultMcpConfig,
       promptTemplateId: 'default',
+      enableFileLogging: false,
     })
 
     setIsExiting(true)

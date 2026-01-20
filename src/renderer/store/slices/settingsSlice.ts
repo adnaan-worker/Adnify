@@ -155,6 +155,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
         mcpConfig: state.mcpConfig,
         aiInstructions: state.aiInstructions,
         onboardingCompleted: state.onboardingCompleted,
+        enableFileLogging: state.enableFileLogging,
       })
       logger.settings.info('[Settings] Saved')
     } catch (e) {

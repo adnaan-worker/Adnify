@@ -66,6 +66,8 @@ function createGroupedAPI() {
       setConfigPath: (path: string) => raw.setConfigPath(path),
       getWhitelist: () => raw.getWhitelist(),
       resetWhitelist: () => raw.resetWhitelist(),
+      getUserDataPath: () => raw.getUserDataPath(),
+      getRecentLogs: () => raw.getRecentLogs(),
       onChanged: (callback: Parameters<typeof raw.onSettingsChanged>[0]) => raw.onSettingsChanged(callback),
     },
 

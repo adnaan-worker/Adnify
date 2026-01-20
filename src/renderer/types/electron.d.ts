@@ -244,7 +244,8 @@ export interface ElectronAPI {
   onSettingsChanged: (callback: (event: { key: string; value: unknown }) => void) => () => void
   getWhitelist: () => Promise<{ shell: string[]; git: string[] }>
   resetWhitelist: () => Promise<{ shell: string[]; git: string[] }>
-
+  getUserDataPath: () => Promise<string>
+  getRecentLogs: () => Promise<string>
   // LLM
   sendMessage: (params: LLMSendMessageParams) => Promise<void>
   compactContext: (params: LLMSendMessageParams) => Promise<{ content: string; error?: string }>

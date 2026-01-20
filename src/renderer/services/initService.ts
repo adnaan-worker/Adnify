@@ -244,6 +244,11 @@ export function registerSettingsSync(): () => void {
           store.setTheme(value)
         }
         break
+      case 'enableFileLogging':
+        if (typeof value === 'boolean') {
+          store.set('enableFileLogging', value)
+        }
+        break
     }
   })
 }

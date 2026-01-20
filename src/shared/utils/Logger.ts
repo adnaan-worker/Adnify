@@ -256,6 +256,10 @@ class LoggerClass {
   enableFileLogging(logFilePath: string): void {
     this.config.fileLogging = true
     this.config.logFilePath = logFilePath
+    // 文件日志默认只记录 warn 和 error，避免文件过大
+    if (this.config.minLevel === 'debug' || this.config.minLevel === 'info') {
+      this.config.minLevel = 'warn'
+    }
   }
 
   /**

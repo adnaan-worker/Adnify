@@ -331,10 +331,30 @@ app.whenReady().then(async () => {
   // 1. 初始化 Store（必须在模块加载前完成）
   await initStores()
 
-  // 2. 创建窗口
+  // 2. 检查是否启用文件日志
+  const appSettings = mainStore.get('app-settings') as any
+  const enableFileLogging = appSettings?.enableFileLogging ?? false
+  logger.system.info('[Main] File logging setting loaded:', { enableFileLogging, type: typeof enableFileLogging })
+  
+  if (enableFileLogging) {
+    const { getUserConfigDir } = await import('./services/configPath')
+    const logPath = path.join(getUserConfigDir(), 'logs', 'main.log')
+    logger.enableFileLogging(logPath)
+    logger.system.info('[Main] File logging enabled', {
+      logPath,
+      version: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+      isPackaged: app.isPackaged,
+    })
+  } else {
+    logger.system.info('[Main] File logging is disabled')
+  }
+
+  // 3. 创建窗口
   const firstWin = createWindow()
 
-  // 3. 后台加载模块（不阻塞窗口显示）
+  // 4. 后台加载模块（不阻塞窗口显示）
   initializeModules(firstWin).catch(err => {
     logger.system.error('[Main] Module initialization failed:', err)
   })

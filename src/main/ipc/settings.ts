@@ -131,4 +131,29 @@ export function registerSettingsHandlers(
   ipcMain.handle('workspace:restore:legacy', () => {
     return mainStore.get('lastWorkspacePath')
   })
+
+  // 获取用户数据路径
+  ipcMain.handle('settings:getUserDataPath', () => {
+    return getUserConfigDir()
+  })
+
+  // 获取最近的日志
+  ipcMain.handle('settings:getRecentLogs', async () => {
+    try {
+      const path = require('path')
+      const logPath = path.join(getUserConfigDir(), 'logs', 'main.log')
+      
+      if (fs.existsSync(logPath)) {
+        const content = fs.readFileSync(logPath, 'utf-8')
+        // 返回最后 10000 行或 1MB 的内容
+        const lines = content.split('\n')
+        const recentLines = lines.slice(-10000)
+        return recentLines.join('\n')
+      }
+      return ''
+    } catch (err) {
+      logger.ipc.error('[Settings] Failed to read logs:', err)
+      return ''
+    }
+  })
 }

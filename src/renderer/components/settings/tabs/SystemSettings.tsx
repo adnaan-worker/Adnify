@@ -5,7 +5,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useState, useEffect, useRef } from 'react'
-import { HardDrive, AlertTriangle, Monitor, Download, Upload } from 'lucide-react'
+import { HardDrive, AlertTriangle, Monitor, Download, Upload, FileText, ExternalLink } from 'lucide-react'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
@@ -13,7 +13,7 @@ import { useStore } from '@store'
 import { downloadSettings, importSettings, settingsService } from '@renderer/settings'
 import { Agent } from '@/renderer/agent'
 import { memoryService } from '@/renderer/agent/services/memoryService'
-import type { ProviderModelConfig } from '@shared/config/settings'
+import type { ProviderModelConfig, SettingsState } from '@shared/config/settings'
 
 interface SystemSettingsProps {
     language: Language
@@ -31,12 +31,52 @@ function DataPathDisplay() {
 export function SystemSettings({ language }: SystemSettingsProps) {
     const [isClearing, setIsClearing] = useState(false)
     const [includeApiKeys, setIncludeApiKeys] = useState(false)
+    const [logPath, setLogPath] = useState('')
     const fileInputRef = useRef<HTMLInputElement>(null)
     const store = useStore()
+    
+    // 从 store 中获取 enableFileLogging
+    const enableFileLogging = store.enableFileLogging
 
-    // 构建当前设置对象
-    const getCurrentSettings = () => {
-        return settingsService.getCache() || {
+    // 获取日志文件路径
+    useEffect(() => {
+        const getLogPath = async () => {
+            try {
+                const userDataPath = await api.settings.getUserDataPath()
+                if (userDataPath) {
+                    setLogPath(`${userDataPath}/logs/main.log`)
+                }
+            } catch (err) {
+                logger.settings.error('Failed to get log path:', err)
+            }
+        }
+        getLogPath()
+    }, [])
+
+    const handleToggleFileLogging = async (enabled: boolean) => {
+        try {
+            // 使用 store 的统一 API
+            store.set('enableFileLogging', enabled)
+            await store.save()
+            
+            if (enabled) {
+                toast.success(language === 'zh' ? '文件日志已启用，重启后生效' : 'File logging enabled, restart required')
+            } else {
+                toast.success(language === 'zh' ? '文件日志已禁用，重启后生效' : 'File logging disabled, restart required')
+            }
+        } catch (err) {
+            logger.settings.error('Failed to toggle file logging:', err)
+            toast.error(language === 'zh' ? '设置失败' : 'Failed to update setting')
+        }
+    }
+
+    // 构建当前设置对象（直接从 settingsService 缓存获取）
+    const getCurrentSettings = (): SettingsState => {
+        const cached = settingsService.getCache()
+        if (cached) return cached
+        
+        // 如果缓存不存在，从 store 构建
+        return {
             llmConfig: store.llmConfig,
             language: store.language,
             autoApprove: store.autoApprove,
@@ -49,6 +89,7 @@ export function SystemSettings({ language }: SystemSettingsProps) {
             mcpConfig: store.mcpConfig,
             aiInstructions: store.aiInstructions,
             onboardingCompleted: store.onboardingCompleted,
+            enableFileLogging: store.enableFileLogging,
         }
     }
 
@@ -152,17 +193,45 @@ export function SystemSettings({ language }: SystemSettingsProps) {
             variant: 'danger',
         })
         if (confirmed) {
-            await api.settings.set('llmConfig', undefined)
-            await api.settings.set('editorConfig', undefined)
-            await api.settings.set('autoApprove', undefined)
-            await api.settings.set('providerConfigs', undefined)
-            await api.settings.set('promptTemplateId', undefined)
-            await api.settings.set('aiInstructions', undefined)
-            await api.settings.set('currentTheme', undefined)
+            // 清除所有持久化数据
             await api.settings.set('app-settings', undefined)
+            await api.settings.set('editorConfig', undefined)
             await api.settings.set('securitySettings', undefined)
+            await api.settings.set('currentTheme', undefined)
             localStorage.clear()
             window.location.reload()
+        }
+    }
+
+    const handleOpenLogFile = async () => {
+        try {
+            if (logPath) {
+                await api.file.showInFolder(logPath)
+            }
+        } catch (err) {
+            logger.settings.error('Failed to open log file:', err)
+            toast.error(language === 'zh' ? '打开日志文件失败' : 'Failed to open log file')
+        }
+    }
+
+    const handleExportLogs = async () => {
+        try {
+            const logs = await api.settings.getRecentLogs()
+            if (logs) {
+                const blob = new Blob([logs], { type: 'text/plain' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `adnify-logs-${new Date().toISOString().slice(0, 10)}.log`
+                a.click()
+                URL.revokeObjectURL(url)
+                toast.success(language === 'zh' ? '日志已导出' : 'Logs exported')
+            } else {
+                toast.error(language === 'zh' ? '没有可导出的日志' : 'No logs to export')
+            }
+        } catch (err) {
+            logger.settings.error('Failed to export logs:', err)
+            toast.error(language === 'zh' ? '导出日志失败' : 'Failed to export logs')
         }
     }
 
@@ -235,6 +304,97 @@ export function SystemSettings({ language }: SystemSettingsProps) {
                         <Button variant="danger" size="sm" onClick={handleReset} className="rounded-xl px-6">
                             {language === 'zh' ? '重置' : 'Reset'}
                         </Button>
+                    </div>
+                </div>
+            </section>
+
+            {/* 日志管理 */}
+            <section>
+                <div className="flex items-center gap-2 mb-5 ml-1">
+                    <FileText className="w-4 h-4 text-accent" />
+                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                        {language === 'zh' ? '日志管理' : 'Log Management'}
+                    </h4>
+                </div>
+                <div className="space-y-4">
+                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-sm font-bold text-text-primary">
+                                    {language === 'zh' ? '启用文件日志' : 'Enable File Logging'}
+                                </div>
+                                <div className="text-xs text-text-muted mt-1 opacity-70">
+                                    {language === 'zh' 
+                                        ? '将应用日志保存到文件，用于调试和问题排查' 
+                                        : 'Save application logs to file for debugging and troubleshooting'}
+                                </div>
+                            </div>
+                            <Switch 
+                                checked={enableFileLogging} 
+                                onChange={(e) => handleToggleFileLogging(e.target.checked)}
+                            />
+                        </div>
+
+                        {enableFileLogging && (
+                            <>
+                                <div>
+                                    <div className="text-sm font-bold text-text-primary mb-3">
+                                        {language === 'zh' ? '日志文件位置' : 'Log File Location'}
+                                    </div>
+                                    {logPath && (
+                                        <div className="flex items-center gap-3 p-4 bg-background/50 rounded-xl border border-border shadow-inner">
+                                            <div className="p-1.5 bg-white/5 rounded-lg">
+                                                <FileText className="w-4 h-4 text-text-muted" />
+                                            </div>
+                                            <div className="text-xs text-text-secondary font-mono break-all opacity-90 flex-1">
+                                                {logPath}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <Button 
+                                        variant="secondary" 
+                                        size="sm" 
+                                        onClick={handleOpenLogFile}
+                                        className="rounded-xl px-4 flex-1"
+                                    >
+                                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                                        {language === 'zh' ? '打开日志文件' : 'Open Log File'}
+                                    </Button>
+                                    <Button 
+                                        variant="secondary" 
+                                        size="sm" 
+                                        onClick={handleExportLogs}
+                                        className="rounded-xl px-4 flex-1"
+                                    >
+                                        <Download className="w-3.5 h-3.5 mr-1.5" />
+                                        {language === 'zh' ? '导出日志' : 'Export Logs'}
+                                    </Button>
+                                </div>
+
+                                <div className="flex items-start gap-2 text-[10px] font-medium text-blue-500 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20">
+                                    <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                        {language === 'zh' 
+                                            ? '日志文件会自动轮转，最多保留 5 个文件（每个最大 10MB）。生产环境默认只记录警告和错误。' 
+                                            : 'Log files rotate automatically, keeping up to 5 files (10MB each). Production mode logs warnings and errors only.'}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {!enableFileLogging && (
+                            <div className="flex items-start gap-2 text-[10px] font-medium text-text-muted bg-white/5 px-3 py-2 rounded-lg border border-border">
+                                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                                <div>
+                                    {language === 'zh' 
+                                        ? '文件日志已禁用。启用后可以查看详细的应用运行日志，包括 LSP 安装、错误信息等。' 
+                                        : 'File logging is disabled. Enable it to view detailed application logs including LSP installation, errors, etc.'}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </section>
