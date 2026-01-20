@@ -202,32 +202,31 @@ export default function SettingsModal() {
     ]
 
     return (
-        <Modal isOpen={true} onClose={() => setShowSettings(false)} title="" size="5xl" noPadding className="overflow-hidden bg-background border border-border/50 shadow-2xl">
+        <Modal isOpen={true} onClose={() => setShowSettings(false)} title="" size="5xl" noPadding className="overflow-hidden bg-background/80 backdrop-blur-2xl border border-border/50 shadow-2xl shadow-black/20 rounded-3xl">
             <div className="flex h-[75vh] max-h-[800px]">
-                {/* Sidebar */}
-                <div className="w-64 bg-surface/5 backdrop-blur-xl border-r border-border flex flex-col pt-6 pb-4">
+                {/* Sidebar - macOS Style */}
+                <div className="w-64 bg-surface/30 backdrop-blur-xl border-r border-border/50 flex flex-col pt-8 pb-6">
                     <div className="px-6 mb-6">
-                        <h2 className="text-lg font-semibold text-text-primary tracking-tight flex items-center gap-2">
-                            <Settings2 className="w-5 h-5 text-accent" />
+                        <h2 className="text-xl font-bold text-text-primary tracking-tight flex items-center gap-2.5">
+                            <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20">
+                                <Settings2 className="w-5 h-5 text-accent" />
+                            </div>
                             {language === 'zh' ? '设置' : 'Settings'}
                         </h2>
                     </div>
                     
-                    <nav className="flex-1 px-3 space-y-1 overflow-y-auto no-scrollbar">
+                    <nav className="flex-1 px-4 space-y-1 overflow-y-auto no-scrollbar">
                         {tabs.map(tab => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group ${
+                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group ${
                                     activeTab === tab.id
-                                    ? 'bg-accent/10 text-accent'
-                                    : 'text-text-secondary hover:bg-surface/50 hover:text-text-primary'
+                                    ? 'bg-accent text-white shadow-md shadow-accent/20'
+                                    : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
                                 }`}
                             >
-                                {activeTab === tab.id && (
-                                    <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-accent rounded-r-full shadow-[0_0_8px_rgba(var(--accent),0.6)]" />
-                                )}
-                                <span className={`transition-colors duration-200 ${activeTab === tab.id ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>
+                                <span className={`transition-colors duration-200 ${activeTab === tab.id ? 'text-white' : 'text-text-muted group-hover:text-text-primary'}`}>
                                     {tab.icon}
                                 </span>
                                 <span>{tab.label}</span>
@@ -235,33 +234,34 @@ export default function SettingsModal() {
                         ))}
                     </nav>
 
-                    <div className="mt-auto px-4 pt-4 border-t border-border/50 space-y-3">
-                        <div className="flex items-center gap-2 px-1 text-text-muted">
+                    <div className="mt-auto px-6 pt-6 border-t border-border/50 space-y-3">
+                        <div className="flex items-center gap-2 px-1 text-text-muted opacity-80">
                             <Globe className="w-3.5 h-3.5" />
-                            <span className="text-xs font-medium uppercase tracking-wider">{language === 'zh' ? '语言' : 'Language'}</span>
+                            <span className="text-xs font-bold uppercase tracking-widest">{language === 'zh' ? '语言' : 'Language'}</span>
                         </div>
                         <Select
                             value={localLanguage}
                             onChange={(value) => setLocalLanguage(value as 'en' | 'zh')}
                             options={LANGUAGES.map(l => ({ value: l.id, label: l.name }))}
-                            className="w-full text-xs bg-surface border-border/50 hover:border-accent/50 transition-colors"
+                            className="w-full text-xs bg-surface/50 border-border/50 hover:border-accent/50 transition-colors"
                         />
                     </div>
                 </div>
 
                 {/* Main Content */}
-                <div className="flex-1 flex flex-col min-w-0 bg-background relative">
-                    <div className="flex-1 overflow-y-auto px-8 py-8 custom-scrollbar scroll-smooth pb-24">
-                        <div className="mb-8 pb-4 border-b border-border/50">
-                            <h3 className="text-2xl font-bold text-text-primary">
+                <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
+                    <div className="flex-1 overflow-y-auto px-10 py-10 custom-scrollbar scroll-smooth pb-28">
+                        <div className="mb-8 pb-6 border-b border-border/40">
+                            <h3 className="text-3xl font-bold text-text-primary tracking-tight">
                                 {tabs.find(t => t.id === activeTab)?.label}
                             </h3>
-                            <p className="text-sm text-text-muted mt-1">
+                            <p className="text-sm text-text-muted mt-2 opacity-80 font-medium">
                                 {language === 'zh' ? '管理您的应用程序偏好设置' : 'Manage your application preferences and configurations'}
                             </p>
                         </div>
 
-                        <div className="animate-fade-in">
+                        <div className="animate-fade-in space-y-8">
+                            {/* Render active tab content */}
                             {activeTab === 'provider' && (
                                 <ProviderSettings
                                     localConfig={localConfig}
@@ -310,26 +310,34 @@ export default function SettingsModal() {
                         </div>
                     </div>
 
-                    <div className="absolute bottom-0 left-0 right-0 px-8 py-4 border-t border-border/50 bg-background/80 backdrop-blur-xl flex items-center justify-end gap-3 z-10">
-                        <Button variant="ghost" onClick={() => setShowSettings(false)} className="hover:bg-surface text-text-secondary">
-                            {language === 'zh' ? '取消' : 'Cancel'}
-                        </Button>
-                        <Button 
-                            variant={saved ? 'success' : 'primary'} 
-                            onClick={handleSave}
-                            className={`min-w-[120px] shadow-lg transition-all duration-300 ${
-                                saved 
-                                ? 'bg-status-success hover:bg-status-success/90 text-white' 
-                                : 'bg-accent hover:bg-accent-hover text-white shadow-accent/20'
-                            }`}
-                        >
-                            {saved ? (
-                                <span className="flex items-center gap-2 justify-center">
-                                    <Check className="w-4 h-4" />
-                                    {language === 'zh' ? '已保存' : 'Saved'}
-                                </span>
-                            ) : (language === 'zh' ? '保存更改' : 'Save Changes')}
-                        </Button>
+                    {/* Floating Action Bar */}
+                    <div className="absolute bottom-6 right-8 left-8 p-4 rounded-2xl bg-surface/80 backdrop-blur-xl border border-border/50 shadow-2xl flex items-center justify-between z-10 transition-all duration-300">
+                        <span className="text-xs text-text-muted ml-2 font-medium">
+                            {saved ? (language === 'zh' ? '所有更改已保存' : 'All changes saved') : (language === 'zh' ? '有未保存的更改' : 'Unsaved changes')}
+                        </span>
+                        <div className="flex items-center gap-3">
+                            <Button variant="ghost" onClick={() => setShowSettings(false)} className="hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary rounded-lg">
+                                {language === 'zh' ? '取消' : 'Cancel'}
+                            </Button>
+                            <Button 
+                                variant={saved ? 'success' : 'primary'} 
+                                onClick={handleSave}
+                                className={`min-w-[140px] shadow-lg transition-all duration-300 rounded-xl ${
+                                    saved 
+                                    ? 'bg-status-success hover:bg-status-success/90 text-white' 
+                                    : 'bg-accent hover:bg-accent-hover text-white shadow-accent/20'
+                                }`}
+                            >
+                                {saved ? (
+                                    <span className="flex items-center gap-2 justify-center font-bold">
+                                        <Check className="w-4 h-4" />
+                                        {language === 'zh' ? '已保存' : 'Saved'}
+                                    </span>
+                                ) : (
+                                    <span className="font-bold">{language === 'zh' ? '保存更改' : 'Save Changes'}</span>
+                                )}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>

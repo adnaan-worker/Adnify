@@ -70,7 +70,7 @@ export function Tooltip({ content, children, side = 'top', delay = 300, classNam
     const tooltip = isVisible ? (
         <div
             ref={tooltipRef}
-            className="fixed z-[9999] px-3 py-1.5 text-xs font-medium text-text-primary bg-surface-active/90 backdrop-blur-md border border-border rounded-lg shadow-xl animate-fade-in pointer-events-none whitespace-nowrap tracking-wide select-none"
+            className="fixed z-[9999] px-2.5 py-1 text-[11px] font-medium text-text-primary bg-surface-active/90 backdrop-blur-md border border-border rounded-lg shadow-xl animate-scale-in pointer-events-none whitespace-nowrap tracking-wide select-none origin-center"
             style={{ top: position.top, left: position.left }}
         >
             {content}

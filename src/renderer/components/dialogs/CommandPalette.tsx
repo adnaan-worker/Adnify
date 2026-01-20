@@ -48,31 +48,31 @@ const CommandItem = memo(function CommandItem({
     <div
       onClick={onSelect}
       className={`
-        flex items-center gap-3 px-3 py-3 mx-2 rounded-lg cursor-pointer transition-all duration-200 group relative overflow-hidden
+        relative flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 mx-2 rounded-lg group
         ${isSelected
-          ? 'bg-accent/10 text-accent-foreground shadow-[inset_2px_0_0_0_rgba(var(--accent))]'
-          : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'}
+          ? 'bg-surface-active text-text-primary'
+          : 'text-text-secondary hover:bg-surface-hover'}
       `}
     >
-      {/* Active Glow Background */}
+      {/* Active Indicator */}
       {isSelected && (
-        <div className="absolute inset-0 bg-gradient-to-r from-accent/10 to-transparent opacity-50 pointer-events-none" />
+        <div className="absolute left-0 top-2 bottom-2 w-1 bg-accent rounded-r-full shadow-[0_0_8px_rgba(var(--accent),0.6)]" />
       )}
 
-      <div className={`p-1.5 rounded-md transition-colors relative z-10 ${isSelected ? 'bg-accent/20 text-accent shadow-[0_0_10px_rgba(var(--accent)/0.3)]' : 'bg-surface text-text-muted group-hover:text-text-primary'}`}>
+      <div className={`p-1.5 rounded-md transition-colors flex-shrink-0 ${isSelected ? 'bg-accent/20 text-accent' : 'bg-surface/50 text-text-muted group-hover:text-text-primary'}`}>
         <Icon className="w-4 h-4" />
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col justify-center relative z-10">
-        <div className={`text-sm font-medium transition-colors ${isSelected ? 'text-text-primary' : ''}`}>{command.label}</div>
+      <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <div className={`text-sm font-medium transition-colors leading-none mb-1 ${isSelected ? 'text-text-primary' : ''}`}>{command.label}</div>
         {command.description && (
-          <div className={`text-xs truncate transition-opacity ${isSelected ? 'text-text-secondary opacity-90' : 'text-text-muted opacity-60'}`}>{command.description}</div>
+          <div className={`text-[10px] truncate transition-opacity leading-none ${isSelected ? 'text-text-secondary opacity-90' : 'text-text-muted opacity-60'}`}>{command.description}</div>
         )}
       </div>
 
       {command.shortcut && (
         <kbd className={`
-          px-2 py-0.5 text-[10px] font-mono rounded border relative z-10 transition-colors
+          px-2 py-0.5 text-[10px] font-mono rounded border relative z-10 transition-colors flex-shrink-0
           ${isSelected
             ? 'bg-background/50 border-accent/30 text-accent'
             : 'bg-surface border-border text-text-muted'}
@@ -80,13 +80,18 @@ const CommandItem = memo(function CommandItem({
           {command.shortcut}
         </kbd>
       )}
-
-      {isSelected && <ArrowRight className="w-3 h-3 text-accent animate-pulse ml-2 relative z-10" />}
+      
+      {isSelected && !command.shortcut && (
+        <div className="flex-shrink-0 text-[10px] font-mono text-text-muted bg-surface px-1.5 py-0.5 rounded border border-border opacity-0 group-hover:opacity-100 transition-opacity animate-fade-in">
+          ⏎ Run
+        </div>
+      )}
     </div>
   )
 })
 
 export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: CommandPaletteProps) {
+  // ... (hooks and state logic remains the same)
   const {
     setShowSettings,
     setTerminalVisible,
@@ -377,21 +382,23 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[15vh] z-[9999] animate-fade-in"
+      className="fixed inset-0 z-[9999] flex items-start justify-center pt-[15vh] animate-fade-in"
       onClick={onClose}
     >
+      <div className="fixed inset-0 bg-background/20 backdrop-blur-sm transition-opacity" />
+      
       <div
         className="
-            w-[640px] max-h-[60vh] flex flex-col
+            relative w-[640px] max-h-[60vh] flex flex-col
             bg-background/80 backdrop-blur-2xl 
-            border border-border rounded-2xl shadow-2xl shadow-black/50
-            overflow-hidden animate-scale-in ring-1 ring-white/5
+            border border-border/50 rounded-2xl shadow-2xl shadow-black/40
+            overflow-hidden animate-scale-in ring-1 ring-white/5 origin-top
         "
         onClick={e => e.stopPropagation()}
       >
         {/* Search Input */}
-        <div className="flex items-center gap-4 px-6 py-5 border-b border-border bg-white/5 relative">
-          <Search className="w-5 h-5 text-accent drop-shadow-[0_0_8px_rgba(var(--accent)/0.5)]" />
+        <div className="flex items-center gap-4 px-6 py-5 border-b border-border/40 shrink-0">
+          <Search className="w-6 h-6 text-text-muted" strokeWidth={2} />
           <input
             ref={inputRef}
             type="text"
@@ -399,7 +406,8 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('typeCommandOrSearch', language)}
-            className="flex-1 bg-transparent text-lg text-text-primary placeholder-text-muted/50 focus:outline-none font-medium tracking-wide"
+            className="flex-1 bg-transparent text-xl font-medium text-text-primary placeholder:text-text-muted/40 focus:outline-none"
+            spellCheck={false}
           />
           {query && (
             <button
@@ -409,16 +417,13 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
               <X className="w-4 h-4 text-text-muted" />
             </button>
           )}
-
-          {/* Subtle glow line at bottom of header */}
-          <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-accent/20 to-transparent" />
         </div>
 
         {/* Command List */}
-        <div ref={listRef} className="flex-1 overflow-y-auto py-3 custom-scrollbar">
+        <div ref={listRef} className="flex-1 overflow-y-auto py-3 custom-scrollbar scroll-p-2">
           {Object.entries(groupedCommands).map(([category, cmds]) => (
-            <div key={category} className="mb-3">
-              <div className="px-6 py-2 text-[10px] font-bold uppercase tracking-widest text-text-muted/50 sticky top-0 bg-background/90 backdrop-blur-md z-10 border-b border-border mb-1">
+            <div key={category} className="mb-2">
+              <div className="px-6 py-1.5 text-[10px] font-bold uppercase tracking-widest text-text-muted/50 sticky top-0 bg-background/95 backdrop-blur-md z-10 mb-1">
                 {category}
               </div>
               <div className="space-y-0.5 px-2">
@@ -452,10 +457,19 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
         </div>
 
         {/* Footer Hint */}
-        <div className="px-6 py-3 bg-background/40 border-t border-border text-[10px] text-text-muted flex justify-between items-center backdrop-blur-md">
+        <div className="px-6 py-2.5 bg-surface/30 border-t border-border/40 text-[10px] font-medium text-text-muted/60 flex justify-between items-center backdrop-blur-md shrink-0">
           <div className="flex gap-4">
-            <span className="flex items-center gap-1.5"><kbd className="font-mono bg-white/5 border border-border px-1.5 py-0.5 rounded text-text-secondary shadow-sm">↑↓</kbd> to navigate</span>
-            <span className="flex items-center gap-1.5"><kbd className="font-mono bg-white/5 border border-border px-1.5 py-0.5 rounded text-text-secondary shadow-sm">Enter</kbd> to select</span>
+            <span className="flex items-center gap-1.5">
+              <div className="flex gap-0.5">
+                <kbd className="font-sans bg-surface/80 border border-border/50 px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↑</kbd>
+                <kbd className="font-sans bg-surface/80 border border-border/50 px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↓</kbd>
+              </div>
+              <span>to navigate</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <kbd className="font-sans bg-surface/80 border border-border/50 px-1.5 py-0.5 rounded shadow-sm">↵</kbd>
+              <span>to select</span>
+            </span>
           </div>
           <div className="flex items-center gap-2 opacity-50">
             <Sparkles className="w-3 h-3 text-accent" />

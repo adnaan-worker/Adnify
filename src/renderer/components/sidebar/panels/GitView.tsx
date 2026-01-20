@@ -68,15 +68,15 @@ function FileItem({
 
     return (
         <div
-            className="group flex items-center px-3 py-1 hover:bg-surface-hover cursor-pointer transition-colors"
+            className="group flex items-center px-2 py-1.5 mx-2 my-0.5 rounded-md hover:bg-surface-hover cursor-pointer transition-colors border border-transparent hover:border-border-subtle"
             onClick={onClick}
         >
             <FileStatusBadge status={status} />
             <div className="flex-1 min-w-0 ml-2">
                 <span className="text-xs text-text-primary truncate block">{fileName}</span>
-                {dirPath && <span className="text-[10px] text-text-muted truncate block">{dirPath}</span>}
+                {dirPath && <span className="text-[10px] text-text-muted truncate block opacity-60">{dirPath}</span>}
             </div>
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {staged ? (
                     <button
                         onClick={(e) => { e.stopPropagation(); onUnstage() }}
@@ -974,26 +974,25 @@ Commit message:`
             )}
 
             {/* Tabs */}
-            <div className="flex border-b border-border-subtle">
-                {(['changes', 'branches', 'stash', 'history'] as GitTab[]).map(tab => (
-                    <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`flex-1 px-2 py-2 text-xs font-medium transition-colors relative ${
-                            activeTab === tab
-                                ? 'text-accent'
-                                : 'text-text-muted hover:text-text-secondary'
-                        }`}
-                    >
-                        {tab === 'changes' && `${tt('git.changes')}${stats.total > 0 ? ` (${stats.total})` : ''}`}
-                        {tab === 'branches' && tt('git.branches')}
-                        {tab === 'stash' && `${tt('git.stash')}${stashList.length > 0 ? ` (${stashList.length})` : ''}`}
-                        {tab === 'history' && tt('git.history')}
-                        {activeTab === tab && (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
-                        )}
-                    </button>
-                ))}
+            <div className="flex p-2 bg-transparent">
+                <div className="flex w-full bg-surface/50 p-1 rounded-lg border border-border-subtle">
+                    {(['changes', 'branches', 'stash', 'history'] as GitTab[]).map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`flex-1 px-2 py-1 text-[10px] font-medium transition-all rounded-md ${
+                                activeTab === tab
+                                    ? 'bg-accent text-white shadow-sm'
+                                    : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
+                            }`}
+                        >
+                            {tab === 'changes' && `${tt('git.changes')}${stats.total > 0 ? ` (${stats.total})` : ''}`}
+                            {tab === 'branches' && tt('git.branches')}
+                            {tab === 'stash' && `${tt('git.stash')}${stashList.length > 0 ? ` (${stashList.length})` : ''}`}
+                            {tab === 'history' && tt('git.history')}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Content */}
@@ -1028,7 +1027,7 @@ Commit message:`
                                     value={commitMessage}
                                     onChange={(e) => setCommitMessage(e.target.value)}
                                     placeholder={tt('git.commitMessage')}
-                                    className="w-full bg-black/20 border border-border-subtle rounded-lg p-2.5 pr-10 text-xs text-text-primary focus:border-accent/50 focus:bg-black/30 focus:outline-none resize-none min-h-[70px] placeholder:text-text-muted/50"
+                                    className="w-full bg-surface border border-border-subtle rounded-xl p-3 pr-10 text-xs text-text-primary focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none resize-none min-h-[80px] placeholder:text-text-muted/50 transition-all"
                                     onKeyDown={(e) => {
                                         if (keybindingService.matches(e, 'git.commit')) handleCommit()
                                     }}

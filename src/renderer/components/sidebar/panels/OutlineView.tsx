@@ -77,16 +77,16 @@ export function OutlineView() {
     switch (kind) {
       case 5: // Class
       case 10: // Enum
-        return <Box className="w-3.5 h-3.5 text-yellow-500" />
+        return <Box className="w-3.5 h-3.5 text-orange-400" />
       case 6: // Method
       case 12: // Function
-        return <Code className="w-3.5 h-3.5 text-purple-500" />
+        return <Code className="w-3.5 h-3.5 text-purple-400" />
       case 8: // Field
       case 13: // Variable
       case 14: // Constant
-        return <Hash className="w-3.5 h-3.5 text-blue-500" />
+        return <Hash className="w-3.5 h-3.5 text-blue-400" />
       case 11: // Interface
-        return <Braces className="w-3.5 h-3.5 text-green-500" />
+        return <Braces className="w-3.5 h-3.5 text-green-400" />
       default:
         return <Code className="w-3.5 h-3.5 text-text-muted" />
     }
@@ -105,11 +105,11 @@ export function OutlineView() {
       <div key={uniqueKey}>
         <div
           onClick={() => handleSymbolClick(symbol)}
-          className="flex items-center gap-1.5 px-2 py-1 cursor-pointer hover:bg-white/5 group transition-colors rounded-md mx-2 my-0.5"
+          className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-surface-hover group transition-colors rounded-md mx-2 my-0.5 border border-transparent hover:border-border-subtle"
           style={{ paddingLeft: `${depth * 12 + 8}px` }}
         >
           {hasChildren ? (
-            <button onClick={(e) => toggleSymbol(symbol.name, e)} className="p-0.5 hover:bg-white/10 rounded text-text-muted hover:text-text-primary">
+            <button onClick={(e) => toggleSymbol(symbol.name, e)} className="p-0.5 hover:bg-surface-active rounded text-text-muted hover:text-text-primary">
               <ChevronRight
                 className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
               />
@@ -119,7 +119,7 @@ export function OutlineView() {
           )}
           {getSymbolIcon(symbol.kind)}
           <span className="text-xs text-text-secondary group-hover:text-text-primary truncate flex-1 transition-colors">{symbol.name}</span>
-          <span className="text-[10px] text-text-muted opacity-0 group-hover:opacity-100 tabular-nums">
+          <span className="text-[10px] text-text-muted opacity-0 group-hover:opacity-100 tabular-nums font-mono">
             {symbol.range?.start?.line !== undefined ? symbol.range.start.line + 1 : ''}
           </span>
         </div>
@@ -133,7 +133,7 @@ export function OutlineView() {
 
   return (
     <div className="flex flex-col h-full bg-transparent">
-      <div className="h-10 px-3 flex items-center justify-between border-b border-border bg-transparent sticky top-0 z-10">
+      <div className="h-10 px-3 flex items-center justify-between border-b border-border bg-background-secondary/95 backdrop-blur-md sticky top-0 z-10">
         <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
           {language === 'zh' ? '大纲' : 'Outline'}
         </span>
@@ -141,13 +141,13 @@ export function OutlineView() {
       </div>
 
       {/* 搜索过滤 */}
-      <div className="px-3 py-2 border-b border-border">
+      <div className="px-3 py-3 border-b border-border/50">
         <input
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder={language === 'zh' ? '过滤符号...' : 'Filter symbols...'}
-          className="w-full bg-surface/20 backdrop-blur-sm border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:border-accent/50 focus:bg-surface/40 focus:outline-none transition-all placeholder:text-text-muted/50"
+          className="w-full bg-surface border border-border-subtle rounded-lg px-2.5 py-1.5 text-xs text-text-primary focus:border-accent/50 focus:ring-1 focus:ring-accent/20 focus:outline-none transition-all placeholder:text-text-muted/50"
         />
       </div>
 

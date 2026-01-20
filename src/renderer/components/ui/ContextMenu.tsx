@@ -90,12 +90,12 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="fixed z-[100] min-w-[200px] p-1.5 bg-background/90 backdrop-blur-xl border border-border rounded-xl shadow-2xl animate-scale-in"
+      className="fixed z-[100] min-w-[220px] p-1.5 bg-surface/80 backdrop-blur-xl border border-border/50 rounded-xl shadow-2xl shadow-black/20 animate-scale-in flex flex-col gap-0.5"
       style={{ left: position.x, top: position.y }}
     >
       {items.map((item, index) => {
         if (item.separator) {
-          return <div key={index} className="my-1 border-t border-border" />
+          return <div key={index} className="my-1 border-t border-border/50 mx-2" />
         }
         
         const Icon = item.icon
@@ -106,19 +106,19 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             onClick={() => handleItemClick(item)}
             disabled={item.disabled}
             className={`
-              w-full px-3 py-2 flex items-center gap-2.5 text-left text-[13px] transition-colors rounded-lg
+              w-full px-2.5 py-1.5 flex items-center gap-2.5 text-left text-[13px] transition-all rounded-lg select-none group
               ${item.disabled 
-                ? 'text-text-muted/50 cursor-not-allowed' 
+                ? 'text-text-muted/40 cursor-not-allowed' 
                 : item.danger
-                  ? 'text-text-secondary hover:bg-status-error/10 hover:text-status-error'
+                  ? 'text-text-secondary hover:bg-red-500/10 hover:text-red-500'
                   : 'text-text-secondary hover:bg-accent/10 hover:text-text-primary'
               }
             `}
           >
-            {Icon && <Icon className="w-4 h-4 flex-shrink-0 opacity-70" />}
-            <span className="flex-1 font-medium">{item.label}</span>
+            {Icon && <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${item.danger ? 'text-red-400/70 group-hover:text-red-500' : 'text-text-muted group-hover:text-text-primary'}`} />}
+            <span className="flex-1 font-medium tracking-tight">{item.label}</span>
             {item.shortcut && (
-              <span className="text-[10px] text-text-muted opacity-60">{item.shortcut}</span>
+              <span className="text-[10px] text-text-muted/60 font-mono tracking-tighter">{item.shortcut}</span>
             )}
           </button>
         )

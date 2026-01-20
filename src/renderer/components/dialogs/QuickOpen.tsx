@@ -5,12 +5,13 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
-import { Search, FileText, X } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 import { useStore } from '@store'
 import { getFileName } from '@shared/utils/pathUtils'
 import { keybindingService } from '@services/keybindingService'
 import { t } from '@renderer/i18n'
 import { Button } from '../ui'
+import FileIcon from '../common/FileIcon'
 
 interface QuickOpenProps {
   onClose: () => void
@@ -98,7 +99,7 @@ const HighlightedText = memo(function HighlightedText({
 
   if (lastIdx < text.length) {
     parts.push(
-      <span key={`text-${lastIdx}`} className="text-text-primary-muted">
+      <span key={`text-${lastIdx}`} className="text-text-primary/70">
         {text.slice(lastIdx)}
       </span>
     )
@@ -129,21 +130,36 @@ const FileMatchItem = memo(function FileMatchItem({
     <div
       onClick={onSelect}
       className={`
-        flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors
-        ${isSelected ? 'bg-accent/20 text-text-primary' : 'hover:bg-surface-hover text-text-secondary'}
+        relative flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 mx-2 rounded-lg group
+        ${isSelected ? 'bg-surface-active text-text-primary' : 'text-text-secondary hover:bg-surface-hover'}
       `}
     >
-      <FileText className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-accent' : 'text-text-muted'}`} />
-      <div className="flex-1 min-w-0">
-        <div className="text-sm truncate">
+      {/* Active Indicator */}
+      {isSelected && (
+        <div className="absolute left-0 top-2 bottom-2 w-1 bg-accent rounded-r-full shadow-[0_0_8px_rgba(var(--accent),0.6)]" />
+      )}
+
+      <div className="flex-shrink-0">
+        <FileIcon filename={fileName} size={18} />
+      </div>
+      
+      <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+        <div className="text-sm font-medium truncate leading-none">
           <HighlightedText text={fileName} matches={fileNameMatches} />
         </div>
         {dirPath && (
-          <div className="text-xs text-text-muted truncate opacity-70">
+          <div className="text-[10px] text-text-muted truncate opacity-60 leading-none">
             {dirPath}
           </div>
         )}
       </div>
+
+      {/* Right Action Hint */}
+      {isSelected && (
+        <div className="flex-shrink-0 text-[10px] font-mono text-text-muted bg-surface px-1.5 py-0.5 rounded border border-border opacity-0 group-hover:opacity-100 transition-opacity animate-fade-in">
+          ⏎ Open
+        </div>
+      )}
     </div>
   )
 })
@@ -279,21 +295,23 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-[15vh] z-50 animate-fade-in"
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] animate-fade-in"
       onClick={onClose}
     >
+      <div className="fixed inset-0 bg-background/20 backdrop-blur-sm transition-opacity" />
+      
       <div
         className="
-            w-[600px] max-h-[60vh] flex flex-col
-            bg-background/90 backdrop-blur-xl 
-            border border-border rounded-2xl shadow-2xl shadow-black/50
-            overflow-hidden animate-slide-up
+            relative w-[640px] max-h-[65vh] flex flex-col
+            bg-background/80 backdrop-blur-2xl 
+            border border-border/50 rounded-2xl shadow-2xl shadow-black/40
+            overflow-hidden animate-scale-in origin-top
         "
         onClick={e => e.stopPropagation()}
       >
-        {/* Search Input */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-          <Search className="w-5 h-5 text-accent" />
+        {/* Search Input - Big & Clean */}
+        <div className="flex items-center gap-4 px-5 py-5 border-b border-border/40 shrink-0">
+          <Search className="w-6 h-6 text-text-muted" strokeWidth={2} />
           <input
             ref={inputRef}
             type="text"
@@ -301,50 +319,67 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('searchFilesPlaceholder', language)}
-            className="flex-1 bg-transparent text-lg text-text-primary placeholder-text-muted focus:outline-none"
+            className="flex-1 bg-transparent text-xl font-medium text-text-primary placeholder:text-text-muted/40 focus:outline-none"
+            spellCheck={false}
           />
           {query && (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setQuery('')}
-              className="rounded-full w-6 h-6 min-h-0 p-0"
+              className="rounded-full w-6 h-6 min-h-0 p-0 text-text-muted hover:text-text-primary"
             >
-              <X className="w-4 h-4 text-text-muted" />
+              <X className="w-4 h-4" />
             </Button>
           )}
         </div>
 
         {/* File List */}
-        <div ref={listRef} className="flex-1 overflow-y-auto py-2 custom-scrollbar">
+        <div ref={listRef} className="flex-1 overflow-y-auto py-2 custom-scrollbar scroll-p-2">
           {isLoading ? (
-            <div className="px-4 py-12 text-center text-text-muted flex flex-col items-center gap-3">
-              <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-              <p>{t('loadingFiles', language)}</p>
+            <div className="px-4 py-16 text-center text-text-muted flex flex-col items-center gap-4">
+              <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs font-medium opacity-70 tracking-wide">{t('loadingFiles', language)}</p>
             </div>
           ) : matches.length === 0 ? (
-            <div className="px-4 py-12 text-center text-text-muted">
-              {query ? t('noFilesFound', language) : t('noFilesInWorkspace', language)}
+            <div className="px-4 py-16 text-center text-text-muted flex flex-col items-center gap-2">
+              <p className="text-sm font-medium">{query ? t('noFilesFound', language) : t('noFilesInWorkspace', language)}</p>
+              {query && <p className="text-xs opacity-50">Try searching for something else</p>}
             </div>
           ) : (
-            matches.map((file, idx) => (
-              <div key={file.path} data-index={idx}>
-                <FileMatchItem
-                  file={file}
-                  isSelected={idx === selectedIndex}
-                  onSelect={() => handleOpenFile(file.path)}
-                />
-              </div>
-            ))
+            <div className="flex flex-col gap-0.5">
+              {matches.map((file, idx) => (
+                <div key={file.path} data-index={idx}>
+                  <FileMatchItem
+                    file={file}
+                    isSelected={idx === selectedIndex}
+                    onSelect={() => handleOpenFile(file.path)}
+                  />
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-2 bg-surface/30 border-t border-border text-[10px] text-text-muted flex justify-between items-center">
-          <span>{t('filesCount', language, { count: String(matches.length) })}</span>
-          <div className="flex items-center gap-3">
-            <span><kbd className="font-mono bg-surface/50 px-1 rounded">↑↓</kbd> {t('navigate', language)}</span>
-            <span><kbd className="font-mono bg-surface/50 px-1 rounded">Enter</kbd> {t('open', language)}</span>
+        <div className="px-5 py-2.5 bg-surface/30 border-t border-border/40 text-[10px] font-medium text-text-muted/60 flex justify-between items-center shrink-0 backdrop-blur-md">
+          <span className="font-mono tracking-tight">{matches.length} matches</span>
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5">
+              <div className="flex gap-0.5">
+                <kbd className="font-sans bg-surface/80 border border-border/50 px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↑</kbd>
+                <kbd className="font-sans bg-surface/80 border border-border/50 px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↓</kbd>
+              </div>
+              <span>to navigate</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <kbd className="font-sans bg-surface/80 border border-border/50 px-1.5 py-0.5 rounded shadow-sm">↵</kbd>
+              <span>to open</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <kbd className="font-sans bg-surface/80 border border-border/50 px-1.5 py-0.5 rounded shadow-sm">esc</kbd>
+              <span>to close</span>
+            </span>
           </div>
         </div>
       </div>

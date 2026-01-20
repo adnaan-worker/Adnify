@@ -61,8 +61,23 @@ const TOAST_CONFIG = {
   }
 }
 
-// 单个 Toast 项
-function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: string) => void }) {
+// 灵动岛风格容器
+function ToastContainer({ toasts, removeToast }: { toasts: ToastMessage[]; removeToast: (id: string) => void }) {
+  // 只关注最新的一条消息
+  const activeToast = toasts[toasts.length - 1]
+
+  return (
+    <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none flex justify-center">
+      <AnimatePresence mode="wait">
+        {activeToast && (
+          <IslandToast key={activeToast.id} toast={activeToast} onDismiss={removeToast} />
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function IslandToast({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: string) => void }) {
   const config = TOAST_CONFIG[toast.type]
   const Icon = config.icon
 
@@ -75,50 +90,53 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 30, scale: 0.8, filter: 'blur(10px)' }}
-      animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-      exit={{ opacity: 0, y: -20, scale: 0.9, transition: { duration: 0.2 } }}
-      transition={{ 
-        type: 'spring', 
-        stiffness: 400, 
-        damping: 30,
-        mass: 0.8
-      }}
-      className={`
-        flex items-center gap-3 px-5 py-2.5 rounded-full border backdrop-blur-2xl
-        ${config.bg} ${config.border} ${config.glow} pointer-events-auto
-        group relative overflow-hidden
-      `}
+      initial={{ opacity: 0, y: 20, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 10, scale: 0.9, transition: { duration: 0.15 } }}
+      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+      className="pointer-events-auto relative"
     >
-      {/* Subtle background shimmer */}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-      
-      <Icon className={`w-4 h-4 ${config.text} shrink-0 relative z-10`} strokeWidth={2.5} />
-      <span className="text-sm text-text-primary font-bold truncate max-w-[400px] relative z-10 tracking-tight">
-        {toast.message}
-      </span>
-      <button
-        onClick={() => onDismiss(toast.id)}
-        className="p-1 hover:bg-white/10 rounded-full transition-all duration-200 shrink-0 relative z-10 active:scale-90"
-      >
-        <X className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
-      </button>
-    </motion.div>
-  )
-}
+      <div className={`
+        flex items-center gap-3 pl-3 pr-4 py-2 rounded-full 
+        bg-[#0a0a0c] text-white
+        ring-1 ring-white/10 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.5)]
+        min-w-[220px] max-w-[450px] overflow-hidden
+      `}>
+        {/* Progress Bar (Ultra Thin) */}
+        {toast.duration !== 0 && (
+          <motion.div 
+            initial={{ width: '100%' }}
+            animate={{ width: '0%' }}
+            transition={{ duration: (toast.duration || 3000) / 1000, ease: 'linear' }}
+            className={`absolute bottom-0 left-0 h-[1px] opacity-60 ${
+              toast.type === 'error' ? 'bg-red-500' : 
+              toast.type === 'success' ? 'bg-emerald-500' : 'bg-accent'
+            }`}
+          />
+        )}
 
-// Toast 容器 - 显示在底部状态栏上方
-function ToastContainer({ toasts, removeToast }: { toasts: ToastMessage[]; removeToast: (id: string) => void }) {
-  return (
-    <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center gap-2.5 pointer-events-none">
-      <AnimatePresence mode="popLayout">
-        {toasts.map((toast) => (
-          <div key={toast.id}>
-            <ToastItem toast={toast} onDismiss={removeToast} />
-          </div>
-        ))}
-      </AnimatePresence>
-    </div>
+        {/* Icon with subtle background glow */}
+        <div className={`
+          w-7 h-7 rounded-full flex items-center justify-center shrink-0
+          ${toast.type === 'error' ? 'bg-red-500/20 text-red-400' : 
+            toast.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 
+            'bg-accent/20 text-accent'}
+        `}>
+          <Icon className="w-4 h-4" strokeWidth={2.5} />
+        </div>
+
+        <span className="text-[13px] font-bold truncate flex-1 tracking-tight text-white/90">
+          {toast.message}
+        </span>
+
+        <button
+          onClick={() => onDismiss(toast.id)}
+          className="p-1 -mr-1 rounded-full hover:bg-white/10 transition-colors shrink-0 group/btn"
+        >
+          <X className="w-3.5 h-3.5 text-white/40 group-hover:text-white" />
+        </button>
+      </div>
+    </motion.div>
   )
 }
 

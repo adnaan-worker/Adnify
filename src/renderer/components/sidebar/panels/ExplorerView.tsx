@@ -203,7 +203,7 @@ export function ExplorerView() {
 
   return (
     <div className="h-full flex flex-col bg-transparent">
-      <div className="h-11 px-4 flex items-center justify-between group border-b border-white/5 bg-transparent sticky top-0 z-10">
+      <div className="h-11 px-4 flex items-center justify-between group border-b border-border/50 bg-transparent sticky top-0 z-10">
         <span className="text-[10px] font-black text-text-primary/40 uppercase tracking-[0.25em] font-sans">
           {t('explorer', language)}
         </span>
@@ -247,8 +247,8 @@ export function ExplorerView() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">
-            <div className="w-16 h-16 bg-surface/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-border shadow-inner">
-              <FolderOpen className="w-8 h-8 text-text-muted opacity-50" />
+            <div className="w-16 h-16 bg-surface/50 rounded-3xl flex items-center justify-center mb-6 border border-border/50 shadow-sm">
+              <FolderOpen className="w-8 h-8 text-accent/50" />
             </div>
             <p className="text-sm font-medium text-text-primary mb-1">{t('noFolderOpened', language)}</p>
             <p className="text-xs text-text-muted mb-6 opacity-60">Open a folder to start coding</p>
@@ -264,7 +264,7 @@ export function ExplorerView() {
       </div>
 
       {isGitRepo && gitStatus && (
-        <div className="px-3 py-2 border-t border-border bg-transparent">
+        <div className="px-3 py-2 border-t border-border bg-background-secondary/95 backdrop-blur-md">
           <div className="flex items-center gap-2 text-xs text-text-secondary">
             <GitBranch className="w-3.5 h-3.5 text-accent opacity-80" />
             <span className="font-medium">{gitStatus.branch}</span>

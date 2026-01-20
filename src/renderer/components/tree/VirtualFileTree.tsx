@@ -538,15 +538,15 @@ export function VirtualFileTree({
           setTimeout(() => document.body.removeChild(dragImage), 0)
         }}
         className={`
-          group flex items-center gap-2 pr-2 cursor-pointer transition-all duration-150 relative select-none rounded-md mx-2 my-0.5
+          group flex items-center gap-2 pr-2 cursor-pointer transition-all duration-150 relative select-none rounded-md mx-2 my-[1px]
           ${isActive
-            ? 'bg-accent/10 text-text-primary font-bold'
-            : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+            ? 'bg-accent/10 text-text-primary font-medium'
+            : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
           }
         `}
         style={{
           height: ITEM_HEIGHT,
-          paddingLeft: `${depth * 12 + 10}px`,
+          paddingLeft: `${depth * 12 + 8}px`,
           position: 'absolute',
           top: (visibleRange.startIndex + index) * ITEM_HEIGHT,
           left: 0,
@@ -555,14 +555,14 @@ export function VirtualFileTree({
       >
         {/* Active Indicator - Premium Glow */}
         {isActive && (
-          <div className="absolute left-0 top-[4px] bottom-[4px] w-[3px] bg-accent rounded-r-full shadow-[0_0_12px_rgba(var(--accent),0.8)] z-10" />
+          <div className="absolute left-0 top-[6px] bottom-[6px] w-[3px] bg-accent rounded-r-full shadow-[0_0_12px_rgba(var(--accent),0.8)] z-10" />
         )}
 
         {/* Indent Guide - Very subtle line */}
         {depth > 0 && Array.from({ length: depth }).map((_, i) => (
           <div
             key={i}
-            className="absolute top-0 bottom-0 border-l border-white/[0.03] group-hover:border-white/[0.08] transition-colors"
+            className="absolute top-0 bottom-0 border-l border-border/20 group-hover:border-border/40 transition-colors"
             style={{ left: `${(i + 1) * 12}px` }}
           />
         ))}

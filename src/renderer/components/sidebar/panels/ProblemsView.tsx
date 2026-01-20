@@ -140,32 +140,32 @@ export function ProblemsView() {
             const isExpanded = expandedFiles.has(uri)
 
             return (
-              <div key={uri} className="border-b border-border-subtle/50">
+              <div key={uri} className="mb-1">
                 <div
                   onClick={() => toggleFile(uri)}
-                  className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-surface-hover"
+                  className="flex items-center gap-2 px-2 py-1.5 mx-2 rounded-md cursor-pointer hover:bg-surface-hover transition-colors"
                 >
                   <ChevronRight
-                    className={`w-3 h-3 text-text-muted transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                    className={`w-3.5 h-3.5 text-text-muted transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                   />
                   <FileText className="w-3.5 h-3.5 text-text-muted" />
-                  <span className="text-xs text-text-secondary flex-1 truncate">{fileName}</span>
-                  <span className="text-[10px] text-text-muted bg-surface-active px-1.5 rounded">{diags.length}</span>
+                  <span className="text-xs font-medium text-text-secondary flex-1 truncate">{fileName}</span>
+                  <span className="text-[10px] text-text-muted bg-surface-active/50 px-1.5 py-0.5 rounded-md font-mono">{diags.length}</span>
                 </div>
 
                 {isExpanded && (
-                  <div className="pb-1">
+                  <div className="flex flex-col gap-0.5 mt-0.5 mb-2">
                     {diags.map((diag, idx) => (
                       <div
                         key={idx}
                         onClick={() => handleDiagnosticClick(uri, diag)}
-                        className="flex items-start gap-2 px-3 py-1.5 pl-8 cursor-pointer hover:bg-surface-hover group"
+                        className="flex items-start gap-2 px-3 py-2 mx-2 ml-6 rounded-md cursor-pointer hover:bg-surface-hover group border border-transparent hover:border-border-subtle transition-all"
                       >
-                        {getSeverityIcon(diag.severity)}
+                        <div className="mt-0.5">{getSeverityIcon(diag.severity)}</div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-text-primary truncate">{diag.message}</p>
-                          <p className="text-[10px] text-text-muted">
-                            {language === 'zh' ? '行' : 'Line'} {diag.range.start.line + 1}
+                          <p className="text-[11px] text-text-primary truncate font-medium">{diag.message}</p>
+                          <p className="text-[10px] text-text-muted opacity-70 mt-0.5 font-mono">
+                            {language === 'zh' ? 'Ln' : 'Ln'} {diag.range.start.line + 1}
                             {diag.source && ` • ${diag.source}`}
                             {diag.code && ` (${diag.code})`}
                           </p>

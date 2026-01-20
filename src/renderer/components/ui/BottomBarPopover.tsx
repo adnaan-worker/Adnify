@@ -96,16 +96,16 @@ export default function BottomBarPopover({
             {isOpen && (
                 <div
                     ref={popoverRef}
-                    className="absolute bottom-full right-0 mb-2 bg-background/80 backdrop-blur-xl border border-border rounded-xl shadow-2xl overflow-hidden animate-slide-up z-50"
+                    className="absolute bottom-full right-0 mb-3 bg-surface/80 backdrop-blur-2xl border border-border/50 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden animate-slide-up z-50 origin-bottom-right"
                     style={{ width, height }}
                 >
                     {/* 面板头部 */}
                     {title && (
-                        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-transparent">
-                            <span className="text-xs font-medium text-text-primary">{title}</span>
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-white/[0.02] z-10 shrink-0">
+                            <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">{title}</span>
                             <button
                                 onClick={() => setIsOpen(false)}
-                                className="p-0.5 text-text-muted hover:text-text-primary transition-colors"
+                                className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors"
                             >
                                 <X className="w-3.5 h-3.5" />
                             </button>
@@ -113,7 +113,7 @@ export default function BottomBarPopover({
                     )}
 
                     {/* 面板内容 */}
-                    <div className="overflow-auto" style={{ height: title ? height - 36 : height }}>
+                    <div className="overflow-auto custom-scrollbar" style={{ height: title ? height - 40 : height }}>
                         {children}
                     </div>
                 </div>
