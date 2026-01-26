@@ -77,7 +77,6 @@ function createGroupedAPI() {
       compactContext: (params: Parameters<typeof raw.compactContext>[0]) => raw.compactContext(params),
       abort: () => raw.abortMessage(),
       onStream: (callback: Parameters<typeof raw.onLLMStream>[0]) => raw.onLLMStream(callback),
-      onToolCall: (callback: Parameters<typeof raw.onLLMToolCall>[0]) => raw.onLLMToolCall(callback),
       onError: (callback: Parameters<typeof raw.onLLMError>[0]) => raw.onLLMError(callback),
       onDone: (callback: Parameters<typeof raw.onLLMDone>[0]) => raw.onLLMDone(callback),
       // Structured Output

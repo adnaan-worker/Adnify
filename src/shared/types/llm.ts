@@ -165,6 +165,7 @@ export interface LLMSendMessageParams {
     messages: LLMMessage[]
     tools?: ToolDefinition[]
     systemPrompt?: string
+    activeTools?: string[]  // 限制可用的工具列表
 }
 
 // ============================================

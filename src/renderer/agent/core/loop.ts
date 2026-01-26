@@ -64,12 +64,41 @@ async function callLLM(
     })
     const tools = chatMode === 'chat' ? [] : toolManager.getAllToolDefinitions()
 
+    // 动态工具控制：根据上下文限制可用工具
+    let activeTools: string[] | undefined
+    
+    if (tools.length > 0) {
+      const allToolNames = tools.map(t => t.name)
+      const store = useAgentStore.getState()
+      
+      // 场景1: Chat 模式 - 禁用所有工具（已在上面处理）
+      // 场景2: Plan 模式 - 启用所有工具（包括 plan 相关工具）
+      // 场景3: Code 模式 - 根据压缩等级动态调整
+      
+      // 当上下文压缩等级较高时，限制工具以减少 token 使用
+      const compressionLevel = store.compressionStats?.level || 0
+      if (compressionLevel >= 3) {
+        // L3/L4: 只保留核心工具，移除 AI 辅助工具（节省 token）
+        const coreTools = allToolNames.filter(name => 
+          !['analyze_code', 'suggest_refactoring', 'suggest_fixes', 'generate_tests'].includes(name)
+        )
+        activeTools = coreTools
+        logger.agent.info(`[Loop] Compression L${compressionLevel}: ${activeTools.length}/${allToolNames.length} tools active (AI tools disabled)`)
+      }
+      
+      // 未来可扩展的场景：
+      // - 只读模式：activeTools = allToolNames.filter(name => getReadOnlyTools().includes(name))
+      // - 安全模式：activeTools = allToolNames.filter(name => !getDangerousTools().includes(name))
+      // - 特定任务：activeTools = getToolsForTask(taskType)
+    }
+
     // 发送请求
     await api.llm.send({
       config: config as import('@shared/types/llm').LLMConfig,
       messages: messages as LLMMessage[],
       tools,
-      systemPrompt: ''
+      systemPrompt: '',
+      activeTools
     })
 
     // 等待流式响应完成

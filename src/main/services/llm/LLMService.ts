@@ -37,6 +37,7 @@ export class LLMService {
     messages: LLMMessage[]
     tools?: ToolDefinition[]
     systemPrompt?: string
+    activeTools?: string[]
   }) {
     this.currentAbortController = new AbortController()
     try {

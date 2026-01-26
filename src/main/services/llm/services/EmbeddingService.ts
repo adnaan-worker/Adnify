@@ -3,7 +3,7 @@
  * 用于代码语义搜索、相似度匹配、RAG
  */
 
-import { embed, embedMany } from 'ai'
+import { embed, embedMany, cosineSimilarity } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { logger } from '@shared/utils/Logger'
 import { LLMError } from '../types'
@@ -105,24 +105,10 @@ export class EmbeddingService {
   }
 
   /**
-   * 计算余弦相似度
+   * 计算余弦相似度（使用 AI SDK 内置实现）
    */
   cosineSimilarity(a: number[], b: number[]): number {
-    if (a.length !== b.length) {
-      throw new Error('Vectors must have the same length')
-    }
-
-    let dotProduct = 0
-    let normA = 0
-    let normB = 0
-
-    for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i]
-      normA += a[i] * a[i]
-      normB += b[i] * b[i]
-    }
-
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB))
+    return cosineSimilarity(a, b)
   }
 
   /**

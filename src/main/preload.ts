@@ -21,21 +21,13 @@ interface SearchFileResult {
 }
 
 interface LLMStreamChunk {
-  type: 'text' | 'reasoning' | 'error' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_end' | 'tool_call'
+  type: 'text' | 'reasoning' | 'error' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_delta_end' | 'tool_call_available'
   content?: string
   error?: string
-  toolCallDelta?: {
-    id?: string
-    name?: string
-    args?: string
-  }
-  toolCall?: LLMToolCall
-}
-
-interface LLMToolCall {
-  id: string
-  name: string
-  arguments: Record<string, unknown>
+  id?: string
+  name?: string
+  arguments?: Record<string, unknown>
+  argumentsDelta?: string
 }
 
 interface LLMError {
@@ -47,7 +39,6 @@ interface LLMError {
 interface LLMResult {
   content: string
   reasoning?: string
-  toolCalls?: LLMToolCall[]
   usage?: {
     promptTokens: number
     completionTokens: number
@@ -193,7 +184,6 @@ export interface ElectronAPI {
   embedMany: (params: { texts: string[]; config: any }) => Promise<any>
   findSimilar: (params: { query: string; candidates: string[]; config: any; topK?: number }) => Promise<any>
   onLLMStream: (callback: (data: LLMStreamChunk) => void) => () => void
-  onLLMToolCall: (callback: (toolCall: LLMToolCall) => void) => () => void
   onLLMError: (callback: (error: LLMError) => void) => () => void
   onLLMDone: (callback: (data: LLMResult) => void) => () => void
 
@@ -437,11 +427,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: IpcRendererEvent, data: LLMStreamChunk) => callback(data)
     ipcRenderer.on('llm:stream', handler)
     return () => ipcRenderer.removeListener('llm:stream', handler)
-  },
-  onLLMToolCall: (callback: (toolCall: LLMToolCall) => void) => {
-    const handler = (_: IpcRendererEvent, toolCall: LLMToolCall) => callback(toolCall)
-    ipcRenderer.on('llm:toolCall', handler)
-    return () => ipcRenderer.removeListener('llm:toolCall', handler)
   },
   onLLMError: (callback: (error: LLMError) => void) => {
     const handler = (_: IpcRendererEvent, error: LLMError) => callback(error)

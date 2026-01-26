@@ -134,7 +134,7 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
               if (assistantId) {
                 store.addToolCallPart(assistantId, toolCall)
               }
-              EventBus.emit({ type: 'stream:tool_end', id: tc.id, args: tc.arguments })
+              EventBus.emit({ type: 'stream:tool_available', id: tc.id, name: tc.name, args: tc.arguments })
             }
           }
         }
@@ -167,7 +167,7 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
 
       case 'tool_call_start': {
         const toolId = data.id || `tool-${Date.now()}`
-        const toolName = data.name || ''
+        const toolName = data.name || '...'
 
         // 收到工具调用时，结束 reasoning 状态
         if (isInReasoning && assistantId && reasoningPartId) {
@@ -182,7 +182,7 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
         if (assistantId) {
           store.addToolCallPart(assistantId, {
             id: toolId,
-            name: toolName || '...',
+            name: toolName,
             arguments: { _streaming: true },
           })
         }
@@ -220,40 +220,52 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
         break
       }
 
+      case 'tool_call_delta_end': {
+        const tcId = data.id
+        if (tcId && assistantId) {
+          const tc = streamingToolCalls.get(tcId)
+          if (tc) {
+            // 参数传输完成，解析最终参数（移除 _streaming 标记）
+            const finalArgs = parsePartialJsonArgs(tc.argsString)
+            if (finalArgs) {
+              store.updateToolCall(assistantId, tc.id, {
+                arguments: finalArgs, // 移除 _streaming
+              })
+            }
+          }
+        }
+        break
+      }
+
+      case 'tool_call_available': {
+        const tcId = data.id || ''
+        const toolName = data.name || ''
+        const args = data.arguments as Record<string, unknown>
+
+        // 清除流式状态
+        if (tcId) {
+          streamingToolCalls.delete(tcId)
+        }
+
+        // 更新为最终参数（移除 _streaming 标记）
+        if (assistantId && tcId) {
+          store.updateToolCall(assistantId, tcId, {
+            name: toolName,
+            arguments: args,
+            status: 'pending',
+          })
+        }
+
+        EventBus.emit({ type: 'stream:tool_available', id: tcId, name: toolName, args })
+        break
+      }
+
       case 'usage':
         if (data.usage) {
           usage = data.usage as TokenUsage
         }
         break
     }
-  }
-
-  // 处理完整工具调用（AI SDK tool-call 事件）
-  const handleToolCall = (tc: { type?: string; id: string; name: string; arguments?: unknown }) => {
-    // 清除流式状态
-    streamingToolCalls.delete(tc.id)
-
-    const toolCall: ToolCall = {
-      id: tc.id,
-      name: tc.name,
-      arguments: (tc.arguments as Record<string, unknown>) || {},
-      status: 'pending',
-    }
-
-    // 检查是否已存在
-    if (!toolCalls.find((t) => t.id === toolCall.id)) {
-      toolCalls.push(toolCall)
-    }
-
-    // 更新 UI
-    if (assistantId) {
-      store.updateToolCall(assistantId, toolCall.id, {
-        name: toolCall.name,
-        arguments: toolCall.arguments,
-        status: 'pending',
-      })
-    }
-    EventBus.emit({ type: 'stream:tool_end', id: toolCall.id, args: toolCall.arguments })
   }
 
   // 结束推理的辅助函数
@@ -317,12 +329,11 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
 
   // 一次性订阅所有 IPC 事件（在 Promise 外部）
   const unsubStream = api.llm.onStream(handleStream)
-  const unsubToolCall = api.llm.onToolCall(handleToolCall)
   const unsubError = api.llm.onError(handleError)
   const unsubDone = api.llm.onDone(handleDone)
 
-  cleanups.push(unsubStream, unsubToolCall, unsubError, unsubDone)
-  activeListenerCount += 4
+  cleanups.push(unsubStream, unsubError, unsubDone)
+  activeListenerCount += 3
 
   // 等待完成 - 返回已创建的 Promise
   const wait = (): Promise<LLMCallResult> => waitPromise

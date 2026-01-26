@@ -20,7 +20,7 @@ export type AgentEvent =
   | { type: 'stream:reasoning'; text: string; phase: 'start' | 'delta' | 'end' }
   | { type: 'stream:tool_start'; id: string; name: string }
   | { type: 'stream:tool_delta'; id: string; args: string }
-  | { type: 'stream:tool_end'; id: string; args: Record<string, unknown> }
+  | { type: 'stream:tool_available'; id: string; name: string; args: Record<string, unknown> }
   
   // LLM 事件
   | { type: 'llm:start' }

@@ -303,29 +303,48 @@ export async function executeTools(
     // 并发限制：最多同时执行 8 个工具（避免系统卡顿）
     const limit = pLimit(8)
     
-    // 使用 Promise.allSettled 而不是 Promise.all，这样即使某个工具失败也不会影响其他工具
-    // 同时，每个工具完成后立即更新结果，而不是等待所有工具完成
+    // 使用 Promise.allSettled 确保每个工具独立执行
+    // 关键优化：每个工具完成后立即更新 UI，不等待其他工具
     const noApprovalPromises = noApprovalRequired.map((tc) => 
       limit(async () => {
+        // 立即标记为运行中（确保 UI 显示）
+        if (context.currentAssistantId) {
+          store.updateToolCall(context.currentAssistantId, tc.id, { status: 'running' })
+        }
+        
         try {
           const result = await executeSingle(tc, context)
-          // 立即更新结果，不等待其他工具
+          // 立即更新结果到数组（不等待其他工具）
           results.push(result)
           completed.add(result.toolCall.id)
           pending.delete(result.toolCall.id)
+          
+          // 强制刷新 UI（确保用户看到进度）
+          if (context.currentAssistantId) {
+            store.updateToolCall(context.currentAssistantId, tc.id, { 
+              status: result.result.meta?.waitingForUser ? 'success' : 
+                     (result.result.content.startsWith('Error:') ? 'error' : 'success'),
+              result: result.result.content,
+            })
+          }
+          
           return result
         } catch (error) {
           logger.agent.error(`[Tools] Unexpected error in ${tc.name}:`, error)
-          // 即使出错也要更新状态
           const errorMsg = error instanceof Error ? error.message : String(error)
+          
+          // 立即更新错误状态
           if (context.currentAssistantId) {
             store.updateToolCall(context.currentAssistantId, tc.id, { 
               status: 'error', 
               result: errorMsg 
             })
           }
+          
           pending.delete(tc.id)
-          return { toolCall: tc, result: { content: `Error: ${errorMsg}` } }
+          const errorResult = { toolCall: tc, result: { content: `Error: ${errorMsg}` } }
+          results.push(errorResult)
+          return errorResult
         }
       })
     )

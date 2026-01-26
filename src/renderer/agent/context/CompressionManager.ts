@@ -9,6 +9,7 @@
 
 import { logger } from '@utils/Logger'
 import { getAgentConfig } from '../utils/AgentConfig'
+import { pruneMessages } from 'ai'
 import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall, MessageContent } from '../types'
 
 // ===== 类型 =====
@@ -123,6 +124,8 @@ function truncateToolCallArgs(tc: ToolCall, maxChars: number): { tc: ToolCall; t
  * - 当前用户消息在数组的最后一条
  * - 需要保留最后一条消息的图片（AI 需要分析）
  * - 历史消息中的图片替换为占位符（AI 已经分析过，节省 token）
+ * 
+ * 优化：结合 AI SDK 的 pruneMessages 进行智能修剪
  */
 export function prepareMessages(
   messages: ChatMessage[],
@@ -137,7 +140,66 @@ export function prepareMessages(
   // 过滤 checkpoint 消息
   result = result.filter(m => m.role !== 'checkpoint')
   
-  // 0. 替换历史消息中的图片为占位符（节省 token）
+  // 0. 使用 AI SDK 的 pruneMessages 进行智能修剪（L2+）
+  if (lastLevel >= 2) {
+    try {
+      const beforeCount = result.length
+      
+      // 转换为 AI SDK 格式
+      const aiMessages = result.map(m => {
+        if (m.role === 'assistant') {
+          const am = m as AssistantMessage
+          return {
+            role: 'assistant' as const,
+            content: am.content || '',
+            tool_calls: am.toolCalls?.map(tc => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
+            }))
+          }
+        }
+        if (m.role === 'tool') {
+          const tm = m as ToolResultMessage
+          return {
+            role: 'tool' as const,
+            tool_call_id: tm.toolCallId,
+            name: tm.name,
+            content: [{ type: 'text' as const, text: tm.content }]
+          }
+        }
+        if (m.role === 'user') {
+          const um = m as UserMessage
+          return {
+            role: 'user' as const,
+            content: typeof um.content === 'string' ? um.content : JSON.stringify(um.content)
+          }
+        }
+        return {
+          role: 'system' as const,
+          content: ''
+        }
+      })
+      
+      // 应用 pruneMessages
+      const pruned = pruneMessages({
+        messages: aiMessages as any, // 类型转换，避免复杂的类型匹配
+        reasoning: lastLevel >= 3 ? 'before-last-message' : 'all',
+        toolCalls: lastLevel >= 3 ? 'before-last-2-messages' : 'all',
+        emptyMessages: 'remove'
+      })
+      
+      removedMessages = beforeCount - pruned.length
+      if (removedMessages > 0) {
+        logger.agent.info(`[Compression] pruneMessages removed ${removedMessages} messages`)
+        result = result.slice(-pruned.length)
+      }
+    } catch (e) {
+      logger.agent.warn('[Compression] pruneMessages failed:', e)
+    }
+  }
+  
+  // 1. 替换历史消息中的图片为占位符（节省 token）
   // 注意：messages 包含刚添加的当前用户消息，它在最后一条
   // 需要保留最后一条用户消息的图片，只替换之前的历史消息
   const lastIndex = result.length - 1

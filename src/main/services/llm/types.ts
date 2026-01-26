@@ -90,7 +90,8 @@ export type StreamEvent =
   | { type: 'reasoning'; content: string }
   | { type: 'tool-call-start'; id: string; name: string }
   | { type: 'tool-call-delta'; id: string; name?: string; argumentsDelta: string }
-  | { type: 'tool-call'; id: string; name: string; arguments: Record<string, unknown> }
+  | { type: 'tool-call-delta-end'; id: string }
+  | { type: 'tool-call-available'; id: string; name: string; arguments: Record<string, unknown> }
   | { type: 'error'; error: LLMError }
   | { type: 'done'; usage?: TokenUsage; metadata?: ResponseMetadata }
 

@@ -22,6 +22,7 @@ export interface StreamingParams {
   tools?: ToolDefinition[]
   systemPrompt?: string
   abortSignal?: AbortSignal
+  activeTools?: string[]  // 限制可用的工具列表
 }
 
 export interface StreamingResult {
@@ -46,7 +47,7 @@ export class StreamingService {
    * 流式生成文本
    */
   async generate(params: StreamingParams): Promise<StreamingResult> {
-    const { config, messages, tools, systemPrompt, abortSignal } = params
+    const { config, messages, tools, systemPrompt, abortSignal, activeTools } = params
 
     // 创建 thinking 策略（只为需要特殊处理的模型）
     const strategy = ThinkingStrategyFactory.create(config.model)
@@ -79,6 +80,7 @@ export class StreamingService {
         model,
         messages: coreMessages,
         tools: coreTools,
+        activeTools,  // 动态限制可用工具
         maxOutputTokens: config.maxTokens,
         temperature: config.temperature,
         topP: config.topP,
@@ -88,6 +90,46 @@ export class StreamingService {
         stopSequences: config.stopSequences,
         seed: config.seed,
         abortSignal,
+        // 自动修复工具调用 JSON 格式错误
+        experimental_repairToolCall: async ({ toolCall, error }) => {
+          logger.llm.warn('[StreamingService] Tool call parse error, attempting repair:', {
+            toolName: toolCall.toolName,
+            error: error.message,
+          })
+          
+          try {
+            const inputText = toolCall.input
+            
+            // 1. 修复未闭合的引号
+            let fixed = inputText.replace(/([^\\])"([^"]*?)$/g, '$1"$2"')
+            
+            // 2. 修复未闭合的大括号
+            const openBraces = (fixed.match(/\{/g) || []).length
+            const closeBraces = (fixed.match(/\}/g) || []).length
+            if (openBraces > closeBraces) {
+              fixed += '}'.repeat(openBraces - closeBraces)
+            }
+            
+            // 3. 修复未闭合的方括号
+            const openBrackets = (fixed.match(/\[/g) || []).length
+            const closeBrackets = (fixed.match(/\]/g) || []).length
+            if (openBrackets > closeBrackets) {
+              fixed += ']'.repeat(openBrackets - closeBrackets)
+            }
+            
+            // 4. 尝试解析修复后的 JSON
+            JSON.parse(fixed)
+            
+            logger.llm.info('[StreamingService] Tool call repaired successfully')
+            return {
+              ...toolCall,
+              input: fixed,
+            }
+          } catch (repairError) {
+            logger.llm.error('[StreamingService] Tool call repair failed:', repairError)
+            return null // 返回 null 表示无法修复
+          }
+        },
       })
 
       // 处理流式响应
@@ -169,10 +211,18 @@ export class StreamingService {
             })
             break
 
-          // 工具调用完成（最终参数）
+          // 工具调用参数传输完成
+          case 'tool-input-end':
+            this.sendEvent({
+              type: 'tool-call-delta-end',
+              id: part.id,
+            })
+            break
+
+          // 工具调用完整信息（包含解析后的参数）
           case 'tool-call':
             this.sendEvent({
-              type: 'tool-call',
+              type: 'tool-call-available',
               id: part.toolCallId,
               name: part.toolName,
               arguments: part.input as Record<string, unknown>,
@@ -268,9 +318,16 @@ export class StreamingService {
           })
           break
 
-        case 'tool-call':
-          this.window.webContents.send('llm:toolCall', {
-            type: 'tool_call',
+        case 'tool-call-delta-end':
+          this.window.webContents.send('llm:stream', {
+            type: 'tool_call_delta_end',
+            id: event.id,
+          })
+          break
+
+        case 'tool-call-available':
+          this.window.webContents.send('llm:stream', {
+            type: 'tool_call_available',
             id: event.id,
             name: event.name,
             arguments: event.arguments,
