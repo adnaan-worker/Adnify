@@ -100,17 +100,29 @@ async function saveFileSnapshots(
 
 /**
  * 检查工具是否需要审批
- * 基于 TOOL_CONFIGS 中的 approvalType 配置
+ * 基于 TOOL_CONFIGS 中的 approvalType 配置和用户的 autoApprove 设置
  */
 function needsApproval(toolName: string): boolean {
-  const { agentConfig } = useStore.getState()
-  // 检查 autoApprove 设置
-  const config = agentConfig as { autoApprove?: boolean } | undefined
-  if (config?.autoApprove) return false
-  
-  // 使用工具配置中的 approvalType
   const approvalType = getToolApprovalType(toolName)
-  return approvalType !== 'none'
+  
+  // 如果工具本身不需要审批，直接返回 false
+  if (approvalType === 'none') return false
+  
+  // 检查用户的 autoApprove 设置
+  const mainStore = useStore.getState()
+  const autoApprove = mainStore.autoApprove
+  
+  // 根据工具类型检查对应的 autoApprove 设置
+  if (approvalType === 'terminal' && autoApprove?.terminal) {
+    return false // 终端命令已设置自动批准
+  }
+  
+  if (approvalType === 'dangerous' && autoApprove?.dangerous) {
+    return false // 危险操作已设置自动批准
+  }
+  
+  // 默认需要审批
+  return true
 }
 
 /**
@@ -151,8 +163,6 @@ async function executeSingle(
   const { currentAssistantId, workspacePath } = context
   const startTime = Date.now()
 
-  logger.agent.debug(`[Tools] Starting execution: ${toolCall.name} (${toolCall.id})`)
-
   // 更新状态为运行中
   if (currentAssistantId) {
     store.updateToolCall(currentAssistantId, toolCall.id, { status: 'running' })
@@ -174,7 +184,6 @@ async function executeSingle(
     )
 
     const duration = Date.now() - startTime
-    logger.agent.debug(`[Tools] Completed: ${toolCall.name} (${toolCall.id}) in ${duration}ms`)
 
     const rawContent = result.success
       ? (result.result !== undefined && result.result !== null ? result.result : 'Success')
@@ -207,12 +216,15 @@ async function executeSingle(
         ? { ...toolCall.arguments, _meta: meta }
         : toolCall.arguments
       
+      const newStatus = result.success ? 'success' : 'error'
+      
       store.updateToolCall(currentAssistantId, toolCall.id, {
-        status: result.success ? 'success' : 'error',
+        status: newStatus,
         result: content,
         arguments: updatedArguments,
         richContent,
       })
+      
       store.addToolResult(toolCall.id, toolCall.name, content, result.success ? 'success' : 'tool_error')
     }
     if (result.success) {
@@ -234,7 +246,7 @@ async function executeSingle(
   } catch (error) {
     const duration = Date.now() - startTime
     const errorMsg = error instanceof Error ? error.message : String(error)
-    logger.agent.error(`[Tools] Error in ${toolCall.name} (${toolCall.id}):`, errorMsg)
+    logger.agent.error(`[Tools] Error in ${toolCall.name}:`, errorMsg)
 
     // 记录错误日志
     mainStore.addToolCallLog({
@@ -277,8 +289,6 @@ export async function executeTools(
     return { results, userRejected }
   }
 
-  logger.agent.info(`[Tools] Executing ${toolCalls.length} tools: ${toolCalls.map(tc => tc.name).join(', ')}`)
-
   // 分析依赖
   const deps = analyzeToolDependencies(toolCalls)
   const completed = new Set<string>()
@@ -288,8 +298,6 @@ export async function executeTools(
   // 分离需要审批和不需要审批的工具
   const approvalRequired = toolCalls.filter(tc => needsApproval(tc.name))
   const noApprovalRequired = toolCalls.filter(tc => !needsApproval(tc.name))
-
-  logger.agent.info(`[Tools] No approval: ${noApprovalRequired.length}, Approval required: ${approvalRequired.length}`)
 
   // 在执行前保存文件快照
   await saveFileSnapshots(toolCalls, context)
@@ -304,30 +312,14 @@ export async function executeTools(
     const limit = pLimit(8)
     
     // 使用 Promise.allSettled 确保每个工具独立执行
-    // 关键优化：每个工具完成后立即更新 UI，不等待其他工具
     const noApprovalPromises = noApprovalRequired.map((tc) => 
       limit(async () => {
-        // 立即标记为运行中（确保 UI 显示）
-        if (context.currentAssistantId) {
-          store.updateToolCall(context.currentAssistantId, tc.id, { status: 'running' })
-        }
-        
         try {
           const result = await executeSingle(tc, context)
           // 立即更新结果到数组（不等待其他工具）
           results.push(result)
           completed.add(result.toolCall.id)
           pending.delete(result.toolCall.id)
-          
-          // 强制刷新 UI（确保用户看到进度）
-          if (context.currentAssistantId) {
-            store.updateToolCall(context.currentAssistantId, tc.id, { 
-              status: result.result.meta?.waitingForUser ? 'success' : 
-                     (result.result.content.startsWith('Error:') ? 'error' : 'success'),
-              result: result.result.content,
-            })
-          }
-          
           return result
         } catch (error) {
           logger.agent.error(`[Tools] Unexpected error in ${tc.name}:`, error)
@@ -349,9 +341,8 @@ export async function executeTools(
       })
     )
     
-    // 等待所有工具完成（但每个工具完成时已经更新了 UI）
+    // 等待所有工具完成
     await Promise.allSettled(noApprovalPromises)
-    logger.agent.info(`[Tools] Completed ${noApprovalRequired.length} no-approval tools`)
   }
 
   // 2. 逐个处理需要审批的工具
@@ -408,8 +399,9 @@ export async function executeTools(
     pending.delete(tc.id)
   }
 
-  // 确保状态更新
+  // 确保所有工具状态已更新并重置流状态
   if (!abortSignal?.aborted) {
+    // 重置流状态为 streaming（移除 tool_running 状态）
     store.setStreamPhase('streaming')
   }
 

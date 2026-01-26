@@ -444,6 +444,7 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
+            let updated = false
             const messages = thread.messages.map(msg => {
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
@@ -453,20 +454,32 @@ export const createMessageSlice: StateCreator<
                     
                     if (existingToolCall) {
                         // 更新已存在的工具调用
+                        updated = true
+                        
+                        // 只合并非 undefined 的字段
+                        const cleanUpdates = Object.fromEntries(
+                            Object.entries(updates).filter(([_, v]) => v !== undefined)
+                        ) as Partial<ToolCall>
+                        
+                        // 创建新的 toolCall 对象（确保引用变化）
+                        const updatedToolCall = { ...existingToolCall, ...cleanUpdates }
+                        
                         const newParts = assistantMsg.parts.map(part => {
                             if (part.type === 'tool_call' && part.toolCall.id === toolCallId) {
-                                return { ...part, toolCall: { ...part.toolCall, ...updates } }
+                                return { ...part, toolCall: updatedToolCall }
                             }
                             return part
                         })
 
                         const newToolCalls = assistantMsg.toolCalls?.map(tc =>
-                            tc.id === toolCallId ? { ...tc, ...updates } : tc
+                            tc.id === toolCallId ? updatedToolCall : tc
                         )
 
                         return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
                     } else {
                         // 工具调用不存在，添加新的
+                        updated = true
+                        
                         const newToolCall: ToolCall = {
                             id: toolCallId,
                             name: (updates.name as string) || '',
@@ -483,10 +496,13 @@ export const createMessageSlice: StateCreator<
                 return msg
             })
 
+            // 如果没有更新，返回原状态避免不必要的重渲染
+            if (!updated) return state
+
             return {
                 threads: {
                     ...state.threads,
-                    [threadId]: { ...thread, messages },
+                    [threadId]: { ...thread, messages, lastModified: Date.now() },
                 },
             }
         })

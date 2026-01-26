@@ -78,7 +78,10 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
   let isCleanedUp = false
 
   // 工具调用流式状态
-  const streamingToolCalls = new Map<string, { id: string; name: string; argsString: string }>()
+  const streamingToolCalls = new Map<string, { id: string; name: string; argsString: string; lastUpdateTime: number }>()
+  
+  // 节流：工具参数更新（避免过于频繁的状态更新）
+  const TOOL_UPDATE_THROTTLE_MS = 50 // 每 50ms 最多更新一次
 
   // 清理函数列表
   const cleanups: (() => void)[] = []
@@ -176,7 +179,7 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
           isInReasoning = false
         }
 
-        streamingToolCalls.set(toolId, { id: toolId, name: toolName, argsString: '' })
+        streamingToolCalls.set(toolId, { id: toolId, name: toolName, argsString: '', lastUpdateTime: 0 })
 
         // 立即添加到 UI
         if (assistantId) {
@@ -199,13 +202,23 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
           if (tc) {
             if (argsDelta) {
               tc.argsString += argsDelta
+              
+              // 节流更新：第一次立即更新，后续根据时间间隔节流
               if (assistantId) {
-                const partialArgs = parsePartialJsonArgs(tc.argsString)
-                if (partialArgs && Object.keys(partialArgs).length > 0) {
-                  store.updateToolCall(assistantId, tc.id, {
-                    arguments: { ...partialArgs, _streaming: true },
-                  })
+                const now = Date.now()
+                const timeSinceLastUpdate = now - tc.lastUpdateTime
+                
+                // 第一次更新（lastUpdateTime === 0）或距离上次更新超过阈值时，立即更新
+                if (tc.lastUpdateTime === 0 || timeSinceLastUpdate >= TOOL_UPDATE_THROTTLE_MS) {
+                  tc.lastUpdateTime = now
+                  const partialArgs = parsePartialJsonArgs(tc.argsString)
+                  if (partialArgs && Object.keys(partialArgs).length > 0) {
+                    store.updateToolCall(assistantId, tc.id, {
+                      arguments: { ...partialArgs, _streaming: true },
+                    })
+                  }
                 }
+                // 否则跳过此次更新（节流）
               }
             }
             if (data.name && data.name !== tc.name) {
@@ -225,12 +238,25 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
         if (tcId && assistantId) {
           const tc = streamingToolCalls.get(tcId)
           if (tc) {
-            // 参数传输完成，解析最终参数（移除 _streaming 标记）
+            // 参数传输完成，立即解析并更新最终参数（移除 _streaming 标记）
             const finalArgs = parsePartialJsonArgs(tc.argsString)
             if (finalArgs) {
               store.updateToolCall(assistantId, tc.id, {
                 arguments: finalArgs, // 移除 _streaming
               })
+            }
+            
+            // 添加到 toolCalls 数组（用于返回给 loop.ts）
+            const toolCall: ToolCall = {
+              id: tc.id,
+              name: tc.name,
+              arguments: finalArgs || {},
+              status: 'pending',
+            }
+            
+            // 检查是否已存在（避免重复）
+            if (!toolCalls.find(t => t.id === tc.id)) {
+              toolCalls.push(toolCall)
             }
           }
         }
@@ -245,6 +271,19 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
         // 清除流式状态
         if (tcId) {
           streamingToolCalls.delete(tcId)
+        }
+
+        // 添加到 toolCalls 数组（用于返回给 loop.ts）
+        const toolCall: ToolCall = {
+          id: tcId,
+          name: toolName,
+          arguments: args,
+          status: 'pending',
+        }
+        
+        // 检查是否已存在（避免重复）
+        if (!toolCalls.find(tc => tc.id === tcId)) {
+          toolCalls.push(toolCall)
         }
 
         // 更新为最终参数（移除 _streaming 标记）
