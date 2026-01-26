@@ -55,8 +55,14 @@ export default function ContextStatsContent({
     4: language === 'zh' ? '交接' : 'Handoff',
   }
 
-  const formatK = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n.toString()
-  const formatNumber = (n: number) => n.toLocaleString()
+  const formatK = (n: number | undefined) => {
+    if (n === undefined || n === null || isNaN(n)) return '0'
+    return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n.toString()
+  }
+  const formatNumber = (n: number | undefined) => {
+    if (n === undefined || n === null || isNaN(n)) return '0'
+    return n.toLocaleString()
+  }
 
   // 进度条颜色
   const progressColor = useMemo(() => {
@@ -142,7 +148,7 @@ export default function ContextStatsContent({
             {language === 'zh' ? '费用统计' : 'Cost Stats'}
           </span>
           <span className="ml-auto text-lg font-bold font-mono text-accent">
-            {formatK(totalUsage.totalTokens)}
+            {formatK(totalUsage?.totalTokens ?? 0)}
           </span>
         </div>
 
@@ -152,7 +158,7 @@ export default function ContextStatsContent({
               {language === 'zh' ? '累计输入' : 'Total In'}
             </span>
             <span className="text-xs font-mono text-text-primary">
-              {formatNumber(totalUsage.promptTokens)}
+              {formatNumber(totalUsage?.promptTokens ?? 0)}
             </span>
           </div>
           <div className="flex items-center justify-between p-2 rounded-lg bg-surface/50 border border-white/5">
@@ -160,7 +166,7 @@ export default function ContextStatsContent({
               {language === 'zh' ? '累计输出' : 'Total Out'}
             </span>
             <span className="text-xs font-mono text-text-primary">
-              {formatNumber(totalUsage.completionTokens)}
+              {formatNumber(totalUsage?.completionTokens ?? 0)}
             </span>
           </div>
         </div>
@@ -173,7 +179,7 @@ export default function ContextStatsContent({
               {language === 'zh' ? '最近一次' : 'Last request'}
             </span>
             <span>
-              {formatK(lastUsage.promptTokens)} <ChevronRight className="w-3 h-3 inline" /> {formatK(lastUsage.completionTokens)}
+              {formatK(lastUsage?.promptTokens ?? 0)} <ChevronRight className="w-3 h-3 inline" /> {formatK(lastUsage?.completionTokens ?? 0)}
             </span>
           </div>
         )}

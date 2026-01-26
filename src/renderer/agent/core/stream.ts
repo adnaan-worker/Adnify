@@ -8,11 +8,19 @@
  */
 
 import { api } from '@/renderer/services/electronAPI'
+import { logger } from '@utils/Logger'
 import { useAgentStore } from '../store/AgentStore'
 import { parseXMLToolCalls } from '../utils/XMLToolParser'
 import { EventBus } from './EventBus'
 import type { ToolCall, TokenUsage } from '../types'
 import type { LLMCallResult } from './types'
+
+// 全局监听器计数器（用于调试内存泄漏）
+let activeListenerCount = 0
+
+export function getActiveListenerCount(): number {
+  return activeListenerCount
+}
 
 // 解析部分 JSON 参数，提取已完成的字段
 function parsePartialJsonArgs(argsString: string): Record<string, unknown> | null {
@@ -67,6 +75,7 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
   let toolCalls: ToolCall[] = []
   let usage: TokenUsage | undefined
   let error: string | undefined
+  let isCleanedUp = false
 
   // 工具调用流式状态
   const streamingToolCalls = new Map<string, { id: string; name: string; argsString: string }>()
@@ -75,12 +84,23 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
   const cleanups: (() => void)[] = []
 
   const cleanup = () => {
+    if (isCleanedUp) {
+      logger.agent.warn('[StreamProcessor] Already cleaned up, skipping')
+      return
+    }
+    isCleanedUp = true
+    const count = cleanups.length
+    logger.agent.info('[StreamProcessor] Cleaning up listeners, count:', count)
     for (const fn of cleanups) {
       try {
         fn()
-      } catch { }
+        activeListenerCount--
+      } catch (err) {
+        logger.agent.error('[StreamProcessor] Cleanup error:', err)
+      }
     }
     cleanups.length = 0
+    logger.agent.info('[StreamProcessor] Active listeners remaining:', activeListenerCount)
   }
 
   // 处理流式数据（AI SDK 格式）
@@ -240,69 +260,76 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
     EventBus.emit({ type: 'stream:tool_end', id: toolCall.id, args: toolCall.arguments })
   }
 
-  // 订阅 IPC 事件
+  // 结束推理的辅助函数
+  const finalizeReasoning = () => {
+    if (isInReasoning) {
+      if (assistantId && reasoningPartId) {
+        store.finalizeReasoningPart(assistantId, reasoningPartId)
+      }
+      EventBus.emit({ type: 'stream:reasoning', text: '', phase: 'end' })
+      isInReasoning = false
+    }
+  }
+
+  // Promise resolve 函数（在外部定义，避免在 Promise 内部创建监听器）
+  let resolveWait: ((result: LLMCallResult) => void) | null = null
+  let isResolved = false
+
+  const doResolve = (result: LLMCallResult) => {
+    if (isResolved) {
+      logger.agent.warn('[StreamProcessor] Already resolved, skipping')
+      return
+    }
+    isResolved = true
+    logger.agent.info('[StreamProcessor] Resolving with result:', { hasContent: !!result.content, hasUsage: !!result.usage, hasError: !!result.error })
+    cleanup()
+    if (resolveWait) {
+      resolveWait(result)
+    }
+  }
+
+  // 处理错误事件
+  const handleError = (err: { message?: string; code?: string } | string) => {
+    const errorMsg = typeof err === 'string' ? err : err.message || 'Unknown error'
+    logger.agent.error('[StreamProcessor] Error received:', errorMsg)
+    error = errorMsg
+    finalizeReasoning()
+    EventBus.emit({ type: 'llm:error', error: errorMsg })
+    doResolve({ content, toolCalls, usage, error: errorMsg })
+  }
+
+  // 处理完成事件
+  const handleDone = (result: { usage?: unknown }) => {
+    if (result?.usage) {
+      usage = result.usage as TokenUsage
+      logger.agent.info('[StreamProcessor] Received usage:', usage)
+    } else {
+      logger.agent.warn('[StreamProcessor] No usage in done event')
+    }
+    finalizeReasoning()
+
+    if (error) {
+      EventBus.emit({ type: 'llm:error', error })
+    } else {
+      EventBus.emit({ type: 'llm:done', content, toolCalls, usage })
+    }
+    doResolve({ content, toolCalls, usage, error })
+  }
+
+  // 一次性订阅所有 IPC 事件（在 Promise 外部）
   const unsubStream = api.llm.onStream(handleStream)
   const unsubToolCall = api.llm.onToolCall(handleToolCall)
-  const unsubError = api.llm.onError((err: string) => {
-    error = err
-  })
+  const unsubError = api.llm.onError(handleError)
+  const unsubDone = api.llm.onDone(handleDone)
 
-  cleanups.push(unsubStream, unsubToolCall, unsubError)
+  cleanups.push(unsubStream, unsubToolCall, unsubError, unsubDone)
+  activeListenerCount += 4
+  logger.agent.info('[StreamProcessor] Created with', cleanups.length, 'listeners, total active:', activeListenerCount)
 
   // 等待完成
   const wait = (): Promise<LLMCallResult> => {
     return new Promise((resolve) => {
-      let resolved = false
-
-      const doResolve = (result: LLMCallResult) => {
-        if (resolved) return
-        resolved = true
-        cleanup()
-        resolve(result)
-      }
-
-      // 结束推理的辅助函数
-      const finalizeReasoning = () => {
-        if (isInReasoning) {
-          if (assistantId && reasoningPartId) {
-            store.finalizeReasoningPart(assistantId, reasoningPartId)
-          }
-          EventBus.emit({ type: 'stream:reasoning', text: '', phase: 'end' })
-          isInReasoning = false
-        }
-      }
-
-      // 处理错误事件
-      const handleError = (err: { message?: string; code?: string } | string) => {
-        const errorMsg = typeof err === 'string' ? err : err.message || 'Unknown error'
-        finalizeReasoning()
-        EventBus.emit({ type: 'llm:error', error: errorMsg })
-        doResolve({ content, toolCalls, usage, error: errorMsg })
-      }
-
-      // 替换原来的错误处理
-      const errorCleanupIdx = cleanups.findIndex((fn) => fn === unsubError)
-      if (errorCleanupIdx !== -1) {
-        cleanups.splice(errorCleanupIdx, 1)
-        unsubError()
-      }
-      const unsubErrorNew = api.llm.onError(handleError)
-      cleanups.push(unsubErrorNew)
-
-      const unsubDone = api.llm.onDone((result: { usage?: unknown }) => {
-        if (result?.usage) {
-          usage = result.usage as TokenUsage
-        }
-        finalizeReasoning()
-
-        if (error) {
-          EventBus.emit({ type: 'llm:error', error })
-        } else {
-          EventBus.emit({ type: 'llm:done', content, toolCalls, usage })
-        }
-        doResolve({ content, toolCalls, usage, error })
-      })
-      cleanups.push(unsubDone)
+      resolveWait = resolve
     })
   }
 

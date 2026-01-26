@@ -174,6 +174,20 @@ class AgentClass {
   }
 
   /**
+   * 获取诊断信息（用于调试内存泄漏）
+   */
+  getDiagnostics() {
+    const { getActiveListenerCount } = require('./stream')
+    return {
+      isRunning: this.isRunning,
+      hasAbortController: !!this.abortController,
+      currentAssistantId: this.currentAssistantId,
+      activeListeners: getActiveListenerCount(),
+      cacheStats: fileCache.getStats(),
+    }
+  }
+
+  /**
    * 检查是否正在运行
    */
   get running(): boolean {

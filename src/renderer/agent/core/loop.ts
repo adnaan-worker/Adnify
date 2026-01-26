@@ -44,37 +44,47 @@ async function callLLM(
 
   const processor = createStreamProcessor(assistantId)
 
-  // 初始化工具
-  initializeToolProviders()
-  await initializeTools()
-  const templateId = useStore.getState().promptTemplateId
-  setToolLoadingContext({
-    mode: chatMode,
-    templateId,
-  })
-  const tools = chatMode === 'chat' ? [] : toolManager.getAllToolDefinitions()
+  try {
+    // 初始化工具
+    initializeToolProviders()
+    await initializeTools()
+    const templateId = useStore.getState().promptTemplateId
+    setToolLoadingContext({
+      mode: chatMode,
+      templateId,
+    })
+    const tools = chatMode === 'chat' ? [] : toolManager.getAllToolDefinitions()
 
-  // 发送请求
-  api.llm.send({
-    config: config as import('@shared/types/llm').LLMConfig,
-    messages: messages as LLMMessage[],
-    tools,
-    systemPrompt: ''
-  }).catch(() => {
+    // 发送请求
+    await api.llm.send({
+      config: config as import('@shared/types/llm').LLMConfig,
+      messages: messages as LLMMessage[],
+      tools,
+      systemPrompt: ''
+    })
+
+    const result = await processor.wait()
+    performanceMonitor.end(`llm:${config.model}`, !result.error)
+
+    // 更新 usage
+    if (assistantId && result.usage) {
+      logger.agent.info('[Loop] Updating message usage:', result.usage)
+      useAgentStore.getState().updateMessage(assistantId, {
+        usage: result.usage
+      } as Partial<import('../types').AssistantMessage>)
+    } else if (assistantId) {
+      logger.agent.warn('[Loop] No usage in result for assistant:', assistantId)
+    }
+
+    // 清理成功完成
     processor.cleanup()
-  })
-
-  const result = await processor.wait()
-  performanceMonitor.end(`llm:${config.model}`, !result.error)
-
-  // 更新 usage
-  if (assistantId && result.usage) {
-    useAgentStore.getState().updateMessage(assistantId, {
-      usage: result.usage
-    } as Partial<import('../types').AssistantMessage>)
+    return result
+  } catch (error) {
+    // 确保在任何错误情况下都清理
+    logger.agent.error('[Loop] Error in callLLM, cleaning up:', error)
+    processor.cleanup()
+    throw error
   }
-
-  return result
 }
 
 async function callLLMWithRetry(

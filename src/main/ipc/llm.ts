@@ -12,10 +12,34 @@
 import { logger } from '@shared/utils/Logger'
 import { ipcMain, BrowserWindow } from 'electron'
 import { LLMService, LLMError } from '../services/llm'
+import type { TokenUsage as LLMTokenUsage } from '../services/llm/types'
 
 // 按窗口 webContents.id 管理独立的 LLM 服务
 const llmServices = new Map<number, LLMService>()
 const compactionServices = new Map<number, LLMService>()
+
+/**
+ * 转换 TokenUsage 格式
+ * LLM 服务使用 inputTokens/outputTokens
+ * 前端 Agent 使用 promptTokens/completionTokens
+ */
+function convertTokenUsage(usage: LLMTokenUsage | undefined): {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  cachedInputTokens?: number
+  reasoningTokens?: number
+} | undefined {
+  if (!usage) return undefined
+  
+  return {
+    promptTokens: usage.inputTokens,
+    completionTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    cachedInputTokens: usage.cachedInputTokens,
+    reasoningTokens: usage.reasoningTokens,
+  }
+}
 
 /**
  * 获取或创建 LLM 服务实例
@@ -93,7 +117,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
       const response = await service.sendMessageSync(params)
       return {
         content: response.data,
-        usage: response.usage,
+        usage: convertTokenUsage(response.usage),
         metadata: response.metadata,
       }
     } catch (error) {
@@ -118,7 +142,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
       const response = await service.analyzeCode(params)
       return {
         data: response.data,
-        usage: response.usage,
+        usage: convertTokenUsage(response.usage),
         metadata: response.metadata,
       }
     } catch (error) {
@@ -140,7 +164,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
       })
       return {
         data: response.data,
-        usage: response.usage,
+        usage: convertTokenUsage(response.usage),
         metadata: response.metadata,
       }
     } catch (error) {
@@ -162,7 +186,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
       const response = await service.suggestRefactoring(params)
       return {
         data: response.data,
-        usage: response.usage,
+        usage: convertTokenUsage(response.usage),
         metadata: response.metadata,
       }
     } catch (error) {
@@ -184,7 +208,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
       const response = await service.suggestFixes(params)
       return {
         data: response.data,
-        usage: response.usage,
+        usage: convertTokenUsage(response.usage),
         metadata: response.metadata,
       }
     } catch (error) {
@@ -206,7 +230,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
       const response = await service.generateTests(params)
       return {
         data: response.data,
-        usage: response.usage,
+        usage: convertTokenUsage(response.usage),
         metadata: response.metadata,
       }
     } catch (error) {
@@ -228,7 +252,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
       const response = await service.embedText(params.text, params.config)
       return {
         data: response.data,
-        usage: response.usage,
+        usage: convertTokenUsage(response.usage),
       }
     } catch (error) {
       handleError(error, 'Text embedding')
@@ -245,7 +269,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
       const response = await service.embedMany(params.texts, params.config)
       return {
         data: response.data,
-        usage: response.usage,
+        usage: convertTokenUsage(response.usage),
       }
     } catch (error) {
       handleError(error, 'Batch embedding')

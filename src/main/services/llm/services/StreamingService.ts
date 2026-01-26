@@ -251,7 +251,13 @@ export class StreamingService {
 
         case 'done':
           this.window.webContents.send('llm:done', {
-            usage: event.usage,
+            usage: event.usage ? {
+              promptTokens: event.usage.inputTokens,
+              completionTokens: event.usage.outputTokens,
+              totalTokens: event.usage.totalTokens,
+              cachedInputTokens: event.usage.cachedInputTokens,
+              reasoningTokens: event.usage.reasoningTokens,
+            } : undefined,
             metadata: event.metadata,
           })
           break
