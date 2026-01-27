@@ -449,26 +449,6 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                     </div>
                 </div>
             </section>
-
-            <section>
-                <div className="flex items-center gap-2 mb-5 ml-1">
-                    <Monitor className="w-4 h-4 text-accent" />
-                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
-                        {language === 'zh' ? '关于' : 'About'}
-                    </h4>
-                </div>
-                <div className="p-10 bg-background/50 backdrop-blur-xl rounded-3xl border border-border text-center shadow-inner relative overflow-hidden">
-                    <div className="absolute inset-0 bg-accent/5 blur-3xl pointer-events-none" />
-                    <div className="w-16 h-16 bg-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-accent/20 shadow-xl shadow-accent/10 relative z-10">
-                        <Monitor className="w-8 h-8 text-accent" />
-                    </div>
-                    <div className="text-2xl font-black text-text-primary mb-2 tracking-tight relative z-10">Adnify</div>
-                    <div className="inline-block px-3 py-1 rounded-full bg-white/5 border border-white/5 text-[10px] font-mono text-text-muted mb-8 relative z-10">v0.1.0-alpha</div>
-                    <div className="text-xs text-text-secondary opacity-60 font-medium relative z-10">
-                        Built with Electron, React, Monaco Editor & Tailwind CSS
-                    </div>
-                </div>
-            </section>
         </div>
     )
 }
