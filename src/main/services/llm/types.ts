@@ -3,7 +3,7 @@
  */
 
 import type { LanguageModelUsage } from 'ai'
-import { mapAISDKError, ErrorCode } from '@shared/utils/errorHandler'
+import { mapAISDKError, ErrorCode, getErrorMessage } from '@shared/utils/errorHandler'
 
 // ============================================
 // 基础类型
@@ -52,10 +52,13 @@ export class LLMError extends Error {
 
   /**
    * 从 AI SDK 错误创建 LLMError
+   * 默认使用英文消息（前端会根据用户语言设置转换）
    */
   static fromAISDKError(error: Error, status?: number): LLMError {
     const mapped = mapAISDKError(error)
-    return new LLMError(mapped.message, mapped.code, mapped.retryable, status, error)
+    // 使用英文作为默认语言，前端会根据用户设置转换
+    const friendlyMessage = getErrorMessage(mapped.code, 'en')
+    return new LLMError(friendlyMessage, mapped.code, mapped.retryable, status, error)
   }
 
   /**

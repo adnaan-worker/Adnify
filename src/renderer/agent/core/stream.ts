@@ -10,8 +10,10 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useAgentStore } from '../store/AgentStore'
+import { useStore } from '@store'
 import { parseXMLToolCalls } from '../utils/XMLToolParser'
 import { EventBus } from './EventBus'
+import { getErrorMessage, ErrorCode } from '@shared/utils/errorHandler'
 import type { ToolCall, TokenUsage } from '../types'
 import type { LLMCallResult } from './types'
 
@@ -343,7 +345,19 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
 
   // 处理错误事件
   const handleError = (err: { message?: string; code?: string } | string) => {
-    const errorMsg = typeof err === 'string' ? err : err.message || 'Unknown error'
+    let errorMsg: string
+    
+    if (typeof err === 'string') {
+      errorMsg = err
+    } else {
+      // 如果有错误码，使用国际化消息
+      if (err.code && err.code in ErrorCode) {
+        const language = useStore.getState().language
+        errorMsg = getErrorMessage(err.code as ErrorCode, language)
+      } else {
+        errorMsg = err.message || 'Unknown error'
+      }
+    }
     
     logger.agent.error('[StreamProcessor] Error:', errorMsg)
     error = errorMsg

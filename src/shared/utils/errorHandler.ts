@@ -195,71 +195,49 @@ export function getErrorMessage(code: ErrorCode, language: 'en' | 'zh' = 'en'): 
 
 /**
  * 映射 Node.js 系统错误
+ * 返回错误码和原始消息，不返回友好消息
  */
-export function mapNodeError(error: NodeJS.ErrnoException): AppError {
+export function mapNodeError(error: NodeJS.ErrnoException): { code: ErrorCode; originalMessage: string; retryable: boolean } {
   const code = error.code || ''
+  const originalMessage = error.message
   
   switch (code) {
     case 'ENOENT':
-      return new AppError(
-        error.message,
-        ErrorCode.FILE_NOT_FOUND,
-        false,
-        error
-      )
+      return { code: ErrorCode.FILE_NOT_FOUND, originalMessage, retryable: false }
     
     case 'EACCES':
     case 'EPERM':
-      return new AppError(
-        error.message,
-        ErrorCode.FILE_ACCESS_DENIED,
-        false,
-        error
-      )
+      return { code: ErrorCode.FILE_ACCESS_DENIED, originalMessage, retryable: false }
     
     case 'ETIMEDOUT':
     case 'ESOCKETTIMEDOUT':
-      return new AppError(
-        error.message,
-        ErrorCode.TIMEOUT,
-        true,
-        error
-      )
+      return { code: ErrorCode.TIMEOUT, originalMessage, retryable: true }
     
     case 'ECONNREFUSED':
     case 'ENOTFOUND':
     case 'ENETUNREACH':
-      return new AppError(
-        error.message,
-        ErrorCode.NETWORK,
-        true,
-        error
-      )
+      return { code: ErrorCode.NETWORK, originalMessage, retryable: true }
     
     default:
-      return new AppError(
-        error.message || 'System error',
-        ErrorCode.UNKNOWN,
-        false,
-        error
-      )
+      return { code: ErrorCode.UNKNOWN, originalMessage: originalMessage || 'System error', retryable: false }
   }
 }
 
 /**
  * 映射 AI SDK 错误（使用类型安全的 isInstance 方法）
+ * 返回 ErrorCode 和原始错误消息（用于日志），不返回友好消息
  */
-export function mapAISDKError(error: unknown): { code: ErrorCode; message: string; retryable: boolean } {
+export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessage: string; retryable: boolean } {
   // 确保是 Error 对象
   if (!(error instanceof Error)) {
     return {
       code: ErrorCode.UNKNOWN,
-      message: String(error),
+      originalMessage: String(error),
       retryable: false,
     }
   }
 
-  const errorMessage = error.message
+  const originalMessage = error.message
 
   // NoOutputGeneratedError - 通常包装了其他错误，优先提取 cause
   if (NoOutputGeneratedError.isInstance(error)) {
@@ -269,7 +247,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
     }
     return {
       code: ErrorCode.LLM_NO_OUTPUT,
-      message: errorMessage,
+      originalMessage,
       retryable: true,
     }
   }
@@ -282,7 +260,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
     }
     return {
       code: ErrorCode.UNKNOWN,
-      message: errorMessage,
+      originalMessage,
       retryable: false,
     }
   }
@@ -291,7 +269,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   if (NoContentGeneratedError.isInstance(error)) {
     return {
       code: ErrorCode.LLM_NO_CONTENT,
-      message: errorMessage,
+      originalMessage,
       retryable: true,
     }
   }
@@ -299,23 +277,40 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   // APICallError - 根据状态码细分
   if (APICallError.isInstance(error)) {
     const statusCode = (error as any).statusCode
+    const responseBody = (error as any).responseBody
+    
+    // 尝试从 responseBody 提取详细信息
+    let detailMessage = originalMessage
+    if (responseBody && typeof responseBody === 'string') {
+      try {
+        const body = JSON.parse(responseBody)
+        if (body.detail) {
+          detailMessage = `${originalMessage}: ${body.detail}`
+        } else if (body.message) {
+          detailMessage = `${originalMessage}: ${body.message}`
+        }
+      } catch {
+        // JSON 解析失败，使用原始消息
+      }
+    }
+    
     if (statusCode === 429) {
       return {
         code: ErrorCode.API_RATE_LIMIT,
-        message: errorMessage,
+        originalMessage: detailMessage,
         retryable: true,
       }
     }
     if (statusCode === 401 || statusCode === 403) {
       return {
         code: ErrorCode.API_KEY_INVALID,
-        message: errorMessage,
+        originalMessage: detailMessage,
         retryable: false,
       }
     }
     return {
       code: ErrorCode.API_CALL_FAILED,
-      message: errorMessage,
+      originalMessage: detailMessage,
       retryable: (error as any).isRetryable ?? true,
     }
   }
@@ -324,7 +319,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   if (InvalidPromptError.isInstance(error)) {
     return {
       code: ErrorCode.LLM_INVALID_PROMPT,
-      message: errorMessage,
+      originalMessage,
       retryable: false,
     }
   }
@@ -333,7 +328,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   if (InvalidResponseDataError.isInstance(error)) {
     return {
       code: ErrorCode.LLM_INVALID_RESPONSE,
-      message: errorMessage,
+      originalMessage,
       retryable: true,
     }
   }
@@ -342,7 +337,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   if (EmptyResponseBodyError.isInstance(error)) {
     return {
       code: ErrorCode.LLM_EMPTY_RESPONSE,
-      message: errorMessage,
+      originalMessage,
       retryable: true,
     }
   }
@@ -351,7 +346,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   if (LoadAPIKeyError.isInstance(error)) {
     return {
       code: ErrorCode.API_KEY_INVALID,
-      message: errorMessage,
+      originalMessage,
       retryable: false,
     }
   }
@@ -360,7 +355,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   if (NoSuchModelError.isInstance(error)) {
     return {
       code: ErrorCode.LLM_NO_SUCH_MODEL,
-      message: errorMessage,
+      originalMessage,
       retryable: false,
     }
   }
@@ -369,7 +364,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   if (TypeValidationError.isInstance(error)) {
     return {
       code: ErrorCode.LLM_VALIDATION_FAILED,
-      message: errorMessage,
+      originalMessage,
       retryable: false,
     }
   }
@@ -378,7 +373,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   if (UnsupportedFunctionalityError.isInstance(error)) {
     return {
       code: ErrorCode.LLM_UNSUPPORTED,
-      message: errorMessage,
+      originalMessage,
       retryable: false,
     }
   }
@@ -387,24 +382,24 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   if (error.name === 'AbortError') {
     return {
       code: ErrorCode.ABORTED,
-      message: errorMessage,
+      originalMessage,
       retryable: false,
     }
   }
 
   // 检查错误消息中的关键词（兜底）
-  const msg = errorMessage.toLowerCase()
+  const msg = originalMessage.toLowerCase()
   if (msg.includes('network') || msg.includes('fetch') || msg.includes('econnrefused')) {
     return {
       code: ErrorCode.NETWORK,
-      message: errorMessage,
+      originalMessage,
       retryable: true,
     }
   }
   if (msg.includes('timeout')) {
     return {
       code: ErrorCode.TIMEOUT,
-      message: errorMessage,
+      originalMessage,
       retryable: true,
     }
   }
@@ -412,15 +407,16 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; message: strin
   // 未知错误
   return {
     code: ErrorCode.UNKNOWN,
-    message: errorMessage,
+    originalMessage,
     retryable: false,
   }
 }
 
 /**
  * 将任意错误转换为 AppError
+ * 使用英文友好消息（前端可根据用户语言转换）
  */
-export function toAppError(error: unknown): AppError {
+export function toAppError(error: unknown, language: 'en' | 'zh' = 'en'): AppError {
   if (error instanceof AppError) {
     return error
   }
@@ -429,15 +425,21 @@ export function toAppError(error: unknown): AppError {
     // Node.js 系统错误
     const nodeError = error as NodeJS.ErrnoException
     if (nodeError.code) {
-      return mapNodeError(nodeError)
+      const mapped = mapNodeError(nodeError)
+      const friendlyMessage = getErrorMessage(mapped.code, language)
+      return new AppError(friendlyMessage, mapped.code, mapped.retryable, error)
     }
     
-    return new AppError(error.message, ErrorCode.UNKNOWN, false, error)
+    // 普通 Error
+    const friendlyMessage = getErrorMessage(ErrorCode.UNKNOWN, language)
+    return new AppError(friendlyMessage, ErrorCode.UNKNOWN, false, error)
   }
 
   if (typeof error === 'string') {
-    return new AppError(error, ErrorCode.UNKNOWN, false)
+    const friendlyMessage = getErrorMessage(ErrorCode.UNKNOWN, language)
+    return new AppError(friendlyMessage, ErrorCode.UNKNOWN, false)
   }
 
-  return new AppError('An unexpected error occurred', ErrorCode.UNKNOWN, false, error)
+  const friendlyMessage = getErrorMessage(ErrorCode.UNKNOWN, language)
+  return new AppError(friendlyMessage, ErrorCode.UNKNOWN, false, error)
 }
