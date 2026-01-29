@@ -5,7 +5,7 @@
 
 import { useState, useRef, useCallback, ReactNode, memo, useMemo } from 'react'
 import { X } from 'lucide-react'
-import { useCloseOnOutsideOrEscape } from '@/renderer/hooks/usePerformance'
+import { useClickOutside, useEscapeKey } from '@/renderer/hooks/usePerformance'
 
 export interface BottomBarPopoverProps {
     /** 触发按钮的图标 */
@@ -42,9 +42,10 @@ export default memo(function BottomBarPopover({
     const handleClose = useCallback(() => setIsOpen(false), [])
     const handleToggle = useCallback(() => setIsOpen(prev => !prev), [])
 
-    // 使用自定义 Hook 处理点击外部和 ESC 键关闭
-    // 但需要排除按钮本身
-    useCloseOnOutsideOrEscape(handleClose, isOpen)
+    // 使用 useClickOutside 处理点击外部关闭，需要排除按钮和弹框本身
+    useClickOutside(handleClose, isOpen, [popoverRef, buttonRef])
+    // 使用 useEscapeKey 处理 ESC 键关闭
+    useEscapeKey(handleClose, isOpen)
 
     const contentHeight = useMemo(() => 
         title ? height - 40 : height,

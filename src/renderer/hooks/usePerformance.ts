@@ -164,17 +164,21 @@ export function useClickOutside<T extends HTMLElement = HTMLElement>(
     if (!enabled) return
 
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      
       // 如果提供了外部 refs，检查所有 refs
       if (externalRefs && externalRefs.length > 0) {
-        const isOutside = externalRefs.every(
-          ref => !ref.current || !ref.current.contains(event.target as Node)
+        // 检查点击是否在任何一个 ref 内部
+        const isInside = externalRefs.some(
+          ref => ref.current && ref.current.contains(target)
         )
-        if (isOutside) {
+        // 只有当点击不在任何 ref 内部时才关闭
+        if (!isInside) {
           handlerRef.current()
         }
       } 
       // 否则使用内部 ref
-      else if (internalRef.current && !internalRef.current.contains(event.target as Node)) {
+      else if (internalRef.current && !internalRef.current.contains(target)) {
         handlerRef.current()
       }
     }
