@@ -474,9 +474,9 @@ Return structured analysis with issues, suggestions, and summary.`,
  * 简化的 JSON Schema 到 Zod 转换器
  * 只支持常见的类型，用于 IPC 传递
  */
-function jsonSchemaToZod(schema: any): z.ZodType {
+function jsonSchemaToZod(schema: any): z.ZodTypeAny {
   if (schema.type === 'object') {
-    const shape: Record<string, z.ZodType> = {}
+    const shape: Record<string, z.ZodTypeAny> = {}
     for (const [key, value] of Object.entries(schema.properties || {})) {
       const propSchema = value as any
       shape[key] = jsonSchemaToZod(propSchema)
@@ -484,11 +484,7 @@ function jsonSchemaToZod(schema: any): z.ZodType {
         shape[key] = shape[key].describe(propSchema.description)
       }
     }
-    let obj = z.object(shape)
-    if (schema.required && Array.isArray(schema.required)) {
-      // Zod 默认所有字段都是必需的，这里不需要额外处理
-    }
-    return obj
+    return z.object(shape)
   }
   
   if (schema.type === 'array') {
