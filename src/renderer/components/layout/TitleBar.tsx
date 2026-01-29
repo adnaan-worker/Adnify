@@ -22,7 +22,7 @@ export default function TitleBar() {
         ${isMac ? 'pl-[76px] pr-4' : 'pl-4 pr-4'}
       `}>
         {/* Logo - Clickable to show about */}
-        <div 
+        <div
           onClick={() => setShowAbout(true)}
           className="no-drag flex items-center gap-2.5 opacity-80 hover:opacity-100 transition-all cursor-pointer group"
         >
@@ -77,22 +77,22 @@ export default function TitleBar() {
         {/* Windows Controls */}
         {!isMac && (
           <div className="no-drag flex items-center h-full pl-2 border-l border-white/5">
-            <div className="flex items-center">
+            <div className="flex items-center gap-0.5">
               <button
                 onClick={() => api.window.minimize()}
-                className="w-10 h-8 flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/5 transition-all group"
+                className="w-9 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/5 transition-all group"
               >
                 <Minus className="w-4 h-4 opacity-70 group-hover:opacity-100" />
               </button>
               <button
                 onClick={() => api.window.maximize()}
-                className="w-10 h-8 flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/5 transition-all group"
+                className="w-9 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/5 transition-all group"
               >
                 <Square className="w-3 h-3 opacity-70 group-hover:opacity-100" />
               </button>
               <button
                 onClick={() => api.window.close()}
-                className="w-10 h-8 flex items-center justify-center text-text-muted hover:text-white hover:bg-red-500/90 transition-all group"
+                className="w-9 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-white hover:bg-red-500/90 transition-all group"
               >
                 <X className="w-4 h-4 opacity-70 group-hover:opacity-100" />
               </button>

@@ -185,13 +185,13 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
     for (const normalizedPath of pathsToExpand) {
       // 在当前层级的 items 中查找匹配的目录
-      const targetDir = currentItems.find(item => 
+      const targetDir = currentItems.find(item =>
         item.isDirectory && pathEquals(item.path, normalizedPath)
       )
 
       if (targetDir) {
         pathsToExpandActual.push(targetDir.path)
-        
+
         // 展开该目录
         const isExpanded = expandedFolders.has(targetDir.path)
         if (!isExpanded) {
@@ -323,7 +323,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     } else {
       // 检查文件类型
       const fileType = getFileType(node.item.path)
-      
+
       if (fileType === 'image' || fileType === 'binary') {
         // 图片和二进制文件不需要读取内容，直接打开
         openFile(node.item.path, '')
@@ -507,9 +507,13 @@ export const VirtualFileTree = memo(function VirtualFileTree({
               }
             }}
             onKeyDown={(e) => {
-              if (keybindingService.matches(e, 'list.select') && e.currentTarget.value.trim()) {
+              // 输入法组合中不处理回车
+              if (e.nativeEvent.isComposing) return
+
+              if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                e.preventDefault()
                 onCreateSubmit(creatingIn.path, e.currentTarget.value.trim(), creatingIn.type)
-              } else if (keybindingService.matches(e, 'list.cancel')) {
+              } else if (e.key === 'Escape') {
                 onCancelCreate()
               }
             }}
@@ -594,8 +598,14 @@ export const VirtualFileTree = memo(function VirtualFileTree({
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={handleRenameSubmit}
             onKeyDown={(e) => {
-              if (keybindingService.matches(e, 'list.select')) handleRenameSubmit()
-              if (keybindingService.matches(e, 'list.cancel')) setRenamingPath(null)
+              // 输入法组合中不处理回车
+              if (e.nativeEvent.isComposing) return
+
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                handleRenameSubmit()
+              }
+              if (e.key === 'Escape') setRenamingPath(null)
             }}
             onClick={(e) => e.stopPropagation()}
             className="flex-1 h-5 text-[13px] px-1 py-0"

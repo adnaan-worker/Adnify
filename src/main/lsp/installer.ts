@@ -14,6 +14,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
+import { getExecutableName, getNpmCommand } from '@shared/utils/pathUtils'
 import Store from 'electron-store'
 
 // ============ 配置持久化 ============
@@ -42,12 +43,12 @@ export function setCustomLspBinDir(customPath: string | null): void {
 export function getLspBinDir(): string {
   const customDir = store.get(CONFIG_KEY_BIN_DIR) as string | undefined
   const dir = customDir || DEFAULT_LSP_BIN_DIR
-  
+
   logger.lsp.debug(`[LSP Installer] Using bin directory: ${dir}`, {
     isCustom: !!customDir,
     defaultDir: DEFAULT_LSP_BIN_DIR,
   })
-  
+
   if (!fs.existsSync(dir)) {
     try {
       fs.mkdirSync(dir, { recursive: true })
@@ -58,7 +59,7 @@ export function getLspBinDir(): string {
       throw new Error(`Failed to create LSP bin directory: ${error.message}`)
     }
   }
-  
+
   return dir
 }
 
@@ -110,17 +111,17 @@ export function commandExists(cmd: string): boolean {
  */
 async function npmInstall(packageName: string, targetDir: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+    const npmCmd = getNpmCommand()
     logger.lsp.info(`[LSP Installer] Running: npm install ${packageName} in ${targetDir}`)
     logger.lsp.debug(`[LSP Installer] npm command: ${npmCmd}`)
-    
+
     // 检查 npm 是否可用
     if (!commandExists('npm')) {
       logger.lsp.error('[LSP Installer] npm not found in PATH')
       resolve(false)
       return
     }
-    
+
     // 确保目标目录存在
     if (!fs.existsSync(targetDir)) {
       try {
@@ -132,30 +133,30 @@ async function npmInstall(packageName: string, targetDir: string): Promise<boole
         return
       }
     }
-    
+
     const proc = spawn(npmCmd, ['install', packageName, '--prefix', targetDir], {
       cwd: targetDir,
       stdio: 'pipe',
       shell: true,
     })
-    
+
     let stdout = ''
     let stderr = ''
-    
+
     // 捕获 stdout
     proc.stdout?.on('data', (data) => {
       const text = data.toString()
       stdout += text
       logger.lsp.debug(`[LSP Installer] npm stdout: ${text.trim()}`)
     })
-    
+
     // 捕获 stderr
     proc.stderr?.on('data', (data) => {
       const text = data.toString()
       stderr += text
       logger.lsp.warn(`[LSP Installer] npm stderr: ${text.trim()}`)
     })
-    
+
     proc.on('close', (code) => {
       if (code === 0) {
         logger.lsp.info(`[LSP Installer] npm install succeeded for ${packageName}`)
@@ -170,7 +171,7 @@ async function npmInstall(packageName: string, targetDir: string): Promise<boole
         resolve(false)
       }
     })
-    
+
     proc.on('error', (err) => {
       logger.lsp.error(`[LSP Installer] npm process error:`, {
         error: err.message,
@@ -190,9 +191,9 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
   try {
     logger.lsp.info(`[LSP Installer] Downloading: ${url}`)
     logger.lsp.debug(`[LSP Installer] Destination: ${destPath}`)
-    
+
     const response = await fetch(url)
-    
+
     if (!response.ok) {
       logger.lsp.error(`[LSP Installer] Download failed: HTTP ${response.status} ${response.statusText}`, {
         url,
@@ -201,29 +202,29 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
       })
       return false
     }
-    
+
     logger.lsp.debug(`[LSP Installer] Download response OK, reading buffer...`)
     const buffer = await response.arrayBuffer()
     const sizeInMB = (buffer.byteLength / 1024 / 1024).toFixed(2)
     logger.lsp.debug(`[LSP Installer] Downloaded ${sizeInMB} MB`)
-    
+
     // 确保目标目录存在
     const destDir = path.dirname(destPath)
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true })
       logger.lsp.debug(`[LSP Installer] Created destination directory: ${destDir}`)
     }
-    
+
     // 写入文件
     fs.writeFileSync(destPath, Buffer.from(buffer))
     logger.lsp.info(`[LSP Installer] File saved: ${destPath} (${sizeInMB} MB)`)
-    
+
     // 验证文件是否存在
     if (!fs.existsSync(destPath)) {
       logger.lsp.error(`[LSP Installer] File verification failed: ${destPath} does not exist after write`)
       return false
     }
-    
+
     return true
   } catch (err) {
     const error = toAppError(err)
@@ -243,34 +244,34 @@ async function extractZip(zipPath: string, destDir: string): Promise<boolean> {
   try {
     logger.lsp.info(`[LSP Installer] Extracting ZIP: ${zipPath}`)
     logger.lsp.debug(`[LSP Installer] Extract destination: ${destDir}`)
-    
+
     // 验证 ZIP 文件存在
     if (!fs.existsSync(zipPath)) {
       logger.lsp.error(`[LSP Installer] ZIP file not found: ${zipPath}`)
       return false
     }
-    
+
     // 获取文件大小
     const stats = fs.statSync(zipPath)
     const sizeInMB = (stats.size / 1024 / 1024).toFixed(2)
     logger.lsp.debug(`[LSP Installer] ZIP file size: ${sizeInMB} MB`)
-    
+
     // 确保目标目录存在
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true })
       logger.lsp.debug(`[LSP Installer] Created extract directory: ${destDir}`)
     }
-    
+
     const AdmZip = (await import('adm-zip')).default
     const zip = new AdmZip(zipPath)
-    
+
     // 获取 ZIP 内容信息
     const entries = zip.getEntries()
     logger.lsp.debug(`[LSP Installer] ZIP contains ${entries.length} entries`)
-    
+
     zip.extractAllTo(destDir, true)
     logger.lsp.info(`[LSP Installer] ZIP extracted successfully to ${destDir}`)
-    
+
     return true
   } catch (err) {
     const error = toAppError(err)
@@ -290,30 +291,30 @@ async function extractTarXz(archivePath: string, destDir: string): Promise<boole
   try {
     logger.lsp.info(`[LSP Installer] Extracting tar.xz: ${archivePath}`)
     logger.lsp.debug(`[LSP Installer] Extract destination: ${destDir}`)
-    
+
     // 验证文件存在
     if (!fs.existsSync(archivePath)) {
       logger.lsp.error(`[LSP Installer] Archive file not found: ${archivePath}`)
       return false
     }
-    
+
     // 获取文件大小
     const stats = fs.statSync(archivePath)
     const sizeInMB = (stats.size / 1024 / 1024).toFixed(2)
     logger.lsp.debug(`[LSP Installer] Archive size: ${sizeInMB} MB`)
-    
+
     // 确保目标目录存在
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true })
       logger.lsp.debug(`[LSP Installer] Created extract directory: ${destDir}`)
     }
-    
+
     if (process.platform === 'win32') {
       // Windows: 使用 tar 命令（Windows 10 1803+ 内置）
       logger.lsp.debug('[LSP Installer] Using Windows tar command')
       try {
-        const output = execSync(`tar -xf "${archivePath}"`, { 
-          cwd: destDir, 
+        const output = execSync(`tar -xf "${archivePath}"`, {
+          cwd: destDir,
           stdio: 'pipe',
           encoding: 'utf-8',
         })
@@ -329,16 +330,16 @@ async function extractTarXz(archivePath: string, destDir: string): Promise<boole
     } else {
       // Unix: 使用 tar 命令
       logger.lsp.debug('[LSP Installer] Using Unix tar command')
-      
+
       // 检查 tar 命令是否可用
       if (!commandExists('tar')) {
         logger.lsp.error('[LSP Installer] tar not found in PATH')
         return false
       }
-      
+
       try {
-        const output = execSync(`tar -xf "${archivePath}"`, { 
-          cwd: destDir, 
+        const output = execSync(`tar -xf "${archivePath}"`, {
+          cwd: destDir,
           stdio: 'pipe',
           encoding: 'utf-8',
         })
@@ -468,7 +469,7 @@ const SERVER_PATHS: Record<string, ServerPathConfig> = {
     systemCommand: 'vue-language-server',
   },
   go: {
-    userPaths: [`gopls${process.platform === 'win32' ? '.exe' : ''}`],
+    userPaths: [getExecutableName('gopls')],
     builtinPaths: [],
     systemCommand: 'gopls',
   },
@@ -479,20 +480,20 @@ const SERVER_PATHS: Record<string, ServerPathConfig> = {
   },
   clangd: {
     userPaths: [
-      `clangd${process.platform === 'win32' ? '.exe' : ''}`,
+      getExecutableName('clangd'),
       // clangd 下载后可能在子目录
-      `clangd_*/bin/clangd${process.platform === 'win32' ? '.exe' : ''}`,
+      `clangd_*/bin/${getExecutableName('clangd')}`,
     ],
     builtinPaths: [],
     systemCommand: 'clangd',
   },
   zig: {
-    userPaths: [`zls${process.platform === 'win32' ? '.exe' : ''}`],
+    userPaths: [getExecutableName('zls')],
     builtinPaths: [],
     systemCommand: 'zls',
   },
   csharp: {
-    userPaths: [`csharp-ls${process.platform === 'win32' ? '.exe' : ''}`],
+    userPaths: [getExecutableName('csharp-ls')],
     builtinPaths: [],
     systemCommand: 'csharp-ls',
   },
@@ -500,6 +501,11 @@ const SERVER_PATHS: Record<string, ServerPathConfig> = {
     userPaths: [],
     builtinPaths: [],
     systemCommand: 'deno',
+  },
+  php: {
+    userPaths: ['node_modules/intelephense/lib/intelephense.js'],
+    builtinPaths: ['intelephense/lib/intelephense.js'],
+    systemCommand: 'intelephense',
   },
 }
 
@@ -565,7 +571,7 @@ export interface LspInstallResult {
 export async function installTypeScriptServer(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting TypeScript Language Server installation')
   logEnvironmentInfo()
-  
+
   const existing = getInstalledServerPath('typescript')
   if (existing) {
     logger.lsp.info(`[LSP Installer] TypeScript server already installed at: ${existing}`)
@@ -574,9 +580,9 @@ export async function installTypeScriptServer(): Promise<LspInstallResult> {
 
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
-  
+
   const success = await npmInstall('typescript-language-server typescript', binDir)
-  
+
   if (success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
     const serverPath = getInstalledServerPath('typescript')
@@ -591,7 +597,7 @@ export async function installTypeScriptServer(): Promise<LspInstallResult> {
       return { success: false, error: 'Server binary not found after installation. Check installation directory.' }
     }
   }
-  
+
   logger.lsp.error('[LSP Installer] npm install failed for typescript-language-server')
   return { success: false, error: 'npm install failed. Check logs for details.' }
 }
@@ -602,7 +608,7 @@ export async function installTypeScriptServer(): Promise<LspInstallResult> {
 export async function installVscodeLanguageServers(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting VSCode Language Servers installation')
   logEnvironmentInfo()
-  
+
   const existing = getInstalledServerPath('html')
   if (existing) {
     logger.lsp.info(`[LSP Installer] VSCode servers already installed at: ${existing}`)
@@ -611,9 +617,9 @@ export async function installVscodeLanguageServers(): Promise<LspInstallResult> 
 
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
-  
+
   const success = await npmInstall('vscode-langservers-extracted', binDir)
-  
+
   if (success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
     const serverPath = getInstalledServerPath('html')
@@ -628,7 +634,7 @@ export async function installVscodeLanguageServers(): Promise<LspInstallResult> 
       return { success: false, error: 'Server binary not found after installation. Check installation directory.' }
     }
   }
-  
+
   logger.lsp.error('[LSP Installer] npm install failed for vscode-langservers-extracted')
   return { success: false, error: 'npm install failed. Check logs for details.' }
 }
@@ -639,7 +645,7 @@ export async function installVscodeLanguageServers(): Promise<LspInstallResult> 
 export async function installPyright(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting Pyright installation')
   logEnvironmentInfo()
-  
+
   const existing = getInstalledServerPath('python')
   if (existing) {
     logger.lsp.info(`[LSP Installer] Pyright already installed at: ${existing}`)
@@ -648,9 +654,9 @@ export async function installPyright(): Promise<LspInstallResult> {
 
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
-  
+
   const success = await npmInstall('pyright', binDir)
-  
+
   if (success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
     const serverPath = getInstalledServerPath('python')
@@ -665,7 +671,7 @@ export async function installPyright(): Promise<LspInstallResult> {
       return { success: false, error: 'Server binary not found after installation. Check installation directory.' }
     }
   }
-  
+
   logger.lsp.error('[LSP Installer] npm install failed for pyright')
   return { success: false, error: 'npm install failed. Check logs for details.' }
 }
@@ -676,7 +682,7 @@ export async function installPyright(): Promise<LspInstallResult> {
 export async function installVueServer(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting Vue Language Server installation')
   logEnvironmentInfo()
-  
+
   const existing = getInstalledServerPath('vue')
   if (existing) {
     logger.lsp.info(`[LSP Installer] Vue server already installed at: ${existing}`)
@@ -685,9 +691,9 @@ export async function installVueServer(): Promise<LspInstallResult> {
 
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
-  
+
   const success = await npmInstall('@vue/language-server', binDir)
-  
+
   if (success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
     const serverPath = getInstalledServerPath('vue')
@@ -702,7 +708,7 @@ export async function installVueServer(): Promise<LspInstallResult> {
       return { success: false, error: 'Server binary not found after installation. Check installation directory.' }
     }
   }
-  
+
   logger.lsp.error('[LSP Installer] npm install failed for @vue/language-server')
   return { success: false, error: 'npm install failed. Check logs for details.' }
 }
@@ -713,7 +719,7 @@ export async function installVueServer(): Promise<LspInstallResult> {
 export async function installGopls(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting gopls installation')
   logEnvironmentInfo()
-  
+
   const existing = getInstalledServerPath('go')
   if (existing) {
     logger.lsp.info(`[LSP Installer] gopls already installed at: ${existing}`)
@@ -727,9 +733,8 @@ export async function installGopls(): Promise<LspInstallResult> {
   }
 
   const binDir = getLspBinDir()
-  const ext = process.platform === 'win32' ? '.exe' : ''
-  const goplsPath = path.join(binDir, 'gopls' + ext)
-  
+  const goplsPath = path.join(binDir, getExecutableName('gopls'))
+
   logger.lsp.info(`[LSP Installer] Installing gopls to: ${binDir}`)
   logger.lsp.debug(`[LSP Installer] Expected binary path: ${goplsPath}`)
 
@@ -741,13 +746,13 @@ export async function installGopls(): Promise<LspInstallResult> {
 
     let stdout = ''
     let stderr = ''
-    
+
     proc.stdout?.on('data', (data) => {
       const text = data.toString()
       stdout += text
       logger.lsp.debug(`[LSP Installer] go install stdout: ${text.trim()}`)
     })
-    
+
     proc.stderr?.on('data', (data) => {
       const text = data.toString()
       stderr += text
@@ -757,7 +762,7 @@ export async function installGopls(): Promise<LspInstallResult> {
     proc.on('close', (code) => {
       if (code === 0) {
         logger.lsp.debug('[LSP Installer] go install completed, verifying binary...')
-        
+
         if (fs.existsSync(goplsPath)) {
           setExecutable(goplsPath)
           logger.lsp.info(`[LSP Installer] gopls installed successfully at: ${goplsPath}`)
@@ -797,7 +802,7 @@ export async function installGopls(): Promise<LspInstallResult> {
 export async function installClangd(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting clangd installation')
   logEnvironmentInfo()
-  
+
   const existing = getInstalledServerPath('clangd')
   if (existing) {
     logger.lsp.info(`[LSP Installer] clangd already installed at: ${existing}`)
@@ -812,7 +817,7 @@ export async function installClangd(): Promise<LspInstallResult> {
     // 获取最新 release 信息
     logger.lsp.debug('[LSP Installer] Fetching latest clangd release info...')
     const releaseRes = await fetch('https://api.github.com/repos/clangd/clangd/releases/latest')
-    
+
     if (!releaseRes.ok) {
       logger.lsp.error(`[LSP Installer] Failed to fetch clangd release info: HTTP ${releaseRes.status}`, {
         status: releaseRes.status,
@@ -823,12 +828,12 @@ export async function installClangd(): Promise<LspInstallResult> {
 
     const release = await releaseRes.json() as { tag_name?: string; assets?: Array<{ name: string; browser_download_url: string }> }
     const tag = release.tag_name
-    
+
     if (!tag) {
       logger.lsp.error('[LSP Installer] No tag found in clangd release')
       return { success: false, error: 'No release tag found' }
     }
-    
+
     logger.lsp.info(`[LSP Installer] Latest clangd version: ${tag}`)
 
     // 确定平台和架构
@@ -843,31 +848,31 @@ export async function installClangd(): Promise<LspInstallResult> {
       logger.lsp.error(`[LSP Installer] Unsupported platform: ${process.platform}`)
       return { success: false, error: `Unsupported platform: ${process.platform}` }
     }
-    
+
     logger.lsp.debug(`[LSP Installer] Target platform: ${platform}`)
 
     // 查找对应的 asset
     const assets = release.assets || []
     logger.lsp.debug(`[LSP Installer] Found ${assets.length} assets in release`)
-    
-    const asset = assets.find(a => 
-      a.name.includes(platform) && 
+
+    const asset = assets.find(a =>
+      a.name.includes(platform) &&
       a.name.endsWith('.zip')
     )
-    
+
     if (!asset) {
       logger.lsp.error(`[LSP Installer] No clangd asset found for ${platform}`, {
         availableAssets: assets.map(a => a.name),
       })
       return { success: false, error: `No clangd binary available for ${platform}` }
     }
-    
+
     logger.lsp.info(`[LSP Installer] Found asset: ${asset.name}`)
 
     // 下载
     const zipPath = path.join(binDir, asset.name)
     const downloaded = await downloadFile(asset.browser_download_url, zipPath)
-    
+
     if (!downloaded) {
       return { success: false, error: 'Failed to download clangd. Check network connection.' }
     }
@@ -875,7 +880,7 @@ export async function installClangd(): Promise<LspInstallResult> {
     // 解压
     logger.lsp.info('[LSP Installer] Extracting clangd...')
     const extracted = await extractZip(zipPath, binDir)
-    
+
     // 删除 zip
     try {
       fs.unlinkSync(zipPath)
@@ -883,7 +888,7 @@ export async function installClangd(): Promise<LspInstallResult> {
     } catch (err) {
       logger.lsp.warn(`[LSP Installer] Failed to delete archive: ${zipPath}`, err)
     }
-    
+
     if (!extracted) {
       return { success: false, error: 'Failed to extract clangd archive' }
     }
@@ -891,7 +896,7 @@ export async function installClangd(): Promise<LspInstallResult> {
     // 查找解压后的二进制
     logger.lsp.debug('[LSP Installer] Searching for clangd binary...')
     const clangdPath = getInstalledServerPath('clangd')
-    
+
     if (clangdPath) {
       setExecutable(clangdPath)
       logger.lsp.info(`[LSP Installer] clangd installed successfully at: ${clangdPath}`)
@@ -917,7 +922,7 @@ export async function installClangd(): Promise<LspInstallResult> {
 export async function installZls(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting zls installation')
   logEnvironmentInfo()
-  
+
   const existing = getInstalledServerPath('zig')
   if (existing) {
     logger.lsp.info(`[LSP Installer] zls already installed at: ${existing}`)
@@ -938,7 +943,7 @@ export async function installZls(): Promise<LspInstallResult> {
   try {
     logger.lsp.debug('[LSP Installer] Fetching latest zls release info...')
     const releaseRes = await fetch('https://api.github.com/repos/zigtools/zls/releases/latest')
-    
+
     if (!releaseRes.ok) {
       logger.lsp.error(`[LSP Installer] Failed to fetch zls release info: HTTP ${releaseRes.status}`, {
         status: releaseRes.status,
@@ -952,15 +957,15 @@ export async function installZls(): Promise<LspInstallResult> {
     // 确定平台和架构
     const archMap: Record<string, string> = { x64: 'x86_64', arm64: 'aarch64', ia32: 'x86' }
     const platformMap: Record<string, string> = { darwin: 'macos', linux: 'linux', win32: 'windows' }
-    
+
     const arch = archMap[process.arch] || process.arch
     const platform = platformMap[process.platform]
-    
+
     if (!platform) {
       logger.lsp.error(`[LSP Installer] Unsupported platform: ${process.platform}`)
       return { success: false, error: `Unsupported platform: ${process.platform}` }
     }
-    
+
     logger.lsp.debug(`[LSP Installer] Target: ${arch}-${platform}`)
 
     // Windows 使用 zip，其他平台使用 tar.xz
@@ -970,22 +975,22 @@ export async function installZls(): Promise<LspInstallResult> {
 
     const assets = release.assets || []
     logger.lsp.debug(`[LSP Installer] Found ${assets.length} assets in release`)
-    
+
     const asset = assets.find(a => a.name === assetName)
-    
+
     if (!asset) {
       logger.lsp.error(`[LSP Installer] No zls asset found: ${assetName}`, {
         availableAssets: assets.map(a => a.name),
       })
       return { success: false, error: `No zls binary available for ${arch}-${platform}` }
     }
-    
+
     logger.lsp.info(`[LSP Installer] Found asset: ${asset.name}`)
 
     // 下载
     const archivePath = path.join(binDir, asset.name)
     const downloaded = await downloadFile(asset.browser_download_url, archivePath)
-    
+
     if (!downloaded) {
       return { success: false, error: 'Failed to download zls. Check network connection.' }
     }
@@ -993,13 +998,13 @@ export async function installZls(): Promise<LspInstallResult> {
     // 解压
     logger.lsp.info('[LSP Installer] Extracting zls...')
     let extractSuccess = false
-    
+
     if (extType === 'zip') {
       extractSuccess = await extractZip(archivePath, binDir)
     } else {
       extractSuccess = await extractTarXz(archivePath, binDir)
     }
-    
+
     // 清理下载的压缩包
     try {
       fs.unlinkSync(archivePath)
@@ -1007,16 +1012,15 @@ export async function installZls(): Promise<LspInstallResult> {
     } catch (err) {
       logger.lsp.warn(`[LSP Installer] Failed to delete archive: ${archivePath}`, err)
     }
-    
+
     if (!extractSuccess) {
       return { success: false, error: 'Failed to extract zls archive' }
     }
 
     // 查找解压后的二进制
     logger.lsp.debug('[LSP Installer] Searching for zls binary...')
-    const ext = process.platform === 'win32' ? '.exe' : ''
-    const zlsPath = path.join(binDir, 'zls' + ext)
-    
+    const zlsPath = path.join(binDir, getExecutableName('zls'))
+
     if (fs.existsSync(zlsPath)) {
       setExecutable(zlsPath)
       logger.lsp.info(`[LSP Installer] zls installed successfully at: ${zlsPath}`)
@@ -1043,7 +1047,7 @@ export async function installZls(): Promise<LspInstallResult> {
 export async function installCsharpLs(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting csharp-ls installation')
   logEnvironmentInfo()
-  
+
   const existing = getInstalledServerPath('csharp')
   if (existing) {
     logger.lsp.info(`[LSP Installer] csharp-ls already installed at: ${existing}`)
@@ -1057,9 +1061,8 @@ export async function installCsharpLs(): Promise<LspInstallResult> {
   }
 
   const binDir = getLspBinDir()
-  const ext = process.platform === 'win32' ? '.exe' : ''
-  const csharpLsPath = path.join(binDir, 'csharp-ls' + ext)
-  
+  const csharpLsPath = path.join(binDir, getExecutableName('csharp-ls'))
+
   logger.lsp.info(`[LSP Installer] Installing csharp-ls to: ${binDir}`)
   logger.lsp.debug(`[LSP Installer] Expected binary path: ${csharpLsPath}`)
 
@@ -1070,13 +1073,13 @@ export async function installCsharpLs(): Promise<LspInstallResult> {
 
     let stdout = ''
     let stderr = ''
-    
+
     proc.stdout?.on('data', (data) => {
       const text = data.toString()
       stdout += text
       logger.lsp.debug(`[LSP Installer] dotnet tool stdout: ${text.trim()}`)
     })
-    
+
     proc.stderr?.on('data', (data) => {
       const text = data.toString()
       stderr += text
@@ -1085,7 +1088,7 @@ export async function installCsharpLs(): Promise<LspInstallResult> {
 
     proc.on('close', (code) => {
       logger.lsp.debug(`[LSP Installer] dotnet tool exited with code ${code}`)
-      
+
       if (fs.existsSync(csharpLsPath)) {
         setExecutable(csharpLsPath)
         logger.lsp.info(`[LSP Installer] csharp-ls installed successfully at: ${csharpLsPath}`)
@@ -1124,6 +1127,43 @@ export async function installCsharpLs(): Promise<LspInstallResult> {
   })
 }
 
+/**
+ * 安装 Intelephense (PHP LSP)
+ */
+export async function installIntelephense(): Promise<LspInstallResult> {
+  logger.lsp.info('[LSP Installer] Starting Intelephense installation')
+  logEnvironmentInfo()
+
+  const existing = getInstalledServerPath('php')
+  if (existing) {
+    logger.lsp.info(`[LSP Installer] Intelephense already installed at: ${existing}`)
+    return { success: true, path: existing }
+  }
+
+  const binDir = getLspBinDir()
+  logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
+
+  const success = await npmInstall('intelephense', binDir)
+
+  if (success) {
+    logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
+    const serverPath = getInstalledServerPath('php')
+    if (serverPath) {
+      logger.lsp.info(`[LSP Installer] intelephense installed successfully at: ${serverPath}`)
+      return { success: true, path: serverPath }
+    } else {
+      logger.lsp.error('[LSP Installer] Installation succeeded but server binary not found', {
+        binDir,
+        expectedPaths: SERVER_PATHS.php.userPaths,
+      })
+      return { success: false, error: 'Server binary not found after installation. Check installation directory.' }
+    }
+  }
+
+  logger.lsp.error('[LSP Installer] npm install failed for intelephense')
+  return { success: false, error: 'npm install failed. Check logs for details.' }
+}
+
 // ============ 统一安装入口 ============
 
 /**
@@ -1131,7 +1171,7 @@ export async function installCsharpLs(): Promise<LspInstallResult> {
  */
 export async function installServer(serverId: string): Promise<LspInstallResult> {
   logger.lsp.info(`[LSP Installer] Install request for server: ${serverId}`)
-  
+
   switch (serverId) {
     case 'typescript':
       return installTypeScriptServer()
@@ -1157,6 +1197,8 @@ export async function installServer(serverId: string): Promise<LspInstallResult>
     case 'deno':
       logger.lsp.warn('[LSP Installer] Deno requires manual installation')
       return { success: false, error: 'Deno must be installed manually from https://deno.land' }
+    case 'php':
+      return installIntelephense()
     default:
       logger.lsp.error(`[LSP Installer] Unknown server ID: ${serverId}`)
       return { success: false, error: `Unknown server: ${serverId}` }
@@ -1194,7 +1236,7 @@ export async function installBasicServers(): Promise<LspInstallResult> {
   ])
 
   const failed = results.filter(r => !r.success)
-  
+
   if (failed.length > 0) {
     const errorMessages = failed.map(f => f.error).join('; ')
     logger.lsp.error('[LSP Installer] Some basic servers failed to install:', {

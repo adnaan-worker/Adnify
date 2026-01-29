@@ -132,13 +132,13 @@ class KeybindingService {
                 const parsed = JSON.parse(localData)
                 this.overrides = new Map(Object.entries(parsed))
                 // 异步同步到文件（不阻塞）
-                api.settings.set('keybindings', parsed).catch(() => {})
+                api.settings.set('keybindings', parsed).catch(() => { })
                 return
             }
         } catch (e) {
             // localStorage 读取失败，继续从文件读取
         }
-        
+
         // 从文件读取
         try {
             const saved = await api.settings.get('keybindings') as Record<string, string>

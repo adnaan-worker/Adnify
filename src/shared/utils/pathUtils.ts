@@ -15,21 +15,21 @@ export const isSensitivePath = sharedIsSensitivePath
 
 export function isPathInWorkspace(path: string, workspacePath: string): boolean {
   if (!workspacePath) return false
-  
+
   // 清理路径中的 "./" 前缀
   let cleanPath = path
   if (cleanPath.startsWith('./') || cleanPath.startsWith('.\\')) {
     cleanPath = cleanPath.slice(2)
   }
-  
+
   const normalizedPath = normalizePath(cleanPath)
   const normalizedWorkspace = normalizePath(workspacePath)
-  
+
   // 如果路径已经是绝对路径且在 workspace 内
   if (normalizedPath.startsWith(normalizedWorkspace)) {
     return true
   }
-  
+
   // 如果是相对路径，转换为绝对路径后检查
   const resolvedPath = normalizePath(toFullPath(cleanPath, workspacePath))
   return resolvedPath.startsWith(normalizedWorkspace)
@@ -120,10 +120,10 @@ export function joinPath(...parts: string[]): string {
 
 export function toFullPath(relativePath: string, workspacePath: string | null): string {
   if (!workspacePath) return relativePath
-  
+
   // 已经是绝对路径
   if (relativePath.startsWith('/') || /^[a-zA-Z]:/.test(relativePath)) return relativePath
-  
+
   // 处理 "./" 和 "." 开头的路径
   let cleanPath = relativePath
   if (cleanPath === '.') {
@@ -135,10 +135,10 @@ export function toFullPath(relativePath: string, workspacePath: string | null): 
   if (cleanPath.startsWith('.\\')) {
     cleanPath = cleanPath.slice(2)
   }
-  
+
   // 如果清理后是空字符串，返回 workspace 路径
   if (!cleanPath) return workspacePath
-  
+
   const sep = getPathSeparator(workspacePath)
   return `${workspacePath}${sep}${cleanPath}`
 }
@@ -185,3 +185,71 @@ export function resolveImportPath(importPath: string, currentFilePath: string, w
   }
   return importPath
 }
+
+// ============ 跨平台工具函数 ============
+
+/**
+ * 平台检测
+ */
+export const platform = {
+  isWindows: typeof process !== 'undefined' && process.platform === 'win32',
+  isMac: typeof process !== 'undefined' && process.platform === 'darwin',
+  isLinux: typeof process !== 'undefined' && process.platform === 'linux',
+}
+
+/**
+ * 获取可执行文件名（Windows 自动添加 .exe 扩展名）
+ * @example getExecutableName('gopls') => 'gopls.exe' (Windows) / 'gopls' (Unix)
+ */
+export function getExecutableName(name: string): string {
+  return platform.isWindows ? `${name}.exe` : name
+}
+
+/**
+ * 获取 npm 命令（Windows 使用 npm.cmd）
+ */
+export function getNpmCommand(): string {
+  return platform.isWindows ? 'npm.cmd' : 'npm'
+}
+
+/**
+ * 获取 npx 命令（Windows 使用 npx.cmd）
+ */
+export function getNpxCommand(): string {
+  return platform.isWindows ? 'npx.cmd' : 'npx'
+}
+
+/**
+ * 路径转为 file:// URI 格式
+ * @example pathToUri('C:/foo/bar.ts') => 'file:///C:/foo/bar.ts'
+ */
+export function pathToUri(filePath: string): string {
+  const normalized = normalizePath(filePath)
+  // Windows 绝对路径：C:/...
+  if (/^[a-zA-Z]:/.test(normalized)) {
+    return `file:///${normalized}`
+  }
+  // Unix 绝对路径：/home/...
+  return `file://${normalized}`
+}
+
+/**
+ * file:// URI 转为路径格式
+ * @example uriToPath('file:///C:/foo/bar.ts') => 'C:/foo/bar.ts'
+ */
+export function uriToPath(uri: string): string {
+  if (uri.startsWith('file:///')) {
+    const path = uri.slice(8)
+    // Windows 路径: file:///C:/...
+    if (/^[a-zA-Z]:/.test(path)) {
+      return path
+    }
+    // Unix 路径: file:///home/... (需要保留前导 /)
+    return '/' + path
+  }
+  if (uri.startsWith('file://')) {
+    return uri.slice(7)
+  }
+  return uri
+}
+

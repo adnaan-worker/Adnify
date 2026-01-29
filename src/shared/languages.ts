@@ -10,10 +10,10 @@
 // ==========================================
 
 export type LanguageId =
-  | 'typescript' | 'typescriptreact' | 'javascript' | 'javascriptreact'
-  | 'html' | 'css' | 'scss' | 'less' | 'json' | 'jsonc'
-  | 'python' | 'go' | 'rust' | 'cpp' | 'c' | 'vue'
-  | 'zig' | 'csharp'
+    | 'typescript' | 'typescriptreact' | 'javascript' | 'javascriptreact'
+    | 'html' | 'css' | 'scss' | 'less' | 'json' | 'jsonc'
+    | 'python' | 'go' | 'rust' | 'cpp' | 'c' | 'vue' | 'php'
+    | 'zig' | 'csharp'
 
 // ==========================================
 // 文件扩展名 -> 语言 ID 映射
@@ -270,6 +270,15 @@ export const LSP_SERVER_DEFINITIONS: LspServerDefinition[] = [
         builtin: false,
         installable: false, // 需要用户自行安装 Deno
     },
+    {
+        id: 'php',
+        name: 'PHP',
+        description: 'Intelephense (通过 npm 安装)',
+        languages: ['php'],
+        displayLanguages: ['PHP'],
+        builtin: false,
+        installable: true,
+    },
 ]
 
 // ==========================================
@@ -284,7 +293,6 @@ export const LSP_EXTENSIBLE_LANGUAGES = [
     'kotlin',  // kotlin-language-server
     'swift',   // sourcekit-lsp
     'ruby',    // solargraph
-    'php',     // intelephense
     'elixir',  // elixir-ls
 ] as const
 

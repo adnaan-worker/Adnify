@@ -12,6 +12,7 @@
 
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
+import { getExecutableName } from '@shared/utils/pathUtils'
 import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -66,7 +67,7 @@ async function findNearestRoot(
   excludePatterns?: string[]
 ): Promise<string | undefined> {
   let currentDir = startDir
-  
+
   while (currentDir.length >= stopDir.length) {
     // 检查排除模式
     if (excludePatterns) {
@@ -77,7 +78,7 @@ async function findNearestRoot(
         }
       }
     }
-    
+
     // 检查目标模式
     for (const pattern of patterns) {
       const targetPath = path.join(currentDir, pattern)
@@ -85,12 +86,12 @@ async function findNearestRoot(
         return currentDir
       }
     }
-    
+
     const parentDir = path.dirname(currentDir)
     if (parentDir === currentDir) break
     currentDir = parentDir
   }
-  
+
   return undefined
 }
 
@@ -156,8 +157,7 @@ async function getGoplsCommand(): Promise<{ command: string; args: string[] } | 
   }
 
   // 检查 GOPATH/bin
-  const isWindows = process.platform === 'win32'
-  const goplsName = isWindows ? 'gopls.exe' : 'gopls'
+  const goplsName = getExecutableName('gopls')
   const goPathBin = process.env.GOPATH ? path.join(process.env.GOPATH, 'bin', goplsName) : null
 
   if (goPathBin && fs.existsSync(goPathBin)) {
@@ -173,8 +173,7 @@ async function getRustAnalyzerCommand(): Promise<{ command: string; args: string
     return { command: 'rust-analyzer', args: [] }
   }
 
-  const isWindows = process.platform === 'win32'
-  const raName = isWindows ? 'rust-analyzer.exe' : 'rust-analyzer'
+  const raName = getExecutableName('rust-analyzer')
   const cargoHome =
     process.env.CARGO_HOME || path.join(process.env.HOME || process.env.USERPROFILE || '', '.cargo')
   const raPath = path.join(cargoHome, 'bin', raName)
@@ -204,7 +203,7 @@ async function getVueServerCommand(): Promise<{ command: string; args: string[] 
   if (commandExists('vue-language-server')) {
     return { command: 'vue-language-server', args: ['--stdio'] }
   }
-  
+
   return null
 }
 
@@ -236,6 +235,21 @@ async function getCsharpLsCommand(): Promise<{ command: string; args: string[] }
 async function getDenoCommand(): Promise<{ command: string; args: string[] } | null> {
   if (commandExists('deno')) {
     return { command: 'deno', args: ['lsp'] }
+  }
+
+  return null
+}
+
+// PHP LSP (intelephense)
+async function getPhpServerCommand(): Promise<{ command: string; args: string[] } | null> {
+  const serverPath = getInstalledServerPath('php')
+  if (serverPath) {
+    return { command: process.execPath, args: [serverPath, '--stdio'] }
+  }
+
+  // 检查全局安装的 intelephense
+  if (commandExists('intelephense')) {
+    return { command: 'intelephense', args: ['--stdio'] }
   }
 
   return null
@@ -314,7 +328,7 @@ const LSP_SERVERS: LspServerConfig[] = [
       const fileDir = path.dirname(filePath)
       const crateRoot = await findNearestRoot(fileDir, workspacePath, ['Cargo.toml', 'Cargo.lock'])
       if (!crateRoot) return workspacePath
-      
+
       // 向上查找 workspace 根目录
       let currentDir = crateRoot
       while (currentDir.length >= workspacePath.length) {
@@ -331,7 +345,7 @@ const LSP_SERVERS: LspServerConfig[] = [
         if (parentDir === currentDir) break
         currentDir = parentDir
       }
-      
+
       return crateRoot
     },
   },
@@ -395,6 +409,21 @@ const LSP_SERVERS: LspServerConfig[] = [
       return root || null // 找不到 deno.json 返回 null，表示不应该使用 Deno LSP
     },
   },
+  {
+    name: 'php',
+    languages: ['php'],
+    getCommand: getPhpServerCommand,
+    // 智能根目录检测：查找 PHP 项目配置文件
+    findRoot: async (filePath, workspacePath) => {
+      const fileDir = path.dirname(filePath)
+      const root = await findNearestRoot(
+        fileDir,
+        workspacePath,
+        ['composer.json', 'composer.lock', 'phpunit.xml', 'phpstan.neon']
+      )
+      return root || workspacePath
+    },
+  },
 ]
 
 // ============ LSP 管理器 ============
@@ -405,10 +434,10 @@ class LspManager {
   private documentVersions: Map<string, number> = new Map() // 启用文档版本管理
   private diagnosticsCache: CacheService<any[]>
   private startingServers: Set<string> = new Set()
-  
+
   // 跟踪每个服务器打开的文档
   private serverOpenedDocuments: Map<string, Map<string, { languageId: string; version: number; text: string }>> = new Map()
-  
+
   // 空闲关闭配置
   private serverLastActivity: Map<string, number> = new Map()
   private idleCheckInterval: NodeJS.Timeout | null = null
@@ -438,7 +467,7 @@ class LspManager {
         this.languageToServer.set(lang, config.name)
       }
     }
-    
+
     // 启动空闲检查定时器
     this.startIdleCheck()
   }
@@ -452,7 +481,7 @@ class LspManager {
 
   private startIdleCheck() {
     if (this.idleCheckInterval) return
-    
+
     this.idleCheckInterval = setInterval(() => {
       const now = Date.now()
       for (const [key, lastActivity] of this.serverLastActivity) {
@@ -555,7 +584,7 @@ class LspManager {
       // 自动重启逻辑（改进版）
       if (code !== 0 && code !== null && inst) {
         const now = Date.now()
-        
+
         // 如果距离上次崩溃超过冷却时间，重置计数
         if (now - inst.lastCrashTime > LspManager.CRASH_COOLDOWN_MS) {
           inst.crashCount = 1
@@ -568,7 +597,7 @@ class LspManager {
         if (inst.crashCount <= LspManager.MAX_CRASH_COUNT) {
           const delay = Math.min(1000 * inst.crashCount, 5000) // 递增延迟，最大 5 秒
           logger.lsp.warn(`[LSP ${key}] Server crashed (${inst.crashCount}/${LspManager.MAX_CRASH_COUNT}), restarting in ${delay}ms...`)
-          
+
           setTimeout(() => {
             // 再次检查是否应该重启（可能用户已手动停止）
             if (!this.servers.has(key)) {
@@ -716,7 +745,7 @@ class LspManager {
   sendRequest(key: string, method: string, params: any, timeoutMs = 30000): Promise<any> {
     // 更新活动时间
     this.updateActivity(key)
-    
+
     return new Promise((resolve, reject) => {
       const instance = this.servers.get(key)
       if (!instance?.process?.stdin || !instance.process.stdin.writable) {
@@ -747,7 +776,7 @@ class LspManager {
   sendNotification(key: string, method: string, params: any): void {
     // 更新活动时间
     this.updateActivity(key)
-    
+
     const instance = this.servers.get(key)
     if (!instance?.process?.stdin || !instance.process.stdin.writable) return
     const body = JSON.stringify({ jsonrpc: '2.0', method, params })
@@ -797,9 +826,9 @@ class LspManager {
           dynamicRegistration: false,
         },
       },
-      workspace: { 
-        workspaceFolders: true, 
-        applyEdit: true, 
+      workspace: {
+        workspaceFolders: true,
+        applyEdit: true,
         configuration: true,
         // 文件监视支持
         didChangeWatchedFiles: {
@@ -812,16 +841,16 @@ class LspManager {
   async stopServerByKey(key: string): Promise<void> {
     const instance = this.servers.get(key)
     if (!instance?.process) return
-    
+
     // 清除该服务器相关的诊断缓存（按前缀删除）
     const workspaceUri = `file:///${instance.workspacePath.replace(/\\/g, '/')}`
     const altUri = workspaceUri.replace('file:///', 'file://')
-    
+
     // 获取要删除的 URI 列表
     const urisToDelete = this.diagnosticsCache.keys().filter(
       uri => uri.startsWith(workspaceUri) || uri.startsWith(altUri)
     )
-    
+
     for (const uri of urisToDelete) {
       this.diagnosticsCache.delete(uri)
       // 通知前端清除诊断
@@ -833,10 +862,10 @@ class LspManager {
         }
       })
     }
-    
+
     // 清除文档跟踪（服务器关闭后文档状态无效）
     this.serverOpenedDocuments.delete(key)
-    
+
     try {
       await this.sendRequest(key, 'shutdown', null, 3000)
       this.sendNotification(key, 'exit', null)
@@ -844,7 +873,7 @@ class LspManager {
     instance.process.kill()
     this.servers.delete(key)
     this.serverLastActivity.delete(key)
-    
+
     logger.lsp.info(`[LSP ${key}] Server stopped and diagnostics cleared`)
   }
 

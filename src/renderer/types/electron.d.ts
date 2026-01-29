@@ -508,6 +508,15 @@ export interface ElectronAPI {
   }>
   httpSetGoogleSearch: (apiKey: string, cx: string) => Promise<{ success: boolean }>
 
+  // Health Check
+  healthCheckProvider: (provider: string, apiKey: string, baseUrl?: string, timeout?: number) => Promise<{
+    provider: string
+    status: 'healthy' | 'unhealthy' | 'unknown'
+    latency?: number
+    error?: string
+    checkedAt: Date
+  }>
+
   // MCP
   mcpInitialize: (workspaceRoots: string[]) => Promise<{ success: boolean; error?: string }>
   mcpGetServersState: () => Promise<{ success: boolean; servers?: McpServerState[]; error?: string }>

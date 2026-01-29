@@ -34,6 +34,7 @@ const LANGUAGE_TO_SERVER: Record<string, string> = {
   c: 'clangd',
   cpp: 'clangd',
   vue: 'vue',
+  php: 'php',
 }
 
 // 服务器显示名称
@@ -47,6 +48,7 @@ const SERVER_NAMES: Record<string, string> = {
   rust: 'rust-analyzer',
   clangd: 'clangd (C/C++)',
   vue: 'Vue Language Server',
+  php: 'Intelephense (PHP)',
 }
 
 // 安装说明
@@ -60,6 +62,7 @@ const INSTALL_HINTS: Record<string, { auto: boolean; hint: string; builtin?: boo
   rust: { auto: false, hint: '请运行: rustup component add rust-analyzer' },
   clangd: { auto: false, hint: '请安装 LLVM/Clang' },
   vue: { auto: true, hint: '可自动安装' },
+  php: { auto: true, hint: '可自动安装 Intelephense' },
 }
 
 export default function LspStatusIndicator() {
@@ -80,7 +83,7 @@ export default function LspStatusIndicator() {
 
   // 获取服务器状态
   useEffect(() => {
-    api.lsp.getServerStatus().then(setServerStatus).catch(() => {})
+    api.lsp.getServerStatus().then(setServerStatus).catch(() => { })
   }, [])
 
   // 安装服务器
