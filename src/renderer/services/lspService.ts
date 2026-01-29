@@ -7,7 +7,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { EXTENSION_TO_LANGUAGE, LSP_SUPPORTED_LANGUAGES } from '@shared/languages'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 
 // 文档版本追踪
 const documentVersions = new Map<string, number>()
@@ -138,7 +138,7 @@ export async function startLspServer(workspacePath: string): Promise<boolean> {
     const result = await api.lsp.start(workspacePath)
     return result.success
   } catch (err) {
-    const error = handleError(err)
+    const error = toAppError(err)
     logger.lsp.error(`[LSP] Failed to start: ${error.code}`, error)
     return false
   }
@@ -153,7 +153,7 @@ export async function stopLspServer(): Promise<void> {
     documentVersions.clear()
     openedDocuments.clear()
   } catch (err) {
-    const error = handleError(err)
+    const error = toAppError(err)
     logger.lsp.error(`[LSP] Failed to stop: ${error.code}`, error)
   }
 }

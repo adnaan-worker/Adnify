@@ -4,7 +4,7 @@
  */
 
 import { ipcMain, app } from 'electron'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 
@@ -52,7 +52,7 @@ export function registerResourcesHandlers() {
 
       return { success: true, data }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -71,7 +71,7 @@ export function registerResourcesHandlers() {
 
       return { success: true, data: content }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 

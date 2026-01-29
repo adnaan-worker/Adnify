@@ -7,7 +7,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { logger } from '@shared/utils/Logger'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import { getConfigFilePath, getWorkspaceConfigFilePath, CONFIG_FILES } from '../configPath'
 import type { McpConfig, McpServerConfig } from '@shared/types/mcp'
 
@@ -144,7 +144,7 @@ export class McpConfigLoader {
 
       return config
     } catch (err) {
-      const error = handleError(err)
+      const error = toAppError(err)
       logger.mcp?.error(`[McpConfigLoader] Failed to load config: ${filePath} - ${error.code}`, error)
       return null
     }
@@ -162,7 +162,7 @@ export class McpConfigLoader {
       fs.writeFileSync(filePath, content, 'utf-8')
       logger.mcp?.info(`[McpConfigLoader] Saved config: ${filePath}`)
     } catch (err) {
-      const error = handleError(err)
+      const error = toAppError(err)
       logger.mcp?.error(`[McpConfigLoader] Failed to save config: ${filePath} - ${error.code}`, error)
       throw error
     }
@@ -208,7 +208,7 @@ export class McpConfigLoader {
 
       this.watchers.push(watcher)
     } catch (err) {
-      const error = handleError(err)
+      const error = toAppError(err)
       logger.mcp?.warn(`[McpConfigLoader] Failed to watch: ${dir} - ${error.code}`, error)
     }
   }

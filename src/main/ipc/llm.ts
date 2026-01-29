@@ -64,21 +64,18 @@ function getOrCreateCompactionService(webContentsId: number, window: BrowserWind
 }
 
 /**
- * 统一错误处理
+ * 统一错误处理 - 记录日志并抛出 LLMError
  */
-function handleError(error: unknown, operation: string) {
-  if (error instanceof LLMError) {
-    logger.ipc.error(`[LLMService] ${operation} error:`, {
-      code: error.code,
-      message: error.message,
-      retryable: error.retryable,
-    })
-    throw error
-  }
-
-  const err = error as { message?: string }
-  logger.ipc.error(`[LLMService] ${operation} error:`, error)
-  throw new Error(err.message || `${operation} failed`)
+function logAndThrowError(error: unknown, operation: string): never {
+  const llmError = error instanceof LLMError ? error : LLMError.fromError(error)
+  
+  logger.ipc.error(`[LLMService] ${operation} failed:`, {
+    code: llmError.code,
+    message: llmError.message,
+    retryable: llmError.retryable,
+  })
+  
+  throw llmError
 }
 
 export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) {
@@ -94,8 +91,16 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
     
     try {
       await service.sendMessage(params)
+      // 流式响应通过事件发送，不需要返回值
     } catch (error) {
-      handleError(error, 'Send message')
+      // 流式错误已通过 llm:error 事件发送到前端
+      // 这里只记录日志，不抛出，避免 IPC 包装错误消息
+      const llmError = error instanceof LLMError ? error : LLMError.fromError(error)
+      logger.ipc.error('[LLMService] Send message failed:', {
+        code: llmError.code,
+        message: llmError.message,
+        retryable: llmError.retryable,
+      })
     }
   })
 
@@ -146,7 +151,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
         metadata: response.metadata,
       }
     } catch (error) {
-      handleError(error, 'Code analysis')
+      logAndThrowError(error, 'Code analysis')
     }
   })
 
@@ -168,7 +173,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
         metadata: response.metadata,
       }
     } catch (error) {
-      handleError(error, 'Code analysis stream')
+      logAndThrowError(error, 'Code analysis stream')
     }
   })
 
@@ -190,7 +195,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
         metadata: response.metadata,
       }
     } catch (error) {
-      handleError(error, 'Refactoring suggestion')
+      logAndThrowError(error, 'Refactoring suggestion')
     }
   })
 
@@ -212,7 +217,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
         metadata: response.metadata,
       }
     } catch (error) {
-      handleError(error, 'Fix suggestion')
+      logAndThrowError(error, 'Fix suggestion')
     }
   })
 
@@ -234,7 +239,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
         metadata: response.metadata,
       }
     } catch (error) {
-      handleError(error, 'Test generation')
+      logAndThrowError(error, 'Test generation')
     }
   })
 
@@ -255,7 +260,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
         usage: convertTokenUsage(response.usage),
       }
     } catch (error) {
-      handleError(error, 'Text embedding')
+      logAndThrowError(error, 'Text embedding')
     }
   })
 
@@ -272,7 +277,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
         usage: convertTokenUsage(response.usage),
       }
     } catch (error) {
-      handleError(error, 'Batch embedding')
+      logAndThrowError(error, 'Batch embedding')
     }
   })
 
@@ -291,7 +296,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
       )
       return result
     } catch (error) {
-      handleError(error, 'Similarity search')
+      logAndThrowError(error, 'Similarity search')
     }
   })
 }

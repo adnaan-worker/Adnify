@@ -3,7 +3,7 @@
  */
 
 import { logger } from '@shared/utils/Logger'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import { ipcMain } from 'electron'
 import { lspManager, LanguageId } from '../lspManager'
 import { EXTENSION_TO_LANGUAGE } from '@shared/languages'
@@ -425,7 +425,7 @@ export function registerLspHandlers(mainStore?: any): void {
     try {
       return await installServer(serverType)
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -434,7 +434,7 @@ export function registerLspHandlers(mainStore?: any): void {
       await installBasicServers()
       return { success: true }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 

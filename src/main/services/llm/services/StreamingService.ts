@@ -196,6 +196,7 @@ export class StreamingService {
       // 处理流式响应
       return await this.processStream(result, strategy)
     } catch (error) {
+      // LLMError.fromError 会自动使用 mapAISDKError 获取友好消息
       const llmError = LLMError.fromError(error)
       this.sendEvent({ type: 'error', error: llmError })
       throw llmError
@@ -213,6 +214,7 @@ export class StreamingService {
   ): Promise<StreamingResult> {
     let reasoning = ''
     const hasCustomParser = !!strategy.parseStreamText
+    let streamError: Error | null = null
 
     for await (const part of result.fullStream) {
       if (this.window.isDestroyed()) break
@@ -220,41 +222,27 @@ export class StreamingService {
       try {
         switch (part.type) {
           case 'text-delta':
-            // 使用策略解析文本
             if (hasCustomParser && strategy.parseStreamText) {
               const parsed = strategy.parseStreamText(part.text)
               if (parsed.thinking) {
                 reasoning += parsed.thinking
-                this.sendEvent({
-                  type: 'reasoning',
-                  content: parsed.thinking,
-                })
+                this.sendEvent({ type: 'reasoning', content: parsed.thinking })
               }
               if (parsed.content) {
-                this.sendEvent({
-                  type: 'text',
-                  content: parsed.content,
-                })
+                this.sendEvent({ type: 'text', content: parsed.content })
               }
             } else {
-              this.sendEvent({
-                type: 'text',
-                content: part.text,
-              })
+              this.sendEvent({ type: 'text', content: part.text })
             }
             break
 
           case 'reasoning-delta':
             if (part.text) {
               reasoning += part.text
-              this.sendEvent({
-                type: 'reasoning',
-                content: part.text,
-              })
+              this.sendEvent({ type: 'reasoning', content: part.text })
             }
             break
 
-          // 工具调用开始（立即显示工具卡片）
           case 'tool-input-start':
             this.sendEvent({
               type: 'tool-call-start',
@@ -263,7 +251,6 @@ export class StreamingService {
             })
             break
 
-          // 工具调用参数增量（流式更新参数）
           case 'tool-input-delta':
             this.sendEvent({
               type: 'tool-call-delta',
@@ -272,7 +259,6 @@ export class StreamingService {
             })
             break
 
-          // 工具调用参数传输完成
           case 'tool-input-end':
             this.sendEvent({
               type: 'tool-call-delta-end',
@@ -280,7 +266,6 @@ export class StreamingService {
             })
             break
 
-          // 工具调用完整信息（包含解析后的参数）
           case 'tool-call':
             this.sendEvent({
               type: 'tool-call-available',
@@ -291,6 +276,10 @@ export class StreamingService {
             break
 
           case 'error':
+            // 捕获流中的错误，稍后抛出
+            if (part.error instanceof Error) {
+              streamError = part.error
+            }
             const llmError = LLMError.fromError(part.error)
             this.sendEvent({ type: 'error', error: llmError })
             break
@@ -300,6 +289,11 @@ export class StreamingService {
           logger.llm.warn('[StreamingService] Error processing stream part:', error)
         }
       }
+    }
+
+    // 如果流中有错误，优先抛出真实错误而不是 NoOutputGeneratedError
+    if (streamError) {
+      throw streamError
     }
 
     // 获取最终结果
@@ -330,7 +324,6 @@ export class StreamingService {
       },
     }
 
-    // 发送完成事件
     this.sendEvent({
       type: 'done',
       usage: streamingResult.usage,

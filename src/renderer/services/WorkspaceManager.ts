@@ -22,7 +22,7 @@ import { clearExtraLibs } from './monacoTypeService'
 import { lintService } from '@renderer/agent/services/lintService'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import { clearHealthCache } from './healthCheckService'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import type { WorkspaceConfig } from '@store'
 
 class WorkspaceManager {
@@ -104,7 +104,7 @@ class WorkspaceManager {
       logger.system.info('[WorkspaceManager] Switch completed successfully')
       return true
     } catch (err) {
-      const error = handleError(err)
+      const error = toAppError(err)
       logger.system.error(`[WorkspaceManager] Switch failed: ${error.code}`, error)
       // 尝试恢复到旧工作区
       if (oldWorkspace) {
@@ -301,7 +301,7 @@ class WorkspaceManager {
       const items = await api.file.readDir(primaryRoot)
       setFiles(items)
     } catch (err) {
-      const error = handleError(err)
+      const error = toAppError(err)
       logger.system.error(`[WorkspaceManager] Failed to read directory: ${error.code}`, error)
       setFiles([])
     }

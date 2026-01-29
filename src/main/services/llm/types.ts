@@ -1,9 +1,9 @@
 /**
  * LLM 服务类型定义
- * 统一的类型系统，避免使用 any
  */
 
 import type { LanguageModelUsage } from 'ai'
+import { mapAISDKError, ErrorCode } from '@shared/utils/errorHandler'
 
 // ============================================
 // 基础类型
@@ -34,50 +34,57 @@ export interface LLMResponse<T> {
 // 错误类型
 // ============================================
 
+/**
+ * LLM 错误类
+ */
 export class LLMError extends Error {
   constructor(
     message: string,
-    public code: string,
-    public retryable: boolean = false,
-    public status?: number,
-    public cause?: Error
+    public readonly code: ErrorCode,
+    public readonly retryable: boolean = false,
+    public readonly status?: number,
+    public readonly cause?: Error
   ) {
     super(message)
     this.name = 'LLMError'
+    Error.captureStackTrace?.(this, LLMError)
   }
 
+  /**
+   * 从 AI SDK 错误创建 LLMError
+   */
+  static fromAISDKError(error: Error, status?: number): LLMError {
+    const mapped = mapAISDKError(error)
+    return new LLMError(mapped.message, mapped.code, mapped.retryable, status, error)
+  }
+
+  /**
+   * 从任意错误创建 LLMError
+   */
   static fromError(error: unknown): LLMError {
-    if (error instanceof LLMError) return error
-
-    const err = error as { name?: string; message?: string; status?: number }
-
-    // 中止错误
-    if (err.name === 'AbortError') {
-      return new LLMError('Request aborted', 'ABORTED', false)
+    if (error instanceof LLMError) {
+      return error
     }
 
-    // 速率限制
-    if (err.status === 429) {
-      return new LLMError('Rate limit exceeded', 'RATE_LIMIT', true, 429)
+    if (error instanceof Error) {
+      return LLMError.fromAISDKError(error)
     }
 
-    // 认证错误
-    if (err.status === 401 || err.status === 403) {
-      return new LLMError('Authentication failed', 'AUTH_ERROR', false, err.status)
+    if (typeof error === 'string') {
+      return new LLMError(error, ErrorCode.UNKNOWN, false)
     }
 
-    // 网络错误
-    if (err.message?.includes('network') || err.message?.includes('fetch')) {
-      return new LLMError('Network error', 'NETWORK_ERROR', true)
-    }
+    return new LLMError('Unknown error', ErrorCode.UNKNOWN, false)
+  }
 
-    // 未知错误
-    return new LLMError(
-      err.message || 'Unknown error',
-      'UNKNOWN_ERROR',
-      false,
-      err.status
-    )
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      code: this.code,
+      retryable: this.retryable,
+      status: this.status,
+    }
   }
 }
 
@@ -174,15 +181,16 @@ export interface TestCase {
 }
 
 // ============================================
-// 工具类型转换
+// 工具函数
 // ============================================
 
 export function convertUsage(usage: LanguageModelUsage): TokenUsage {
+  const usageAny = usage as any
   return {
     inputTokens: usage.inputTokens || 0,
     outputTokens: usage.outputTokens || 0,
     totalTokens: usage.totalTokens || 0,
-    cachedInputTokens: usage.inputTokenDetails?.cacheReadTokens,
-    reasoningTokens: usage.outputTokenDetails?.reasoningTokens,
+    cachedInputTokens: usageAny.inputDetails?.cacheReadTokens,
+    reasoningTokens: usageAny.outputDetails?.reasoningTokens,
   }
 }

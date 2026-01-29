@@ -4,20 +4,19 @@
 
 import { describe, it, expect } from 'vitest'
 import { 
-  handleError, 
+  toAppError, 
   AppError, 
   ErrorCode,
-  getUserFriendlyMessage,
-  success,
-  failure,
-  wrapAsync
+  getErrorMessage,
+  mapAISDKError,
+  mapNodeError,
 } from '@shared/utils/errorHandler'
 
 describe('errorHandler', () => {
-  describe('handleError', () => {
+  describe('toAppError', () => {
     it('should return AppError as-is', () => {
       const appError = new AppError('Test error', ErrorCode.FILE_NOT_FOUND)
-      const result = handleError(appError)
+      const result = toAppError(appError)
       
       expect(result).toBe(appError)
       expect(result.code).toBe(ErrorCode.FILE_NOT_FOUND)
@@ -25,59 +24,103 @@ describe('errorHandler', () => {
 
     it('should convert Error to AppError', () => {
       const error = new Error('Test error')
-      const result = handleError(error)
+      const result = toAppError(error)
       
       expect(result).toBeInstanceOf(AppError)
       expect(result.message).toBe('Test error')
-      expect(result.code).toBe(ErrorCode.UNKNOWN_ERROR)
+      expect(result.code).toBe(ErrorCode.UNKNOWN)
     })
 
     it('should convert string to AppError', () => {
-      const result = handleError('String error')
+      const result = toAppError('String error')
       
       expect(result).toBeInstanceOf(AppError)
       expect(result.message).toBe('String error')
-      expect(result.code).toBe(ErrorCode.UNKNOWN_ERROR)
+      expect(result.code).toBe(ErrorCode.UNKNOWN)
     })
 
     it('should handle unknown types', () => {
-      const result = handleError({ foo: 'bar' })
+      const result = toAppError({ foo: 'bar' })
       
       expect(result).toBeInstanceOf(AppError)
-      expect(result.message).toBe('An unknown error occurred')
-      expect(result.code).toBe(ErrorCode.UNKNOWN_ERROR)
+      expect(result.message).toBe('An unexpected error occurred')
+      expect(result.code).toBe(ErrorCode.UNKNOWN)
     })
+  })
 
+  describe('mapNodeError', () => {
     it('should map ENOENT to FILE_NOT_FOUND', () => {
-      const error = Object.assign(new Error('File not found'), { code: 'ENOENT' })
-      const result = handleError(error)
+      const error = Object.assign(new Error('File not found'), { code: 'ENOENT' }) as NodeJS.ErrnoException
+      const result = mapNodeError(error)
       
       expect(result.code).toBe(ErrorCode.FILE_NOT_FOUND)
       expect(result.retryable).toBe(false)
     })
 
     it('should map EACCES to FILE_ACCESS_DENIED', () => {
-      const error = Object.assign(new Error('Permission denied'), { code: 'EACCES' })
-      const result = handleError(error)
+      const error = Object.assign(new Error('Permission denied'), { code: 'EACCES' }) as NodeJS.ErrnoException
+      const result = mapNodeError(error)
       
       expect(result.code).toBe(ErrorCode.FILE_ACCESS_DENIED)
       expect(result.retryable).toBe(false)
     })
 
-    it('should map ETIMEDOUT to TIMEOUT_ERROR', () => {
-      const error = Object.assign(new Error('Timeout'), { code: 'ETIMEDOUT' })
-      const result = handleError(error)
+    it('should map ETIMEDOUT to TIMEOUT', () => {
+      const error = Object.assign(new Error('Timeout'), { code: 'ETIMEDOUT' }) as NodeJS.ErrnoException
+      const result = mapNodeError(error)
       
-      expect(result.code).toBe(ErrorCode.TIMEOUT_ERROR)
+      expect(result.code).toBe(ErrorCode.TIMEOUT)
       expect(result.retryable).toBe(true)
     })
 
-    it('should map ECONNREFUSED to NETWORK_ERROR', () => {
-      const error = Object.assign(new Error('Connection refused'), { code: 'ECONNREFUSED' })
-      const result = handleError(error)
+    it('should map ECONNREFUSED to NETWORK', () => {
+      const error = Object.assign(new Error('Connection refused'), { code: 'ECONNREFUSED' }) as NodeJS.ErrnoException
+      const result = mapNodeError(error)
       
-      expect(result.code).toBe(ErrorCode.NETWORK_ERROR)
+      expect(result.code).toBe(ErrorCode.NETWORK)
       expect(result.retryable).toBe(true)
+    })
+  })
+
+  describe('mapAISDKError', () => {
+    it('should map NoContentGeneratedError', () => {
+      const error = new Error('No content')
+      error.name = 'NoContentGeneratedError'
+      const result = mapAISDKError(error)
+      
+      expect(result.code).toBe(ErrorCode.LLM_NO_CONTENT)
+      expect(result.retryable).toBe(true)
+    })
+
+    it('should map APICallError with 429 status', () => {
+      const error = Object.assign(new Error('Rate limit'), { 
+        name: 'APICallError',
+        statusCode: 429 
+      })
+      const result = mapAISDKError(error)
+      
+      expect(result.code).toBe(ErrorCode.API_RATE_LIMIT)
+      expect(result.retryable).toBe(true)
+    })
+
+    it('should map APICallError with 401 status', () => {
+      const error = Object.assign(new Error('Unauthorized'), { 
+        name: 'APICallError',
+        statusCode: 401 
+      })
+      const result = mapAISDKError(error)
+      
+      expect(result.code).toBe(ErrorCode.API_KEY_INVALID)
+      expect(result.retryable).toBe(false)
+    })
+
+    it('should map AbortError', () => {
+      const error = new Error('Aborted')
+      error.name = 'AbortError'
+      const result = mapAISDKError(error)
+      
+      expect(result.code).toBe(ErrorCode.ABORTED)
+      expect(result.retryable).toBe(false)
     })
   })
 
@@ -86,157 +129,82 @@ describe('errorHandler', () => {
       const error = new AppError(
         'Test message',
         ErrorCode.API_KEY_INVALID,
-        { key: 'value' },
-        true
+        true,
+        { key: 'value' }
       )
       
       expect(error.message).toBe('Test message')
       expect(error.code).toBe(ErrorCode.API_KEY_INVALID)
-      expect(error.details).toEqual({ key: 'value' })
       expect(error.retryable).toBe(true)
+      expect(error.details).toEqual({ key: 'value' })
       expect(error.name).toBe('AppError')
     })
 
     it('should have default values', () => {
-      const error = new AppError('Test')
+      const error = new AppError('Test', ErrorCode.UNKNOWN)
       
-      expect(error.code).toBe(ErrorCode.UNKNOWN_ERROR)
-      expect(error.details).toBeUndefined()
       expect(error.retryable).toBe(false)
+      expect(error.details).toBeUndefined()
     })
 
     it('should serialize to JSON', () => {
-      const error = new AppError('Test', ErrorCode.FILE_NOT_FOUND, { path: '/test' })
+      const error = new AppError('Test', ErrorCode.FILE_NOT_FOUND, false, { path: '/test' })
       const json = error.toJSON()
       
       expect(json.name).toBe('AppError')
       expect(json.message).toBe('Test')
       expect(json.code).toBe(ErrorCode.FILE_NOT_FOUND)
       expect(json.details).toEqual({ path: '/test' })
-      expect(json.stack).toBeDefined()
     })
   })
 
-  describe('getUserFriendlyMessage', () => {
+  describe('getErrorMessage', () => {
     it('should return English message by default', () => {
-      const error = new AppError('Technical error', ErrorCode.FILE_NOT_FOUND)
-      const message = getUserFriendlyMessage(error, 'en')
-      
-      expect(message).toBe('File not found. Please check the file path.')
+      const message = getErrorMessage(ErrorCode.FILE_NOT_FOUND, 'en')
+      expect(message).toBe('File not found')
     })
 
     it('should return Chinese message', () => {
-      const error = new AppError('Technical error', ErrorCode.FILE_NOT_FOUND)
-      const message = getUserFriendlyMessage(error, 'zh')
-      
-      expect(message).toBe('文件不存在，请检查文件路径')
-    })
-
-    it('should return original message for unknown error code', () => {
-      const error = new AppError('Custom error', 'CUSTOM_CODE' as ErrorCode)
-      const message = getUserFriendlyMessage(error, 'en')
-      
-      expect(message).toBe('Custom error')
+      const message = getErrorMessage(ErrorCode.FILE_NOT_FOUND, 'zh')
+      expect(message).toBe('文件不存在')
     })
 
     it('should handle all error codes', () => {
       const codes = [
-        ErrorCode.UNKNOWN_ERROR,
-        ErrorCode.NETWORK_ERROR,
-        ErrorCode.TIMEOUT_ERROR,
+        ErrorCode.UNKNOWN,
+        ErrorCode.NETWORK,
+        ErrorCode.TIMEOUT,
+        ErrorCode.ABORTED,
         ErrorCode.FILE_NOT_FOUND,
         ErrorCode.FILE_ACCESS_DENIED,
-        ErrorCode.FILE_READ_ERROR,
-        ErrorCode.FILE_WRITE_ERROR,
+        ErrorCode.FILE_READ,
+        ErrorCode.FILE_WRITE,
         ErrorCode.API_KEY_INVALID,
         ErrorCode.API_RATE_LIMIT,
-        ErrorCode.API_REQUEST_FAILED,
+        ErrorCode.API_CALL_FAILED,
         ErrorCode.LSP_NOT_INITIALIZED,
         ErrorCode.LSP_REQUEST_FAILED,
         ErrorCode.MCP_NOT_INITIALIZED,
         ErrorCode.MCP_SERVER_ERROR,
         ErrorCode.MCP_TOOL_ERROR,
+        ErrorCode.LLM_NO_CONTENT,
+        ErrorCode.LLM_NO_OUTPUT,
+        ErrorCode.LLM_INVALID_PROMPT,
+        ErrorCode.LLM_INVALID_RESPONSE,
+        ErrorCode.LLM_EMPTY_RESPONSE,
+        ErrorCode.LLM_NO_SUCH_MODEL,
+        ErrorCode.LLM_VALIDATION_FAILED,
+        ErrorCode.LLM_UNSUPPORTED,
       ]
 
       codes.forEach(code => {
-        const error = new AppError('Test', code)
-        const enMessage = getUserFriendlyMessage(error, 'en')
-        const zhMessage = getUserFriendlyMessage(error, 'zh')
+        const enMessage = getErrorMessage(code, 'en')
+        const zhMessage = getErrorMessage(code, 'zh')
         
         expect(enMessage).toBeTruthy()
         expect(zhMessage).toBeTruthy()
         expect(enMessage).not.toBe(zhMessage) // Different languages
       })
-    })
-  })
-
-  describe('success', () => {
-    it('should create success result', () => {
-      const result = success({ value: 42 })
-      
-      expect(result.success).toBe(true)
-      expect(result.data).toEqual({ value: 42 })
-    })
-
-    it('should handle different data types', () => {
-      expect(success('string').data).toBe('string')
-      expect(success(123).data).toBe(123)
-      expect(success(null).data).toBe(null)
-      expect(success(undefined).data).toBe(undefined)
-    })
-  })
-
-  describe('failure', () => {
-    it('should create failure result', () => {
-      const error = new AppError('Test error', ErrorCode.FILE_NOT_FOUND)
-      const result = failure(error)
-      
-      expect(result.success).toBe(false)
-      expect(result.error).toBe(error)
-    })
-  })
-
-  describe('wrapAsync', () => {
-    it('should return result on success', async () => {
-      const fn = async () => 'success'
-      const wrapped = wrapAsync(fn)
-      const result = await wrapped()
-      
-      expect(result).toBe('success')
-    })
-
-    it('should return failure on error', async () => {
-      const fn = async () => {
-        throw new Error('Test error')
-      }
-      const wrapped = wrapAsync(fn)
-      const result = await wrapped()
-      
-      expect(result).toHaveProperty('success', false)
-      if ('error' in result) {
-        expect(result.error).toBeInstanceOf(AppError)
-        expect(result.error.message).toBe('Test error')
-      }
-    })
-
-    it('should preserve function arguments', async () => {
-      const fn = async (a: number, b: number) => a + b
-      const wrapped = wrapAsync(fn)
-      const result = await wrapped(2, 3)
-      
-      expect(result).toBe(5)
-    })
-
-    it('should handle AppError', async () => {
-      const fn = async () => {
-        throw new AppError('Custom error', ErrorCode.API_KEY_INVALID)
-      }
-      const wrapped = wrapAsync(fn)
-      const result = await wrapped()
-      
-      if ('error' in result) {
-        expect(result.error.code).toBe(ErrorCode.API_KEY_INVALID)
-      }
     })
   })
 })

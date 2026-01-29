@@ -3,7 +3,7 @@
  */
 
 import { ipcMain } from 'electron'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import { debugService } from '../services/debugger'
 import { getAdapterInfo, builtinAdapters } from '../services/debugger/adapters'
 import type { DebugConfig } from '../services/debugger'
@@ -31,7 +31,7 @@ export function registerDebugHandlers() {
       const sessionId = await debugService.createSession(config)
       return { success: true, sessionId }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -41,7 +41,7 @@ export function registerDebugHandlers() {
       await debugService.launch(sessionId)
       return { success: true }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -51,7 +51,7 @@ export function registerDebugHandlers() {
       await debugService.attach(sessionId)
       return { success: true }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -61,7 +61,7 @@ export function registerDebugHandlers() {
       await debugService.configurationDone(sessionId)
       return { success: true }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -71,7 +71,7 @@ export function registerDebugHandlers() {
       await debugService.stop(sessionId)
       return { success: true }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -81,7 +81,7 @@ export function registerDebugHandlers() {
       await debugService.continue(sessionId)
       return { success: true }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -91,7 +91,7 @@ export function registerDebugHandlers() {
       await debugService.stepOver(sessionId)
       return { success: true }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -101,7 +101,7 @@ export function registerDebugHandlers() {
       await debugService.stepInto(sessionId)
       return { success: true }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -111,7 +111,7 @@ export function registerDebugHandlers() {
       await debugService.stepOut(sessionId)
       return { success: true }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -121,7 +121,7 @@ export function registerDebugHandlers() {
       await debugService.pause(sessionId)
       return { success: true }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -131,7 +131,7 @@ export function registerDebugHandlers() {
       const result = await debugService.setBreakpoints(sessionId, file, breakpoints)
       return { success: true, breakpoints: result }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -141,7 +141,7 @@ export function registerDebugHandlers() {
       const frames = await debugService.getStackTrace(sessionId, threadId)
       return { success: true, frames }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -151,7 +151,7 @@ export function registerDebugHandlers() {
       const scopes = await debugService.getScopes(sessionId, frameId)
       return { success: true, scopes }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -161,7 +161,7 @@ export function registerDebugHandlers() {
       const variables = await debugService.getVariables(sessionId, variablesReference)
       return { success: true, variables }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -171,7 +171,7 @@ export function registerDebugHandlers() {
       const result = await debugService.evaluate(sessionId, expression, frameId)
       return { success: true, result }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -191,7 +191,7 @@ export function registerDebugHandlers() {
       const threads = await debugService.getThreads(sessionId)
       return { success: true, threads }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 

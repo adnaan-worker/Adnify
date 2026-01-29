@@ -3,7 +3,7 @@
  */
 
 import { logger } from '@shared/utils/Logger'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import { ipcMain, BrowserWindow } from 'electron'
 import { spawn, execSync } from 'child_process'
 import { securityManager, OperationType } from './securityModule'
@@ -271,11 +271,11 @@ export function registerSecureTerminalHandlers(
       }
     } catch (err) {
       securityManager.logOperation(OperationType.SHELL_EXECUTE, fullCommand, false, {
-        error: handleError(err).message,
+        error: toAppError(err).message,
       })
       return {
         success: false,
-        error: `执行失败: ${handleError(err).message}`,
+        error: `执行失败: ${toAppError(err).message}`,
       }
     }
   })
@@ -397,11 +397,11 @@ export function registerSecureTerminalHandlers(
         }
       } catch (err) {
         securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, {
-          error: handleError(err).message,
+          error: toAppError(err).message,
         })
         return {
           success: false,
-          error: `Git执行失败: ${handleError(err).message}`,
+          error: `Git执行失败: ${toAppError(err).message}`,
         }
       }
     }
@@ -430,7 +430,7 @@ export function registerSecureTerminalHandlers(
       pty = null
     }
   } catch (err) {
-    const errorMsg = handleError(err).message || handleError(err).message || 'Unknown error'
+    const errorMsg = toAppError(err).message || toAppError(err).message || 'Unknown error'
     logger.security.warn('[Terminal] node-pty not available, interactive terminal disabled')
     logger.security.warn('[Terminal] Error:', errorMsg)
     
@@ -568,7 +568,7 @@ export function registerSecureTerminalHandlers(
         })
       } catch (err) {
         // 捕获原生模块异常
-        const errorMsg = handleError(err).message || handleError(err).message || 'Unknown spawn error'
+        const errorMsg = toAppError(err).message || toAppError(err).message || 'Unknown spawn error'
         logger.security.error(`[Terminal] PTY spawn failed: ${errorMsg}`, err)
         
         // 检查是否是原生模块问题
@@ -596,7 +596,7 @@ export function registerSecureTerminalHandlers(
         logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
         // 通知渲染进程终端出错
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('terminal:error', { id, error: handleError(err).message })
+          mainWindow.webContents.send('terminal:error', { id, error: toAppError(err).message })
         }
       })
 
@@ -618,7 +618,7 @@ export function registerSecureTerminalHandlers(
       return { success: true }
     } catch (err) {
       logger.security.error('[Terminal] Failed to create terminal:', err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -831,7 +831,7 @@ export function registerSecureTerminalHandlers(
           success: false,
           output: stdout + stderr,
           exitCode: 1,
-          error: handleError(err).message
+          error: toAppError(err).message
         })
       })
     })

@@ -16,7 +16,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { getEditorConfig } from '@renderer/settings'
 import { logger } from '@utils/Logger'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 
 // ===== 类型定义 =====
 
@@ -242,7 +242,7 @@ class TerminalManagerClass {
       }
       return true
     } catch (err) {
-      const error = handleError(err)
+      const error = toAppError(err)
       logger.system.error(`[TerminalManager] Exception creating PTY for ${id}: ${error.code}`, error)
       
       // 显示错误信息到终端

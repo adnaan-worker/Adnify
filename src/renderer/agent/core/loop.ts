@@ -114,14 +114,14 @@ async function callLLM(
       logger.agent.warn('[Loop] No usage data in LLM result')
     }
 
-    // 清理
     processor.cleanup()
     return result
   } catch (error) {
-    // 确保在任何错误情况下都清理
-    logger.agent.error('[Loop] Error in callLLM:', error)
     processor.cleanup()
-    throw error
+    logger.agent.error('[Loop] Error in callLLM:', error)
+    
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    return { error: errorMsg }
   }
 }
 
@@ -149,7 +149,8 @@ async function callLLMWithRetry(
           const msg = error instanceof Error ? error.message : String(error)
           return isRetryableError(error) && msg !== 'Aborted'
         },
-        onRetry: (attempt, error, delay) => logger.agent.info(`[Loop] LLM retry ${attempt}, waiting ${delay}ms...`, error),
+        onRetry: (attempt, error, delay) => 
+          logger.agent.info(`[Loop] LLM retry ${attempt}, waiting ${delay}ms...`, error),
       }
     )
   } catch (error) {

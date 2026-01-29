@@ -4,7 +4,7 @@
  */
 
 import { logger } from '@shared/utils/Logger'
-import { handleError, ErrorCode } from '@shared/utils/errorHandler'
+import { toAppError, ErrorCode } from '@shared/utils/errorHandler'
 import { ipcMain, dialog, shell } from 'electron'
 import * as path from 'path'
 import { promises as fsPromises } from 'fs'
@@ -159,10 +159,10 @@ export function registerSecureFileHandlers(
       return content
     } catch (err) {
       // 文件不存在是正常情况（如可选的规则文件），不记录为 ERROR
-      if (handleError(err).code === ErrorCode.FILE_NOT_FOUND || (err as any)?.code === 'ENOENT') {
+      if (toAppError(err).code === ErrorCode.FILE_NOT_FOUND || (err as any)?.code === 'ENOENT') {
         logger.security.debug('[File] not found:', filePath)
       } else {
-        logger.security.error('[File] read failed:', filePath, handleError(err).message)
+        logger.security.error('[File] read failed:', filePath, toAppError(err).message)
       }
       return null
     }
@@ -202,7 +202,7 @@ export function registerSecureFileHandlers(
       })
       return base64
     } catch (err) {
-      logger.security.error('[File] read binary failed:', filePath, handleError(err).message)
+      logger.security.error('[File] read binary failed:', filePath, toAppError(err).message)
       return null
     }
   })
@@ -249,7 +249,7 @@ export function registerSecureFileHandlers(
       })
       return true
     } catch (err) {
-      logger.security.error('[File] write failed:', filePath, handleError(err).message)
+      logger.security.error('[File] write failed:', filePath, toAppError(err).message)
       return false
     }
   })
@@ -340,7 +340,7 @@ export function registerSecureFileHandlers(
       })
       return true
     } catch (err) {
-      logger.security.error('[File] mkdir failed:', dirPath, handleError(err).message)
+      logger.security.error('[File] mkdir failed:', dirPath, toAppError(err).message)
       return false
     }
   })
@@ -391,7 +391,7 @@ export function registerSecureFileHandlers(
       })
       return true
     } catch (err) {
-      logger.security.error('[File] delete failed:', filePath, handleError(err).message)
+      logger.security.error('[File] delete failed:', filePath, toAppError(err).message)
       return false
     }
   })
@@ -416,7 +416,7 @@ export function registerSecureFileHandlers(
       })
       return true
     } catch (err) {
-      logger.security.error('[File] rename failed:', oldPath, handleError(err).message)
+      logger.security.error('[File] rename failed:', oldPath, toAppError(err).message)
       return false
     }
   })

@@ -11,7 +11,7 @@
  */
 
 import { api } from '@/renderer/services/electronAPI'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { getEditorConfig } from '@renderer/settings'
@@ -519,7 +519,7 @@ class CompletionService {
 
       this.onCompletionCallback?.(result)
     } catch (err) {
-      if (err instanceof Error && (handleError(err).name === 'AbortError' || handleError(err).message.includes('aborted'))) {
+      if (err instanceof Error && (toAppError(err).name === 'AbortError' || toAppError(err).message.includes('aborted'))) {
         // Request was cancelled, ignore
         return
       }
@@ -579,7 +579,7 @@ class CompletionService {
       const unsubError = api.llm.onError((err: { message: string }) => {
         cleanup()
         if (!isAborted) {
-          reject(new Error(handleError(err).message))
+          reject(new Error(toAppError(err).message))
         }
       })
 

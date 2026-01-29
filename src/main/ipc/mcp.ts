@@ -5,7 +5,7 @@
  */
 
 import { ipcMain, BrowserWindow } from 'electron'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import { logger } from '@shared/utils/Logger'
 import { mcpManager } from '../services/mcp'
 import type {
@@ -23,7 +23,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err) {
       logger.mcp?.error('[MCP IPC] Initialize failed:', err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -32,7 +32,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
     try {
       return { success: true, servers: mcpManager.getServersState() }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -41,7 +41,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
     try {
       return { success: true, tools: mcpManager.getAllTools() }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -52,7 +52,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err) {
       logger.mcp?.error(`[MCP IPC] Connect server ${serverId} failed:`, err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -63,7 +63,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err) {
       logger.mcp?.error(`[MCP IPC] Disconnect server ${serverId} failed:`, err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -74,7 +74,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err) {
       logger.mcp?.error(`[MCP IPC] Reconnect server ${serverId} failed:`, err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -89,7 +89,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return result
     } catch (err) {
       logger.mcp?.error('[MCP IPC] Call tool failed:', err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -100,7 +100,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return result
     } catch (err) {
       logger.mcp?.error('[MCP IPC] Read resource failed:', err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -115,7 +115,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return result
     } catch (err) {
       logger.mcp?.error('[MCP IPC] Get prompt failed:', err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -126,7 +126,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err) {
       logger.mcp?.error(`[MCP IPC] Refresh capabilities ${serverId} failed:`, err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -135,7 +135,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
     try {
       return { success: true, paths: mcpManager.getConfigPaths() }
     } catch (err) {
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -146,7 +146,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err) {
       logger.mcp?.error('[MCP IPC] Reload config failed:', err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -157,7 +157,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err) {
       logger.mcp?.error('[MCP IPC] Add server failed:', err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -168,7 +168,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err) {
       logger.mcp?.error(`[MCP IPC] Remove server ${serverId} failed:`, err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -179,7 +179,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err) {
       logger.mcp?.error(`[MCP IPC] Toggle server ${serverId} failed:`, err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -192,7 +192,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return result
     } catch (err) {
       logger.mcp?.error(`[MCP IPC] Start OAuth ${serverId} failed:`, err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -203,7 +203,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return result
     } catch (err) {
       logger.mcp?.error(`[MCP IPC] Finish OAuth ${serverId} failed:`, err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -214,7 +214,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return result
     } catch (err) {
       logger.mcp?.error(`[MCP IPC] Refresh OAuth token ${serverId} failed:`, err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 
@@ -225,7 +225,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err) {
       logger.mcp?.error('[MCP IPC] Set auto-connect failed:', err)
-      return { success: false, error: handleError(err).message }
+      return { success: false, error: toAppError(err).message }
     }
   })
 

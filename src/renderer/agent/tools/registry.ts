@@ -10,7 +10,7 @@
  */
 
 import { z } from 'zod'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import { logger } from '@utils/Logger'
 import { TOOL_SCHEMAS, TOOL_DEFINITIONS, TOOL_CONFIGS, type ToolCategory } from '@/shared/config/tools'
 import type {
@@ -169,7 +169,7 @@ class ToolRegistry {
       return await executor(validation.data as Record<string, unknown>, context)
     } catch (err) {
       logger.agent.error(`[ToolRegistry] Execution error for ${name}:`, err)
-      return { success: false, result: '', error: `Execution error: ${handleError(err).message}` }
+      return { success: false, result: '', error: `Execution error: ${toAppError(err).message}` }
     }
   }
 

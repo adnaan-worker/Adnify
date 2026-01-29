@@ -4,7 +4,7 @@
  */
 
 import { useStore } from '@store'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import { mcpService } from '@services/mcpService'
 import { logger } from '@utils/Logger'
 import { getFileName } from '@shared/utils/pathUtils'
@@ -187,7 +187,7 @@ export class McpToolProvider implements ToolProvider {
       return {
         success: false,
         result: '',
-        error: handleError(err).message,
+        error: toAppError(err).message,
       }
     }
   }

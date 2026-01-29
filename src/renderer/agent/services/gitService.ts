@@ -1,5 +1,5 @@
 import { api } from '@/renderer/services/electronAPI'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 
 /**
  * Git 服务 (使用安全的 Git API)
@@ -11,7 +11,7 @@ import { handleError } from '@shared/utils/errorHandler'
  * 处理 Git 错误的辅助函数
  */
 function handleGitError(err: unknown): string {
-    const error = handleError(err)
+    const error = toAppError(err)
     return error.message
 }
 

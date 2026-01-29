@@ -4,7 +4,7 @@
  */
 
 import { logger } from '@utils/Logger'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import type { ToolProvider, ToolMeta } from './types'
 import type {
   ToolDefinition,
@@ -174,7 +174,7 @@ class ToolManager {
       return {
         success: false,
         result: '',
-        error: `Execution error: ${handleError(err).message}`,
+        error: `Execution error: ${toAppError(err).message}`,
       }
     }
   }

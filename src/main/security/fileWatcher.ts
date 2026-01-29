@@ -4,7 +4,7 @@
  */
 
 import { logger } from '@shared/utils/Logger'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import { FileChangeBuffer, createFileChangeHandler } from '../indexing/fileChangeBuffer'
 import { getIndexService } from '../indexing/indexService'
 import { lspManager } from '../lspManager'
@@ -174,7 +174,7 @@ export async function cleanupFileWatcher(): Promise<void> {
     try {
       await subscription.unsubscribe()
     } catch (err) {
-      logger.security.info('[Watcher] Cleanup completed (ignored error):', handleError(err).message)
+      logger.security.info('[Watcher] Cleanup completed (ignored error):', toAppError(err).message)
     }
   }
 }

@@ -4,7 +4,7 @@
  */
 
 import { api } from '@/renderer/services/electronAPI'
-import { handleError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import { logger } from '@utils/Logger'
 import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
 import type { PlanItem, PlanFileData } from '../types'
@@ -763,7 +763,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             return {
                 success: false,
                 result: '',
-                error: `UI/UX search failed: ${handleError(err).message}`,
+                error: `UI/UX search failed: ${toAppError(err).message}`,
             }
         }
     },
@@ -799,7 +799,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             return {
                 success: false,
                 result: '',
-                error: `UI/UX recommendation failed: ${handleError(err).message}`,
+                error: `UI/UX recommendation failed: ${toAppError(err).message}`,
             }
         }
     },
@@ -865,7 +865,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             return {
                 success: false,
                 result: '',
-                error: `Code analysis failed: ${handleError(err).message}`,
+                error: `Code analysis failed: ${toAppError(err).message}`,
             }
         }
     },
@@ -922,7 +922,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             return {
                 success: false,
                 result: '',
-                error: `Refactoring suggestion failed: ${handleError(err).message}`,
+                error: `Refactoring suggestion failed: ${toAppError(err).message}`,
             }
         }
     },
@@ -943,7 +943,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             // 获取诊断信息
             const lintErrors = await lintService.getLintErrors(path, true)
             const diagnostics = lintErrors.map(err => ({
-                message: handleError(err).message,
+                message: toAppError(err).message,
                 line: err.startLine ?? err.line ?? 1,
                 column: err.column ?? 1,
                 severity: err.severity === 'error' ? 1 : err.severity === 'warning' ? 2 : 3,
@@ -995,7 +995,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             return {
                 success: false,
                 result: '',
-                error: `Fix suggestion failed: ${handleError(err).message}`,
+                error: `Fix suggestion failed: ${toAppError(err).message}`,
             }
         }
     },
@@ -1055,7 +1055,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             return {
                 success: false,
                 result: '',
-                error: `Test generation failed: ${handleError(err).message}`,
+                error: `Test generation failed: ${toAppError(err).message}`,
             }
         }
     },

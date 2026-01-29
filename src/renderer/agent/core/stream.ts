@@ -344,6 +344,7 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
   // 处理错误事件
   const handleError = (err: { message?: string; code?: string } | string) => {
     const errorMsg = typeof err === 'string' ? err : err.message || 'Unknown error'
+    
     logger.agent.error('[StreamProcessor] Error:', errorMsg)
     error = errorMsg
     finalizeReasoning()
