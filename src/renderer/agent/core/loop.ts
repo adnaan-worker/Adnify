@@ -33,6 +33,30 @@ import type { LLMMessage } from '@/shared/types'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext } from './types'
 
+// ===== 模式后处理钩子 =====
+
+/**
+ * 执行模式后处理钩子
+ */
+function executeModePostProcessHook(
+  mode: WorkMode,
+  context: Parameters<import('@shared/config/agentConfig').ModePostProcessHook>[0]
+): ReturnType<import('@shared/config/agentConfig').ModePostProcessHook> {
+  const agentConfig = getAgentConfig()
+  const hookConfig = agentConfig.modePostProcessHooks?.[mode]
+  
+  if (!hookConfig?.enabled || !hookConfig.hook) {
+    return null
+  }
+  
+  try {
+    return hookConfig.hook(context)
+  } catch (error) {
+    logger.agent.error(`[Loop] Mode post-process hook error for ${mode}:`, error)
+    return null
+  }
+}
+
 // ===== LLM 调用 =====
 
 /**
@@ -250,6 +274,17 @@ async function checkAndHandleCompression(
   // 更新 store
   store.setCompressionStats(newStats as import('../context/CompressionManager').CompressionStats)
   store.setCompressionPhase('idle')
+  
+  // L3 预警：提前通知用户上下文即将满
+  if (calculatedLevel === 3 && (!previousStats || previousStats.level < 3)) {
+    const remainingRatio = 1 - newStats.ratio
+    const estimatedRemainingTurns = Math.floor(remainingRatio * contextLimit / (usage.input + usage.output))
+    EventBus.emit({ 
+      type: 'context:warning', 
+      level: 3, 
+      message: `Context usage is high (${(newStats.ratio * 100).toFixed(1)}%). Estimated ${estimatedRemainingTurns} turns remaining.`,
+    })
+  }
 
   // L3: 生成 LLM 摘要
   if (calculatedLevel >= 3 && enableLLMSummary && thread) {
@@ -334,6 +369,12 @@ export async function runLoop(
     shouldContinue = false
     EventBus.emit({ type: 'loop:iteration', count: iteration })
 
+    // 检查中止信号
+    if (context.abortSignal?.aborted) {
+      EventBus.emit({ type: 'loop:end', reason: 'aborted' })
+      break
+    }
+
     if (llmMessages.length === 0) {
       logger.agent.error('[Loop] No messages to send')
       store.appendToAssistant(assistantId, '\n\n❌ Error: No messages to send')
@@ -344,6 +385,7 @@ export async function runLoop(
     // 调用 LLM
     const result = await callLLMWithRetry(config, llmMessages, context.chatMode, assistantId, context.abortSignal)
 
+    // 再次检查中止信号（LLM 调用后）
     if (context.abortSignal?.aborted) {
       EventBus.emit({ type: 'loop:end', reason: 'aborted' })
       break
@@ -423,16 +465,25 @@ export async function runLoop(
 
     // 没有工具调用 - Chat 模式或 LLM 决定结束
     if (!result.toolCalls || result.toolCalls.length === 0) {
-      // Plan 模式特殊处理：提醒更新计划
-      if (context.chatMode === 'plan' && store.plan) {
-        const readOnlyTools = getReadOnlyTools()
-        const hasWriteOps = llmMessages.some(m => m.role === 'assistant' && m.tool_calls?.some((tc: any) => !readOnlyTools.includes(tc.function.name)))
-        const hasUpdatePlan = llmMessages.some(m => m.role === 'assistant' && m.tool_calls?.some((tc: any) => tc.function.name === 'update_plan'))
-        if (hasWriteOps && !hasUpdatePlan && iteration < maxIterations) {
-          llmMessages.push({ role: 'user', content: 'Reminder: Please use `update_plan` to update the plan status before finishing.' })
-          shouldContinue = true
-          continue
-        }
+      // 模式后处理钩子
+      const hookResult = executeModePostProcessHook(context.chatMode, {
+        mode: context.chatMode,
+        messages: llmMessages,
+        hasWriteOps: llmMessages.some(m => {
+          const readOnlyTools = getReadOnlyTools()
+          return m.role === 'assistant' && m.tool_calls?.some((tc: any) => !readOnlyTools.includes(tc.function.name))
+        }),
+        hasSpecificTool: (toolName: string) => llmMessages.some(m => 
+          m.role === 'assistant' && m.tool_calls?.some((tc: any) => tc.function.name === toolName)
+        ),
+        iteration,
+        maxIterations,
+      })
+      
+      if (hookResult?.shouldContinue && hookResult.reminderMessage) {
+        llmMessages.push({ role: 'user', content: hookResult.reminderMessage })
+        shouldContinue = true
+        continue
       }
       EventBus.emit({ type: 'loop:end', reason: 'complete' })
       break
@@ -478,6 +529,12 @@ export async function runLoop(
       { workspacePath: context.workspacePath, currentAssistantId: assistantId },
       context.abortSignal
     )
+
+    // 检查中止信号（工具执行后）
+    if (context.abortSignal?.aborted) {
+      EventBus.emit({ type: 'loop:end', reason: 'aborted' })
+      break
+    }
 
     // 检查 ask_user
     const waitingResult = toolResults.find(r => r.result.meta?.waitingForUser)

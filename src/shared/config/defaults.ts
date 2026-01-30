@@ -183,6 +183,15 @@ export const AGENT_DEFAULTS = {
     maxHistory: 50,            // 历史记录保留数量
     maxExactRepeats: 5,        // 相同参数的精确重复阈值
     maxSameTargetRepeats: 8,   // 同一文件的连续编辑阈值
+    dynamicThreshold: true,    // 根据任务复杂度动态调整阈值
+  },
+  
+  // 动态并发控制
+  dynamicConcurrency: {
+    enabled: true,
+    minConcurrency: 4,
+    maxConcurrency: 16,
+    cpuMultiplier: 2,
   },
 
   // 目录排除列表

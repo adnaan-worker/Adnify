@@ -85,6 +85,35 @@ export const TOOL_TRUNCATE_DEFAULTS: Record<string, ToolTruncateConfig> = {
 }
 
 // ============================================
+// 模式后处理钩子配置
+// ============================================
+
+export type ModePostProcessHook = (context: {
+  mode: string
+  messages: unknown[]
+  hasWriteOps: boolean
+  hasSpecificTool: (toolName: string) => boolean
+  iteration: number
+  maxIterations: number
+}) => { shouldContinue: boolean; reminderMessage?: string } | null
+
+export interface ModePostProcessConfig {
+  enabled: boolean
+  hook: ModePostProcessHook
+}
+
+// ============================================
+// 工具依赖配置
+// ============================================
+
+export interface ToolDependency {
+  /** 依赖的工具名称 */
+  dependsOn: string[]
+  /** 依赖类型：sequential（必须按顺序）或 parallel（可并行但需等待） */
+  type: 'sequential' | 'parallel'
+}
+
+// ============================================
 // Agent 运行时配置类型
 // ============================================
 
@@ -111,6 +140,14 @@ export interface AgentRuntimeConfig {
   // 工具执行
   toolTimeoutMs: number
   enableAutoFix: boolean
+  
+  // 动态并发控制
+  dynamicConcurrency: {
+    enabled: boolean
+    minConcurrency: number
+    maxConcurrency: number
+    cpuMultiplier: number  // CPU 核心数的倍数
+  }
 
   // 上下文压缩
   keepRecentTurns: number
@@ -130,15 +167,22 @@ export interface AgentRuntimeConfig {
   pruneMinimumTokens: number
   pruneProtectTokens: number
 
-  // 循环检测
+  // 循环检测（支持动态调整）
   loopDetection: {
     maxHistory: number
     maxExactRepeats: number
     maxSameTargetRepeats: number
+    dynamicThreshold: boolean  // 是否根据任务复杂度动态调整
   }
 
   // 目录忽略列表
   ignoredDirectories: string[]
+  
+  // 模式后处理钩子
+  modePostProcessHooks?: Record<string, ModePostProcessConfig>
+  
+  // 工具依赖声明
+  toolDependencies?: Record<string, ToolDependency>
 
   // 子配置（可选覆盖）
   cache?: Partial<CacheConfigs>
@@ -148,9 +192,43 @@ export interface AgentRuntimeConfig {
 // 从 defaults.ts 构建完整的 Agent 配置
 export const DEFAULT_AGENT_CONFIG: AgentRuntimeConfig = {
   ...AGENT_DEFAULTS,
-  loopDetection: { ...AGENT_DEFAULTS.loopDetection },
+  loopDetection: { 
+    ...AGENT_DEFAULTS.loopDetection,
+    dynamicThreshold: true,
+  },
   summaryMaxContextChars: { ...AGENT_DEFAULTS.summaryMaxContextChars },
   ignoredDirectories: [...AGENT_DEFAULTS.ignoredDirectories],
+  dynamicConcurrency: {
+    enabled: true,
+    minConcurrency: 4,
+    maxConcurrency: 16,
+    cpuMultiplier: 2,
+  },
+  modePostProcessHooks: {
+    plan: {
+      enabled: true,
+      hook: (context) => {
+        const { hasWriteOps, hasSpecificTool, iteration, maxIterations } = context
+        if (hasWriteOps && !hasSpecificTool('update_plan') && iteration < maxIterations) {
+          return {
+            shouldContinue: true,
+            reminderMessage: 'Reminder: Please use `update_plan` to update the plan status before finishing.',
+          }
+        }
+        return null
+      },
+    },
+  },
+  toolDependencies: {
+    edit_file: {
+      dependsOn: ['read_file'],
+      type: 'sequential',
+    },
+    replace_file_content: {
+      dependsOn: ['read_file'],
+      type: 'sequential',
+    },
+  },
 }
 
 // ============================================

@@ -204,7 +204,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             include: args.file_pattern as string | undefined,
             isCaseSensitive: false
         })
-        if (!results) return { success: false, result: 'Search failed' }
+        if (!results) return { success: false, result: '', error: 'Search failed' }
         return { success: true, result: results.slice(0, 50).map(r => `${r.path}:${r.line}: ${r.text.trim()}`).join('\n') || 'No matches found' }
     },
 

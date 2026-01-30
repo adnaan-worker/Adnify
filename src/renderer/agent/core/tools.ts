@@ -126,15 +126,58 @@ function needsApproval(toolName: string): boolean {
 }
 
 /**
- * 分析工具依赖关系
+ * 获取动态并发限制
+ */
+function getDynamicConcurrency(): number {
+  const agentConfig = getAgentConfig()
+  const { enabled, minConcurrency, maxConcurrency, cpuMultiplier } = agentConfig.dynamicConcurrency
+  
+  if (!enabled) {
+    return 8  // 默认固定值
+  }
+  
+  // 获取 CPU 核心数（浏览器环境）
+  const cpuCores = typeof navigator !== 'undefined' && navigator.hardwareConcurrency 
+    ? navigator.hardwareConcurrency 
+    : 4
+  
+  // 计算并发数：CPU 核心数 * 倍数
+  const calculated = Math.floor(cpuCores * cpuMultiplier)
+  
+  // 限制在最小和最大值之间
+  const concurrency = Math.max(minConcurrency, Math.min(maxConcurrency, calculated))
+  
+  logger.agent.info(`[Tools] Dynamic concurrency: ${concurrency} (CPU cores: ${cpuCores})`)
+  
+  return concurrency
+}
+
+/**
+ * 分析工具依赖关系（支持显式声明）
  */
 function analyzeToolDependencies(toolCalls: ToolCall[]): Map<string, Set<string>> {
   const deps = new Map<string, Set<string>>()
   const fileWriters = new Map<string, string>() // path -> toolCallId
+  const agentConfig = getAgentConfig()
+  const declaredDeps = agentConfig.toolDependencies || {}
 
   for (const tc of toolCalls) {
     deps.set(tc.id, new Set())
     
+    // 1. 检查显式声明的依赖
+    const declaredDep = declaredDeps[tc.name]
+    if (declaredDep) {
+      // 查找依赖的工具调用
+      for (const depToolName of declaredDep.dependsOn) {
+        const depToolCall = toolCalls.find(t => t.name === depToolName && t.id !== tc.id)
+        if (depToolCall) {
+          deps.get(tc.id)!.add(depToolCall.id)
+          logger.agent.info(`[Tools] Explicit dependency: ${tc.name} depends on ${depToolName}`)
+        }
+      }
+    }
+    
+    // 2. 隐式依赖：文件编辑依赖
     if (isFileEditTool(tc.name)) {
       const path = tc.arguments?.path as string
       if (path) {
@@ -302,14 +345,15 @@ export async function executeTools(
   // 在执行前保存文件快照
   await saveFileSnapshots(toolCalls, context)
 
-  // 1. 先并行执行不需要审批的工具（使用并发限制避免系统卡顿）
+  // 1. 先并行执行不需要审批的工具（使用动态并发限制）
   if (noApprovalRequired.length > 0) {
     store.setStreamPhase('tool_running')
     
     // 动态导入 p-limit
     const pLimit = (await import('p-limit')).default
-    // 并发限制：最多同时执行 8 个工具（避免系统卡顿）
-    const limit = pLimit(8)
+    // 动态并发限制
+    const concurrency = getDynamicConcurrency()
+    const limit = pLimit(concurrency)
     
     // 使用 Promise.allSettled 确保每个工具独立执行
     const noApprovalPromises = noApprovalRequired.map((tc) => 

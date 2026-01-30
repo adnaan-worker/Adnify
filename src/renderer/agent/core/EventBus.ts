@@ -36,6 +36,7 @@ export type AgentEvent =
   
   // 上下文事件
   | { type: 'context:level'; level: number; tokens: number; ratio: number }
+  | { type: 'context:warning'; level: number; message: string }  // 新增：上下文预警
   | { type: 'context:prune'; prunedCount: number; savedTokens: number }
   | { type: 'context:summary'; summary: string }
   | { type: 'context:handoff'; document: HandoffDocument }

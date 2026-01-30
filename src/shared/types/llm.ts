@@ -216,6 +216,12 @@ export interface ToolCall {
     error?: string
     /** 富内容结果（图片、代码、表格等） */
     richContent?: ToolRichContent[]
+    /** 流式状态（独立字段，不污染 arguments） */
+    streamingState?: {
+        isStreaming: boolean
+        partialArgs?: Record<string, unknown>
+        lastUpdateTime?: number
+    }
 }
 
 export interface ToolExecutionResult {

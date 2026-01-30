@@ -6,8 +6,10 @@
  * 2. 检测真正的循环模式（A→B→A→B）
  * 3. 支持时间窗口衰减
  * 4. 区分读操作和写操作
+ * 5. 动态调整阈值（根据任务复杂度）
  */
 
+import { logger } from '@utils/Logger'
 import type { LLMToolCall } from '@/shared/types'
 import { getAgentConfig } from './AgentConfig'
 
@@ -37,6 +39,7 @@ interface LoopDetectorInternalConfig {
   minPatternLength: number
   maxPatternLength: number
   readOpMultiplier: number
+  dynamicThreshold: boolean
 }
 
 /**
@@ -54,6 +57,7 @@ function getLoopConfig(): LoopDetectorInternalConfig {
     minPatternLength: 2,  // 检测 A→B→A→B 模式
     maxPatternLength: 4,
     readOpMultiplier: 8,  // 读操作允许更多次（24 次精确重复）
+    dynamicThreshold: loopConfig.dynamicThreshold ?? true,  // 默认启用动态阈值
   }
 }
 
@@ -196,9 +200,21 @@ export class LoopDetector {
 
   private checkExactRepeat(record: ToolCallRecord): LoopCheckResult {
     const isReadOp = READ_OPERATIONS.has(record.name)
-    const threshold = isReadOp 
-      ? this.config.maxExactRepeats * this.config.readOpMultiplier
-      : this.config.maxExactRepeats
+    const config = this.config
+    
+    // 动态调整阈值
+    let threshold = isReadOp 
+      ? config.maxExactRepeats * config.readOpMultiplier
+      : config.maxExactRepeats
+    
+    // 如果启用动态阈值，根据任务复杂度调整
+    if (config.dynamicThreshold) {
+      const complexity = this.estimateTaskComplexity()
+      if (complexity > 0.7) {
+        threshold = Math.floor(threshold * 1.5)  // 复杂任务允许更多重复
+        logger.agent.info(`[LoopDetector] Dynamic threshold adjusted: ${threshold} (complexity: ${complexity.toFixed(2)})`)
+      }
+    }
 
     const exactMatches = this.history.filter(
       h => h.name === record.name && h.argsHash === record.argsHash
@@ -324,6 +340,30 @@ export class LoopDetector {
 
   private hashContent(content: string): string {
     return this.simpleHash(content)
+  }
+
+  /**
+   * 估算任务复杂度（基于历史记录）
+   * 返回 0-1 之间的值，越大表示任务越复杂
+   */
+  private estimateTaskComplexity(): number {
+    if (this.history.length < 5) return 0
+    
+    // 1. 工具多样性（使用的不同工具数量）
+    const uniqueTools = new Set(this.history.map(h => h.name)).size
+    const toolDiversity = Math.min(uniqueTools / 10, 1)  // 最多 10 种工具算满分
+    
+    // 2. 目标多样性（操作的不同文件/目标数量）
+    const uniqueTargets = new Set(this.history.filter(h => h.target).map(h => h.target)).size
+    const targetDiversity = Math.min(uniqueTargets / 15, 1)  // 最多 15 个目标算满分
+    
+    // 3. 失败率（失败的工具调用比例）
+    const failureRate = this.history.filter(h => !h.success).length / this.history.length
+    
+    // 综合评分：工具多样性 40% + 目标多样性 40% + 失败率 20%
+    const complexity = toolDiversity * 0.4 + targetDiversity * 0.4 + failureRate * 0.2
+    
+    return complexity
   }
 
   private simpleHash(str: string): string {

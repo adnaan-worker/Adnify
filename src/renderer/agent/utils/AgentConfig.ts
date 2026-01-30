@@ -61,7 +61,17 @@ export function getAgentConfig(): AgentRuntimeConfig {
             maxHistory: agentConfig.loopDetection?.maxHistory ?? DEFAULT_AGENT_CONFIG.loopDetection.maxHistory,
             maxExactRepeats: agentConfig.loopDetection?.maxExactRepeats ?? DEFAULT_AGENT_CONFIG.loopDetection.maxExactRepeats,
             maxSameTargetRepeats: agentConfig.loopDetection?.maxSameTargetRepeats ?? DEFAULT_AGENT_CONFIG.loopDetection.maxSameTargetRepeats,
+            dynamicThreshold: agentConfig.loopDetection?.dynamicThreshold ?? DEFAULT_AGENT_CONFIG.loopDetection.dynamicThreshold,
         },
+        
+        // 动态并发控制
+        dynamicConcurrency: DEFAULT_AGENT_CONFIG.dynamicConcurrency,
+        
+        // 模式后处理钩子
+        modePostProcessHooks: DEFAULT_AGENT_CONFIG.modePostProcessHooks,
+        
+        // 工具依赖声明
+        toolDependencies: DEFAULT_AGENT_CONFIG.toolDependencies,
 
         // 忽略目录
         ignoredDirectories: agentConfig.ignoredDirectories ?? DEFAULT_AGENT_CONFIG.ignoredDirectories,

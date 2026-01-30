@@ -53,6 +53,7 @@ export interface LoopDetectionConfig {
   maxHistory: number           // 历史记录保留数量
   maxExactRepeats: number      // 相同参数的精确重复阈值
   maxSameTargetRepeats: number // 同一文件的连续编辑阈值
+  dynamicThreshold?: boolean   // 根据任务复杂度动态调整阈值
 }
 
 export interface AgentConfig {
@@ -92,6 +93,17 @@ export interface AgentConfig {
   pruneProtectTokens?: number
   // 循环检测
   loopDetection: LoopDetectionConfig
+  // 动态并发控制（可选，内部使用）
+  dynamicConcurrency?: {
+    enabled: boolean
+    minConcurrency: number
+    maxConcurrency: number
+    cpuMultiplier: number
+  }
+  // 模式后处理钩子（可选，内部使用）
+  modePostProcessHooks?: Record<string, unknown>
+  // 工具依赖声明（可选，内部使用）
+  toolDependencies?: Record<string, unknown>
   // 目录忽略
   ignoredDirectories: string[]
 }

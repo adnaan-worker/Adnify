@@ -183,12 +183,16 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
 
         streamingToolCalls.set(toolId, { id: toolId, name: toolName, argsString: '', lastUpdateTime: 0 })
 
-        // 立即添加到 UI
+        // 立即添加到 UI（使用 streamingState 而非污染 arguments）
         if (assistantId) {
           store.addToolCallPart(assistantId, {
             id: toolId,
             name: toolName,
-            arguments: { _streaming: true },
+            arguments: {},
+            streamingState: {
+              isStreaming: true,
+              partialArgs: {},
+            },
           })
         }
         EventBus.emit({ type: 'stream:tool_start', id: toolId, name: toolName })
@@ -216,7 +220,11 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
                   const partialArgs = parsePartialJsonArgs(tc.argsString)
                   if (partialArgs && Object.keys(partialArgs).length > 0) {
                     store.updateToolCall(assistantId, tc.id, {
-                      arguments: { ...partialArgs, _streaming: true },
+                      streamingState: {
+                        isStreaming: true,
+                        partialArgs,
+                        lastUpdateTime: now,
+                      },
                     })
                   }
                 }
@@ -240,11 +248,12 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
         if (tcId && assistantId) {
           const tc = streamingToolCalls.get(tcId)
           if (tc) {
-            // 参数传输完成，立即解析并更新最终参数（移除 _streaming 标记）
+            // 参数传输完成，立即解析并更新最终参数（清除 streamingState）
             const finalArgs = parsePartialJsonArgs(tc.argsString)
             if (finalArgs) {
               store.updateToolCall(assistantId, tc.id, {
-                arguments: finalArgs, // 移除 _streaming
+                arguments: finalArgs,
+                streamingState: undefined,  // 清除流式状态
               })
             }
             
@@ -288,12 +297,13 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
           toolCalls.push(toolCall)
         }
 
-        // 更新为最终参数（移除 _streaming 标记）
+        // 更新为最终参数（清除 streamingState）
         if (assistantId && tcId) {
           store.updateToolCall(assistantId, tcId, {
             name: toolName,
             arguments: args,
             status: 'pending',
+            streamingState: undefined,  // 清除流式状态
           })
         }
 
