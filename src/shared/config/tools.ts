@@ -771,68 +771,6 @@ TIPS:
         },
     },
 
-    // ===== Plan 工具 =====
-    create_plan: {
-        name: 'create_plan',
-        displayName: 'Create Plan',
-        description: 'Create execution plan for complex multi-step tasks.',
-        detailedDescription: `Create a structured plan for complex tasks.
-- Break down task into logical steps
-- Each step should be verifiable
-- Use for tasks requiring multiple tool calls`,
-        category: 'plan',
-        approvalType: 'none',
-        parallel: false,
-        requiresWorkspace: true,
-        enabled: true,
-        parameters: {
-            items: {
-                type: 'array',
-                description: 'Plan items',
-                required: true,
-                items: {
-                    type: 'object',
-                    description: 'Plan item',
-                    properties: {
-                        title: { type: 'string', description: 'Step title', required: true },
-                        description: { type: 'string', description: 'Step description' },
-                    },
-                },
-            },
-        },
-    },
-
-    update_plan: {
-        name: 'update_plan',
-        displayName: 'Update Plan',
-        description: 'Update plan item status. Use after completing or failing a step.',
-        detailedDescription: `Update the status of plan items.
-- Use items array to update specific item statuses
-- Each item needs: id (or index like "1", "2") and status ("completed", "in_progress", "failed")
-- Example: items=[{id:"1", status:"completed"}] to mark step 1 as done`,
-        category: 'plan',
-        approvalType: 'none',
-        parallel: false,
-        requiresWorkspace: true,
-        enabled: true,
-        parameters: {
-            items: {
-                type: 'array',
-                description: 'Items to update. Each item: {id: "1", status: "completed"|"in_progress"|"failed"}',
-                required: true,
-                items: {
-                    type: 'object',
-                    description: 'Plan item update',
-                    properties: {
-                        id: { type: 'string', description: 'Item ID or index', required: true },
-                        status: { type: 'string', description: 'New status', enum: ['completed', 'in_progress', 'failed'], required: true },
-                    },
-                },
-            },
-            status: { type: 'string', description: 'Overall plan status (optional)', enum: ['active', 'completed', 'failed'] },
-        },
-    },
-
     ask_user: {
         name: 'ask_user',
         displayName: 'Ask User',
@@ -944,7 +882,82 @@ TIPS:
             product_type: { type: 'string', description: 'Product type (e.g., saas, e-commerce, fintech, healthcare)', required: true },
         },
     },
+
+    // ===== 工作流工具 =====
+    create_workflow: {
+        name: 'create_workflow',
+        displayName: 'Create Workflow',
+        description: `Create a workflow with requirements document and execution nodes.
+
+You must provide:
+1. name: Workflow name (kebab-case)
+2. description: Brief description
+3. requirements: Markdown document with requirements
+4. workflow: JSON object with nodes and edges
+
+The workflow JSON should define the execution flow with specific tool calls.`,
+        detailedDescription: `Creates a complete workflow including:
+- Requirements document (.md file)
+- Workflow definition (.json file) with executable nodes
+
+The workflow parameter should be a JSON object with:
+- nodes: Array of workflow nodes (tool calls, decisions, etc.)
+- edges: Array of connections between nodes
+
+Example workflow structure:
+{
+  "nodes": [
+    {"id": "start", "type": "start", "label": "开始", "config": {}},
+    {"id": "read-config", "type": "tool", "label": "读取配置", "config": {"toolName": "read_file", "arguments": {"path": "config.json"}}},
+    {"id": "analyze", "type": "tool", "label": "分析代码", "config": {"toolName": "search_files", "arguments": {"path": "src", "pattern": "TODO"}}},
+    {"id": "end", "type": "end", "label": "完成", "config": {}}
+  ],
+  "edges": [
+    {"id": "e1", "source": "start", "target": "read-config"},
+    {"id": "e2", "source": "read-config", "target": "analyze"},
+    {"id": "e3", "source": "analyze", "target": "end"}
+  ]
+}`,
+        examples: [
+            'create_workflow with detailed nodes including tool calls',
+        ],
+        criticalRules: [
+            'MUST include detailed workflow nodes with tool calls',
+            'MUST create both requirements document and workflow definition',
+            'Workflow nodes should specify actual tool names and arguments',
+        ],
+        category: 'plan',
+        approvalType: 'none',
+        parallel: false,
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {
+            name: { type: 'string', description: 'Workflow name (kebab-case)', required: true },
+            description: { type: 'string', description: 'Brief workflow description', required: true },
+            requirements: { type: 'string', description: 'Requirements document (Markdown format)', required: true },
+            workflow: { type: 'object', description: 'Workflow definition with nodes and edges (JSON object)', required: true },
+        },
+    },
+
+    list_workflows: {
+        name: 'list_workflows',
+        displayName: 'List Workflows',
+        description: 'List all workflow files in .adnify/workflows/ directory.',
+        detailedDescription: `Returns a list of all workflow JSON files in the workspace.
+- Shows file paths relative to workspace root
+- Can be used to check existing workflows before creating new ones`,
+        examples: [
+            'list_workflows',
+        ],
+        category: 'plan',
+        approvalType: 'none',
+        parallel: true,
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {},
+    },
 }
+
 
 
 // ============================================

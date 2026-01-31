@@ -227,9 +227,6 @@ class WorkspaceManager {
       // CheckpointSlice
       messageCheckpoints: [],
       
-      // PlanSlice
-      plan: null,
-      
       // StreamSlice
       streamState: {
         phase: 'idle',

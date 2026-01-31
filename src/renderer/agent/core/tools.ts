@@ -332,6 +332,82 @@ export async function executeTools(
     return { results, userRejected }
   }
 
+  // ===== Plan 模式工具拦截 =====
+  if (context.chatMode === 'plan') {
+    // 检查是否已经创建了工作流
+    const hasCreatedWorkflow = toolCalls.some(tc => tc.name === 'create_workflow')
+    
+    // 定义只读工具（允许在创建工作流前使用）
+    const readOnlyTools = [
+      'read_file',
+      'read_multiple_files',
+      'list_directory',
+      'get_dir_tree',
+      'search_files',
+      'codebase_search',
+      'get_lint_errors',
+      'find_references',
+      'go_to_definition',
+      'get_hover_info',
+      'get_document_symbols',
+      'web_search',
+      'read_url',
+      'ask_user',
+      'list_workflows',
+      'create_workflow',
+      // UI/UX 工具（如果有的话）
+      'uiux_search',
+      'uiux_recommend',
+    ]
+    
+    // 如果还没创建工作流，检查是否有非只读工具
+    if (!hasCreatedWorkflow) {
+      const forbiddenTools = toolCalls.filter(tc => !readOnlyTools.includes(tc.name))
+      
+      if (forbiddenTools.length > 0) {
+        // 拦截禁止的工具调用
+        for (const tc of forbiddenTools) {
+          const errorMsg = `❌ PLAN MODE RESTRICTION: Cannot use "${tc.name}" before creating a workflow.
+
+You are in PLAN MODE - this is for planning, not implementation.
+
+What you MUST do:
+1. Use ask_user to gather requirements from the user
+2. Call create_workflow to create the workflow
+
+What you CANNOT do (until workflow is created):
+- Run commands (run_command)
+- Edit files (edit_file, write_file)
+- Delete files (delete_file_or_folder)
+- Any modification operations
+
+Current status: No workflow created yet
+Next action: Call ask_user to gather requirements, then create_workflow`
+          
+          results.push({
+            toolCall: tc,
+            result: { content: errorMsg }
+          })
+          
+          if (context.currentAssistantId) {
+            store.updateToolCall(context.currentAssistantId, tc.id, {
+              status: 'error',
+              result: errorMsg
+            })
+          }
+        }
+        
+        // 移除被拦截的工具
+        toolCalls = toolCalls.filter(tc => readOnlyTools.includes(tc.name))
+        
+        if (toolCalls.length === 0) {
+          return { results, userRejected: false }
+        }
+      }
+    }
+  }
+  // ===== End Plan 模式拦截 =====
+
   // 分析依赖
   const deps = analyzeToolDependencies(toolCalls)
   const completed = new Set<string>()

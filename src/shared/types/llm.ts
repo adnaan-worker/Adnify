@@ -266,6 +266,7 @@ export interface ToolRichContent {
 export interface ToolExecutionContext {
     workspacePath: string | null
     currentAssistantId?: string | null
+    chatMode?: import('@/renderer/modes/types').WorkMode
 }
 
 export type ToolExecutor = (

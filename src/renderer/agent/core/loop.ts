@@ -163,7 +163,25 @@ async function callLLMWithRetry(
       async () => {
         if (abortSignal?.aborted) throw new Error('Aborted')
         const result = await callLLM(config, messages, chatMode, assistantId)
-        if (result.error) throw new Error(result.error)
+        
+        // 工具调用解析错误不应该导致重试，而是返回给 AI 让它反思
+        // 只有真正的 LLM 错误（网络、API 等）才需要重试
+        if (result.error) {
+          const errorMsg = result.error.toLowerCase()
+          const isToolParseError = errorMsg.includes('tool call parse') || 
+                                   errorMsg.includes('invalid input for tool') ||
+                                   errorMsg.includes('type validation failed')
+          
+          if (isToolParseError) {
+            // 工具解析错误：不重试，返回结果让 loop 处理
+            logger.agent.warn('[Loop] Tool parse error, will be handled in loop:', result.error)
+            return result
+          }
+          
+          // 其他错误：抛出以触发重试
+          throw new Error(result.error)
+        }
+        
         return result
       },
       {
@@ -391,11 +409,38 @@ export async function runLoop(
       break
     }
 
+    // 处理错误
     if (result.error) {
-      logger.agent.error('[Loop] LLM error:', result.error)
-      store.appendToAssistant(assistantId, `\n\n❌ Error: ${result.error}`)
-      EventBus.emit({ type: 'loop:end', reason: 'error' })
-      break
+      const errorMsg = result.error.toLowerCase()
+      const isToolParseError = errorMsg.includes('tool call parse') || 
+                               errorMsg.includes('invalid input for tool') ||
+                               errorMsg.includes('type validation failed')
+      
+      if (isToolParseError) {
+        // 工具解析错误：作为用户消息返回给 AI，让它反思和重试
+        logger.agent.warn('[Loop] Tool parse error, adding as feedback:', result.error)
+        
+        llmMessages.push({
+          role: 'user',
+          content: `❌ Tool Call Error: ${result.error}
+
+Please fix the tool call and try again. Make sure:
+1. All required parameters are provided
+2. Parameter types are correct
+3. Parameter names match exactly
+
+Try again with the corrected tool call.`
+        })
+        
+        shouldContinue = true
+        continue
+      } else {
+        // 其他错误：中止循环
+        logger.agent.error('[Loop] LLM error:', result.error)
+        store.appendToAssistant(assistantId, `\n\n❌ Error: ${result.error}`)
+        EventBus.emit({ type: 'loop:end', reason: 'error' })
+        break
+      }
     }
 
     // 在 LLM 调用后立即检查压缩
@@ -526,7 +571,7 @@ export async function runLoop(
     // 执行工具
     const { results: toolResults, userRejected } = await executeTools(
       result.toolCalls,
-      { workspacePath: context.workspacePath, currentAssistantId: assistantId },
+      { workspacePath: context.workspacePath, currentAssistantId: assistantId, chatMode: context.chatMode },
       context.abortSignal
     )
 
@@ -584,6 +629,119 @@ export async function runLoop(
           linesAdded: (meta.linesAdded as number) || 0,
           linesRemoved: (meta.linesRemoved as number) || 0,
         })
+      }
+    }
+
+    // Plan 模式特殊处理：在工具执行后检查是否需要提醒
+    if (context.chatMode === 'plan') {
+      // 统计已使用的工具
+      const toolsUsed = new Set<string>()
+      let askUserCount = 0
+      for (const msg of llmMessages) {
+        if (msg.role === 'assistant' && msg.tool_calls) {
+          for (const tc of msg.tool_calls as any[]) {
+            toolsUsed.add(tc.function.name)
+            if (tc.function.name === 'ask_user') {
+              askUserCount++
+            }
+          }
+        }
+      }
+      
+      const hasUsedAskUser = toolsUsed.has('ask_user')
+      const justExecutedTools = result.toolCalls.map(tc => tc.name)
+      
+      // 如果刚执行了读取工具但还没用过 ask_user，强制要求使用
+      const readTools = ['read_file', 'read_multiple_files', 'list_directory', 'get_dir_tree', 'search_files', 'codebase_search']
+      const justReadFiles = justExecutedTools.some(t => readTools.includes(t))
+      
+      if (justReadFiles && !hasUsedAskUser) {
+        logger.agent.info('[Loop] Plan mode: Forcing ask_user after file reading')
+        llmMessages.push({
+          role: 'user',
+          content: `⚠️ PLAN MODE REQUIREMENT: You MUST now use the ask_user tool.
+
+You've read the project files. Now you MUST gather requirements from the user using ask_user.
+
+DO NOT:
+- Run any commands
+- Edit any files
+- Create workflow yet (need more info first)
+
+DO THIS NOW:
+Call ask_user with interactive options. For "optimize project", ask:
+
+\`\`\`json
+{
+  "question": "What aspects of the project would you like to optimize?",
+  "options": [
+    {"id": "performance", "label": "Performance Optimization", "description": "Improve speed, reduce memory usage"},
+    {"id": "code-quality", "label": "Code Quality", "description": "Refactoring, clean code, best practices"},
+    {"id": "architecture", "label": "Architecture", "description": "Improve project structure and organization"},
+    {"id": "ui-ux", "label": "UI/UX", "description": "Enhance user interface and experience"},
+    {"id": "testing", "label": "Testing", "description": "Add or improve test coverage"},
+    {"id": "documentation", "label": "Documentation", "description": "Improve docs and comments"}
+  ],
+  "multiSelect": true
+}
+\`\`\`
+
+Call ask_user NOW. This is mandatory in Plan mode.`
+        })
+      }
+      
+      // 如果刚执行了 ask_user，根据次数决定下一步
+      if (justExecutedTools.includes('ask_user')) {
+        if (askUserCount === 1) {
+          // 第一轮后，要求继续收集细节
+          logger.agent.info('[Loop] Plan mode: Requesting more details after first ask_user')
+          llmMessages.push({
+            role: 'user',
+            content: `Good! You've gathered the main areas. Now ask follow-up questions to get more details.
+
+Based on what the user selected, ask specific questions about:
+- Priority and timeline
+- Specific pain points or issues
+- Success criteria
+- Any constraints or requirements
+
+Call ask_user again with relevant follow-up questions.`
+          })
+        } else if (askUserCount === 2) {
+          // 第二轮后，要求收集实施细节
+          logger.agent.info('[Loop] Plan mode: Requesting implementation details after second ask_user')
+          llmMessages.push({
+            role: 'user',
+            content: `Good! Now ask about implementation details:
+- Testing requirements
+- Documentation needs
+- Review process
+- Deployment considerations
+
+Call ask_user again to gather these details.`
+          })
+        } else if (askUserCount >= 3) {
+          // 第三轮后，可以创建工作流了
+          logger.agent.info('[Loop] Plan mode: Allowing create_workflow after 3+ rounds')
+          llmMessages.push({
+            role: 'user',
+            content: `Excellent! You've gathered comprehensive requirements through ${askUserCount} rounds.
+
+Now create a detailed workflow with create_workflow. Include:
+
+1. **Complete requirements document** with:
+   - Overview and goals
+   - All information gathered from ask_user
+   - Detailed acceptance criteria
+   - Step-by-step implementation plan
+   - Testing strategy
+   - Documentation requirements
+
+2. **Workflow structure** should have meaningful nodes, not just start/end
+
+Call create_workflow NOW with a comprehensive requirements document.`
+          })
+        }
       }
     }
 

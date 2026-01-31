@@ -34,7 +34,7 @@ import { TabContextMenu } from './TabContextMenu'
 import { EditorWelcome } from './EditorWelcome'
 import { SafeDiffEditor } from './SafeDiffEditor'
 import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile, isPlanFile } from './FilePreview'
-import { PlanPreview } from '../agent/PlanPreview'
+import { WorkflowPreview } from './WorkflowPreview'
 import { CodeSkeleton } from '../ui/Loading'
 
 // Hooks
@@ -307,7 +307,7 @@ export default function Editor() {
         {activeFile && (
           <>
             {/* Markdown 工具栏 */}
-            {activeFileType === 'markdown' && !isPlanFile(activeFile.path) && (
+            {activeFileType === 'markdown' && (
               <div className="absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-1 bg-surface/80 backdrop-blur-sm rounded-bl-lg border-l border-b border-border">
                 <button onClick={() => setMarkdownMode('edit')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'edit' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title="编辑模式">
                   <Edit className="w-3.5 h-3.5" />
@@ -326,7 +326,7 @@ export default function Editor() {
             ) : activeFileType === 'binary' ? (
               <UnsupportedFile path={activeFile.path} fileType="binary" />
             ) : isPlanFile(activeFile.path) ? (
-              <PlanPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
+              <WorkflowPreview content={activeFile.content} />
             ) : activeFileType === 'markdown' && markdownMode === 'preview' ? (
               <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
             ) : activeFileType === 'markdown' && markdownMode === 'split' ? (

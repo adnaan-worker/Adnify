@@ -44,7 +44,7 @@ export interface TemplateToolConfig {
 // 工具组定义
 // ============================================
 
-/** 核心工具 - code/plan 模式共用 */
+/** 核心工具 - agent 模式使用 */
 const CORE_TOOLS: string[] = [
   // 文件读取
   'read_file',
@@ -78,11 +78,10 @@ const CORE_TOOLS: string[] = [
   'read_url',
 ]
 
-/** 计划工具 - plan 模式专用 */
+/** Plan 工具 - plan 模式专用 */
 const PLAN_TOOLS: string[] = [
-  'create_plan',
-  'update_plan',
-  'ask_user',
+  'create_workflow',
+  'list_workflows',
 ]
 
 /** UI/UX 工具 - uiux-designer 角色专用 */
@@ -138,7 +137,7 @@ export function getToolGroup(id: string): string[] | undefined {
  * 加载规则：
  * - chat: 空（无工具）
  * - agent: core
- * - plan: core + plan
+ * - plan: core + plan（完整工具集 + 工作流工具）
  * - 角色: 在模式基础上 + 角色专属工具组
  */
 export function getToolsForContext(context: ToolLoadingContext): string[] {
@@ -150,19 +149,23 @@ export function getToolsForContext(context: ToolLoadingContext): string[] {
   // 收集工具（使用 Set 去重）
   const tools = new Set<string>()
 
-  // 1. 添加 core 工具
-  for (const tool of CORE_TOOLS) {
-    tools.add(tool)
-  }
-
-  // 2. plan 模式添加 plan 工具
+  // 1. 根据模式添加基础工具
   if (context.mode === 'plan') {
+    // Plan 模式：core 工具 + plan 工具
+    for (const tool of CORE_TOOLS) {
+      tools.add(tool)
+    }
     for (const tool of PLAN_TOOLS) {
+      tools.add(tool)
+    }
+  } else {
+    // Agent 模式：core 工具
+    for (const tool of CORE_TOOLS) {
       tools.add(tool)
     }
   }
 
-  // 3. 添加角色专属工具
+  // 2. 添加角色专属工具
   if (context.templateId) {
     const templateConfig = TEMPLATE_TOOLS[context.templateId]
     if (templateConfig) {

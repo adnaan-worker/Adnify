@@ -42,9 +42,6 @@ export * from './messages'
 // 上下文类型
 export * from './context'
 
-// Plan 类型
-export * from './plan'
-
 // 交互式内容类型
 export * from './interactive'
 

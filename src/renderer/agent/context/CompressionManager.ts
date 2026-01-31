@@ -53,7 +53,7 @@ export const LEVEL_NAMES = [
 const TRUNCATE_TOOLS = new Set(['write_file', 'edit_file', 'replace_file_content', 'create_file_or_folder'])
 
 /** 受保护的工具（不清理结果） */
-const PROTECTED_TOOLS = new Set(['ask_user', 'update_plan', 'create_plan'])
+const PROTECTED_TOOLS = new Set(['ask_user'])
 
 // ===== 核心函数 =====
 

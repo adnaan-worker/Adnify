@@ -7,7 +7,6 @@ import { api } from '@/renderer/services/electronAPI'
 import { toAppError } from '@shared/utils/errorHandler'
 import { logger } from '@utils/Logger'
 import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
-import type { PlanItem, PlanFileData } from '../types'
 import { validatePath, isSensitivePath } from '@shared/utils/pathUtils'
 import { pathToLspUri, waitForDiagnostics, isLanguageSupported, getLanguageId } from '@/renderer/services/lspService'
 import {
@@ -16,7 +15,6 @@ import {
 import { smartReplace, normalizeLineEndings } from '@/renderer/utils/smartReplace'
 import { getAgentConfig } from '../utils/AgentConfig'
 import { Agent } from '../core'
-import { useAgentStore } from '../store/AgentStore'
 import { lintService } from '../services/lintService'
 import { useStore } from '@/renderer/store'
 
@@ -82,23 +80,6 @@ function formatDirTree(nodes: DirTreeNode[], prefix = ''): string {
         }
     }
     return result
-}
-
-function generatePlanJson(plan: { items: PlanItem[]; status?: string }, title?: string): PlanFileData {
-    const now = Date.now()
-    return {
-        version: 1,
-        title: title || 'Execution Plan',
-        status: (plan.status as PlanFileData['status']) || 'draft',
-        createdAt: now,
-        updatedAt: now,
-        items: plan.items.map(item => ({
-            id: item.id,
-            title: item.title,
-            description: item.description,
-            status: item.status,
-        })),
-    }
 }
 
 function resolvePath(p: unknown, workspacePath: string | null, allowRead = false): string {
@@ -557,147 +538,6 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         return { success: true, result: `Title: ${result.title}\n\n${result.content}` }
     },
 
-    async create_plan(args, ctx) {
-        const items = args.items as Array<{ title: string; description?: string }>
-        const title = args.title as string | undefined
-        useAgentStore.getState().createPlan(items)
-
-        const plan = useAgentStore.getState().plan
-        if (plan && ctx.workspacePath) {
-            const planData = generatePlanJson(plan, title)
-            const planName = title ? title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_').slice(0, 30) : `plan_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
-            const planFilePath = `${ctx.workspacePath}/.adnify/plans/${planName}.json`
-
-            await api.file.ensureDir(`${ctx.workspacePath}/.adnify/plans`)
-            await api.file.write(planFilePath, JSON.stringify(planData, null, 2))
-
-            useStore.getState().openFile(planFilePath, JSON.stringify(planData, null, 2))
-            useStore.getState().setActiveFile(planFilePath)
-            await api.file.write(`${ctx.workspacePath}/.adnify/active_plan.txt`, planFilePath)
-
-            // 触发任务列表刷新
-            window.dispatchEvent(new CustomEvent('plan-list-refresh'))
-
-            return { success: true, result: `Plan created with ${plan.items.length} items` }
-        }
-        return { success: true, result: 'Plan created successfully' }
-    },
-
-    async update_plan(args, ctx) {
-        const store = useAgentStore.getState()
-        const plan = store.plan
-
-        // 参数校验
-        if (!plan) {
-            return { success: false, result: '', error: 'No active plan. Use create_plan first.' }
-        }
-
-        if (!args.items && !args.status) {
-            return {
-                success: false,
-                result: '',
-                error: 'Missing required parameter "items". Usage: update_plan items=[{id:"1", status:"completed"}]'
-            }
-        }
-
-        // 校验 items 格式
-        if (args.items) {
-            const items = args.items as Array<unknown>
-            if (!Array.isArray(items)) {
-                return { success: false, result: '', error: 'Parameter "items" must be an array.' }
-            }
-            for (const item of items) {
-                if (typeof item !== 'object' || item === null) {
-                    return { success: false, result: '', error: 'Each item must be an object with id and status.' }
-                }
-                const { id, status } = item as Record<string, unknown>
-                if (!id && !status) {
-                    return { success: false, result: '', error: 'Each item must have at least "id" or "status" field.' }
-                }
-                if (status && !['pending', 'in_progress', 'completed', 'failed', 'skipped'].includes(status as string)) {
-                    return {
-                        success: false,
-                        result: '',
-                        error: `Invalid status "${status}". Must be one of: pending, in_progress, completed, failed, skipped`
-                    }
-                }
-            }
-        }
-
-        if (args.status) store.updatePlanStatus(args.status as 'draft' | 'active' | 'completed' | 'failed')
-
-        const updatedItems: string[] = []
-        if (args.items && plan) {
-            for (const item of args.items as Array<{ id?: string; status?: string; title?: string }>) {
-                let targetId = item.id
-                if (!targetId && item.title) {
-                    const match = plan.items.find((p: PlanItem) => p.title === item.title)
-                    if (match) targetId = match.id
-                }
-                if (!targetId) continue
-
-                let matchedItem = plan.items.find((p: PlanItem) => p.id === targetId)
-                if (!matchedItem && targetId.length >= 4) {
-                    const prefixMatches = plan.items.filter((p: PlanItem) => p.id.startsWith(targetId!))
-                    if (prefixMatches.length === 1) matchedItem = prefixMatches[0]
-                }
-                if (!matchedItem) {
-                    const idx = parseInt(targetId, 10)
-                    if (!isNaN(idx)) {
-                        const adjustedIdx = idx > 0 && idx <= plan.items.length ? idx - 1 : idx
-                        if (adjustedIdx >= 0 && adjustedIdx < plan.items.length) matchedItem = plan.items[adjustedIdx]
-                    }
-                }
-
-                if (matchedItem) {
-                    const updates: Partial<PlanItem> = {}
-                    if (item.status) updates.status = item.status as PlanItem['status']
-                    if (item.title) updates.title = item.title
-                    store.updatePlanItem(matchedItem.id, updates)
-                    updatedItems.push(`#${plan.items.indexOf(matchedItem) + 1} → ${item.status || 'updated'}`)
-                }
-            }
-        }
-
-        // 同步 JSON 文件
-        const updatedPlan = useAgentStore.getState().plan
-        if (updatedPlan && ctx.workspacePath) {
-            let planFilePath = await api.file.read(`${ctx.workspacePath}/.adnify/active_plan.txt`)
-            planFilePath = (planFilePath || `${ctx.workspacePath}/.adnify/plans/plan.json`).trim()
-
-            // 读取现有 JSON 获取标题
-            let finalTitle = args.title as string | undefined
-            if (!finalTitle && planFilePath.endsWith('.json')) {
-                try {
-                    const oldContent = await api.file.read(planFilePath)
-                    if (oldContent) {
-                        const oldData = JSON.parse(oldContent) as PlanFileData
-                        finalTitle = oldData.title
-                    }
-                } catch { /* ignore */ }
-            }
-
-            const planData = generatePlanJson(updatedPlan, finalTitle)
-            const planContent = JSON.stringify(planData, null, 2)
-            await api.file.write(planFilePath, planContent)
-
-            try {
-                const openFile = useStore.getState().openFiles.find((f: { path: string }) => f.path === planFilePath)
-                if (openFile) useStore.getState().reloadFileFromDisk(planFilePath, planContent)
-            } catch (err) {
-                logger.agent.error('[update_plan] Failed to sync editor:', err)
-            }
-
-            // 触发任务列表刷新
-            window.dispatchEvent(new CustomEvent('plan-list-refresh'))
-        }
-
-        const resultMsg = updatedItems.length > 0
-            ? `Plan updated: ${updatedItems.join(', ')}`
-            : 'Plan updated successfully'
-        return { success: true, result: resultMsg }
-    },
-
     async ask_user(args, _ctx) {
         const question = args.question as string
         const options = args.options as Array<{ id: string; label: string; description?: string }>
@@ -1071,7 +911,99 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             }
         }
     },
+
+    // ===== 工作流工具 =====
+    async create_workflow(args, ctx) {
+        const { createWorkflowFile } = await import('@/renderer/plan/tools/agentTools')
+        const name = String(args.name)
+        const description = String(args.description)
+        const requirements = String(args.requirements)
+        const workflow = args.workflow as { nodes: any[]; edges: any[] }
+
+        if (!workflow || !workflow.nodes || !workflow.edges) {
+            return {
+                success: false,
+                result: '',
+                error: 'Workflow parameter must include nodes and edges arrays',
+            }
+        }
+
+        const result = await createWorkflowFile(name, description, requirements, workflow, ctx.workspacePath)
+
+        if (!result.success) {
+            return {
+                success: false,
+                result: '',
+                error: result.error || 'Failed to create workflow',
+            }
+        }
+
+        // 自动打开工作流文件
+        if (result.workflowPath) {
+            const content = await api.file.read(result.workflowPath)
+            if (content) {
+                const { openFile, setActiveFile } = useStore.getState()
+                openFile(result.workflowPath, content)
+                setActiveFile(result.workflowPath)
+            }
+        }
+
+        // 同时打开需求文档
+        if (result.requirementsPath) {
+            const content = await api.file.read(result.requirementsPath)
+            if (content) {
+                const { openFile } = useStore.getState()
+                openFile(result.requirementsPath, content)
+            }
+        }
+
+        return {
+            success: true,
+            result: `✅ Created workflow "${name}" with ${workflow.nodes.length} nodes
+
+📁 Files created:
+- Workflow: ${result.workflowPath}
+- Requirements: ${result.requirementsPath}
+
+The workflow includes:
+- ${workflow.nodes.filter((n: any) => n.type === 'tool').length} tool call nodes
+- ${workflow.nodes.filter((n: any) => n.type === 'decision').length} decision nodes
+- ${workflow.nodes.filter((n: any) => n.type === 'ask').length} user interaction nodes
+
+The workflow file is now open in the editor. You can run it directly from the preview.`,
+        }
+    },
+
+    async list_workflows(_args, ctx) {
+        const { listWorkflowFiles } = await import('@/renderer/plan/tools/agentTools')
+        const result = await listWorkflowFiles(ctx.workspacePath)
+
+        if (!result.success) {
+            return {
+                success: false,
+                result: '',
+                error: result.error || 'Failed to list workflows',
+            }
+        }
+
+        if (!result.files || result.files.length === 0) {
+            return {
+                success: true,
+                result: 'No workflows found in .adnify/workflows/\n\nYou can create a new workflow using the create_workflow tool.',
+            }
+        }
+
+        const fileList = result.files
+            .map(f => `- ${f.replace(ctx.workspacePath + '/', '')}`)
+            .join('\n')
+
+        return {
+            success: true,
+            result: `Found ${result.files.length} workflow(s):\n\n${fileList}`,
+        }
+    },
 }
+
 
 /**
  * 格式化 UI/UX 搜索结果为可读文本

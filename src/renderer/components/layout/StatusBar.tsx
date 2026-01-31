@@ -21,7 +21,6 @@ import { indexWorkerService, IndexProgress } from '@services/indexWorkerService'
 import BottomBarPopover from '../ui/BottomBarPopover'
 import ToolCallLogContent from '../panels/ToolCallLogContent'
 import ContextStatsContent from '../panels/ContextStatsContent'
-import { PlanListPopover } from '../panels/PlanListContent'
 import { useAgentStore, selectMessages, selectCompressionStats, selectHandoffRequired, selectCompressionPhase } from '@renderer/agent'
 import { isAssistantMessage, TokenUsage } from '@renderer/agent/types'
 import { useDiagnosticsStore, getFileStats } from '@services/diagnosticsStore'
@@ -297,8 +296,6 @@ export default function StatusBar() {
           >
             <ToolCallLogContent language={language as 'en' | 'zh'} />
           </BottomBarPopover>
-
-          <PlanListPopover language={language as 'en' | 'zh'} />
         </div>
 
         {/* Panel Toggles */}

@@ -11,13 +11,11 @@ import {
     createThreadSlice,
     createMessageSlice,
     createCheckpointSlice,
-    createPlanSlice,
     createStreamSlice,
     createBranchSlice,
     type ThreadSlice,
     type MessageSlice,
     type CheckpointSlice,
-    type PlanSlice,
     type StreamSlice,
     type BranchSlice,
     type Branch,
@@ -80,7 +78,7 @@ interface ContextCompressionState {
     createHandoffSession: () => HandoffSessionResult | null
 }
 
-export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & PlanSlice & StreamSlice & BranchSlice & ContextCompressionState & UIState
+export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & StreamSlice & BranchSlice & ContextCompressionState & UIState
 
 // ===== 流式响应节流优化 =====
 
@@ -170,7 +168,6 @@ export const useAgentStore = create<AgentStore>()(
             const threadSlice = createThreadSlice(...args)
             const messageSlice = createMessageSlice(...args)
             const checkpointSlice = createCheckpointSlice(...args)
-            const planSlice = createPlanSlice(...args)
             const streamSlice = createStreamSlice(...args)
             const branchSlice = createBranchSlice(...args)
 
@@ -282,7 +279,6 @@ export const useAgentStore = create<AgentStore>()(
                 ...threadSlice,
                 ...messageSlice,
                 ...checkpointSlice,
-                ...planSlice,
                 ...streamSlice,
                 ...branchSlice,
                 ...contextCompressionState,
@@ -296,7 +292,6 @@ export const useAgentStore = create<AgentStore>()(
             partialize: (state) => ({
                 threads: state.threads,
                 currentThreadId: state.currentThreadId,
-                plan: state.plan,
                 branches: state.branches,
                 activeBranchId: state.activeBranchId,
                 messageCheckpoints: state.messageCheckpoints,

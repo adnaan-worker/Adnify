@@ -48,7 +48,6 @@ export function useAgent() {
   // 获取线程相关状态
   const threads = useAgentStore(state => state.threads)
   const currentThreadId = useAgentStore(state => state.currentThreadId)
-  const plan = useAgentStore(state => state.plan)
 
   // 确保有一个默认线程（首次加载时）
   const createThreadAction = useAgentStore(state => state.createThread)
@@ -90,15 +89,6 @@ export function useAgent() {
     useAgentStore.getState().setCompressionStats(null)
   }, [clearMessagesAction])
   const clearCheckpoints = useAgentStore(state => state.clearMessageCheckpoints)
-
-  // Plan 操作
-  const createPlan = useAgentStore(state => state.createPlan)
-  const updatePlanStatus = useAgentStore(state => state.updatePlanStatus)
-  const updatePlanItem = useAgentStore(state => state.updatePlanItem)
-  const addPlanItem = useAgentStore(state => state.addPlanItem)
-  const deletePlanItem = useAgentStore(state => state.deletePlanItem)
-  const setPlanStep = useAgentStore(state => state.setPlanStep)
-  const clearPlan = useAgentStore(state => state.clearPlan)
 
   // 分支操作
   const createBranch = useAgentStore(state => state.createBranch)
@@ -215,16 +205,6 @@ export function useAgent() {
     addContextItem,
     removeContextItem,
     clearContextItems,
-    // Plan
-    plan,
-    createPlan,
-    updatePlanStatus,
-
-    updatePlanItem,
-    addPlanItem,
-    deletePlanItem,
-    setPlanStep,
-    clearPlan,
 
     // 分支
     createBranch,

@@ -9,7 +9,6 @@ export { default as ChatMessage } from './ChatMessage'
 export { default as ChatPanel } from './ChatPanel'
 export { RichContentRenderer } from './RichContentRenderer'
 export { OptionCard } from './OptionCard'
-export { PlanPreview } from './PlanPreview'
 
 // 新增组件
 export { BranchSelector, MessageBranchActions } from './BranchControls'

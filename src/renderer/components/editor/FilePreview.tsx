@@ -41,7 +41,7 @@ export function isBinaryFile(path: string): boolean {
 
 export function isPlanFile(path: string): boolean {
     const normalizedPath = path.replace(/\\/g, '/')
-    return normalizedPath.includes('.adnify/plans/') && normalizedPath.endsWith('.json')
+    return normalizedPath.includes('.adnify/workflows/') && normalizedPath.endsWith('.json')
 }
 
 // ===== Markdown 预览组件 =====
