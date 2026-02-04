@@ -3,13 +3,12 @@
  * 
  * 架构设计：
  * - 工具组：按功能分组的工具集合
- * - 模式工具：不同工作模式（agent/plan/chat）加载不同工具
+ * - 模式工具：不同工作模式（agent/chat）加载不同工具
  * - 角色工具：不同角色（模板）可以扩展额外工具
  * 
  * 加载规则：
  * - chat 模式：无工具
  * - agent 模式：core 工具组
- * - plan 模式：core + plan 工具组
  * - 角色扩展：在模式基础上添加角色专属工具组
  */
 
@@ -78,12 +77,6 @@ const CORE_TOOLS: string[] = [
   'read_url',
 ]
 
-/** Plan 工具 - plan 模式专用 */
-const PLAN_TOOLS: string[] = [
-  'create_workflow',
-  'list_workflows',
-]
-
 /** UI/UX 工具 - uiux-designer 角色专用 */
 const UIUX_TOOLS: string[] = [
   'uiux_search',
@@ -93,7 +86,6 @@ const UIUX_TOOLS: string[] = [
 /** 工具组注册表 */
 const TOOL_GROUPS: Record<string, string[]> = {
   core: CORE_TOOLS,
-  plan: PLAN_TOOLS,
   uiux: UIUX_TOOLS,
 }
 
@@ -136,8 +128,7 @@ export function getToolGroup(id: string): string[] | undefined {
  * 
  * 加载规则：
  * - chat: 空（无工具）
- * - agent: core
- * - plan: core + plan（完整工具集 + 工作流工具）
+ * - agent: core 工具组
  * - 角色: 在模式基础上 + 角色专属工具组
  */
 export function getToolsForContext(context: ToolLoadingContext): string[] {
@@ -149,20 +140,9 @@ export function getToolsForContext(context: ToolLoadingContext): string[] {
   // 收集工具（使用 Set 去重）
   const tools = new Set<string>()
 
-  // 1. 根据模式添加基础工具
-  if (context.mode === 'plan') {
-    // Plan 模式：core 工具 + plan 工具
-    for (const tool of CORE_TOOLS) {
-      tools.add(tool)
-    }
-    for (const tool of PLAN_TOOLS) {
-      tools.add(tool)
-    }
-  } else {
-    // Agent 模式：core 工具
-    for (const tool of CORE_TOOLS) {
-      tools.add(tool)
-    }
+  // 1. Agent 模式：core 工具
+  for (const tool of CORE_TOOLS) {
+    tools.add(tool)
   }
 
   // 2. 添加角色专属工具

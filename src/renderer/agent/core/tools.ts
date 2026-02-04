@@ -104,23 +104,23 @@ async function saveFileSnapshots(
  */
 function needsApproval(toolName: string): boolean {
   const approvalType = getToolApprovalType(toolName)
-  
+
   // 如果工具本身不需要审批，直接返回 false
   if (approvalType === 'none') return false
-  
+
   // 检查用户的 autoApprove 设置
   const mainStore = useStore.getState()
   const autoApprove = mainStore.autoApprove
-  
+
   // 根据工具类型检查对应的 autoApprove 设置
   if (approvalType === 'terminal' && autoApprove?.terminal) {
     return false // 终端命令已设置自动批准
   }
-  
+
   if (approvalType === 'dangerous' && autoApprove?.dangerous) {
     return false // 危险操作已设置自动批准
   }
-  
+
   // 默认需要审批
   return true
 }
@@ -131,24 +131,24 @@ function needsApproval(toolName: string): boolean {
 function getDynamicConcurrency(): number {
   const agentConfig = getAgentConfig()
   const { enabled, minConcurrency, maxConcurrency, cpuMultiplier } = agentConfig.dynamicConcurrency
-  
+
   if (!enabled) {
     return 8  // 默认固定值
   }
-  
+
   // 获取 CPU 核心数（浏览器环境）
-  const cpuCores = typeof navigator !== 'undefined' && navigator.hardwareConcurrency 
-    ? navigator.hardwareConcurrency 
+  const cpuCores = typeof navigator !== 'undefined' && navigator.hardwareConcurrency
+    ? navigator.hardwareConcurrency
     : 4
-  
+
   // 计算并发数：CPU 核心数 * 倍数
   const calculated = Math.floor(cpuCores * cpuMultiplier)
-  
+
   // 限制在最小和最大值之间
   const concurrency = Math.max(minConcurrency, Math.min(maxConcurrency, calculated))
-  
+
   logger.agent.info(`[Tools] Dynamic concurrency: ${concurrency} (CPU cores: ${cpuCores})`)
-  
+
   return concurrency
 }
 
@@ -163,7 +163,7 @@ function analyzeToolDependencies(toolCalls: ToolCall[]): Map<string, Set<string>
 
   for (const tc of toolCalls) {
     deps.set(tc.id, new Set())
-    
+
     // 1. 检查显式声明的依赖
     const declaredDep = declaredDeps[tc.name]
     if (declaredDep) {
@@ -176,7 +176,7 @@ function analyzeToolDependencies(toolCalls: ToolCall[]): Map<string, Set<string>
         }
       }
     }
-    
+
     // 2. 隐式依赖：文件编辑依赖
     if (isFileEditTool(tc.name)) {
       const path = tc.arguments?.path as string
@@ -235,7 +235,7 @@ async function executeSingle(
     // 截断过长的工具结果（防止单轮对话过长）
     const config = getAgentConfig()
     const content = truncateToolResult(rawContent, toolCall.name, config.maxToolResultChars)
-    
+
     if (content.length < rawContent.length) {
       logger.agent.info(`[Tools] Truncated ${toolCall.name} result: ${rawContent.length} -> ${content.length} chars`)
     }
@@ -252,22 +252,22 @@ async function executeSingle(
 
     const meta = result.meta || {}
     const richContent = result.richContent
-    
+
     // 更新状态，并将 meta 数据合并到 arguments._meta
     if (currentAssistantId) {
       const updatedArguments = Object.keys(meta).length > 0
         ? { ...toolCall.arguments, _meta: meta }
         : toolCall.arguments
-      
+
       const newStatus = result.success ? 'success' : 'error'
-      
+
       store.updateToolCall(currentAssistantId, toolCall.id, {
         status: newStatus,
         result: content,
         arguments: updatedArguments,
         richContent,
       })
-      
+
       store.addToolResult(toolCall.id, toolCall.name, content, result.success ? 'success' : 'tool_error')
     }
     if (result.success) {
@@ -300,7 +300,7 @@ async function executeSingle(
       success: false,
       error: errorMsg,
     })
-    
+
     if (currentAssistantId) {
       store.updateToolCall(currentAssistantId, toolCall.id, { status: 'error', result: errorMsg })
       store.addToolResult(toolCall.id, toolCall.name, `Error: ${errorMsg}`, 'tool_error')
@@ -332,90 +332,6 @@ export async function executeTools(
     return { results, userRejected }
   }
 
-  // ===== Plan 模式工具拦截 =====
-  if (context.chatMode === 'plan') {
-    // 检查整个对话历史中是否已经创建过工作流
-    const thread = store.getCurrentThread()
-    const hasCreatedWorkflowInHistory = thread?.messages.some(msg => 
-      msg.role === 'assistant' && 
-      'toolCalls' in msg && 
-      msg.toolCalls?.some((tc: any) => tc.name === 'create_workflow')
-    ) || false
-    
-    // 当前这一轮是否正在创建工作流
-    const isCreatingWorkflowNow = toolCalls.some(tc => tc.name === 'create_workflow')
-    
-    // 定义只读工具（允许在创建工作流前使用）
-    const readOnlyTools = [
-      'read_file',
-      'read_multiple_files',
-      'list_directory',
-      'get_dir_tree',
-      'search_files',
-      'codebase_search',
-      'get_lint_errors',
-      'find_references',
-      'go_to_definition',
-      'get_hover_info',
-      'get_document_symbols',
-      'web_search',
-      'read_url',
-      'ask_user',
-      'list_workflows',
-      'create_workflow',
-      // UI/UX 工具（如果有的话）
-      'uiux_search',
-      'uiux_recommend',
-    ]
-    
-    // 如果历史中没有创建过工作流，且当前也不是在创建，则拦截修改操作
-    if (!hasCreatedWorkflowInHistory && !isCreatingWorkflowNow) {
-      const forbiddenTools = toolCalls.filter(tc => !readOnlyTools.includes(tc.name))
-      
-      if (forbiddenTools.length > 0) {
-        // 拦截禁止的工具调用
-        for (const tc of forbiddenTools) {
-          const errorMsg = `❌ PLAN MODE RESTRICTION: Cannot use "${tc.name}" before creating a workflow.
-
-You are in PLAN MODE - this is for planning, not implementation.
-
-What you MUST do:
-1. Use ask_user to gather requirements from the user
-2. Call create_workflow to create the workflow
-
-What you CANNOT do (until workflow is created):
-- Run commands (run_command)
-- Edit files (edit_file, write_file)
-- Delete files (delete_file_or_folder)
-- Any modification operations
-
-Current status: No workflow created yet
-Next action: Call ask_user to gather requirements, then create_workflow`
-          
-          results.push({
-            toolCall: tc,
-            result: { content: errorMsg }
-          })
-          
-          if (context.currentAssistantId) {
-            store.updateToolCall(context.currentAssistantId, tc.id, {
-              status: 'error',
-              result: errorMsg
-            })
-          }
-        }
-        
-        // 移除被拦截的工具
-        toolCalls = toolCalls.filter(tc => readOnlyTools.includes(tc.name))
-        
-        if (toolCalls.length === 0) {
-          return { results, userRejected: false }
-        }
-      }
-    }
-  }
-  // ===== End Plan 模式拦截 =====
-
   // 分析依赖
   const deps = analyzeToolDependencies(toolCalls)
   const completed = new Set<string>()
@@ -432,15 +348,15 @@ Next action: Call ask_user to gather requirements, then create_workflow`
   // 1. 先并行执行不需要审批的工具（使用动态并发限制）
   if (noApprovalRequired.length > 0) {
     store.setStreamPhase('tool_running')
-    
+
     // 动态导入 p-limit
     const pLimit = (await import('p-limit')).default
     // 动态并发限制
     const concurrency = getDynamicConcurrency()
     const limit = pLimit(concurrency)
-    
+
     // 使用 Promise.allSettled 确保每个工具独立执行
-    const noApprovalPromises = noApprovalRequired.map((tc) => 
+    const noApprovalPromises = noApprovalRequired.map((tc) =>
       limit(async () => {
         try {
           const result = await executeSingle(tc, context)
@@ -452,15 +368,15 @@ Next action: Call ask_user to gather requirements, then create_workflow`
         } catch (error) {
           logger.agent.error(`[Tools] Unexpected error in ${tc.name}:`, error)
           const errorMsg = error instanceof Error ? error.message : String(error)
-          
+
           // 立即更新错误状态
           if (context.currentAssistantId) {
-            store.updateToolCall(context.currentAssistantId, tc.id, { 
-              status: 'error', 
-              result: errorMsg 
+            store.updateToolCall(context.currentAssistantId, tc.id, {
+              status: 'error',
+              result: errorMsg
             })
           }
-          
+
           pending.delete(tc.id)
           const errorResult = { toolCall: tc, result: { content: `Error: ${errorMsg}` } }
           results.push(errorResult)
@@ -468,7 +384,7 @@ Next action: Call ask_user to gather requirements, then create_workflow`
         }
       })
     )
-    
+
     // 等待所有工具完成
     await Promise.allSettled(noApprovalPromises)
   }
@@ -480,13 +396,13 @@ Next action: Call ask_user to gather requirements, then create_workflow`
     // 检查依赖是否满足（依赖的工具必须已完成且未被拒绝）
     const tcDeps = deps.get(tc.id) || new Set()
     const depsOk = Array.from(tcDeps).every(dep => completed.has(dep) && !rejected.has(dep))
-    
+
     if (!depsOk) {
       // 依赖未满足，跳过此工具
       if (context.currentAssistantId) {
-        store.updateToolCall(context.currentAssistantId, tc.id, { 
-          status: 'error', 
-          result: 'Skipped: dependency not met' 
+        store.updateToolCall(context.currentAssistantId, tc.id, {
+          status: 'error',
+          result: 'Skipped: dependency not met'
         })
       }
       results.push({ toolCall: tc, result: { content: 'Skipped: dependency not met' } })
@@ -514,7 +430,7 @@ Next action: Call ask_user to gather requirements, then create_workflow`
       EventBus.emit({ type: 'tool:rejected', id: tc.id })
       results.push({ toolCall: tc, result: { content: 'Rejected by user' } })
       pending.delete(tc.id)
-      
+
       // 继续处理下一个工具，而不是中断整个流程
       continue
     }

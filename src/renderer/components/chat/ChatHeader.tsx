@@ -29,17 +29,17 @@ export default function ChatHeader({
         <button
           onClick={() => setChatMode('chat')}
           className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${chatMode === 'chat'
-              ? 'bg-background text-text-primary shadow-sm'
-              : 'text-text-muted hover:text-text-primary'
+            ? 'bg-background text-text-primary shadow-sm'
+            : 'text-text-muted hover:text-text-primary'
             }`}
         >
           Chat
         </button>
         <button
           onClick={() => setChatMode('agent')}
-          className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${chatMode === 'agent' || chatMode === 'plan'
-              ? 'text-accent bg-accent/10 shadow-sm'
-              : 'text-text-muted hover:text-text-primary'
+          className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${chatMode === 'agent'
+            ? 'text-accent bg-accent/10 shadow-sm'
+            : 'text-text-muted hover:text-text-primary'
             }`}
         >
           Agent

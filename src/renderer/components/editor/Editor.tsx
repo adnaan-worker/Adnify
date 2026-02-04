@@ -33,8 +33,8 @@ import EditorContextMenu from './EditorContextMenu'
 import { TabContextMenu } from './TabContextMenu'
 import { EditorWelcome } from './EditorWelcome'
 import { SafeDiffEditor } from './SafeDiffEditor'
-import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile, isPlanFile } from './FilePreview'
-import { WorkflowPreview } from './WorkflowPreview'
+import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile, isPlanBoard } from './FilePreview'
+import { PlanBoardTab } from '../plan'
 import { CodeSkeleton } from '../ui/Loading'
 
 // Hooks
@@ -50,7 +50,7 @@ export default function Editor() {
     language, activeDiff, setActiveDiff
   } = useStore()
   const { pendingChanges, acceptChange, undoChange } = useAgent()
-  
+
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | typeof import('monaco-editor/esm/vs/editor/editor.api') | null>(null)
   const cursorDebounceRef = useRef<NodeJS.Timeout | null>(null)
@@ -157,7 +157,7 @@ export default function Editor() {
         const editorContent = editor.getValue()
         const { openFiles: currentFiles } = useStore.getState()
         const currentFile = currentFiles.find(f => f.path === activeFilePath)
-        
+
         if (currentFile && editorContent === currentFile.content) {
           // 内容相同，说明是外部同步（如 AI 写入后 reloadFileFromDisk）
           // 更新 savedVersionId，保持 isDirty: false
@@ -325,8 +325,8 @@ export default function Editor() {
               <ImagePreview path={activeFile.path} />
             ) : activeFileType === 'binary' ? (
               <UnsupportedFile path={activeFile.path} fileType="binary" />
-            ) : isPlanFile(activeFile.path) ? (
-              <WorkflowPreview content={activeFile.content} />
+            ) : isPlanBoard(activeFile.path) ? (
+              <PlanBoardTab />
             ) : activeFileType === 'markdown' && markdownMode === 'preview' ? (
               <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
             ) : activeFileType === 'markdown' && markdownMode === 'split' ? (

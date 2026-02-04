@@ -431,7 +431,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             // 捕获执行异常（如 IPC 通信失败）
             const errorMsg = error instanceof Error ? error.message : String(error)
             logger.agent.error('[run_command] Execution failed:', errorMsg)
-            
+
             return {
                 success: false,
                 result: `Error: Failed to execute command: ${errorMsg}`,
@@ -660,16 +660,16 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
     async analyze_code(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath, true)
         const { llmConfig } = useStore.getState()
-        
+
         try {
             // 读取文件内容
             const code = await api.file.read(path)
             if (code === null) {
                 return { success: false, result: '', error: `File not found: ${path}` }
             }
-            
+
             const language = getLanguageId(path)
-            
+
             // 调用 AI 分析
             const response = await api.llm.analyzeCode({
                 config: llmConfig,
@@ -677,18 +677,18 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 language,
                 filePath: path,
             })
-            
+
             const result = response.data
-            
+
             // 格式化结果
-            const issues = result.issues.map(issue => 
+            const issues = result.issues.map(issue =>
                 `[${issue.severity}] Line ${issue.line}: ${issue.message}`
             ).join('\n')
-            
-            const suggestions = result.suggestions.map((sug, i) => 
+
+            const suggestions = result.suggestions.map((sug, i) =>
                 `${i + 1}. [${sug.priority}] ${sug.title}\n   ${sug.description}`
             ).join('\n\n')
-            
+
             const output = [
                 '=== AI Code Analysis ===',
                 '',
@@ -703,7 +703,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 '',
                 response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
             ].join('\n')
-            
+
             return {
                 success: true,
                 result: output,
@@ -725,16 +725,16 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
     async suggest_refactoring(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath, true)
         const { llmConfig } = useStore.getState()
-        
+
         try {
             // 读取文件内容
             const code = await api.file.read(path)
             if (code === null) {
                 return { success: false, result: '', error: `File not found: ${path}` }
             }
-            
+
             const language = getLanguageId(path)
-            
+
             // 调用 AI 重构建议
             const response = await api.llm.suggestRefactoring({
                 config: llmConfig,
@@ -742,17 +742,17 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 language,
                 intent: args.intent as string,
             })
-            
+
             const result = response.data
-            
+
             // 格式化结果
-            const refactorings = result.refactorings.map((ref, i) => 
+            const refactorings = result.refactorings.map((ref, i) =>
                 `${i + 1}. [${ref.confidence}] ${ref.title}\n` +
                 `   ${ref.description}\n` +
                 `   ${ref.explanation}\n` +
                 `   Changes: ${ref.changes.length} modification(s)`
             ).join('\n\n')
-            
+
             const output = [
                 '=== Refactoring Suggestions ===',
                 '',
@@ -760,7 +760,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 '',
                 response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
             ].join('\n')
-            
+
             return {
                 success: true,
                 result: output,
@@ -782,16 +782,16 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
     async suggest_fixes(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath, true)
         const { llmConfig } = useStore.getState()
-        
+
         try {
             // 读取文件内容
             const code = await api.file.read(path)
             if (code === null) {
                 return { success: false, result: '', error: `File not found: ${path}` }
             }
-            
+
             const language = getLanguageId(path)
-            
+
             // 获取诊断信息
             const lintErrors = await lintService.getLintErrors(path, true)
             const diagnostics = lintErrors.map(err => ({
@@ -800,14 +800,14 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 column: err.column ?? 1,
                 severity: err.severity === 'error' ? 1 : err.severity === 'warning' ? 2 : 3,
             }))
-            
+
             if (diagnostics.length === 0) {
                 return {
                     success: true,
                     result: 'No errors found. File is clean!',
                 }
             }
-            
+
             // 调用 AI 修复建议
             const response = await api.llm.suggestFixes({
                 config: llmConfig,
@@ -815,17 +815,17 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 language,
                 diagnostics,
             })
-            
+
             const result = response.data
-            
+
             // 格式化结果
-            const fixes = result.fixes.map((fix, i) => 
+            const fixes = result.fixes.map((fix, i) =>
                 `${i + 1}. [${fix.confidence}] ${fix.title}\n` +
                 `   Diagnostic #${fix.diagnosticIndex}: ${diagnostics[fix.diagnosticIndex]?.message || 'Unknown'}\n` +
                 `   ${fix.description}\n` +
                 `   Changes: ${fix.changes.length} modification(s)`
             ).join('\n\n')
-            
+
             const output = [
                 '=== AI Fix Suggestions ===',
                 '',
@@ -833,7 +833,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 '',
                 response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
             ].join('\n')
-            
+
             return {
                 success: true,
                 result: output,
@@ -855,16 +855,16 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
     async generate_tests(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath, true)
         const { llmConfig } = useStore.getState()
-        
+
         try {
             // 读取文件内容
             const code = await api.file.read(path)
             if (code === null) {
                 return { success: false, result: '', error: `File not found: ${path}` }
             }
-            
+
             const language = getLanguageId(path)
-            
+
             // 调用 AI 测试生成
             const response = await api.llm.generateTests({
                 config: llmConfig,
@@ -872,16 +872,16 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 language,
                 framework: args.framework as string | undefined,
             })
-            
+
             const result = response.data
-            
+
             // 格式化结果
-            const testCases = result.testCases.map((tc, i) => 
+            const testCases = result.testCases.map((tc, i) =>
                 `${i + 1}. [${tc.type}] ${tc.name}\n` +
                 `   ${tc.description}\n` +
                 `   \`\`\`${language}\n${tc.code}\n\`\`\``
             ).join('\n\n')
-            
+
             const output = [
                 '=== Generated Tests ===',
                 '',
@@ -893,7 +893,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 '',
                 response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
             ].filter(Boolean).join('\n')
-            
+
             return {
                 success: true,
                 result: output,
@@ -909,103 +909,6 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 result: '',
                 error: `Test generation failed: ${toAppError(err).message}`,
             }
-        }
-    },
-
-    // ===== 工作流工具 =====
-    async create_workflow(args, ctx) {
-        const { createWorkflowFile } = await import('@/renderer/plan/tools/agentTools')
-        const name = String(args.name)
-        const description = String(args.description)
-        const requirements = String(args.requirements)
-        const workflow = args.workflow as { nodes: any[]; edges: any[] }
-
-        if (!workflow || !workflow.nodes || !workflow.edges) {
-            return {
-                success: false,
-                result: '',
-                error: 'Workflow parameter must include nodes and edges arrays',
-            }
-        }
-
-        const result = await createWorkflowFile(name, description, requirements, workflow, ctx.workspacePath)
-
-        if (!result.success) {
-            return {
-                success: false,
-                result: '',
-                error: result.error || 'Failed to create workflow',
-            }
-        }
-
-        // 自动打开工作流文件
-        if (result.workflowPath) {
-            const content = await api.file.read(result.workflowPath)
-            if (content) {
-                const { openFile, setActiveFile } = useStore.getState()
-                openFile(result.workflowPath, content)
-                setActiveFile(result.workflowPath)
-            }
-        }
-
-        // 同时打开需求文档
-        if (result.requirementsPath) {
-            const content = await api.file.read(result.requirementsPath)
-            if (content) {
-                const { openFile } = useStore.getState()
-                openFile(result.requirementsPath, content)
-            }
-        }
-
-        return {
-            success: true,
-            result: `✅ Workflow "${name}" created successfully!
-
-📁 Files:
-- ${result.workflowPath}
-- ${result.requirementsPath}
-
-📊 Workflow structure:
-- ${workflow.nodes.length} nodes total
-- ${workflow.nodes.filter((n: any) => n.type === 'tool').length} tool nodes
-- ${workflow.nodes.filter((n: any) => n.type === 'decision').length} decision nodes
-- ${workflow.nodes.filter((n: any) => n.type === 'ask').length} interaction nodes
-
-🎯 Next: The workflow will be executed automatically. You'll see each step in the chat as it runs.`,
-            meta: {
-                workflowPath: result.workflowPath,
-                workflowName: name,
-                shouldExecute: true, // 标记需要执行
-            },
-        }
-    },
-
-    async list_workflows(_args, ctx) {
-        const { listWorkflowFiles } = await import('@/renderer/plan/tools/agentTools')
-        const result = await listWorkflowFiles(ctx.workspacePath)
-
-        if (!result.success) {
-            return {
-                success: false,
-                result: '',
-                error: result.error || 'Failed to list workflows',
-            }
-        }
-
-        if (!result.files || result.files.length === 0) {
-            return {
-                success: true,
-                result: 'No workflows found in .adnify/workflows/\n\nYou can create a new workflow using the create_workflow tool.',
-            }
-        }
-
-        const fileList = result.files
-            .map(f => `- ${f.replace(ctx.workspacePath + '/', '')}`)
-            .join('\n')
-
-        return {
-            success: true,
-            result: `Found ${result.files.length} workflow(s):\n\n${fileList}`,
         }
     },
 }

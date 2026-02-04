@@ -39,9 +39,8 @@ export function isBinaryFile(path: string): boolean {
     return getFileType(path) === 'binary'
 }
 
-export function isPlanFile(path: string): boolean {
-    const normalizedPath = path.replace(/\\/g, '/')
-    return normalizedPath.includes('.adnify/workflows/') && normalizedPath.endsWith('.json')
+export function isPlanBoard(path: string): boolean {
+    return path === 'adnify://plan-board'
 }
 
 // ===== Markdown 预览组件 =====
@@ -135,7 +134,7 @@ export function ImagePreview({ path }: ImagePreviewProps) {
     const [loading, setLoading] = useState(true)
     const containerRef = useRef<HTMLDivElement>(null)
     const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null)
-    
+
     // 拖动状态
     const [position, setPosition] = useState({ x: 0, y: 0 })
     const isDraggingRef = useRef(false)

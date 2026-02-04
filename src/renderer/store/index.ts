@@ -14,7 +14,9 @@ import {
   createLayoutSlice, LayoutSlice,
   createGitSlice, GitSlice,
   createEditorStateSlice, EditorStateSlice,
+  createPlanSlice, PlanSlice,
 } from './slices'
+
 
 // 导出类型
 export type { OpenFile, WorkspaceConfig, LargeFileInfo } from './slices'
@@ -34,7 +36,7 @@ export type { WorkMode } from '@/renderer/modes/types'
 
 // 组合所有 slices
 type StoreState = FileSlice & SettingsSlice & ThemeSlice & LogSlice & McpSlice & DebugSlice
-  & DialogSlice & LayoutSlice & GitSlice & EditorStateSlice
+  & DialogSlice & LayoutSlice & GitSlice & EditorStateSlice & PlanSlice
 
 export const useStore = create<StoreState>()((...args) => ({
   ...createFileSlice(...args),
@@ -47,4 +49,5 @@ export const useStore = create<StoreState>()((...args) => ({
   ...createLayoutSlice(...args),
   ...createGitSlice(...args),
   ...createEditorStateSlice(...args),
+  ...createPlanSlice(...args),
 }))

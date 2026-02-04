@@ -44,11 +44,11 @@ function executeModePostProcessHook(
 ): ReturnType<import('@shared/config/agentConfig').ModePostProcessHook> {
   const agentConfig = getAgentConfig()
   const hookConfig = agentConfig.modePostProcessHooks?.[mode]
-  
+
   if (!hookConfig?.enabled || !hookConfig.hook) {
     return null
   }
-  
+
   try {
     return hookConfig.hook(context)
   } catch (error) {
@@ -91,26 +91,26 @@ async function callLLM(
 
     // 动态工具控制：根据上下文限制可用工具
     let activeTools: string[] | undefined
-    
+
     if (tools.length > 0) {
       const allToolNames = tools.map(t => t.name)
       const store = useAgentStore.getState()
-      
+
       // 场景1: Chat 模式 - 禁用所有工具（已在上面处理）
       // 场景2: Plan 模式 - 启用所有工具（包括 plan 相关工具）
       // 场景3: Code 模式 - 根据压缩等级动态调整
-      
+
       // 当上下文压缩等级较高时，限制工具以减少 token 使用
       const compressionLevel = store.compressionStats?.level || 0
       if (compressionLevel >= 3) {
         // L3/L4: 只保留核心工具，移除 AI 辅助工具（节省 token）
-        const coreTools = allToolNames.filter(name => 
+        const coreTools = allToolNames.filter(name =>
           !['analyze_code', 'suggest_refactoring', 'suggest_fixes', 'generate_tests'].includes(name)
         )
         activeTools = coreTools
         logger.agent.info(`[Loop] Compression L${compressionLevel}: ${activeTools.length}/${allToolNames.length} tools active (AI tools disabled)`)
       }
-      
+
       // 未来可扩展的场景：
       // - 只读模式：activeTools = allToolNames.filter(name => getReadOnlyTools().includes(name))
       // - 安全模式：activeTools = allToolNames.filter(name => !getDangerousTools().includes(name))
@@ -144,7 +144,7 @@ async function callLLM(
   } catch (error) {
     processor.cleanup()
     logger.agent.error('[Loop] Error in callLLM:', error)
-    
+
     const errorMsg = error instanceof Error ? error.message : String(error)
     return { error: errorMsg }
   }
@@ -163,25 +163,25 @@ async function callLLMWithRetry(
       async () => {
         if (abortSignal?.aborted) throw new Error('Aborted')
         const result = await callLLM(config, messages, chatMode, assistantId)
-        
+
         // 工具调用解析错误不应该导致重试，而是返回给 AI 让它反思
         // 只有真正的 LLM 错误（网络、API 等）才需要重试
         if (result.error) {
           const errorMsg = result.error.toLowerCase()
-          const isToolParseError = errorMsg.includes('tool call parse') || 
-                                   errorMsg.includes('invalid input for tool') ||
-                                   errorMsg.includes('type validation failed')
-          
+          const isToolParseError = errorMsg.includes('tool call parse') ||
+            errorMsg.includes('invalid input for tool') ||
+            errorMsg.includes('type validation failed')
+
           if (isToolParseError) {
             // 工具解析错误：不重试，返回结果让 loop 处理
             logger.agent.warn('[Loop] Tool parse error, will be handled in loop:', result.error)
             return result
           }
-          
+
           // 其他错误：抛出以触发重试
           throw new Error(result.error)
         }
-        
+
         return result
       },
       {
@@ -192,7 +192,7 @@ async function callLLMWithRetry(
           const msg = error instanceof Error ? error.message : String(error)
           return isRetryableError(error) && msg !== 'Aborted'
         },
-        onRetry: (attempt, error, delay) => 
+        onRetry: (attempt, error, delay) =>
           logger.agent.info(`[Loop] LLM retry ${attempt}, waiting ${delay}ms...`, error),
       }
     )
@@ -292,14 +292,14 @@ async function checkAndHandleCompression(
   // 更新 store
   store.setCompressionStats(newStats as import('../context/CompressionManager').CompressionStats)
   store.setCompressionPhase('idle')
-  
+
   // L3 预警：提前通知用户上下文即将满
   if (calculatedLevel === 3 && (!previousStats || previousStats.level < 3)) {
     const remainingRatio = 1 - newStats.ratio
     const estimatedRemainingTurns = Math.floor(remainingRatio * contextLimit / (usage.input + usage.output))
-    EventBus.emit({ 
-      type: 'context:warning', 
-      level: 3, 
+    EventBus.emit({
+      type: 'context:warning',
+      level: 3,
       message: `Context usage is high (${(newStats.ratio * 100).toFixed(1)}%). Estimated ${estimatedRemainingTurns} turns remaining.`,
     })
   }
@@ -412,14 +412,14 @@ export async function runLoop(
     // 处理错误
     if (result.error) {
       const errorMsg = result.error.toLowerCase()
-      const isToolParseError = errorMsg.includes('tool call parse') || 
-                               errorMsg.includes('invalid input for tool') ||
-                               errorMsg.includes('type validation failed')
-      
+      const isToolParseError = errorMsg.includes('tool call parse') ||
+        errorMsg.includes('invalid input for tool') ||
+        errorMsg.includes('type validation failed')
+
       if (isToolParseError) {
         // 工具解析错误：作为用户消息返回给 AI，让它反思和重试
         logger.agent.warn('[Loop] Tool parse error, adding as feedback:', result.error)
-        
+
         llmMessages.push({
           role: 'user',
           content: `❌ Tool Call Error: ${result.error}
@@ -431,7 +431,7 @@ Please fix the tool call and try again. Make sure:
 
 Try again with the corrected tool call.`
         })
-        
+
         shouldContinue = true
         continue
       } else {
@@ -446,7 +446,7 @@ Try again with the corrected tool call.`
     // 在 LLM 调用后立即检查压缩
     // 处理 usage 可能是数组或对象的情况
     const usageData = Array.isArray(result.usage) ? result.usage[0] : result.usage
-    
+
     if (usageData && usageData.totalTokens > 0) {
       const usage = {
         input: usageData.promptTokens || 0,
@@ -471,15 +471,15 @@ Try again with the corrected tool call.`
     } else {
       // 兜底：使用精确估算值更新统计
       logger.agent.warn('[Loop] No valid usage data from LLM, using estimated tokens')
-      
+
       const estimatedTokens = estimateMessagesTokens(llmMessages as ChatMessage[])
-      
+
       // 假设 90% 是输入，10% 是输出（保守估计）
       const usage = {
         input: Math.floor(estimatedTokens * 0.9),
         output: Math.floor(estimatedTokens * 0.1),
       }
-      
+
       // 更新消息的 usage（使用估算值）
       if (assistantId) {
         store.updateMessage(assistantId, {
@@ -490,7 +490,7 @@ Try again with the corrected tool call.`
           }
         } as Partial<import('../types').AssistantMessage>)
       }
-      
+
       const compressionResult = await checkAndHandleCompression(
         usage,
         contextLimit,
@@ -518,13 +518,13 @@ Try again with the corrected tool call.`
           const readOnlyTools = getReadOnlyTools()
           return m.role === 'assistant' && m.tool_calls?.some((tc: any) => !readOnlyTools.includes(tc.function.name))
         }),
-        hasSpecificTool: (toolName: string) => llmMessages.some(m => 
+        hasSpecificTool: (toolName: string) => llmMessages.some(m =>
           m.role === 'assistant' && m.tool_calls?.some((tc: any) => tc.function.name === toolName)
         ),
         iteration,
         maxIterations,
       })
-      
+
       if (hookResult?.shouldContinue && hookResult.reminderMessage) {
         llmMessages.push({ role: 'user', content: hookResult.reminderMessage })
         shouldContinue = true
@@ -605,11 +605,11 @@ Try again with the corrected tool call.`
         name: toolCall.name,
         content: toolResult.content,
       })
-      
+
       // 记录工具执行结果到循环检测器
       const success = !toolResult.content.startsWith('Error:')
       loopDetector.recordResult(toolCall.id, success)
-      
+
       const meta = toolResult.meta
       if (meta?.filePath && typeof meta.filePath === 'string' && typeof meta.newContent === 'string') {
         loopDetector.updateContentHash(meta.filePath, meta.newContent)
@@ -629,206 +629,6 @@ Try again with the corrected tool call.`
           linesAdded: (meta.linesAdded as number) || 0,
           linesRemoved: (meta.linesRemoved as number) || 0,
         })
-      }
-      
-      // Plan 模式：检查是否需要执行工作流
-      if (context.chatMode === 'plan' && toolCall.name === 'create_workflow' && meta?.shouldExecute) {
-        const workflowPath = meta.workflowPath as string
-        const workflowName = meta.workflowName as string
-        
-        logger.agent.info('[Loop] Plan mode: Executing workflow automatically:', workflowName)
-        
-        // 添加执行提示到聊天
-        store.appendToAssistant(assistantId, `\n\n🚀 **Executing workflow: ${workflowName}**\n\nI'll now execute each step of the workflow and show you the progress...`)
-        
-        // 执行工作流
-        try {
-          const { PlanEngine } = await import('@/renderer/plan/core/PlanEngine')
-          const workflowContent = await api.file.read(workflowPath)
-          if (workflowContent) {
-            const workflow = JSON.parse(workflowContent)
-            const engine = new PlanEngine(workflow)
-            
-            // 监听工作流事件并显示在聊天中
-            engine.on('*', (event) => {
-              const node = workflow.nodes?.find((n: any) => n.id === event.nodeId)
-              const nodeName = node?.label || event.nodeId
-              
-              let message = ''
-              switch (event.type) {
-                case 'node_start':
-                  message = `\n▶️ Starting: **${nodeName}**`
-                  break
-                case 'node_complete':
-                  message = `\n✅ Completed: **${nodeName}**`
-                  break
-                case 'node_error':
-                  message = `\n❌ Failed: **${nodeName}** - ${event.error}`
-                  break
-                case 'workflow_complete':
-                  message = `\n\n🎉 **Workflow completed successfully!**`
-                  break
-                case 'workflow_error':
-                  message = `\n\n❌ **Workflow failed:** ${event.error}`
-                  break
-              }
-              
-              if (message) {
-                store.appendToAssistant(assistantId, message)
-              }
-            })
-            
-            // 执行工作流
-            await engine.start()
-          }
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error)
-          logger.agent.error('[Loop] Failed to execute workflow:', errorMsg)
-          store.appendToAssistant(assistantId, `\n\n❌ **Failed to execute workflow:** ${errorMsg}`)
-        }
-      }
-    }
-
-    // Plan 模式特殊处理：在工具执行后检查是否需要提醒
-    if (context.chatMode === 'plan') {
-      // 统计已使用的工具
-      const toolsUsed = new Set<string>()
-      let askUserCount = 0
-      for (const msg of llmMessages) {
-        if (msg.role === 'assistant' && msg.tool_calls) {
-          for (const tc of msg.tool_calls as any[]) {
-            toolsUsed.add(tc.function.name)
-            if (tc.function.name === 'ask_user') {
-              askUserCount++
-            }
-          }
-        }
-      }
-      
-      const hasUsedAskUser = toolsUsed.has('ask_user')
-      const justExecutedTools = result.toolCalls.map(tc => tc.name)
-      
-      // 如果刚执行了读取工具但还没用过 ask_user，强制要求使用
-      const readTools = ['read_file', 'read_multiple_files', 'list_directory', 'get_dir_tree', 'search_files', 'codebase_search']
-      const justReadFiles = justExecutedTools.some(t => readTools.includes(t))
-      
-      if (justReadFiles && !hasUsedAskUser) {
-        logger.agent.info('[Loop] Plan mode: Forcing ask_user after file reading')
-        llmMessages.push({
-          role: 'user',
-          content: `⚠️ PLAN MODE REQUIREMENT: You MUST now use the ask_user tool.
-
-You've read the project files. Now you MUST gather requirements from the user using ask_user.
-
-DO NOT:
-- Run any commands
-- Edit any files
-- Create workflow yet (need more info first)
-
-DO THIS NOW:
-Call ask_user with interactive options. For "optimize project", ask:
-
-\`\`\`json
-{
-  "question": "What aspects of the project would you like to optimize?",
-  "options": [
-    {"id": "performance", "label": "Performance Optimization", "description": "Improve speed, reduce memory usage"},
-    {"id": "code-quality", "label": "Code Quality", "description": "Refactoring, clean code, best practices"},
-    {"id": "architecture", "label": "Architecture", "description": "Improve project structure and organization"},
-    {"id": "ui-ux", "label": "UI/UX", "description": "Enhance user interface and experience"},
-    {"id": "testing", "label": "Testing", "description": "Add or improve test coverage"},
-    {"id": "documentation", "label": "Documentation", "description": "Improve docs and comments"}
-  ],
-  "multiSelect": true
-}
-\`\`\`
-
-Call ask_user NOW. This is mandatory in Plan mode.`
-        })
-      }
-      
-      // 如果刚执行了 ask_user，根据次数决定下一步
-      if (justExecutedTools.includes('ask_user')) {
-        if (askUserCount === 1) {
-          // 第一轮后，要求继续收集细节
-          logger.agent.info('[Loop] Plan mode: Requesting more details after first ask_user')
-          llmMessages.push({
-            role: 'user',
-            content: `Good! You've gathered the main areas. Now ask follow-up questions to get more details.
-
-Based on what the user selected, ask specific questions about:
-- Priority and timeline
-- Specific pain points or issues
-- Success criteria
-- Any constraints or requirements
-
-Call ask_user again with relevant follow-up questions.`
-          })
-        } else if (askUserCount === 2) {
-          // 第二轮后，要求收集实施细节
-          logger.agent.info('[Loop] Plan mode: Requesting implementation details after second ask_user')
-          llmMessages.push({
-            role: 'user',
-            content: `Good! Now ask about implementation details:
-- Testing requirements
-- Documentation needs
-- Review process
-- Deployment considerations
-
-Call ask_user again to gather these details.`
-          })
-        } else if (askUserCount >= 3) {
-          // 第三轮后，强制要求创建工作流
-          logger.agent.info('[Loop] Plan mode: FORCING create_workflow after 3+ rounds')
-          llmMessages.push({
-            role: 'user',
-            content: `✅ Excellent! You've gathered comprehensive requirements through ${askUserCount} rounds.
-
-🚨 **MANDATORY NEXT STEP**: You MUST now call create_workflow.
-
-DO NOT:
-- ❌ Run any commands (run_command)
-- ❌ Edit any files (edit_file, write_file)
-- ❌ Make any modifications
-- ❌ Ask more questions (you have enough info)
-
-DO THIS NOW (REQUIRED):
-Call create_workflow with:
-
-1. **name**: Short workflow name (e.g., "project-optimization")
-2. **description**: One-line summary
-3. **requirements**: Complete Markdown document with:
-   - Overview and goals
-   - All information gathered from ${askUserCount} rounds of ask_user
-   - Detailed acceptance criteria
-   - Step-by-step implementation plan
-   - Testing strategy
-   - Documentation requirements
-4. **workflow**: JSON with nodes and edges containing actual tool calls
-
-Example structure:
-\`\`\`json
-{
-  "name": "project-optimization",
-  "description": "Optimize project based on user requirements",
-  "requirements": "## Overview\\n\\n[All gathered info]\\n\\n## Acceptance Criteria\\n\\n- [ ] Item 1\\n- [ ] Item 2",
-  "workflow": {
-    "nodes": [
-      {"id": "start", "type": "start", "label": "Start"},
-      {"id": "analyze", "type": "tool", "label": "Analyze", "config": {"toolName": "read_file", "arguments": {"path": "package.json"}}},
-      {"id": "end", "type": "end", "label": "End"}
-    ],
-    "edges": [
-      {"id": "e1", "source": "start", "target": "analyze"},
-      {"id": "e2", "source": "analyze", "target": "end"}
-    ]
-  }
-}
-\`\`\`
-
-Call create_workflow NOW. This is not optional.`
-          })
-        }
       }
     }
 
@@ -853,6 +653,4 @@ Call create_workflow NOW. This is not optional.`
     EventBus.emit({ type: 'loop:warning', message: 'Max iterations reached' })
     EventBus.emit({ type: 'loop:end', reason: 'max_iterations' })
   }
-
-  // 循环结束，finalize 由 Agent.ts 的 cleanup 处理
 }

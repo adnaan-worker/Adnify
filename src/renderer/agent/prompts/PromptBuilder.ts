@@ -25,7 +25,6 @@ import {
   WORKFLOW_GUIDELINES,
   OUTPUT_FORMAT,
   TOOL_GUIDELINES,
-  PLAN_MODE_INSTRUCTIONS,
   getPromptTemplateById,
   getDefaultPromptTemplate,
 } from './promptTemplates'
@@ -103,22 +102,19 @@ export interface PromptContext {
  * 构建工具描述部分
  * 
  * 工具过滤逻辑：
- * 1. 根据模式排除类别（agent 模式排除 plan 类别，plan 模式不排除）
- * 2. 根据 getToolsForContext 获取允许的工具列表（包含角色专属工具）
- * 3. 只生成允许工具的描述
+ * 1. 根据 getToolsForContext 获取允许的工具列表（包含角色专属工具）
+ * 2. 只生成允许工具的描述
  */
 function buildTools(mode: WorkMode, templateId?: string): string {
-  // 根据模式确定要排除的类别
-  // agent 模式：排除 plan 类别
-  // plan 模式：不排除任何类别（可以使用所有工具）
-  const excludeCategories: ToolCategory[] = mode === 'agent' ? ['plan'] : []
-  
+  // 不排除任何类别
+  const excludeCategories: ToolCategory[] = []
+
   // 获取当前上下文允许的工具列表（包含角色专属工具）
   const allowedTools = getToolsForContext({ mode, templateId })
-  
+
   // 生成工具描述（双重过滤：类别 + 允许列表）
   const baseTools = generateToolsPromptDescriptionFiltered(excludeCategories, allowedTools)
-  
+
   return `## Available Tools
 
 ${baseTools}
@@ -179,8 +175,8 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     SECURITY_RULES,
     buildTools(ctx.mode, ctx.templateId),
     CODE_CONVENTIONS,
-    // Plan 模式使用专门的指令，其他模式使用通用工作流指南
-    ctx.mode === 'plan' ? PLAN_MODE_INSTRUCTIONS : WORKFLOW_GUIDELINES,
+    // 使用通用工作流指南
+    WORKFLOW_GUIDELINES,
     OUTPUT_FORMAT,
     buildEnvironment(ctx),
     buildProjectSummary(ctx.projectSummary || null),
@@ -188,7 +184,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     buildMemory(ctx.memories),
     buildCustomInstructions(ctx.customInstructions),
   ]
-  
+
   return sections.filter(Boolean).join('\n\n')
 }
 
@@ -209,7 +205,7 @@ export function buildChatPrompt(ctx: PromptContext): string {
     buildMemory(ctx.memories),
     buildCustomInstructions(ctx.customInstructions),
   ]
-  
+
   return sections.filter(Boolean).join('\n\n')
 }
 

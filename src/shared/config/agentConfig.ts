@@ -140,7 +140,7 @@ export interface AgentRuntimeConfig {
   // 工具执行
   toolTimeoutMs: number
   enableAutoFix: boolean
-  
+
   // 动态并发控制
   dynamicConcurrency: {
     enabled: boolean
@@ -155,14 +155,14 @@ export interface AgentRuntimeConfig {
   maxImportantOldTurns: number
   enableLLMSummary: boolean
   autoHandoff: boolean
-  
+
   // 摘要生成配置
   summaryMaxContextChars: {
     quick: number
     detailed: number
     handoff: number
   }
-  
+
   // Prune 配置
   pruneMinimumTokens: number
   pruneProtectTokens: number
@@ -177,10 +177,10 @@ export interface AgentRuntimeConfig {
 
   // 目录忽略列表
   ignoredDirectories: string[]
-  
+
   // 模式后处理钩子
   modePostProcessHooks?: Record<string, ModePostProcessConfig>
-  
+
   // 工具依赖声明
   toolDependencies?: Record<string, ToolDependency>
 
@@ -192,7 +192,7 @@ export interface AgentRuntimeConfig {
 // 从 defaults.ts 构建完整的 Agent 配置
 export const DEFAULT_AGENT_CONFIG: AgentRuntimeConfig = {
   ...AGENT_DEFAULTS,
-  loopDetection: { 
+  loopDetection: {
     ...AGENT_DEFAULTS.loopDetection,
     dynamicThreshold: true,
   },
@@ -203,89 +203,6 @@ export const DEFAULT_AGENT_CONFIG: AgentRuntimeConfig = {
     minConcurrency: 4,
     maxConcurrency: 16,
     cpuMultiplier: 2,
-  },
-  modePostProcessHooks: {
-    plan: {
-      enabled: true,
-      hook: (context) => {
-        // Plan 模式工作流检查：
-        // 1. 必须使用 ask_user 收集需求（至少一次）
-        // 2. 最终必须调用 create_workflow
-        
-        const messages = context.messages as Array<{ 
-          role: string
-          content?: string
-          tool_calls?: Array<{ function: { name: string } }> 
-        }>
-        
-        // 统计已使用的工具
-        const toolsUsed = new Set<string>()
-        let askUserCount = 0
-        for (const msg of messages) {
-          if (msg.tool_calls) {
-            for (const tc of msg.tool_calls) {
-              toolsUsed.add(tc.function.name)
-              if (tc.function.name === 'ask_user') {
-                askUserCount++
-              }
-            }
-          }
-        }
-        
-        const hasUsedAskUser = toolsUsed.has('ask_user')
-        const hasUsedCreateWorkflow = toolsUsed.has('create_workflow')
-        
-        // 检查最后一条消息
-        const lastMessage = messages[messages.length - 1]
-        const lastHasToolCalls = lastMessage?.tool_calls && lastMessage.tool_calls.length > 0
-        
-        // 如果 AI 没有调用工具（想结束对话）
-        if (!lastHasToolCalls) {
-          // 优先级 1：必须至少使用一次 ask_user
-          if (!hasUsedAskUser) {
-            console.log('[Plan Mode Hook] Forcing ask_user usage')
-            return {
-              shouldContinue: true,
-              reminderMessage: `⚠️ PLAN MODE: You must use ask_user to gather requirements.
-
-You can read files to understand the project, but you MUST also use ask_user to collect requirements from the user.
-
-Example:
-\`\`\`json
-{
-  "question": "What type of workflow would you like to create?",
-  "options": [
-    {"id": "feature", "label": "Feature Development"},
-    {"id": "bugfix", "label": "Bug Fix"},
-    {"id": "refactor", "label": "Refactoring"}
-  ]
-}
-\`\`\`
-
-Call ask_user NOW.`
-            }
-          }
-          
-          // 优先级 2：使用过 ask_user 但没创建工作流
-          if (hasUsedAskUser && !hasUsedCreateWorkflow) {
-            console.log('[Plan Mode Hook] Forcing create_workflow usage')
-            return {
-              shouldContinue: true,
-              reminderMessage: `⚠️ PLAN MODE: You gathered requirements (${askUserCount} rounds) but didn't create the workflow.
-
-Now you must call create_workflow with:
-- name: Workflow name (kebab-case)
-- description: Brief description
-- requirements: Complete Markdown document with all gathered information
-
-Call create_workflow NOW.`
-            }
-          }
-        }
-        
-        return null
-      }
-    }
   },
   toolDependencies: {
     edit_file: {

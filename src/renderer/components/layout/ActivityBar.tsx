@@ -1,10 +1,10 @@
-import { Files, Search, GitBranch, Settings, Sparkles, AlertCircle, ListTree, History } from 'lucide-react'
+import { Files, Search, GitBranch, Settings, Sparkles, AlertCircle, ListTree, History, LayoutGrid } from 'lucide-react'
 import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 
 export default function ActivityBar() {
-  const { activeSidePanel, setActiveSidePanel, language, setShowSettings, setShowComposer } = useStore()
+  const { activeSidePanel, setActiveSidePanel, language, setShowSettings, setShowComposer, openPlanBoard, openFile } = useStore()
 
   const items = [
     { id: 'explorer', icon: Files, label: t('explorer', language) },
@@ -49,6 +49,17 @@ export default function ActivityBar() {
             className="w-10 h-10 rounded-xl flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/5 transition-all duration-300 group hover:scale-105"
           >
             <Sparkles className="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-accent transition-all group-hover:drop-shadow-[0_0_8px_rgba(var(--accent)/0.4)]" strokeWidth={1.5} />
+          </button>
+        </Tooltip>
+        <Tooltip content={language === 'zh' ? 'Plan 看板' : 'Plan Board'} side="right">
+          <button
+            onClick={() => {
+              openPlanBoard()
+              openFile('adnify://plan-board', '')
+            }}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/5 transition-all duration-300 group hover:scale-105"
+          >
+            <LayoutGrid className="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-accent transition-all group-hover:drop-shadow-[0_0_8px_rgba(var(--accent)/0.4)]" strokeWidth={1.5} />
           </button>
         </Tooltip>
         <Tooltip content={t('settings', language)} side="right">

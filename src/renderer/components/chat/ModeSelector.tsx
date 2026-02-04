@@ -1,10 +1,10 @@
 /**
  * 模式选择器组件
- * 下拉方式选择 Chat/Agent/Plan 模式
+ * 下拉方式选择 Chat/Agent 模式
  */
 
 import { useState, useRef, useEffect } from 'react'
-import { ChevronDown, Check, MessageSquare, Sparkles, ClipboardList } from 'lucide-react'
+import { ChevronDown, Check, MessageSquare, Sparkles } from 'lucide-react'
 import { WorkMode } from '@/renderer/modes/types'
 import { useStore } from '@store'
 
@@ -22,31 +22,23 @@ const MODES: Array<{
   descEn: string
   color: string
 }> = [
-  {
-    id: 'chat',
-    icon: MessageSquare,
-    labelKey: 'Chat',
-    descZh: '普通对话，不执行工具',
-    descEn: 'Chat only, no tool execution',
-    color: 'text-blue-400',
-  },
-  {
-    id: 'agent',
-    icon: Sparkles,
-    labelKey: 'Agent',
-    descZh: 'AI 代理，可执行工具',
-    descEn: 'AI agent with tool execution',
-    color: 'text-accent',
-  },
-  {
-    id: 'plan',
-    icon: ClipboardList,
-    labelKey: 'Plan',
-    descZh: '规划模式，先制定计划',
-    descEn: 'Planning mode, create plan first',
-    color: 'text-emerald-400',
-  },
-]
+    {
+      id: 'chat',
+      icon: MessageSquare,
+      labelKey: 'Chat',
+      descZh: '普通对话，不执行工具',
+      descEn: 'Chat only, no tool execution',
+      color: 'text-blue-400',
+    },
+    {
+      id: 'agent',
+      icon: Sparkles,
+      labelKey: 'Agent',
+      descZh: 'AI 代理，可执行工具',
+      descEn: 'AI agent with tool execution',
+      color: 'text-accent',
+    },
+  ]
 
 export default function ModeSelector({ mode, onModeChange, className = '' }: ModeSelectorProps) {
   const { language } = useStore()

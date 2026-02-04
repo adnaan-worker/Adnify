@@ -19,19 +19,13 @@ export const MODE_CONFIGS: Record<WorkMode, ModeConfig> = {
     chat: {
         id: 'chat',
         label: 'Chat',
-        icon: '💬',
+        icon: 'MessageSquare',
         description: '快速问答，无工具调用'
     },
     agent: {
         id: 'agent',
         label: 'Agent',
-        icon: '🤖',
+        icon: 'Sparkles',
         description: '单次任务，工具调用'
-    },
-    plan: {
-        id: 'plan',
-        label: 'Plan Mode',
-        icon: '📋',
-        description: '项目级开发，分步规划'
     }
 }
