@@ -33,8 +33,7 @@ import EditorContextMenu from './EditorContextMenu'
 import { TabContextMenu } from './TabContextMenu'
 import { EditorWelcome } from './EditorWelcome'
 import { SafeDiffEditor } from './SafeDiffEditor'
-import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile, isPlanBoard } from './FilePreview'
-import { PlanBoardTab } from '../plan'
+import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile } from './FilePreview'
 import { CodeSkeleton } from '../ui/Loading'
 
 // Hooks
@@ -325,8 +324,6 @@ export default function Editor() {
               <ImagePreview path={activeFile.path} />
             ) : activeFileType === 'binary' ? (
               <UnsupportedFile path={activeFile.path} fileType="binary" />
-            ) : isPlanBoard(activeFile.path) ? (
-              <PlanBoardTab />
             ) : activeFileType === 'markdown' && markdownMode === 'preview' ? (
               <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
             ) : activeFileType === 'markdown' && markdownMode === 'split' ? (
