@@ -14,7 +14,7 @@ import type { ToolApprovalType } from '@/shared/types/llm'
 // 类型定义
 // ============================================
 
-export type ToolCategory = 'read' | 'write' | 'terminal' | 'search' | 'lsp' | 'network' | 'interaction'
+export type ToolCategory = 'read' | 'write' | 'terminal' | 'search' | 'lsp' | 'network' | 'interaction' | 'orchestrator'
 
 export interface ToolPropertyDef {
     type: 'string' | 'number' | 'boolean' | 'array' | 'object'
@@ -774,7 +774,7 @@ TIPS:
     ask_user: {
         name: 'ask_user',
         displayName: 'Ask User',
-        description: 'Ask user to select from options. Use in Plan mode to gather requirements before creating task templates.',
+        description: 'Ask user to select from options to gather requirements or preferences.',
         detailedDescription: `Present interactive options to the user and wait for their selection.
 - Use to gather requirements, preferences, or confirmations
 - Options are displayed as clickable cards
@@ -811,6 +811,53 @@ TIPS:
                 },
             },
             multiSelect: { type: 'boolean', description: 'Allow multiple selections (default: false)', default: false },
+        },
+    },
+
+    create_task_plan: {
+        name: 'create_task_plan',
+        displayName: 'Create Task Plan',
+        description: 'Create a structured task plan with requirements document and task list.',
+        detailedDescription: `Generate a task plan file that will be displayed in the TaskBoard.
+- Creates a plan file in .adnify/plan/ directory
+- Automatically opens the TaskBoard tab
+- Each task includes suggested provider/model/role
+- User can modify assignments before execution`,
+        examples: [
+            'create_task_plan name="Login Page" requirementsDoc="..." tasks=[{title:"Create form",suggestedProvider:"anthropic",suggestedModel:"claude-sonnet-4",suggestedRole:"coder"}]',
+        ],
+        criticalRules: [
+            'Always gather requirements with ask_user before creating a plan',
+            'Break complex requests into atomic tasks',
+            'Suggest appropriate models based on task complexity',
+            'Include clear task descriptions',
+        ],
+        category: 'orchestrator',
+        approvalType: 'none',
+        parallel: false,
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {
+            name: { type: 'string', description: 'Human-readable name for the plan', required: true },
+            requirementsDoc: { type: 'string', description: 'Markdown formatted requirements document', required: true },
+            tasks: {
+                type: 'array',
+                description: 'List of tasks to execute',
+                required: true,
+                items: {
+                    type: 'object',
+                    description: 'Task definition',
+                    properties: {
+                        title: { type: 'string', description: 'Task title', required: true },
+                        description: { type: 'string', description: 'Detailed task description', required: true },
+                        suggestedProvider: { type: 'string', description: 'Recommended provider (openai, anthropic, gemini)', required: true },
+                        suggestedModel: { type: 'string', description: 'Recommended model', required: true },
+                        suggestedRole: { type: 'string', description: 'Recommended role/persona', required: true },
+                        dependencies: { type: 'array', description: 'IDs of tasks this depends on', items: { type: 'string', description: 'Task ID' } },
+                    },
+                },
+            },
+            executionMode: { type: 'string', description: 'Default execution mode: sequential or parallel', enum: ['sequential', 'parallel'], default: 'sequential' },
         },
     },
 
@@ -1161,6 +1208,7 @@ export function generateToolsPromptDescriptionFiltered(
         lsp: [],
         network: [],
         interaction: [],
+        orchestrator: [],
     }
 
     // 按类别分组

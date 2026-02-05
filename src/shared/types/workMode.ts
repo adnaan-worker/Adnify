@@ -3,4 +3,4 @@
  */
 
 /** 工作模式 */
-export type WorkMode = 'chat' | 'agent'
+export type WorkMode = 'chat' | 'agent' | 'orchestrator'

@@ -35,6 +35,7 @@ import { EditorWelcome } from './EditorWelcome'
 import { SafeDiffEditor } from './SafeDiffEditor'
 import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile } from './FilePreview'
 import { CodeSkeleton } from '../ui/Loading'
+import { TaskBoard } from '../orchestrator/TaskBoard'
 
 // Hooks
 import { useEditorActions, useAICompletion, useEditorEvents } from './hooks'
@@ -324,6 +325,8 @@ export default function Editor() {
               <ImagePreview path={activeFile.path} />
             ) : activeFileType === 'binary' ? (
               <UnsupportedFile path={activeFile.path} fileType="binary" />
+            ) : activeFile.path.includes('.adnify/plan/') && activeFile.path.endsWith('.json') ? (
+              <TaskBoard planId={activeFile.path.split('/').pop()?.replace('.json', '') || ''} />
             ) : activeFileType === 'markdown' && markdownMode === 'preview' ? (
               <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
             ) : activeFileType === 'markdown' && markdownMode === 'split' ? (

@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
-import { ChevronDown, Check, MessageSquare, Sparkles } from 'lucide-react'
+import { ChevronDown, Check, MessageSquare, Sparkles, Workflow } from 'lucide-react'
 import { WorkMode } from '@/renderer/modes/types'
 import { useStore } from '@store'
 
@@ -37,6 +37,14 @@ const MODES: Array<{
       descZh: 'AI 代理，可执行工具',
       descEn: 'AI agent with tool execution',
       color: 'text-accent',
+    },
+    {
+      id: 'orchestrator',
+      icon: Workflow,
+      labelKey: 'Orchestrator',
+      descZh: '多轮需求收集与任务规划',
+      descEn: 'Requirement gathering & task planning',
+      color: 'text-purple-400',
     },
   ]
 

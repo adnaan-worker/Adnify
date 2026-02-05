@@ -63,9 +63,7 @@ const TOOL_LABELS: Record<string, string> = {
     // 网络
     web_search: 'Web Search',
     read_url: 'Read URL',
-    // Plan
-    create_plan: 'Create Plan',
-    update_plan: 'Update Plan',
+    // 交互
     ask_user: 'Ask User',
     // UI/UX
     uiux_search: 'UI/UX Search',

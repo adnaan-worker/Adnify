@@ -39,10 +39,6 @@ export function isBinaryFile(path: string): boolean {
     return getFileType(path) === 'binary'
 }
 
-export function isPlanBoard(path: string): boolean {
-    return path === 'adnify://plan-board'
-}
-
 // ===== Markdown 预览组件 =====
 
 interface MarkdownPreviewProps {
@@ -385,43 +381,37 @@ export function UnsupportedFile({ path, fileType }: UnsupportedFileProps) {
 interface MarkdownToolbarProps {
     mode: 'edit' | 'preview' | 'split'
     onModeChange: (mode: 'edit' | 'preview' | 'split') => void
-    isPlan?: boolean
 }
 
-export function MarkdownToolbar({ mode, onModeChange, isPlan }: MarkdownToolbarProps) {
+export function MarkdownToolbar({ mode, onModeChange }: MarkdownToolbarProps) {
     return (
         <div className="flex items-center gap-1 px-2 py-1 border-b border-border bg-surface/30">
-            {!isPlan && (
-                <>
-                    <Button
-                        variant={mode === 'edit' ? 'secondary' : 'ghost'}
-                        size="sm"
-                        onClick={() => onModeChange('edit')}
-                        className="h-6 px-2 text-xs gap-1"
-                        title="编辑模式"
-                    >
-                        <Edit className="w-3 h-3" />
-                        编辑
-                    </Button>
-                    <Button
-                        variant={mode === 'split' ? 'secondary' : 'ghost'}
-                        size="sm"
-                        onClick={() => onModeChange('split')}
-                        className="h-6 px-2 text-xs gap-1"
-                        title="分屏模式"
-                    >
-                        <Columns className="w-3 h-3" />
-                        分屏
-                    </Button>
-                </>
-            )}
             <Button
-                variant={mode === 'preview' || isPlan ? 'secondary' : 'ghost'}
+                variant={mode === 'edit' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => onModeChange('edit')}
+                className="h-6 px-2 text-xs gap-1"
+                title="编辑模式"
+            >
+                <Edit className="w-3 h-3" />
+                编辑
+            </Button>
+            <Button
+                variant={mode === 'split' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => onModeChange('split')}
+                className="h-6 px-2 text-xs gap-1"
+                title="分屏模式"
+            >
+                <Columns className="w-3 h-3" />
+                分屏
+            </Button>
+            <Button
+                variant={mode === 'preview' ? 'secondary' : 'ghost'}
                 size="sm"
                 onClick={() => onModeChange('preview')}
                 className="h-6 px-2 text-xs gap-1"
                 title="预览模式"
-                disabled={isPlan}
             >
                 <Eye className="w-3 h-3" />
                 预览

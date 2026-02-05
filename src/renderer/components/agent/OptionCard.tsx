@@ -1,6 +1,6 @@
 /**
  * 交互式选项卡片组件
- * 用于 Plan 模式下 AI 引导用户选择
+ * 用于 ask_user 工具引导用户选择
  */
 
 import { useState, useCallback } from 'react'

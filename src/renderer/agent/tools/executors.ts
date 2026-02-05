@@ -554,6 +554,83 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         }
     },
 
+    async create_task_plan(args, ctx) {
+        const name = args.name as string
+        const requirementsDoc = args.requirementsDoc as string
+        const tasks = args.tasks as Array<{
+            title: string
+            description: string
+            suggestedProvider: string
+            suggestedModel: string
+            suggestedRole: string
+            dependencies?: string[]
+        }>
+        const executionMode = (args.executionMode as 'sequential' | 'parallel') || 'sequential'
+
+        if (!ctx.workspacePath) {
+            return { success: false, result: 'No workspace path available' }
+        }
+
+        try {
+            // 生成唯一 ID
+            const timestamp = Date.now()
+            const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)
+            const planId = `${slug}-${timestamp}`
+
+            // 创建 .adnify/plan 目录
+            const planDir = `${ctx.workspacePath}/.adnify/plan`
+            await api.file.mkdir(planDir)
+
+            // 保存需求文档 (markdown)
+            const mdPath = `${planDir}/${planId}.md`
+            await api.file.write(mdPath, requirementsDoc)
+
+            // 构建任务对象
+            const planTasks = tasks.map((t, idx) => ({
+                id: `task-${idx + 1}`,
+                title: t.title,
+                description: t.description,
+                provider: t.suggestedProvider,
+                model: t.suggestedModel,
+                role: t.suggestedRole,
+                dependencies: t.dependencies || [],
+                status: 'pending' as const,
+            }))
+
+            // 构建规划对象
+            const plan = {
+                id: planId,
+                name,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                requirementsDoc: `${planId}.md`,
+                executionMode,
+                status: 'draft' as const,
+                tasks: planTasks,
+            }
+
+            // 保存规划文件 (json)
+            const jsonPath = `${planDir}/${planId}.json`
+            await api.file.write(jsonPath, JSON.stringify(plan, null, 2))
+
+            // 添加到 store 并打开 TaskBoard
+            const { useAgentStore } = await import('../store/AgentStore')
+            useAgentStore.getState().addPlan(plan)
+
+            // 打开 plan 文件（触发 TaskBoard 渲染）
+            useStore.getState().openFile(jsonPath, JSON.stringify(plan, null, 2))
+
+            return {
+                success: true,
+                result: `Created task plan "${name}" with ${tasks.length} tasks.\nPlan file: ${jsonPath}\nRequirements: ${mdPath}\n\nThe TaskBoard has been opened for user review. Please review the plan and click "开始执行" to proceed.`,
+                meta: { planId, planPath: jsonPath, stopLoop: true },
+            }
+        } catch (err) {
+            const error = toAppError(err)
+            return { success: false, result: error.message }
+        }
+    },
+
     async uiux_search(args) {
         const { uiuxDatabase } = await import('./uiux')
 

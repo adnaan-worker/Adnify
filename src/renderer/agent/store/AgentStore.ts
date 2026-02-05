@@ -24,6 +24,10 @@ import {
     type BranchSlice,
     type Branch,
 } from './slices'
+import {
+    createOrchestratorSlice,
+    type OrchestratorSlice,
+} from './slices/orchestratorSlice'
 import type { ChatMessage, ContextItem, StreamState } from '../types'
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../context/types'
@@ -103,7 +107,7 @@ export interface ThreadBoundStore {
     setInteractive: (messageId: string, interactive: import('../types').InteractiveContent) => void
 }
 
-export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & BranchSlice & UIState & {
+export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & BranchSlice & OrchestratorSlice & UIState & {
     _flushTextBuffer: (messageId: string) => void
     forThread: (threadId: string) => ThreadBoundStore
 }
@@ -118,6 +122,7 @@ export const useAgentStore = create<AgentStore>()(
             const messageSlice = createMessageSlice(...args)
             const checkpointSlice = createCheckpointSlice(...args)
             const branchSlice = createBranchSlice(...args)
+            const orchestratorSlice = createOrchestratorSlice(...args)
 
             const [set, get] = args
 
@@ -247,6 +252,7 @@ export const useAgentStore = create<AgentStore>()(
                 ...messageSlice,
                 ...checkpointSlice,
                 ...branchSlice,
+                ...orchestratorSlice,
                 ...uiState,
                 _flushTextBuffer,
                 forThread,

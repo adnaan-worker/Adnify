@@ -83,10 +83,17 @@ const UIUX_TOOLS: string[] = [
   'uiux_recommend',
 ]
 
+/** Orchestrator 工具 - orchestrator 模式专用 */
+const ORCHESTRATOR_TOOLS: string[] = [
+  'ask_user',
+  'create_task_plan',
+]
+
 /** 工具组注册表 */
 const TOOL_GROUPS: Record<string, string[]> = {
   core: CORE_TOOLS,
   uiux: UIUX_TOOLS,
+  orchestrator: ORCHESTRATOR_TOOLS,
 }
 
 /** 角色工具配置注册表 */
@@ -129,6 +136,7 @@ export function getToolGroup(id: string): string[] | undefined {
  * 加载规则：
  * - chat: 空（无工具）
  * - agent: core 工具组
+ * - orchestrator: orchestrator 工具组（ask_user, create_task_plan）
  * - 角色: 在模式基础上 + 角色专属工具组
  */
 export function getToolsForContext(context: ToolLoadingContext): string[] {
@@ -139,6 +147,14 @@ export function getToolsForContext(context: ToolLoadingContext): string[] {
 
   // 收集工具（使用 Set 去重）
   const tools = new Set<string>()
+
+  // orchestrator 模式：使用专属工具组
+  if (context.mode === 'orchestrator') {
+    for (const tool of TOOL_GROUPS['orchestrator'] || []) {
+      tools.add(tool)
+    }
+    return Array.from(tools)
+  }
 
   // 1. Agent 模式：core 工具
   for (const tool of CORE_TOOLS) {

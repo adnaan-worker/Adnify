@@ -101,8 +101,7 @@ async function callLLM(
       const store = useAgentStore.getState()
 
       // 场景1: Chat 模式 - 禁用所有工具（已在上面处理）
-      // 场景2: Plan 模式 - 启用所有工具（包括 plan 相关工具）
-      // 场景3: Code 模式 - 根据压缩等级动态调整
+      // 场景2: Agent 模式 - 根据压缩等级动态调整
 
       // 当上下文压缩等级较高时，限制工具以减少 token 使用
       const currentThread = store.getCurrentThread()
@@ -619,6 +618,15 @@ Try again with the corrected tool call.`
       }
       threadStore.setStreamPhase('idle')
       EventBus.emit({ type: 'loop:end', reason: 'waiting_for_user' })
+      break
+    }
+
+    // 检查 stopLoop (create_task_plan 等工具请求停止循环)
+    const stopLoopResult = toolResults.find(r => r.result.meta?.stopLoop)
+    if (stopLoopResult) {
+      threadStore.finalizeAssistant(assistantId)
+      threadStore.setStreamPhase('idle')
+      EventBus.emit({ type: 'loop:end', reason: 'tool_requested_stop' })
       break
     }
 
