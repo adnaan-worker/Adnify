@@ -22,7 +22,8 @@ export class LLMService {
   private syncService: SyncService
   private structuredService: StructuredService
   private embeddingService: EmbeddingService
-  private currentAbortController: AbortController | null = null
+  // 按 requestId 管理多个并发请求的 AbortController
+  private abortControllers = new Map<string, AbortController>()
 
   constructor(window: BrowserWindow) {
     this.streamingService = new StreamingService(window)
@@ -31,28 +32,46 @@ export class LLMService {
     this.embeddingService = new EmbeddingService()
   }
 
-  // 流式生成
+  // 流式生成（支持多个并发请求）
   async sendMessage(params: {
     config: LLMConfig
     messages: LLMMessage[]
     tools?: ToolDefinition[]
     systemPrompt?: string
     activeTools?: string[]
+    requestId?: string  // 请求标识，用于多对话隔离
   }) {
-    this.currentAbortController = new AbortController()
+    const requestId = params.requestId || crypto.randomUUID()
+    const abortController = new AbortController()
+    this.abortControllers.set(requestId, abortController)
+
     try {
       return await this.streamingService.generate({
         ...params,
-        abortSignal: this.currentAbortController.signal,
+        requestId,
+        abortSignal: abortController.signal,
       })
     } finally {
-      this.currentAbortController = null
+      this.abortControllers.delete(requestId)
     }
   }
 
-  abort() {
-    this.currentAbortController?.abort()
-    this.currentAbortController = null
+  // 中止指定请求，或中止所有请求
+  abort(requestId?: string) {
+    if (requestId) {
+      // 中止指定请求
+      const controller = this.abortControllers.get(requestId)
+      if (controller) {
+        controller.abort()
+        this.abortControllers.delete(requestId)
+      }
+    } else {
+      // 中止所有请求
+      for (const controller of this.abortControllers.values()) {
+        controller.abort()
+      }
+      this.abortControllers.clear()
+    }
   }
 
   // 同步生成

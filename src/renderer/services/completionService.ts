@@ -555,6 +555,9 @@ class CompletionService {
         return
       }
 
+      // 生成请求 ID，用于 IPC 频道隔离
+      const requestId = crypto.randomUUID()
+
       // Build the prompt
       const prompt = this.buildCompletionPrompt(context)
       let completionText = ''
@@ -568,22 +571,22 @@ class CompletionService {
       }
       signal.addEventListener('abort', abortHandler)
 
-      // Set up listeners
-      const unsubStream = api.llm.onStream((chunk: { type: string; content?: string }) => {
+      // Set up listeners（使用动态频道）
+      const unsubStream = api.llm.onStream(requestId, (chunk: { type: string; content?: string }) => {
         if (isAborted) return
         if (chunk.type === 'text' && chunk.content) {
           completionText += chunk.content
         }
       })
 
-      const unsubError = api.llm.onError((err: { message: string }) => {
+      const unsubError = api.llm.onError(requestId, (err: { message: string }) => {
         cleanup()
         if (!isAborted) {
           reject(new Error(toAppError(err).message))
         }
       })
 
-      const unsubDone = api.llm.onDone(() => {
+      const unsubDone = api.llm.onDone(requestId, () => {
         cleanup()
         if (isAborted) return
 
@@ -610,11 +613,12 @@ class CompletionService {
         unsubDone()
       }
 
-      // Send the completion request
+      // Send the completion request（携带 requestId）
       api.llm.send({
         config: llmConfig,
         messages: [{ role: 'user', content: prompt }],
-        systemPrompt: 'You are a code completion assistant. Output ONLY the code completion, no explanations or markdown.'
+        systemPrompt: 'You are a code completion assistant. Output ONLY the code completion, no explanations or markdown.',
+        requestId,
       }).catch((err) => {
         cleanup()
         if (!isAborted) {

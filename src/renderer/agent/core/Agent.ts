@@ -67,7 +67,9 @@ class AgentClass {
     chatMode: WorkMode = 'agent'
   ): Promise<void> {
     const store = useAgentStore.getState()
-    const threadId = store.currentThreadId
+
+    // 第一次对话时可能还没有 threadId，需要在 addUserMessage 后获取
+    let threadId = store.currentThreadId
 
     // 防止同一线程重复运行
     if (threadId && this.runningTasks.has(threadId)) {
@@ -83,38 +85,41 @@ class AgentClass {
 
     const abortController = new AbortController()
 
-    // 记录当前任务
-    if (threadId) {
-      this.runningTasks.set(threadId, { abortController, assistantId: '' })
-    }
-
     try {
       // 1. 准备上下文
       const contextItems = store.getCurrentThread()?.contextItems || []
       const userQuery = this.extractUserQuery(userMessage)
       const contextContent = await buildContextContent(contextItems, userQuery)
 
-      // 2. 添加用户消息
+      // 2. 添加用户消息（这可能会创建新线程）
       const userMessageId = store.addUserMessage(userMessage, contextItems)
       store.clearContextItems()
 
-      // 3. 创建检查点（用于撤销）
+      // 重新获取 threadId（addUserMessage 可能创建了新线程）
+      threadId = useAgentStore.getState().currentThreadId
+      if (!threadId) {
+        logger.agent.error('[Agent] No thread ID after addUserMessage')
+        return
+      }
+
+      // 3. 记录任务（现在 threadId 一定存在）
+      this.runningTasks.set(threadId, { abortController, assistantId: '' })
+
+      // 4. 创建检查点（用于撤销）
       const checkpointImages = this.extractCheckpointImages(userMessage)
       const messageText = typeof userMessage === 'string' ? userMessage.slice(0, 50) : 'User message'
       await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems)
 
-      // 4. 构建 LLM 消息（包含上下文压缩）
+      // 5. 构建 LLM 消息（包含上下文压缩）
       const llmMessages = await buildLLMMessages(userMessage, contextContent, systemPrompt)
 
-      // 5. 创建助手消息并开始流式响应
-      const assistantId = store.addAssistantMessage(undefined, threadId || undefined)
-      if (threadId) {
-        const task = this.runningTasks.get(threadId)
-        if (task) task.assistantId = assistantId
-      }
-      store.setStreamPhase('streaming', threadId || undefined)
+      // 6. 创建助手消息并开始流式响应
+      const assistantId = store.addAssistantMessage(undefined, threadId)
+      const task = this.runningTasks.get(threadId)
+      if (task) task.assistantId = assistantId
+      store.setStreamPhase('streaming', threadId)
 
-      // 6. 运行主循环（传递 threadId 实现后台隔离）
+      // 7. 运行主循环（传递 threadId 实现后台隔离）
       await runLoop(
         config,
         llmMessages,
@@ -132,7 +137,7 @@ class AgentClass {
       logger.agent.error('[Agent] Error:', appError.toJSON())
       this.showError(formatErrorMessage(appError))
     } finally {
-      // 确保清理资源
+      // 确保清理资源（threadId 现在一定存在）
       this.cleanupTask(threadId)
     }
   }
@@ -340,21 +345,25 @@ class AgentClass {
    * - 发生错误（finally 块）
    */
   /**
-   * 清理指定线程的任务资源
+   * 清理指定线程的任务资源（唯一的"完成"处理点）
+   * 
+   * 职责：
+   * - 完成助手消息（设置 isStreaming: false）
+   * - 重置流状态（设置 phase: 'idle'）
+   * - 清理任务记录
    */
   private cleanupTask(threadId: string | null): void {
     const store = useAgentStore.getState()
 
     if (threadId && this.runningTasks.has(threadId)) {
       const task = this.runningTasks.get(threadId)!
-      // Finalize 助手消息（传入 threadId 确保操作正确的线程）
       if (task.assistantId) {
         store.finalizeAssistant(task.assistantId, threadId)
       }
       this.runningTasks.delete(threadId)
     }
 
-    // 重置该线程的流状态（无论是否是当前线程）
+    // 重置该线程的流状态
     if (threadId) {
       store.setStreamPhase('idle', threadId)
     }

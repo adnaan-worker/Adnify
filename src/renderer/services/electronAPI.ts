@@ -76,9 +76,13 @@ function createGroupedAPI() {
       send: (params: Parameters<typeof raw.sendMessage>[0]) => raw.sendMessage(params),
       compactContext: (params: Parameters<typeof raw.compactContext>[0]) => raw.compactContext(params),
       abort: () => raw.abortMessage(),
-      onStream: (callback: Parameters<typeof raw.onLLMStream>[0]) => raw.onLLMStream(callback),
-      onError: (callback: Parameters<typeof raw.onLLMError>[0]) => raw.onLLMError(callback),
-      onDone: (callback: Parameters<typeof raw.onLLMDone>[0]) => raw.onLLMDone(callback),
+      // LLM 事件订阅（使用动态 IPC 频道实现请求隔离）
+      onStream: (requestId: string, callback: (data: { type: string; content?: string; id?: string; name?: string; arguments?: unknown; argumentsDelta?: string }) => void) =>
+        raw.onLLMStream(requestId, callback),
+      onError: (requestId: string, callback: (error: { message: string; code: string; retryable: boolean }) => void) =>
+        raw.onLLMError(requestId, callback),
+      onDone: (requestId: string, callback: (data: { usage?: unknown }) => void) =>
+        raw.onLLMDone(requestId, callback),
       // Structured Output
       analyzeCode: (params: Parameters<typeof raw.analyzeCode>[0]) => raw.analyzeCode(params),
       analyzeCodeStream: (params: Parameters<typeof raw.analyzeCodeStream>[0]) => raw.analyzeCodeStream(params),

@@ -67,6 +67,7 @@ function executeModePostProcessHook(
  * @param chatMode - 工作模式
  * @param assistantId - 助手消息 ID
  * @param threadStore - 线程绑定的 Store
+ * @param requestId - 请求标识，用于多对话隔离
  * @returns LLM 调用结果
  */
 async function callLLM(
@@ -74,11 +75,12 @@ async function callLLM(
   messages: LLMMessage[],
   chatMode: WorkMode,
   assistantId: string | null,
-  threadStore: import('../store/AgentStore').ThreadBoundStore
+  threadStore: import('../store/AgentStore').ThreadBoundStore,
+  requestId: string
 ): Promise<LLMCallResult> {
   performanceMonitor.start(`llm:${config.model}`, 'llm', { provider: config.provider, messageCount: messages.length })
 
-  const processor = createStreamProcessor(assistantId, threadStore)
+  const processor = createStreamProcessor(assistantId, threadStore, requestId)
 
   try {
     // 初始化工具
@@ -120,13 +122,14 @@ async function callLLM(
       // - 特定任务：activeTools = getToolsForTask(taskType)
     }
 
-    // 发送请求
+    // 发送请求（携带 requestId 用于多对话隔离）
     await api.llm.send({
       config: config as import('@shared/types/llm').LLMConfig,
       messages: messages as LLMMessage[],
       tools,
       systemPrompt: '',
-      activeTools
+      activeTools,
+      requestId
     })
 
     // 等待流式响应完成
@@ -159,14 +162,17 @@ async function callLLMWithRetry(
   chatMode: WorkMode,
   assistantId: string | null,
   threadStore: import('../store/AgentStore').ThreadBoundStore,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  requestId?: string
 ): Promise<LLMCallResult> {
   const retryConfig = getAgentConfig()
+  // 确保有 requestId（后备生成）
+  const reqId = requestId || crypto.randomUUID()
   try {
     return await withRetry(
       async () => {
         if (abortSignal?.aborted) throw new Error('Aborted')
-        const result = await callLLM(config, messages, chatMode, assistantId, threadStore)
+        const result = await callLLM(config, messages, chatMode, assistantId, threadStore, reqId)
 
         // 工具调用解析错误不应该导致重试，而是返回给 AI 让它反思
         // 只有真正的 LLM 错误（网络、API 等）才需要重试
@@ -389,6 +395,9 @@ export async function runLoop(
   // 获取模型上下文限制（默认 128k）
   const contextLimit = config.contextLimit || 128_000
 
+  // 生成请求 ID，用于 IPC 频道隔离
+  const requestId = crypto.randomUUID()
+
   const loopDetector = new LoopDetector()
   let iteration = 0
   let shouldContinue = true
@@ -413,8 +422,8 @@ export async function runLoop(
       break
     }
 
-    // 调用 LLM
-    const result = await callLLMWithRetry(config, llmMessages, context.chatMode, assistantId, threadStore, context.abortSignal)
+    // 调用 LLM（传递 requestId 用于多对话隔离）
+    const result = await callLLMWithRetry(config, llmMessages, context.chatMode, assistantId, threadStore, context.abortSignal, requestId)
 
     // 再次检查中止信号（LLM 调用后）
     if (context.abortSignal?.aborted) {

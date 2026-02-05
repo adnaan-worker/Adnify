@@ -2,9 +2,12 @@
  * 流式处理模块
  *
  * 职责：
- * - 处理 LLM 流式响应（AI SDK 事件格式）
+ * - 订阅 IPC 事件，收集 LLM 流式响应数据
  * - 解析文本、推理、工具调用
- * - 发布事件到 EventBus
+ * - 通过 Promise 返回最终结果
+ * 
+ * 注意：此模块只负责数据收集，不控制全局状态（streamState.phase）
+ * 状态控制由 Agent.cleanupTask 统一处理
  */
 
 import { api } from '@/renderer/services/electronAPI'
@@ -68,7 +71,8 @@ export interface StreamProcessor {
 
 export function createStreamProcessor(
   assistantId: string | null,
-  store: import('../store/AgentStore').ThreadBoundStore
+  store: import('../store/AgentStore').ThreadBoundStore,
+  requestId: string  // 必传，用于 IPC 频道隔离
 ): StreamProcessor {
 
   let content = ''
@@ -115,6 +119,8 @@ export function createStreamProcessor(
     argumentsDelta?: string
     usage?: unknown
   }) => {
+    // 动态频道已实现隔离，无需过滤
+
     switch (data.type) {
       case 'text':
         if (data.content) {
@@ -364,6 +370,7 @@ export function createStreamProcessor(
 
   // 处理错误事件
   const handleError = (err: { message?: string; code?: string } | string) => {
+    // 动态频道已实现隔离，无需过滤
     let errorMsg: string
 
     if (typeof err === 'string') {
@@ -381,37 +388,30 @@ export function createStreamProcessor(
     logger.agent.error('[StreamProcessor] Error:', errorMsg)
     error = errorMsg
     finalizeReasoning()
-    EventBus.emit({ type: 'llm:error', error: errorMsg })
+    // 只 resolve，不 emit EventBus - 状态由 Agent.cleanupTask 控制
     doResolve({ content, toolCalls, usage, error: errorMsg })
   }
 
-  // 处理完成事件
+  // 处理完成事件 - 只收集数据并 resolve，不控制全局状态
   const handleDone = (result: { usage?: unknown }) => {
     if (result?.usage) {
       usage = result.usage as TokenUsage
     }
     finalizeReasoning()
-
-    if (error) {
-      EventBus.emit({ type: 'llm:error', error })
-    } else {
-      EventBus.emit({ type: 'llm:done', content, toolCalls, usage })
-    }
+    // 只 resolve，不 emit EventBus - 状态由 Agent.cleanupTask 控制
     doResolve({ content, toolCalls, usage, error })
   }
 
-  // 一次性订阅所有 IPC 事件（在 Promise 外部）
-  const unsubStream = api.llm.onStream(handleStream)
-  const unsubError = api.llm.onError(handleError)
-  const unsubDone = api.llm.onDone(handleDone)
+  // 订阅特定请求的 IPC 频道（实现请求隔离）
+  const unsubStream = api.llm.onStream(requestId, handleStream)
+  const unsubError = api.llm.onError(requestId, handleError)
+  const unsubDone = api.llm.onDone(requestId, handleDone)
 
   cleanups.push(unsubStream, unsubError, unsubDone)
   activeListenerCount += 3
 
   // 等待完成 - 返回已创建的 Promise
   const wait = (): Promise<LLMCallResult> => waitPromise
-
-  EventBus.emit({ type: 'llm:start' })
 
   return { wait, cleanup }
 }

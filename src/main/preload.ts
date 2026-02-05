@@ -85,6 +85,8 @@ interface LLMSendMessageParams {
   messages: LLMMessage[]
   tools?: ToolDefinition[]
   systemPrompt?: string
+  activeTools?: string[]
+  requestId: string  // 必传，用于 IPC 频道隔离
 }
 
 interface EmbeddingConfigInput {
@@ -184,9 +186,9 @@ export interface ElectronAPI {
   embedText: (params: { text: string; config: any }) => Promise<any>
   embedMany: (params: { texts: string[]; config: any }) => Promise<any>
   findSimilar: (params: { query: string; candidates: string[]; config: any; topK?: number }) => Promise<any>
-  onLLMStream: (callback: (data: LLMStreamChunk) => void) => () => void
-  onLLMError: (callback: (error: LLMError) => void) => () => void
-  onLLMDone: (callback: (data: LLMResult) => void) => () => void
+  onLLMStream: (requestId: string, callback: (data: LLMStreamChunk) => void) => () => void
+  onLLMError: (requestId: string, callback: (error: LLMError) => void) => () => void
+  onLLMDone: (requestId: string, callback: (data: LLMResult) => void) => () => void
 
   // Interactive Terminal
   createTerminal: (options: { id: string; cwd?: string; shell?: string }) => Promise<boolean>
@@ -445,20 +447,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   embedText: (params: { text: string; config: any }) => ipcRenderer.invoke('llm:embedText', params),
   embedMany: (params: { texts: string[]; config: any }) => ipcRenderer.invoke('llm:embedMany', params),
   findSimilar: (params: { query: string; candidates: string[]; config: any; topK?: number }) => ipcRenderer.invoke('llm:findSimilar', params),
-  onLLMStream: (callback: (data: LLMStreamChunk) => void) => {
+  // LLM 事件订阅（使用动态 IPC 频道实现请求隔离）
+  onLLMStream: (requestId: string, callback: (data: LLMStreamChunk) => void) => {
+    const channel = `llm:stream:${requestId}`
     const handler = (_: IpcRendererEvent, data: LLMStreamChunk) => callback(data)
-    ipcRenderer.on('llm:stream', handler)
-    return () => ipcRenderer.removeListener('llm:stream', handler)
+    ipcRenderer.on(channel, handler)
+    return () => ipcRenderer.removeListener(channel, handler)
   },
-  onLLMError: (callback: (error: LLMError) => void) => {
+  onLLMError: (requestId: string, callback: (error: LLMError) => void) => {
+    const channel = `llm:error:${requestId}`
     const handler = (_: IpcRendererEvent, error: LLMError) => callback(error)
-    ipcRenderer.on('llm:error', handler)
-    return () => ipcRenderer.removeListener('llm:error', handler)
+    ipcRenderer.on(channel, handler)
+    return () => ipcRenderer.removeListener(channel, handler)
   },
-  onLLMDone: (callback: (data: LLMResult) => void) => {
+  onLLMDone: (requestId: string, callback: (data: LLMResult) => void) => {
+    const channel = `llm:done:${requestId}`
     const handler = (_: IpcRendererEvent, data: LLMResult) => callback(data)
-    ipcRenderer.on('llm:done', handler)
-    return () => ipcRenderer.removeListener('llm:done', handler)
+    ipcRenderer.on(channel, handler)
+    return () => ipcRenderer.removeListener(channel, handler)
   },
 
   createTerminal: (options: { id: string; cwd?: string; shell?: string }) =>

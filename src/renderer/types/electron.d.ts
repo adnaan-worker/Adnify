@@ -348,10 +348,10 @@ export interface ElectronAPI {
     code?: string
   }>
   abortMessage: () => void
-  onLLMStream: (callback: (chunk: LLMStreamChunk) => void) => () => void
+  onLLMStream: (requestId: string, callback: (chunk: LLMStreamChunk) => void) => () => void
   onLLMToolCall: (callback: (toolCall: LLMToolCall) => void) => () => void
-  onLLMError: (callback: (error: LLMError) => void) => () => void
-  onLLMDone: (callback: (result: LLMResult) => void) => () => void
+  onLLMError: (requestId: string, callback: (error: LLMError) => void) => () => void
+  onLLMDone: (requestId: string, callback: (result: LLMResult) => void) => () => void
   // LLM - Structured Output
   analyzeCode: (params: {
     config: LLMConfig

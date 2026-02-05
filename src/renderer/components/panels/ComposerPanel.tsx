@@ -666,6 +666,9 @@ async function generateComposerEdits(
     let resolved = false
     const unsubscribers: (() => void)[] = []
 
+    // 生成请求 ID，用于 IPC 频道隔离
+    const requestId = crypto.randomUUID()
+
     const cleanup = () => {
       if (!resolved) {
         resolved = true
@@ -674,7 +677,7 @@ async function generateComposerEdits(
     }
 
     unsubscribers.push(
-      api.llm.onStream((chunk: { type: string; content?: string }) => {
+      api.llm.onStream(requestId, (chunk: { type: string; content?: string }) => {
         if (chunk.type === 'text' && chunk.content) {
           result += chunk.content
         }
@@ -682,7 +685,7 @@ async function generateComposerEdits(
     )
 
     unsubscribers.push(
-      api.llm.onDone(() => {
+      api.llm.onDone(requestId, () => {
         cleanup()
 
         // 解析响应
@@ -718,7 +721,7 @@ async function generateComposerEdits(
     )
 
     unsubscribers.push(
-      api.llm.onError((error: { message: string }) => {
+      api.llm.onError(requestId, (error: { message: string }) => {
         cleanup()
         resolve({ success: false, error: error.message })
       })
@@ -735,6 +738,7 @@ async function generateComposerEdits(
       config,
       messages: [{ role: 'user', content: prompt }],
       systemPrompt: 'You are a helpful code editor assistant. Follow the response format exactly.',
+      requestId,
     }).catch((err) => {
       if (!resolved) {
         cleanup()

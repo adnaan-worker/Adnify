@@ -48,18 +48,18 @@ export default function InlineEdit({
 
 	const handleSubmit = useCallback(async () => {
 		if (!instruction.trim() || state === 'loading') return
-		
+
 		setState('loading')
 		setError('')
 		setGeneratedCode('')
-		
+
 		try {
 			// 构建提示词
 			const prompt = buildEditPrompt(instruction, selectedCode, filePath, lineRange)
-			
+
 			// 调用 LLM
 			const result = await generateEdit(llmConfig, prompt)
-			
+
 			if (result.success && result.code) {
 				setGeneratedCode(result.code)
 				setState('preview')
@@ -80,10 +80,10 @@ export default function InlineEdit({
 			onClose()
 		}
 	}, [generatedCode, onApply, onClose])
-	
+
 	const handleRetry = useCallback(() => {
-	    setState('idle')
-	    setTimeout(() => inputRef.current?.focus(), 100)
+		setState('idle')
+		setTimeout(() => inputRef.current?.focus(), 100)
 	}, [])
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -110,7 +110,7 @@ export default function InlineEdit({
 				top: position.y,
 				minWidth: 500,
 				maxWidth: 800,
-                maxHeight: '80vh'
+				maxHeight: '80vh'
 			}}
 		>
 			{/* Header */}
@@ -148,21 +148,21 @@ export default function InlineEdit({
 			{state === 'preview' && generatedCode && (
 				<div className="flex-1 overflow-hidden flex flex-col bg-background/50 border-t border-border-subtle">
 					<div className="px-3 py-1.5 flex justify-between items-center bg-surface/50 border-b border-border-subtle">
-                        <span className="text-[10px] uppercase tracking-wider text-text-muted font-medium">{t('diffPreview', language)}</span>
-                        <div className="flex gap-2">
-                            <span className="flex items-center gap-1 text-[10px] text-status-error"><span className="w-2 h-2 rounded-full bg-status-error/20 flex items-center justify-center">-</span> {t('original', language)}</span>
-                            <span className="flex items-center gap-1 text-[10px] text-status-success"><span className="w-2 h-2 rounded-full bg-status-success/20 flex items-center justify-center">+</span> {t('modified', language)}</span>
-                        </div>
-                    </div>
+						<span className="text-[10px] uppercase tracking-wider text-text-muted font-medium">{t('diffPreview', language)}</span>
+						<div className="flex gap-2">
+							<span className="flex items-center gap-1 text-[10px] text-status-error"><span className="w-2 h-2 rounded-full bg-status-error/20 flex items-center justify-center">-</span> {t('original', language)}</span>
+							<span className="flex items-center gap-1 text-[10px] text-status-success"><span className="w-2 h-2 rounded-full bg-status-success/20 flex items-center justify-center">+</span> {t('modified', language)}</span>
+						</div>
+					</div>
 					<div className="flex-1 overflow-auto p-0 min-h-[150px]">
 						<DiffViewer
-                            originalContent={selectedCode}
-                            modifiedContent={generatedCode}
-                            filePath={filePath}
-                            onAccept={handleApply}
-                            onReject={handleRetry}
-                            minimal={true}
-                        />
+							originalContent={selectedCode}
+							modifiedContent={generatedCode}
+							filePath={filePath}
+							onAccept={handleApply}
+							onReject={handleRetry}
+							minimal={true}
+						/>
 					</div>
 				</div>
 			)}
@@ -171,9 +171,9 @@ export default function InlineEdit({
 			{state === 'error' && error && (
 				<div className="px-3 pb-3 shrink-0">
 					<div className="p-2 bg-status-error/10 border border-status-error/20 rounded-lg flex items-center gap-2">
-                        <X className="w-4 h-4 text-status-error" />
+						<X className="w-4 h-4 text-status-error" />
 						<p className="text-xs text-status-error flex-1">{error}</p>
-                        <button onClick={handleRetry} className="text-xs underline text-status-error hover:text-status-error/80">{t('retry', language)}</button>
+						<button onClick={handleRetry} className="text-xs underline text-status-error hover:text-status-error/80">{t('retry', language)}</button>
 					</div>
 				</div>
 			)}
@@ -186,27 +186,27 @@ export default function InlineEdit({
 				<div className="flex items-center gap-2">
 					{state === 'loading' && (
 						<div className="flex items-center gap-2 text-xs text-text-muted">
-                            <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
-                            {t('generating', language)}
-                        </div>
+							<Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
+							{t('generating', language)}
+						</div>
 					)}
 					{state === 'preview' && (
-                        <>
-                            <button
-                                onClick={handleRetry}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded bg-surface border border-border-subtle text-text-secondary text-xs hover:bg-surface-hover transition-colors"
-                            >
-                                <RefreshCw className="w-3 h-3" />
-                                {t('retry', language)}
-                            </button>
-                            <button
-                                onClick={handleApply}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded bg-accent text-white text-xs hover:bg-accent-hover transition-colors shadow-glow"
-                            >
-                                <Check className="w-3 h-3" />
-                                {t('apply', language)}
-                            </button>
-                        </>
+						<>
+							<button
+								onClick={handleRetry}
+								className="flex items-center gap-1 px-3 py-1.5 rounded bg-surface border border-border-subtle text-text-secondary text-xs hover:bg-surface-hover transition-colors"
+							>
+								<RefreshCw className="w-3 h-3" />
+								{t('retry', language)}
+							</button>
+							<button
+								onClick={handleApply}
+								className="flex items-center gap-1 px-3 py-1.5 rounded bg-accent text-white text-xs hover:bg-accent-hover transition-colors shadow-glow"
+							>
+								<Check className="w-3 h-3" />
+								{t('apply', language)}
+							</button>
+						</>
 					)}
 					{(state === 'idle' || state === 'error') && (
 						<button
@@ -234,7 +234,7 @@ function buildEditPrompt(
 	lineRange: [number, number]
 ): string {
 	const lang = filePath.split('.').pop() || 'code'
-	
+
 	return `You are a code editor assistant. Edit the following code according to the user's instruction.
 
 File: ${filePath}
@@ -269,6 +269,9 @@ async function generateEdit(
 		let resolved = false
 		const unsubscribers: (() => void)[] = []
 
+		// 生成请求 ID，用于 IPC 频道隔离
+		const requestId = crypto.randomUUID()
+
 		const cleanup = () => {
 			if (!resolved) {
 				resolved = true
@@ -276,9 +279,9 @@ async function generateEdit(
 			}
 		}
 
-		// 监听流式响应
+		// 监听流式响应（使用动态频道）
 		unsubscribers.push(
-			api.llm.onStream((chunk: { type: string; content?: string }) => {
+			api.llm.onStream(requestId, (chunk: { type: string; content?: string }) => {
 				if (chunk.type === 'text' && chunk.content) {
 					result += chunk.content
 				}
@@ -287,7 +290,7 @@ async function generateEdit(
 
 		// 监听完成
 		unsubscribers.push(
-			api.llm.onDone(() => {
+			api.llm.onDone(requestId, () => {
 				cleanup()
 				// 清理可能的 markdown 代码块
 				let code = result.trim()
@@ -300,7 +303,7 @@ async function generateEdit(
 
 		// 监听错误
 		unsubscribers.push(
-			api.llm.onError((error: { message: string }) => {
+			api.llm.onError(requestId, (error: { message: string }) => {
 				cleanup()
 				resolve({ success: false, error: error.message })
 			})
@@ -314,11 +317,12 @@ async function generateEdit(
 			}
 		}, 60000)
 
-		// 发送请求
+		// 发送请求（携带 requestId）
 		api.llm.send({
 			config,
 			messages: [{ role: 'user', content: prompt }],
 			systemPrompt: 'You are a helpful code editor assistant. Respond only with code, no explanations.',
+			requestId,
 		}).catch((err) => {
 			if (!resolved) {
 				cleanup()

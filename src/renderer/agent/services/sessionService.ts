@@ -79,7 +79,7 @@ class SessionService {
 		try {
 			const data = await api.settings.get(SESSIONS_KEY)
 			if (!data || typeof data !== 'string') return []
-			
+
 			const sessions: ChatSession[] = JSON.parse(data)
 			return sessions.map(s => ({
 				id: s.id,
@@ -102,7 +102,7 @@ class SessionService {
 		try {
 			const data = await api.settings.get(SESSIONS_KEY)
 			if (!data || typeof data !== 'string') return null
-			
+
 			const sessions: ChatSession[] = JSON.parse(data)
 			return sessions.find(s => s.id === id) || null
 		} catch {
@@ -136,10 +136,10 @@ class SessionService {
 	): Promise<string> {
 		const data = await api.settings.get(SESSIONS_KEY)
 		let sessions: ChatSession[] = data && typeof data === 'string' ? JSON.parse(data) : []
-		
+
 		const now = Date.now()
 		const messages = thread.messages
-		
+
 		if (existingId) {
 			// 更新现有会话
 			const idx = sessions.findIndex(s => s.id === existingId)
@@ -155,7 +155,7 @@ class SessionService {
 				return existingId
 			}
 		}
-		
+
 		// 创建新会话
 		const newSession: ChatSession = {
 			id: crypto.randomUUID(),
@@ -166,14 +166,14 @@ class SessionService {
 			updatedAt: now,
 			config,
 		}
-		
+
 		sessions.unshift(newSession)
-		
+
 		// 限制会话数量
 		if (sessions.length > MAX_SESSIONS) {
 			sessions = sessions.slice(0, MAX_SESSIONS)
 		}
-		
+
 		await api.settings.set(SESSIONS_KEY, JSON.stringify(sessions))
 		return newSession.id
 	}
@@ -185,11 +185,11 @@ class SessionService {
 		try {
 			const data = await api.settings.get(SESSIONS_KEY)
 			if (!data || typeof data !== 'string') return false
-			
+
 			let sessions: ChatSession[] = JSON.parse(data)
 			const initialLength = sessions.length
 			sessions = sessions.filter(s => s.id !== id)
-			
+
 			if (sessions.length < initialLength) {
 				await api.settings.set(SESSIONS_KEY, JSON.stringify(sessions))
 				return true
@@ -207,10 +207,10 @@ class SessionService {
 		try {
 			const data = await api.settings.get(SESSIONS_KEY)
 			if (!data || typeof data !== 'string') return false
-			
+
 			const sessions: ChatSession[] = JSON.parse(data)
 			const session = sessions.find(s => s.id === id)
-			
+
 			if (session) {
 				session.name = name
 				session.updatedAt = Date.now()
@@ -245,23 +245,23 @@ class SessionService {
 	async importSession(jsonStr: string): Promise<string | null> {
 		try {
 			const session: ChatSession = JSON.parse(jsonStr)
-			
+
 			// 验证必要字段
 			if (!session.messages || !Array.isArray(session.messages)) {
 				throw new Error('Invalid session format')
 			}
-			
+
 			// 生成新 ID
 			session.id = crypto.randomUUID()
 			session.createdAt = Date.now()
 			session.updatedAt = Date.now()
-			
+
 			const data = await api.settings.get(SESSIONS_KEY)
 			const sessions: ChatSession[] = data && typeof data === 'string' ? JSON.parse(data) : []
-			
+
 			sessions.unshift(session)
 			await api.settings.set(SESSIONS_KEY, JSON.stringify(sessions))
-			
+
 			return session.id
 		} catch {
 			return null
@@ -276,15 +276,17 @@ class SessionService {
 		if (!session) return false
 
 		const store = useAgentStore.getState()
-		
+
 		// 创建新线程
 		const threadId = store.createThread()
-		
+
 		// 直接设置线程的消息（通过 zustand set）
+		// 重要：加载历史会话时必须重置 streamState 为 idle，
+		// 否则可能会因为之前未完成的流状态导致 UI 卡在"正在输出"
 		useAgentStore.setState(state => {
 			const thread = state.threads[threadId]
 			if (!thread) return state
-			
+
 			return {
 				threads: {
 					...state.threads,
@@ -292,11 +294,12 @@ class SessionService {
 						...thread,
 						messages: session.messages,
 						lastModified: Date.now(),
+						streamState: { phase: 'idle' }, // 强制重置流状态
 					},
 				},
 			}
 		})
-		
+
 		logger.agent.info('[SessionService] Loaded session:', sessionId, 'messages:', session.messages.length)
 		return true
 	}
