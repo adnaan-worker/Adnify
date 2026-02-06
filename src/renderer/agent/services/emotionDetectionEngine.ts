@@ -146,9 +146,33 @@ class EmotionDetectionEngine {
   } {
     const dayHistory = this.getHistory(24 * 60 * 60 * 1000)
 
-    const focusTime = dayHistory.filter(h =>
+    // 计算历史记录中的 Focus Time（每个记录代表一个检测窗口，约12秒）
+    const historyFocusTime = dayHistory.filter(h =>
       h.state === 'focused' || h.state === 'flow'
     ).length * (DETECTION_WINDOW / 1000 / 60)
+
+    // 如果当前状态是 focused 或 flow，加上当前状态的持续时间
+    // 历史记录只在状态变化或强度变化较大时记录，所以需要加上当前状态的持续时间
+    let currentStateFocusTime = 0
+    if (this.currentState && (this.currentState.state === 'focused' || this.currentState.state === 'flow')) {
+      // 找到历史记录中最后一条 focused/flow 记录的时间戳
+      const lastFocusRecord = dayHistory
+        .filter(h => h.state === 'focused' || h.state === 'flow')
+        .sort((a, b) => b.timestamp - a.timestamp)[0]
+      
+      // 如果最后一条记录的时间戳早于 stateStartTime，说明状态已经变化了，从 stateStartTime 开始计算
+      // 否则，从最后一条记录的时间戳开始计算（避免重复计算）
+      const startTime = lastFocusRecord && lastFocusRecord.timestamp >= this.stateStartTime
+        ? lastFocusRecord.timestamp
+        : this.stateStartTime
+      
+      const currentStateDuration = Date.now() - startTime
+      // 只计算超过一个检测窗口的时间（避免与历史记录重复）
+      const extraTime = Math.max(0, currentStateDuration - DETECTION_WINDOW)
+      currentStateFocusTime = extraTime / 1000 / 60 // 转换为分钟
+    }
+
+    const focusTime = historyFocusTime + currentStateFocusTime
 
     let flowSessions = 0
     let inFlowSession = false
@@ -330,12 +354,19 @@ class EmotionDetectionEngine {
       suggestions: enhanced.suggestions.length > 0 ? enhanced.suggestions : undefined,
     }
 
-    // 始终更新 currentState
+    // 检查状态是否真正变化（用于更新 stateStartTime）
+    const stateChanged = !this.currentState || this.currentState.state !== detection.state
     const shouldBroadcast = this.shouldNotifyStateChange(detection)
+    
+    // 如果状态类型变化，更新 stateStartTime
+    if (stateChanged) {
+      this.stateStartTime = Date.now()
+    }
+    
+    // 始终更新 currentState
     this.currentState = detection
 
     if (shouldBroadcast) {
-      this.stateStartTime = Date.now()
       this.recordHistory(detection)
       EventBus.emit({ type: 'emotion:changed', emotion: detection })
 

@@ -13,6 +13,7 @@ import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, Setting
 import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
 import { EmotionCompanion } from './components/agent/EmotionCompanion'
 import { EmotionStateNotice } from './components/agent/EmotionStateNotice'
+import { emotionAdapter } from './agent/services/emotionAdapter'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 
 startupMetrics.mark('app-module-loaded')
@@ -48,6 +49,11 @@ function ToastInitializer() {
 
 // 主应用内容
 function AppContent() {
+  // 初始化情绪适配器（应用级别，只初始化一次）
+  useEffect(() => {
+    emotionAdapter.initialize()
+  }, [])
+
   // 使用 selector 优化性能，避免不必要的重渲染
   // Zustand 会自动优化这些独立的 selector，只订阅相关状态变化
   const workspace = useStore((state) => state.workspace)

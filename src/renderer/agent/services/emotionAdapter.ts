@@ -300,9 +300,14 @@ class EmotionAdapter {
   private currentOscillator: OscillatorNode | null = null
 
   /**
-   * 初始化适配器
+   * 初始化适配器（防重入）
    */
   initialize(): void {
+    // 如果已经初始化，直接返回
+    if (this.unsubscribeEmotionChanged) {
+      return
+    }
+
     // 订阅情绪变化事件
     this.unsubscribeEmotionChanged = EventBus.on('emotion:changed', (event) => {
       if (event.emotion) {

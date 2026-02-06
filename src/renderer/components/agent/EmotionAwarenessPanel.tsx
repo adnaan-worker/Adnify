@@ -19,7 +19,6 @@ import {
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { emotionDetectionEngine } from '@/renderer/agent/services/emotionDetectionEngine'
-import { emotionAdapter } from '@/renderer/agent/services/emotionAdapter'
 import { EventBus } from '@/renderer/agent/core/EventBus'
 import type { EmotionState, EmotionHistory } from '@/renderer/agent/types/emotion'
 import { cn } from '@utils/cn'
@@ -49,22 +48,32 @@ export const EmotionAwarenessPanel: React.FC = () => {
   })
 
   useEffect(() => {
-    // 初始化适配器（检测引擎由 StatusBar 指示器启动）
-    emotionAdapter.initialize()
+    // 注意：emotionAdapter 和 emotionDetectionEngine 都在应用级别初始化
+    // 这里只负责订阅数据更新和显示
 
-    const unsubscribe = EventBus.on('emotion:changed', () => {
+    const updateHistory = () => {
       setHistory(emotionDetectionEngine.getHistory(24 * 60 * 60 * 1000))
-    })
+    }
 
-    setHistory(emotionDetectionEngine.getHistory(24 * 60 * 60 * 1000))
+    // 订阅情绪变化事件
+    const unsubscribe = EventBus.on('emotion:changed', updateHistory)
+
+    // 初始加载
+    updateHistory()
+
+    // 添加定时器，每30秒更新一次（即使状态没变化，Focus Time 也会累积）
+    const intervalId = setInterval(updateHistory, 30 * 1000)
 
     return () => {
-      emotionAdapter.cleanup()
       unsubscribe()
+      clearInterval(intervalId)
     }
   }, [])
 
-  const productivity = emotionDetectionEngine.getProductivityReport()
+  // 使用 useMemo 让 productivity 随 history 更新而重新计算
+  const productivity = useMemo(() => {
+    return emotionDetectionEngine.getProductivityReport()
+  }, [history])
 
   const toggleSetting = (key: keyof typeof settings) => {
     setSettings(prev => ({ ...prev, [key]: !prev[key] }))
