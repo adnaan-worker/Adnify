@@ -483,4 +483,10 @@ export const en = {
   'emotion.status.neutral.1': 'Ready to code 💻',
   'emotion.status.neutral.2': 'Let\'s build',
   'emotion.status.neutral.3': 'Steady progress',
+  'emotion.status.clickToChange': 'Click to change message',
+
+  // Emotion Trend — inflection markers (拐点标记)
+  'emotion.inflection.prolonged': 'Here: {duration} min of {stateLabel}',
+  'emotion.inflection.flowInterrupted': 'Flow / focus interrupted',
+  'emotion.inflection.systemIntervention': 'System intervened here',
 } as const

@@ -23,7 +23,7 @@ import { EventBus } from '@/renderer/agent/core/EventBus'
 import type { EmotionState, EmotionHistory } from '@/renderer/agent/types/emotion'
 import { cn } from '@utils/cn'
 import { useStore } from '@store'
-import { t } from '@/renderer/i18n'
+import { t, type TranslationKey } from '@/renderer/i18n'
 
 const EMOTION_COLORS: Record<EmotionState, string> = {
   focused: '#3b82f6',
@@ -61,8 +61,8 @@ export const EmotionAwarenessPanel: React.FC = () => {
     // 初始加载
     updateHistory()
 
-    // 添加定时器，每30秒更新一次（即使状态没变化，Focus Time 也会累积）
-    const intervalId = setInterval(updateHistory, 30 * 1000)
+    // 每 10 秒拉一次 history，让 Focus Time 等数据及时刷新
+    const intervalId = setInterval(updateHistory, 10 * 1000)
 
     return () => {
       unsubscribe()
@@ -74,6 +74,9 @@ export const EmotionAwarenessPanel: React.FC = () => {
   const productivity = useMemo(() => {
     return emotionDetectionEngine.getProductivityReport()
   }, [history])
+
+  // 拐点标记：从 history 推断「连续长时间某状态」「Flow/专注被打断」等，让用户知道「该干嘛」
+  const inflectionPoints = useMemo(() => computeInflectionPoints(history), [history])
 
   const toggleSetting = (key: keyof typeof settings) => {
     setSettings(prev => ({ ...prev, [key]: !prev[key] }))
@@ -130,7 +133,7 @@ export const EmotionAwarenessPanel: React.FC = () => {
             <TrendingUp className="w-3 h-3" />
             {t('emotion.trend', language)}
           </h3>
-          <EmotionTimeline history={history} />
+          <EmotionTimeline history={history} inflectionPoints={inflectionPoints} />
         </div>
 
         {/* === 设置 === */}
@@ -246,7 +249,52 @@ const SettingToggle: React.FC<{
   </button>
 )
 
-const EmotionTimeline: React.FC<{ history: EmotionHistory[] }> = ({ history }) => {
+/** 拐点类型：用于在时间轴上标记「这里发生了什么」 */
+export type InflectionPoint =
+  | { type: 'prolonged'; timestamp: number; state: EmotionState; durationMin: number }
+  | { type: 'interrupted'; timestamp: number; fromState: EmotionState; toState: EmotionState }
+  | { type: 'intervention'; timestamp: number }
+
+const PROLONGED_THRESHOLD_MS = 12 * 60 * 1000  // 连续 12 分钟同状态算「拐点」
+const FLOW_STATES: EmotionState[] = ['flow', 'focused']
+const NEGATIVE_STATES: EmotionState[] = ['frustrated', 'stressed', 'tired']
+
+function computeInflectionPoints(history: EmotionHistory[]): InflectionPoint[] {
+  if (history.length < 2) return []
+  const points: InflectionPoint[] = []
+  const sorted = [...history].sort((a, b) => a.timestamp - b.timestamp)
+
+  // 1. 连续长时间同一状态（如连续 12 分钟 Frustrated）：每个长跑只标一个拐点
+  let runStart = sorted[0].timestamp
+  let runState = sorted[0].state
+  for (let i = 1; i < sorted.length; i++) {
+    const h = sorted[i]
+    if (h.state === runState) {
+      const duration = h.timestamp - runStart
+      if (duration >= PROLONGED_THRESHOLD_MS) {
+        const durationMin = Math.round(duration / 60000)
+        points.push({ type: 'prolonged', timestamp: runStart + duration / 2, state: runState, durationMin })
+        runStart = h.timestamp // 推进，同一跑段不再重复标记
+      }
+    } else {
+      runStart = h.timestamp
+      runState = h.state
+    }
+  }
+
+  // 2. Flow/专注 被打断：flow|focused → frustrated|stressed|tired
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1]
+    const curr = sorted[i]
+    if (FLOW_STATES.includes(prev.state) && NEGATIVE_STATES.includes(curr.state)) {
+      points.push({ type: 'interrupted', timestamp: curr.timestamp, fromState: prev.state, toState: curr.state })
+    }
+  }
+
+  return points
+}
+
+const EmotionTimeline: React.FC<{ history: EmotionHistory[]; inflectionPoints: InflectionPoint[] }> = ({ history, inflectionPoints }) => {
   const { language } = useStore()
   // 按30分钟窗口聚合，最近12小时
   const timelineData = useMemo(() => {
@@ -294,6 +342,23 @@ const EmotionTimeline: React.FC<{ history: EmotionHistory[] }> = ({ history }) =
     return windows
   }, [history])
 
+  // 拐点按 30 分钟窗口归到对应柱子：timelineData[0]=12h前，timelineData[23]=现在
+  const windowSizeMs = 30 * 60 * 1000
+  const latestTime = timelineData.length > 0 ? timelineData[timelineData.length - 1].time : Date.now()
+  const inflectionsByWindow = useMemo(() => {
+    const map: Record<number, InflectionPoint[]> = {}
+    const len = timelineData.length
+    inflectionPoints.forEach((ip) => {
+      const age = latestTime - ip.timestamp
+      const idx = len - 1 - Math.floor(age / windowSizeMs)
+      if (idx >= 0 && idx < len) {
+        if (!map[idx]) map[idx] = []
+        map[idx].push(ip)
+      }
+    })
+    return map
+  }, [inflectionPoints, timelineData, latestTime])
+
   if (history.length === 0) {
     return (
       <div className="h-20 flex items-center justify-center text-text-muted text-xs">
@@ -302,8 +367,40 @@ const EmotionTimeline: React.FC<{ history: EmotionHistory[] }> = ({ history }) =
     )
   }
 
+  const stateLabelKey = (s: EmotionState): TranslationKey => `emotion.state.${s}` as TranslationKey
+  const renderInflectionTooltip = (ip: InflectionPoint) => {
+    if (ip.type === 'prolonged') {
+      const stateLabel = t(stateLabelKey(ip.state), language)
+      return t('emotion.inflection.prolonged', language, { duration: ip.durationMin, stateLabel })
+    }
+    if (ip.type === 'interrupted') return t('emotion.inflection.flowInterrupted', language)
+    return t('emotion.inflection.systemIntervention', language)
+  }
+
   return (
     <div className="space-y-1">
+      {/* 拐点标记行：小点 + tooltip */}
+      <div className="flex gap-0.5 h-4 items-center justify-start">
+        {timelineData.map((_, i) => {
+          const inflections = inflectionsByWindow[i] || []
+          if (inflections.length === 0) return <div key={i} className="flex-1" />
+          return (
+            <div key={i} className="flex-1 flex justify-center relative group/marker">
+              <div
+                className="w-1.5 h-1.5 rounded-full bg-amber-400/90 shrink-0 cursor-help"
+                title={inflections.map(renderInflectionTooltip).join('\n')}
+              />
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover/marker:block z-20 pointer-events-none">
+                <div className="bg-background-secondary border border-white/10 rounded px-2 py-1.5 text-[9px] text-text-secondary shadow-lg max-w-[180px]">
+                  {inflections.map((ip, j) => (
+                    <div key={j}>{renderInflectionTooltip(ip)}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
       {/* 时间轴条形图 */}
       <div className="flex gap-0.5 h-8 items-end">
         {timelineData.map((window, i) => {

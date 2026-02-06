@@ -483,4 +483,10 @@ export const zh = {
   'emotion.status.neutral.1': '准备编码 💻',
   'emotion.status.neutral.2': '开始构建',
   'emotion.status.neutral.3': '稳步前进',
+  'emotion.status.clickToChange': '点击切换文案',
+
+  // 情绪趋势 — 拐点标记
+  'emotion.inflection.prolonged': '这里连续 {duration} 分钟 {stateLabel}',
+  'emotion.inflection.flowInterrupted': 'Flow/专注 被打断',
+  'emotion.inflection.systemIntervention': '这里系统主动介入',
 } as const

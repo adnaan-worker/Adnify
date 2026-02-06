@@ -310,6 +310,9 @@ class EmotionAdapter {
       return
     }
 
+    // 环境音效已禁用：启动时先停掉任何可能残留的背景音
+    this.stopAmbientSound()
+
     // 订阅情绪变化事件
     this.unsubscribeEmotionChanged = EventBus.on('emotion:changed', (event) => {
       if (event.emotion) {
@@ -659,6 +662,11 @@ class EmotionAdapter {
     type: 'focus' | 'relax' | 'energize' | 'none',
     volume: number
   ): Promise<void> {
+    // 环境音效已禁用：任何入口都直接停止并返回
+    if (!this.AMBIENT_SOUND_ENABLED) {
+      this.stopAmbientSound()
+      return
+    }
     if (!type || type === 'none') {
       this.stopAmbientSound()
       return
