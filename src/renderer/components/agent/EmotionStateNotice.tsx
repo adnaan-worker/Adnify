@@ -16,16 +16,18 @@ import React, { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { EventBus } from '@/renderer/agent/core/EventBus'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
+import { useStore } from '@store'
+import { t } from '@/renderer/i18n'
 
-const EMOTION_META: Record<EmotionState, { emoji: string; label: string; color: string }> = {
-  focused:    { emoji: '⚡', label: '专注',  color: '#3b82f6' },
-  frustrated: { emoji: '😤', label: '沮丧',  color: '#f97316' },
-  tired:      { emoji: '😴', label: '疲劳',  color: '#8b5cf6' },
-  excited:    { emoji: '🚀', label: '兴奋',  color: '#22c55e' },
-  bored:      { emoji: '😐', label: '无聊',  color: '#6b7280' },
-  stressed:   { emoji: '😰', label: '压力',  color: '#06b6d4' },
-  flow:       { emoji: '✨', label: '心流',  color: '#6366f1' },
-  neutral:    { emoji: '💻', label: '正常',  color: '#94a3b8' },
+const EMOTION_META: Record<EmotionState, { emoji: string; color: string; translationKey: string }> = {
+  focused:    { emoji: '⚡', color: '#3b82f6', translationKey: 'emotion.state.focused' },
+  frustrated: { emoji: '😤', color: '#f97316', translationKey: 'emotion.state.frustrated' },
+  tired:      { emoji: '😴', color: '#8b5cf6', translationKey: 'emotion.state.tired' },
+  excited:    { emoji: '🚀', color: '#22c55e', translationKey: 'emotion.state.excited' },
+  bored:      { emoji: '😐', color: '#6b7280', translationKey: 'emotion.state.bored' },
+  stressed:   { emoji: '😰', color: '#06b6d4', translationKey: 'emotion.state.stressed' },
+  flow:       { emoji: '✨', color: '#6366f1', translationKey: 'emotion.state.flow' },
+  neutral:    { emoji: '💻', color: '#94a3b8', translationKey: 'emotion.state.neutral' },
 }
 
 // 最短通知间隔
@@ -40,6 +42,7 @@ interface NoticeData {
 }
 
 export const EmotionStateNotice: React.FC = () => {
+  const { language } = useStore()
   const [notice, setNotice] = useState<NoticeData | null>(null)
   const [isVisible, setIsVisible] = useState(false)
   const prevStateRef = useRef<EmotionState>('neutral')
@@ -104,6 +107,8 @@ export const EmotionStateNotice: React.FC = () => {
 
   const from = EMOTION_META[notice.fromState]
   const to = EMOTION_META[notice.toState]
+  const fromLabel = t(from.translationKey as any, language)
+  const toLabel = t(to.translationKey as any, language)
 
   return (
     <AnimatePresence>
@@ -134,10 +139,10 @@ export const EmotionStateNotice: React.FC = () => {
             <div className="flex flex-col gap-0.5 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium" style={{ color: notice.color }}>
-                  {to.label}
+                  {toLabel}
                 </span>
                 <span className="text-[10px] text-text-muted">
-                  {from.label} → {to.label}
+                  {fromLabel} → {toLabel}
                 </span>
               </div>
               <p className="text-[11px] text-text-secondary leading-snug truncate max-w-[280px]">

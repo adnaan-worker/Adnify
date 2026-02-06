@@ -23,6 +23,8 @@ import { emotionAdapter } from '@/renderer/agent/services/emotionAdapter'
 import { EventBus } from '@/renderer/agent/core/EventBus'
 import type { EmotionState, EmotionHistory } from '@/renderer/agent/types/emotion'
 import { cn } from '@utils/cn'
+import { useStore } from '@store'
+import { t } from '@/renderer/i18n'
 
 const EMOTION_COLORS: Record<EmotionState, string> = {
   focused: '#3b82f6',
@@ -36,6 +38,7 @@ const EMOTION_COLORS: Record<EmotionState, string> = {
 }
 
 export const EmotionAwarenessPanel: React.FC = () => {
+  const { language } = useStore()
   const [history, setHistory] = useState<EmotionHistory[]>([])
   const [settings, setSettings] = useState({
     ambientGlow: true,
@@ -73,38 +76,38 @@ export const EmotionAwarenessPanel: React.FC = () => {
       <div className="p-4 border-b border-border">
         <div className="flex items-center gap-2">
           <Brain className="w-5 h-5 text-accent" />
-          <h2 className="text-sm font-medium text-text-primary">情绪感知</h2>
+          <h2 className="text-sm font-medium text-text-primary">{t('emotion.title', language)}</h2>
         </div>
-        <p className="text-xs text-text-muted mt-1">数据报告与偏好设置</p>
+        <p className="text-xs text-text-muted mt-1">{t('emotion.desc', language)}</p>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {/* === 今日概览 === */}
         <div className="p-4">
           <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            今日概览
+            {t('emotion.todayOverview', language)}
           </h3>
           <div className="grid grid-cols-2 gap-2">
             <StatCard
-              label="专注时间"
+              label={t('emotion.focusTime', language)}
               value={`${Math.round(productivity.focusTime)}m`}
               icon={<Zap className="w-3.5 h-3.5" />}
               color="#3b82f6"
             />
             <StatCard
-              label="心流次数"
+              label={t('emotion.flowSessions', language)}
               value={productivity.flowSessions}
               icon={<Activity className="w-3.5 h-3.5" />}
               color="#6366f1"
             />
             <StatCard
-              label="沮丧次数"
+              label={t('emotion.frustrationEpisodes', language)}
               value={productivity.frustrationEpisodes}
               icon={<Frown className="w-3.5 h-3.5" />}
               color="#f97316"
             />
             <StatCard
-              label="最高产时段"
+              label={t('emotion.mostProductiveHour', language)}
               value={`${productivity.mostProductiveHour}:00`}
               icon={<Clock className="w-3.5 h-3.5" />}
               color="#eab308"
@@ -116,7 +119,7 @@ export const EmotionAwarenessPanel: React.FC = () => {
         <div className="px-4 pb-4">
           <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <TrendingUp className="w-3 h-3" />
-            情绪趋势
+            {t('emotion.trend', language)}
           </h3>
           <EmotionTimeline history={history} />
         </div>
@@ -124,41 +127,41 @@ export const EmotionAwarenessPanel: React.FC = () => {
         {/* === 设置 === */}
         <div className="px-4 pb-4 border-t border-border pt-4">
           <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            偏好设置
+            {t('emotion.preferences', language)}
           </h3>
           <div className="space-y-3">
             <SettingToggle
               icon={<Palette className="w-3.5 h-3.5" />}
-              label="环境光效"
-              description="编辑器边缘微妙光晕"
+              label={t('emotion.ambientGlow', language)}
+              description={t('emotion.ambientGlowDesc', language)}
               enabled={settings.ambientGlow}
               onToggle={() => toggleSetting('ambientGlow')}
             />
             <SettingToggle
               icon={settings.companionEnabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-              label="智能伙伴"
-              description="上下文建议和提醒"
+              label={t('emotion.companion', language)}
+              description={t('emotion.companionDesc', language)}
               enabled={settings.companionEnabled}
               onToggle={() => toggleSetting('companionEnabled')}
             />
             <SettingToggle
               icon={settings.soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-              label="环境音效"
-              description="背景白噪音"
+              label={t('emotion.soundEffects', language)}
+              description={t('emotion.soundEffectsDesc', language)}
               enabled={settings.soundEnabled}
               onToggle={() => toggleSetting('soundEnabled')}
             />
             <SettingToggle
               icon={<Sun className="w-3.5 h-3.5" />}
-              label="自动适配"
-              description="根据情绪调整 UI"
+              label={t('emotion.autoAdapt', language)}
+              description={t('emotion.autoAdaptDesc', language)}
               enabled={settings.autoAdapt}
               onToggle={() => toggleSetting('autoAdapt')}
             />
 
             {/* 灵敏度 */}
             <div className="flex items-center justify-between py-1">
-              <span className="text-xs text-text-secondary">检测灵敏度</span>
+              <span className="text-xs text-text-secondary">{t('emotion.sensitivity', language)}</span>
               <div className="flex items-center gap-1">
                 {(['low', 'medium', 'high'] as const).map(level => (
                   <button
@@ -171,7 +174,7 @@ export const EmotionAwarenessPanel: React.FC = () => {
                         : 'text-text-muted hover:bg-white/5'
                     )}
                   >
-                    {level === 'low' ? '低' : level === 'medium' ? '中' : '高'}
+                    {level === 'low' ? t('emotion.sensitivityLow', language) : level === 'medium' ? t('emotion.sensitivityMedium', language) : t('emotion.sensitivityHigh', language)}
                   </button>
                 ))}
               </div>
@@ -235,6 +238,7 @@ const SettingToggle: React.FC<{
 )
 
 const EmotionTimeline: React.FC<{ history: EmotionHistory[] }> = ({ history }) => {
+  const { language } = useStore()
   // 按30分钟窗口聚合，最近12小时
   const timelineData = useMemo(() => {
     const now = Date.now()
@@ -284,7 +288,7 @@ const EmotionTimeline: React.FC<{ history: EmotionHistory[] }> = ({ history }) =
   if (history.length === 0) {
     return (
       <div className="h-20 flex items-center justify-center text-text-muted text-xs">
-        暂无数据，开始工作后将记录趋势
+        {t('emotion.noData', language)}
       </div>
     )
   }
@@ -327,9 +331,9 @@ const EmotionTimeline: React.FC<{ history: EmotionHistory[] }> = ({ history }) =
 
       {/* 时间标签 */}
       <div className="flex justify-between text-[9px] text-text-muted px-0.5">
-        <span>12h ago</span>
-        <span>6h ago</span>
-        <span>Now</span>
+        <span>{t('emotion.timeAgo12h', language)}</span>
+        <span>{t('emotion.timeAgo6h', language)}</span>
+        <span>{t('emotion.timeNow', language)}</span>
       </div>
 
       {/* 图例 */}
@@ -338,10 +342,10 @@ const EmotionTimeline: React.FC<{ history: EmotionHistory[] }> = ({ history }) =
           <div key={state} className="flex items-center gap-1">
             <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: EMOTION_COLORS[state] }} />
             <span className="text-[9px] text-text-muted">
-              {state === 'focused' ? '专注' :
-               state === 'flow' ? '心流' :
-               state === 'frustrated' ? '沮丧' :
-               state === 'tired' ? '疲劳' : '压力'}
+              {state === 'focused' ? t('emotion.state.focused', language) :
+               state === 'flow' ? t('emotion.state.flow', language) :
+               state === 'frustrated' ? t('emotion.state.frustrated', language) :
+               state === 'tired' ? t('emotion.state.tired', language) : t('emotion.state.stressed', language)}
             </span>
           </div>
         ))}

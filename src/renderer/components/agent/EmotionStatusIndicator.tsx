@@ -9,24 +9,27 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { EventBus } from '@/renderer/agent/core/EventBus'
 import { emotionDetectionEngine } from '@/renderer/agent/services/emotionDetectionEngine'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
+import { useStore } from '@store'
+import { t } from '@/renderer/i18n'
 
 const EMOTION_META: Record<EmotionState, {
   color: string
-  label: string
   emoji: string
   pulseSpeed: number  // 呼吸速度，越快越激烈
+  translationKey: string
 }> = {
-  focused:    { color: '#3b82f6', label: '专注',  emoji: '⚡', pulseSpeed: 2.5 },
-  frustrated: { color: '#f97316', label: '沮丧',  emoji: '😤', pulseSpeed: 1.2 },
-  tired:      { color: '#8b5cf6', label: '疲劳',  emoji: '😴', pulseSpeed: 4.0 },
-  excited:    { color: '#22c55e', label: '兴奋',  emoji: '🚀', pulseSpeed: 0.8 },
-  bored:      { color: '#6b7280', label: '无聊',  emoji: '😐', pulseSpeed: 3.5 },
-  stressed:   { color: '#06b6d4', label: '压力',  emoji: '😰', pulseSpeed: 1.0 },
-  flow:       { color: '#6366f1', label: '心流',  emoji: '✨', pulseSpeed: 2.0 },
-  neutral:    { color: '#94a3b8', label: '正常',  emoji: '💻', pulseSpeed: 3.0 },
+  focused:    { color: '#3b82f6', emoji: '⚡', pulseSpeed: 2.5, translationKey: 'emotion.state.focused' },
+  frustrated: { color: '#f97316', emoji: '😤', pulseSpeed: 1.2, translationKey: 'emotion.state.frustrated' },
+  tired:      { color: '#8b5cf6', emoji: '😴', pulseSpeed: 4.0, translationKey: 'emotion.state.tired' },
+  excited:    { color: '#22c55e', emoji: '🚀', pulseSpeed: 0.8, translationKey: 'emotion.state.excited' },
+  bored:      { color: '#6b7280', emoji: '😐', pulseSpeed: 3.5, translationKey: 'emotion.state.bored' },
+  stressed:   { color: '#06b6d4', emoji: '😰', pulseSpeed: 1.0, translationKey: 'emotion.state.stressed' },
+  flow:       { color: '#6366f1', emoji: '✨', pulseSpeed: 2.0, translationKey: 'emotion.state.flow' },
+  neutral:    { color: '#94a3b8', emoji: '💻', pulseSpeed: 3.0, translationKey: 'emotion.state.neutral' },
 }
 
 export const EmotionStatusIndicator: React.FC = () => {
+  const { language } = useStore()
   const [emotion, setEmotion] = useState<EmotionDetection | null>(null)
   const [isHovered, setIsHovered] = useState(false)
   const [justChanged, setJustChanged] = useState(false)
@@ -53,6 +56,7 @@ export const EmotionStatusIndicator: React.FC = () => {
   const state = emotion?.state || 'neutral'
   const meta = EMOTION_META[state]
   const intensity = emotion?.intensity ?? 0.5
+  const label = t(meta.translationKey as any, language)
 
   return (
     <div
@@ -109,7 +113,7 @@ export const EmotionStatusIndicator: React.FC = () => {
               className="text-[10px] font-medium overflow-hidden whitespace-nowrap"
               style={{ color: meta.color }}
             >
-              {meta.emoji} {meta.label}
+              {meta.emoji} {label}
             </motion.span>
           )}
         </AnimatePresence>
@@ -133,7 +137,7 @@ export const EmotionStatusIndicator: React.FC = () => {
                   style={{ backgroundColor: meta.color }}
                 />
                 <span className="text-sm font-medium text-text-primary">
-                  {meta.emoji} {meta.label}
+                  {meta.emoji} {label}
                 </span>
                 <span
                   className="text-xs px-1.5 py-0.5 rounded-full ml-auto"

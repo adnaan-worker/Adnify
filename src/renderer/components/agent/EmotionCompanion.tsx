@@ -15,6 +15,8 @@ import { emotionFeedback } from '@/renderer/agent/services/emotionFeedback'
 import { getRecommendedActions } from '@/renderer/agent/services/emotionActions'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
 import type { EmotionActionDef } from '@/renderer/agent/services/emotionActions'
+import { useStore } from '@store'
+import { t } from '@/renderer/i18n'
 
 interface CompanionMessage {
   id: string
@@ -82,6 +84,7 @@ const TYPE_STYLES: Record<CompanionMessage['type'], {
 }
 
 export const EmotionCompanion: React.FC = () => {
+  const { language } = useStore()
   const [activeMessage, setActiveMessage] = useState<CompanionMessage | null>(null)
   const [isVisible, setIsVisible] = useState(false)
   const [feedbackGiven, setFeedbackGiven] = useState(false)
@@ -201,7 +204,7 @@ export const EmotionCompanion: React.FC = () => {
         priority: 4,
         dismissable: true,
         actions: [{
-          label: '好的',
+          label: t('emotion.companion.ok', language),
           icon: <ThumbsUp className="w-3 h-3" />,
           onClick: dismiss,
         }],
@@ -217,8 +220,8 @@ export const EmotionCompanion: React.FC = () => {
         priority: 7,
         dismissable: true,
         actions: [
-          { label: '休息一下', icon: <Coffee className="w-3 h-3" />, onClick: dismiss },
-          { label: '稍后', icon: <ThumbsDown className="w-3 h-3" />, onClick: dismiss },
+          { label: t('emotion.companion.takeBreak', language), icon: <Coffee className="w-3 h-3" />, onClick: dismiss },
+          { label: t('emotion.companion.later', language), icon: <ThumbsDown className="w-3 h-3" />, onClick: dismiss },
         ],
       })
     })
@@ -311,11 +314,11 @@ export const EmotionCompanion: React.FC = () => {
                 <div className="flex items-center gap-2 mt-3 pl-7 pt-2 border-t border-white/5">
                   {feedbackGiven ? (
                     <span className="text-[10px] text-text-muted">
-                      感谢反馈，会帮助我更准确 ✓
+                      {t('emotion.companion.feedbackThanks', language)}
                     </span>
                   ) : (
                     <>
-                      <span className="text-[10px] text-text-muted mr-1">判断准确吗？</span>
+                      <span className="text-[10px] text-text-muted mr-1">{t('emotion.companion.feedbackQuestion', language)}</span>
                       <button
                         onClick={() => handleFeedback(true)}
                         className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px]
@@ -323,7 +326,7 @@ export const EmotionCompanion: React.FC = () => {
                           transition-all"
                       >
                         <ThumbsUp className="w-3 h-3" />
-                        准确
+                        {t('emotion.companion.accurate', language)}
                       </button>
                       <button
                         onClick={() => handleFeedback(false)}
@@ -332,7 +335,7 @@ export const EmotionCompanion: React.FC = () => {
                           transition-all"
                       >
                         <ThumbsDown className="w-3 h-3" />
-                        不准
+                        {t('emotion.companion.inaccurate', language)}
                       </button>
                     </>
                   )}
