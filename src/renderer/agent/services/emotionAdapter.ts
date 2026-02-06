@@ -296,8 +296,10 @@ class EmotionAdapter {
   private unsubscribeEmotionChanged: (() => void) | null = null
   /** 跟踪所有待执行的 setTimeout，cleanup 时统一清理 */
   private pendingTimeouts: NodeJS.Timeout[] = []
-  /** 当前正在播放的 oscillator 引用 */
-  private currentOscillator: OscillatorNode | null = null
+  /** 当前正在播放的音频源 */
+  private currentAudioSource: AudioBufferSourceNode | HTMLAudioElement | null = null
+  /** 当前音频的增益节点 */
+  private currentGainNode: GainNode | null = null
 
   /**
    * 初始化适配器（防重入）
@@ -460,13 +462,13 @@ class EmotionAdapter {
     }
   }
 
-  private applySoundAdaptation(sound: EnvironmentAdaptation['sound']): void {
-    if (!sound.enabled || !sound.type || sound.type === 'none') {
-      this.stopAmbientSound()
-      return
-    }
+  /** 环境音效功能已禁用，暂不开发 */
+  private readonly AMBIENT_SOUND_ENABLED = false
 
-    // 播放环境音（如果需要）
+  private applySoundAdaptation(sound: EnvironmentAdaptation['sound']): void {
+    this.stopAmbientSound()
+    if (!this.AMBIENT_SOUND_ENABLED) return
+    if (!sound.enabled || !sound.type || sound.type === 'none') return
     this.playAmbientSound(sound.type, sound.volume)
   }
 
@@ -539,6 +541,120 @@ class EmotionAdapter {
 
   // ===== 环境音效 =====
 
+  /**
+   * 轻音乐资源 URL ！！！待定开发！！！
+   */
+  private readonly MUSIC_URLS: Record<'focus' | 'relax' | 'energize', string[]> = {
+    focus: [
+      // 专注音乐 - 使用 Lofi 或 Ambient 风格
+      // 示例：可以使用 Pixabay 或其他免费资源
+      // 如果网络资源不可用，会自动回退到生成的白噪音
+    ],
+    relax: [
+      // 放松音乐 - 自然声音或冥想音乐
+    ],
+    energize: [
+      // 激励音乐 - 轻快的背景音乐
+    ],
+  }
+
+  /**
+   * 获取音乐 URL（支持从设置中读取用户配置）
+   */
+  private getMusicUrl(type: 'focus' | 'relax' | 'energize'): string | null {
+    const urls = this.MUSIC_URLS[type]
+    // 优先使用第一个 URL，如果没有则返回 null（会使用回退方案）
+    return urls && urls.length > 0 ? urls[0] : null
+  }
+
+  /**
+   * 加载并播放网络音频
+   */
+  private async loadAndPlayAudio(url: string, volume: number): Promise<void> {
+    try {
+      // 使用 HTMLAudioElement 播放（更简单，支持网络资源）
+      const audio = new Audio(url)
+      audio.loop = true
+      audio.volume = volume * 0.3 // 降低音量，更舒适
+      audio.preload = 'auto'
+
+      // 淡入效果
+      audio.volume = 0
+      await audio.play()
+      
+      // 淡入动画
+      const fadeInDuration = 2000 // 2秒
+      const startTime = Date.now()
+      const targetVolume = volume * 0.3
+      
+      const fadeInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime
+        if (elapsed >= fadeInDuration) {
+          audio.volume = targetVolume
+          clearInterval(fadeInterval)
+        } else {
+          audio.volume = (elapsed / fadeInDuration) * targetVolume
+        }
+      }, 50)
+
+      this.currentAudioSource = audio
+      this.currentGainNode = null // HTMLAudioElement 不使用 GainNode
+
+      // 错误处理
+      audio.addEventListener('error', () => {
+        logger.agent.warn('[EmotionAdapter] Audio load failed, falling back to generated sound:', url)
+        // 如果网络音频加载失败，可以回退到生成的音效
+        this.playFallbackSound(volume)
+      })
+
+    } catch (error) {
+      logger.agent.error('[EmotionAdapter] Failed to play audio:', error)
+      // 回退到生成的音效
+      this.playFallbackSound(volume)
+    }
+  }
+
+  /**
+   * 回退方案：如果网络音频加载失败，使用生成的音效
+   */
+  private playFallbackSound(volume: number): void {
+    // 使用 Web Audio API 生成简单的环境音
+    try {
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      }
+
+      // 生成简单的白噪音（比之前的正弦波更自然）
+      const bufferSize = this.audioContext.sampleRate * 2
+      const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate)
+      const data = buffer.getChannelData(0)
+      
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1
+      }
+
+      const source = this.audioContext.createBufferSource()
+      const gainNode = this.audioContext.createGain()
+      const filter = this.audioContext.createBiquadFilter()
+
+      source.buffer = buffer
+      source.loop = true
+      filter.type = 'lowpass'
+      filter.frequency.value = 2000
+      gainNode.gain.value = volume * 0.05
+
+      source.connect(filter)
+      filter.connect(gainNode)
+      gainNode.connect(this.audioContext.destination)
+      source.start(0)
+
+      this.currentAudioSource = source
+      this.currentGainNode = gainNode
+    } catch (error) {
+      logger.agent.error('[EmotionAdapter] Fallback sound failed:', error)
+    }
+  }
+
   private async playAmbientSound(
     type: 'focus' | 'relax' | 'energize' | 'none',
     volume: number
@@ -548,56 +664,92 @@ class EmotionAdapter {
       return
     }
 
-    // 先停掉之前的，避免堆积
-    this.stopCurrentOscillator()
+    // 先停掉之前的音频
+    this.stopAmbientSound()
 
-    try {
-      if (!this.audioContext) {
-        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-      }
-
-      const oscillator = this.audioContext.createOscillator()
-      const gainNode = this.audioContext.createGain()
-
-      const frequencies: Record<string, number> = {
-        focus: 432,
-        relax: 528,
-        energize: 639,
-      }
-
-      oscillator.frequency.value = frequencies[type] || 432
-      oscillator.type = 'sine'
-      gainNode.gain.value = volume * 0.1
-
-      oscillator.connect(gainNode)
-      gainNode.connect(this.audioContext.destination)
-      oscillator.start()
-
-      // 保存引用，以便清理
-      this.currentOscillator = oscillator
-
-      // 5 分钟后自动停止（tracked）
-      const t = setTimeout(() => {
-        this.stopCurrentOscillator()
-      }, 5 * 60 * 1000)
-      this.pendingTimeouts.push(t)
-
-    } catch (error) {
-      logger.agent.error('[EmotionAdapter] Failed to play sound:', error)
+    // 获取对应类型的音乐 URL
+    const musicUrl = this.getMusicUrl(type)
+    
+    if (musicUrl) {
+      // 尝试加载网络音频
+      await this.loadAndPlayAudio(musicUrl, volume)
+    } else {
+      // 如果没有配置 URL，直接使用回退方案（生成的白噪音）
+      logger.agent.info(`[EmotionAdapter] No music URL configured for ${type}, using fallback sound`)
+      this.playFallbackSound(volume)
     }
-  }
 
-  private stopCurrentOscillator(): void {
-    if (this.currentOscillator) {
-      try { this.currentOscillator.stop() } catch { /* already stopped */ }
-      this.currentOscillator = null
-    }
+    // 30 分钟后自动停止
+    const t = setTimeout(() => {
+      this.stopAmbientSound()
+    }, 30 * 60 * 1000)
+    this.pendingTimeouts.push(t)
   }
 
   private stopAmbientSound(): void {
-    this.stopCurrentOscillator()
-    if (this.audioContext) {
-      try { this.audioContext.close() } catch { /* ignore */ }
+    // 停止 HTMLAudioElement
+    if (this.currentAudioSource instanceof HTMLAudioElement) {
+      try {
+        // 淡出效果
+        const audio = this.currentAudioSource
+        const fadeOutDuration = 1000 // 1秒
+        const startVolume = audio.volume
+        const startTime = Date.now()
+
+        const fadeInterval = setInterval(() => {
+          const elapsed = Date.now() - startTime
+          if (elapsed >= fadeOutDuration) {
+            audio.volume = 0
+            audio.pause()
+            audio.src = ''
+            clearInterval(fadeInterval)
+            this.currentAudioSource = null
+          } else {
+            audio.volume = startVolume * (1 - elapsed / fadeOutDuration)
+          }
+        }, 50)
+      } catch (error) {
+        // 忽略错误
+        this.currentAudioSource = null
+      }
+    }
+    // 停止 AudioBufferSourceNode
+    else if (this.currentAudioSource instanceof AudioBufferSourceNode) {
+      try {
+        if (this.currentGainNode && this.audioContext) {
+          // 淡出效果
+          this.currentGainNode.gain.linearRampToValueAtTime(
+            0,
+            this.audioContext.currentTime + 1
+          )
+          setTimeout(() => {
+            try { 
+              if (this.currentAudioSource instanceof AudioBufferSourceNode) {
+                this.currentAudioSource.stop()
+              }
+            } catch { /* already stopped */ }
+            this.currentAudioSource = null
+            this.currentGainNode = null
+          }, 1100)
+        } else {
+          try { 
+            if (this.currentAudioSource instanceof AudioBufferSourceNode) {
+              this.currentAudioSource.stop()
+            }
+          } catch { /* already stopped */ }
+          this.currentAudioSource = null
+        }
+      } catch (error) {
+        this.currentAudioSource = null
+        this.currentGainNode = null
+      }
+    }
+
+    // 清理 AudioContext（如果不再需要）
+    if (this.audioContext && !this.currentAudioSource) {
+      try { 
+        this.audioContext.close().catch(() => {}) 
+      } catch { /* ignore */ }
       this.audioContext = null
     }
   }

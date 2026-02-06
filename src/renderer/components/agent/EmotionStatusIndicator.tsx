@@ -4,13 +4,14 @@
  * 设计原则：不打扰，但一眼能看到当前状态
  */
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { EventBus } from '@/renderer/agent/core/EventBus'
 import { emotionDetectionEngine } from '@/renderer/agent/services/emotionDetectionEngine'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
 import { useStore } from '@store'
 import { t } from '@/renderer/i18n'
+import { Sparkles } from 'lucide-react'
 
 const EMOTION_META: Record<EmotionState, {
   color: string
@@ -28,11 +29,23 @@ const EMOTION_META: Record<EmotionState, {
   neutral:    { color: '#94a3b8', emoji: '💻', pulseSpeed: 3.0, translationKey: 'emotion.state.neutral' },
 }
 
+const EMOTION_MESSAGES: Record<EmotionState, string[]> = {
+  focused: ['emotion.status.focused.1', 'emotion.status.focused.2', 'emotion.status.focused.3'],
+  frustrated: ['emotion.status.frustrated.1', 'emotion.status.frustrated.2', 'emotion.status.frustrated.3'],
+  tired: ['emotion.status.tired.1', 'emotion.status.tired.2', 'emotion.status.tired.3'],
+  excited: ['emotion.status.excited.1', 'emotion.status.excited.2', 'emotion.status.excited.3'],
+  bored: ['emotion.status.bored.1', 'emotion.status.bored.2', 'emotion.status.bored.3'],
+  stressed: ['emotion.status.stressed.1', 'emotion.status.stressed.2', 'emotion.status.stressed.3'],
+  flow: ['emotion.status.flow.1', 'emotion.status.flow.2', 'emotion.status.flow.3'],
+  neutral: ['emotion.status.neutral.1', 'emotion.status.neutral.2', 'emotion.status.neutral.3'],
+}
+
 export const EmotionStatusIndicator: React.FC = () => {
   const { language } = useStore()
   const [emotion, setEmotion] = useState<EmotionDetection | null>(null)
   const [isHovered, setIsHovered] = useState(false)
   const [justChanged, setJustChanged] = useState(false)
+  const [messageIndex, setMessageIndex] = useState(0)
 
   useEffect(() => {
     // 初始化检测引擎
@@ -42,6 +55,7 @@ export const EmotionStatusIndicator: React.FC = () => {
       setEmotion(event.emotion)
       // 状态变化时闪烁提示
       setJustChanged(true)
+      setMessageIndex(0) // 重置消息索引
       setTimeout(() => setJustChanged(false), 3000)
     })
 
@@ -53,14 +67,34 @@ export const EmotionStatusIndicator: React.FC = () => {
     }
   }, [])
 
+  // 轮播消息
+  useEffect(() => {
+    if (!emotion || emotion.state === 'neutral') return
+
+    const messages = EMOTION_MESSAGES[emotion.state]
+    const interval = setInterval(() => {
+      setMessageIndex((prev) => (prev + 1) % messages.length)
+    }, 6000) // 每6秒切换一次
+
+    return () => clearInterval(interval)
+  }, [emotion])
+
   const state = emotion?.state || 'neutral'
   const meta = EMOTION_META[state]
   const intensity = emotion?.intensity ?? 0.5
   const label = t(meta.translationKey as any, language)
+  const messages = EMOTION_MESSAGES[state]
+  const currentMessageKey = messages[messageIndex]
+
+  const handleClick = useCallback(() => {
+    if (!emotion || emotion.state === 'neutral') return
+    const messages = EMOTION_MESSAGES[emotion.state]
+    setMessageIndex((prev) => (prev + 1) % messages.length)
+  }, [emotion])
 
   return (
     <div
-      className="relative flex items-center h-full"
+      className="relative flex items-center h-full gap-2"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -118,6 +152,34 @@ export const EmotionStatusIndicator: React.FC = () => {
           )}
         </AnimatePresence>
       </button>
+
+      {/* 情绪提示消息（悬停或点击时显示） */}
+      {emotion && emotion.state !== 'neutral' && (isHovered || justChanged) && (
+        <motion.div
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -10 }}
+          className="flex items-center gap-2 px-2 py-1 rounded-md bg-background-secondary/95 backdrop-blur-sm border border-white/10 max-w-[200px]"
+          onClick={handleClick}
+          style={{ cursor: 'pointer' }}
+        >
+          <AnimatePresence mode="wait">
+            <motion.span
+              key={messageIndex}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+              className="text-[10px] text-text-secondary leading-relaxed truncate"
+            >
+              {t(currentMessageKey as any, language)}
+            </motion.span>
+          </AnimatePresence>
+          {emotion.suggestions && emotion.suggestions.length > 0 && (
+            <Sparkles className="w-3 h-3 text-accent flex-shrink-0" />
+          )}
+        </motion.div>
+      )}
 
       {/* 悬停详情卡片 */}
       <AnimatePresence>
