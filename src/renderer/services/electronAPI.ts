@@ -41,6 +41,7 @@ function createGroupedAPI() {
       delete: (path: string) => raw.deleteFile(path),
       rename: (oldPath: string, newPath: string) => raw.renameFile(oldPath, newPath),
       showInFolder: (path: string) => raw.showItemInFolder(path),
+      openInBrowser: (path: string) => raw.openInBrowser(path),
       search: (query: string, rootPath: string | string[], options?: Parameters<typeof raw.searchFiles>[2]) =>
         raw.searchFiles(query, rootPath, options),
       onChanged: (callback: Parameters<typeof raw.onFileChanged>[0]) => raw.onFileChanged(callback),

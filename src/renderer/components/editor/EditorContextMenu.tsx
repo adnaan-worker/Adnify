@@ -291,7 +291,18 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     // 其他
     { id: 'comment', labelKey: 'ctxToggleComment', shortcut: 'Ctrl+/', action: () => runAction('editor.action.commentLine') },
     { id: 'delete-line', labelKey: 'ctxDeleteLine', shortcut: 'Ctrl+Shift+K', action: () => runAction('editor.action.deleteLines') },
-    { id: 'select-next', labelKey: 'ctxSelectNext', shortcut: 'Ctrl+D', action: () => runAction('editor.action.addSelectionToNextFindMatch') },
+    { id: 'select-next', labelKey: 'ctxSelectNext', shortcut: 'Ctrl+D', action: () => runAction('editor.action.addSelectionToNextFindMatch'), divider: true },
+    // 文件操作
+    { 
+      id: 'open-in-browser', 
+      labelKey: 'ctxOpenInBrowser', 
+      action: async () => {
+        if (activeFilePath) {
+          const success = await api.file.openInBrowser(activeFilePath)
+          if (!success) logger.ui.error('Failed to open in browser')
+        }
+      } 
+    },
   ]
 
   // 渲染 Call Hierarchy 结果

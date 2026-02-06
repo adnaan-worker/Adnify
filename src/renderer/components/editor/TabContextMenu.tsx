@@ -63,6 +63,14 @@ export function TabContextMenu({
       label: isZh ? '在资源管理器中显示' : 'Reveal in Explorer',
       action: () => api.file.showInFolder(filePath)
     },
+    { type: 'separator' as const },
+    {
+      label: isZh ? '在浏览器中打开' : 'Open in Browser',
+      action: async () => {
+        const success = await api.file.openInBrowser(filePath)
+        if (!success) toast.error(isZh ? '打开失败' : 'Failed to open')
+      }
+    },
   ]
 
   return (

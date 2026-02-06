@@ -322,6 +322,7 @@ export interface ElectronAPI {
   saveFile: (content: string, path?: string) => Promise<string | null>
   fileExists: (path: string) => Promise<boolean>
   showItemInFolder: (path: string) => Promise<void>
+  openInBrowser: (path: string) => Promise<boolean>
   mkdir: (path: string) => Promise<boolean>
   deleteFile: (path: string) => Promise<boolean>
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>

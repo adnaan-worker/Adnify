@@ -13,7 +13,8 @@ import {
   Copy,
   Clipboard,
   ExternalLink,
-  Loader2
+  Loader2,
+  Globe
 } from 'lucide-react'
 import { useStore } from '@store'
 import type { FileItem } from '@shared/types'
@@ -416,6 +417,13 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     api.file.showInFolder(node.item.path)
   }, [])
 
+  const handleOpenInBrowser = useCallback(async (node: FlattenedNode) => {
+    const success = await api.file.openInBrowser(node.item.path)
+    if (!success) {
+      toast.error('Failed to open in browser')
+    }
+  }, [])
+
   const handleNewFile = useCallback((node: FlattenedNode) => {
     if (node.item.isDirectory) {
       expandFolder(node.item.path)
@@ -455,7 +463,10 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         { id: 'reveal', label: 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
       ]
     }
-    return [
+    const isHtmlFile = node.item.name.toLowerCase().endsWith('.html') || 
+                       node.item.name.toLowerCase().endsWith('.htm')
+    
+    const items: ContextMenuItem[] = [
       { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
       { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
       { id: 'sep1', label: '', separator: true },
@@ -463,7 +474,13 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       { id: 'copyRelPath', label: 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
       { id: 'reveal', label: 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
     ]
-  }, [language, handleNewFile, handleNewFolder, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer])
+
+    // 对 HTML 文件添加"在浏览器中打开"选项
+    items.push({ id: 'sep2', label: '', separator: true })
+    items.push({ id: 'openInBrowser', label: 'Open in Browser', icon: Globe, onClick: () => handleOpenInBrowser(node) })
+
+    return items
+  }, [language, handleNewFile, handleNewFolder, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])
 
   // 渲染单个节点
   const renderNode = (node: FlattenedNode, index: number) => {

@@ -254,6 +254,7 @@ export const zh = {
   'ctxToggleComment': '切换行注释',
   'ctxDeleteLine': '删除行',
   'ctxSelectNext': '选择下一个匹配项',
+  'ctxOpenInBrowser': '在浏览器中打开',
 
   // ToolCallCard
   'toolArguments': '参数',

@@ -7,6 +7,7 @@ import { logger } from '@shared/utils/Logger'
 import { toAppError, ErrorCode } from '@shared/utils/errorHandler'
 import { ipcMain, dialog, shell } from 'electron'
 import * as path from 'path'
+import { pathToFileURL } from 'url'
 import { promises as fsPromises } from 'fs'
 import Store from 'electron-store'
 import { securityManager, OperationType } from './securityModule'
@@ -425,6 +426,20 @@ export function registerSecureFileHandlers(
   ipcMain.handle('file:showInFolder', async (_, filePath: string) => {
     try {
       shell.showItemInFolder(filePath)
+      return true
+    } catch {
+      return false
+    }
+  })
+
+  // 在浏览器中打开文件
+  ipcMain.handle('file:openInBrowser', async (_, filePath: string) => {
+    try {
+      // 验证文件存在
+      await fsPromises.access(filePath)
+      // 转换为 file:// URL
+      const fileUrl = pathToFileURL(filePath).href
+      await shell.openExternal(fileUrl)
       return true
     } catch {
       return false

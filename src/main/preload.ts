@@ -413,6 +413,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveFile: (content: string, path?: string) => ipcRenderer.invoke('file:save', content, path),
   fileExists: (path: string) => ipcRenderer.invoke('file:exists', path),
   showItemInFolder: (path: string) => ipcRenderer.invoke('file:showInFolder', path),
+  openInBrowser: (path: string) => ipcRenderer.invoke('file:openInBrowser', path),
   mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),
   deleteFile: (path: string) => ipcRenderer.invoke('file:delete', path),
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:rename', oldPath, newPath),

@@ -254,6 +254,7 @@ export const en = {
   'ctxToggleComment': 'Toggle Line Comment',
   'ctxDeleteLine': 'Delete Line',
   'ctxSelectNext': 'Select Next Occurrence',
+  'ctxOpenInBrowser': 'Open in Browser',
 
   // ToolCallCard
   'toolArguments': 'Arguments',
