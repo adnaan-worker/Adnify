@@ -10,6 +10,7 @@ import { GitView } from './panels/GitView'
 import { ProblemsView } from './panels/ProblemsView'
 import { OutlineView } from './panels/OutlineView'
 import { HistoryView } from './panels/HistoryView'
+import { EmotionAwarenessPanel } from '../agent/EmotionAwarenessPanel'
 
 export default function Sidebar() {
     const { activeSidePanel } = useStore()
@@ -21,6 +22,7 @@ export default function Sidebar() {
             {activeSidePanel === 'explorer' && <ExplorerView />}
             {activeSidePanel === 'search' && <SearchView />}
             {activeSidePanel === 'git' && <GitView />}
+            {activeSidePanel === 'emotion' && <EmotionAwarenessPanel />}
             {activeSidePanel === 'problems' && <ProblemsView />}
             {activeSidePanel === 'outline' && <OutlineView />}
             {activeSidePanel === 'history' && <HistoryView />}

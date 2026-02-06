@@ -46,6 +46,12 @@ export type AgentEvent =
   | { type: 'loop:iteration'; count: number }
   | { type: 'loop:end'; reason: string }
   | { type: 'loop:warning'; message: string }
+  
+  // 情绪感知事件
+  | { type: 'emotion:changed'; emotion: import('../types/emotion').EmotionDetection }
+  | { type: 'emotion:message'; message: string; state: import('../types/emotion').EmotionState }
+  | { type: 'break:micro'; message: string }
+  | { type: 'break:suggested'; message: string }
 
 export type EventType = AgentEvent['type']
 

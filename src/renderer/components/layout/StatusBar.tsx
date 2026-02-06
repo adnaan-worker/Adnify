@@ -25,6 +25,7 @@ import { useAgentStore, selectMessages, selectCompressionStats, selectHandoffReq
 import { isAssistantMessage, TokenUsage } from '@renderer/agent/types'
 import { useDiagnosticsStore, getFileStats } from '@services/diagnosticsStore'
 import LspStatusIndicator from './LspStatusIndicator'
+import { EmotionStatusIndicator } from '../agent/EmotionStatusIndicator'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function StatusBar() {
@@ -138,6 +139,11 @@ export default function StatusBar() {
     <div className="h-8 bg-background-secondary/40 backdrop-blur-md flex items-center justify-between px-3 text-[10px] select-none text-text-muted z-50 font-medium border-t border-white/5">
       {/* Left Group */}
       <div className="flex items-center gap-2">
+        {/* 情绪呼吸灯 */}
+        <EmotionStatusIndicator />
+
+        <div className="w-px h-3.5 bg-white/5" />
+
         {isGitRepo && gitStatus && (
           <button className="flex items-center gap-1.5 px-2.5 py-1 rounded-full hover:bg-white/5 text-text-muted hover:text-text-primary transition-all group border border-transparent hover:border-white/5">
             <GitBranch className="w-3 h-3 text-accent opacity-80" />

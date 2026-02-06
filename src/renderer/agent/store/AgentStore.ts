@@ -32,6 +32,7 @@ import type { ChatMessage, ContextItem, StreamState } from '../types'
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../context/types'
 import { buildHandoffContext } from '../context/HandoffManager'
+import type { EmotionDetection, EmotionHistory } from '../types/emotion'
 
 // 重新导出刷新函数供外部使用
 export { flushStreamingBuffer }
@@ -65,11 +66,24 @@ interface UIState {
     inputPrompt: string
     currentSessionId: string | null
     handoffDocument: HandoffDocument | null  // Handoff 文档（临时状态）
+    // 代码审查状态
+    codeReviewSession: import('../types/codeReview').CodeReviewSession | null
+    reviewProgress: { current: number; total: number; currentFile: string } | null
+    // 情绪感知状态
+    emotionDetection: EmotionDetection | null
+    emotionHistory: EmotionHistory[]
     setContextStats: (stats: ContextStats | null) => void
     setInputPrompt: (prompt: string) => void
     setCurrentSessionId: (id: string | null) => void
     setHandoffDocument: (doc: HandoffDocument | null) => void
     createHandoffSession: () => HandoffSessionResult | null
+    // 代码审查方法
+    setCodeReviewSession: (session: import('../types/codeReview').CodeReviewSession | null) => void
+    updateReviewProgress: (current: number, total: number, currentFile: string) => void
+    updateReviewComment: (comment: import('../types/codeReview').ReviewComment) => void
+    // 情绪感知方法
+    setEmotionDetection: (detection: EmotionDetection | null) => void
+    updateEmotionHistory: (history: EmotionHistory) => void
 }
 
 // 线程绑定的 Store 操作接口
@@ -137,6 +151,10 @@ export const useAgentStore = create<AgentStore>()(
                 inputPrompt: '',
                 currentSessionId: null,
                 handoffDocument: null,
+                codeReviewSession: null,
+                reviewProgress: null,
+                emotionDetection: null,
+                emotionHistory: [],
                 setContextStats: (stats) => set({ contextStats: stats }),
                 setInputPrompt: (prompt) => set({ inputPrompt: prompt }),
                 setCurrentSessionId: (id) => set({ currentSessionId: id }),
@@ -185,6 +203,33 @@ export const useAgentStore = create<AgentStore>()(
                         fileChanges: handoff.summary.fileChanges,
                     }
                 },
+                // 代码审查方法
+                setCodeReviewSession: (session) => set({ codeReviewSession: session }),
+                updateReviewProgress: (current, total, currentFile) => 
+                    set({ reviewProgress: { current, total, currentFile } }),
+                updateReviewComment: (comment) => {
+                    set(state => {
+                        if (!state.codeReviewSession) return state
+                        const files = state.codeReviewSession.files.map(file => {
+                            const commentIndex = file.comments.findIndex(c => c.id === comment.id)
+                            if (commentIndex === -1) return file
+                            const newComments = [...file.comments]
+                            newComments[commentIndex] = comment
+                            return { ...file, comments: newComments }
+                        })
+                        return {
+                            codeReviewSession: {
+                                ...state.codeReviewSession,
+                                files
+                            }
+                        }
+                    })
+                },
+                // 情绪感知方法
+                setEmotionDetection: (detection) => set({ emotionDetection: detection }),
+                updateEmotionHistory: (history) => set(state => ({
+                    emotionHistory: [...state.emotionHistory, history].slice(-1440) // 保留最近24小时
+                })),
             }
 
             // 重写 finalizeAssistant 先刷新 StreamingBuffer
