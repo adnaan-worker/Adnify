@@ -609,8 +609,9 @@ class EmotionDetectionEngine {
   private detectEmotionFromBehavior(metrics: BehaviorMetrics): EmotionDetection {
     const factors: EmotionFactor[] = []
     const scores: Record<EmotionState, number> = {
+      // neutral 基线提高 — 需要多个信号同时触发才能打败 neutral
       focused: 0, frustrated: 0, tired: 0, excited: 0,
-      bored: 0, stressed: 0, flow: 0, neutral: 0.25,
+      bored: 0, stressed: 0, flow: 0, neutral: 0.55,
     }
 
     // 记录基线样本（持续学习）
@@ -628,11 +629,15 @@ class EmotionDetectionEngine {
       metrics.fileSwitches / Math.max(windowMin, 0.1),
     )
 
+    // === 判断用户是否在"阅读/思考"状态 ===
+    // 鼠标有移动 or 最近有文件切换 → 在阅读代码，不是真正的"停顿"
+    const recentMouseActivity = Date.now() - this._lastActivityTime < 15_000
+    const isReading = metrics.typingSpeed < 5 && recentMouseActivity
+
     // 1. 打字速度 — 如果有基线，用偏差；否则用绝对值
     let typingSpeedScore: number
     if (relative.calibrated) {
-      // 偏差越大越显著：>1σ 快=兴奋/专注, <-1σ 慢=疲劳/沮丧
-      typingSpeedScore = clampScore((relative.typingSpeedDeviation + 1) / 2) // 映射到 0-1
+      typingSpeedScore = clampScore((relative.typingSpeedDeviation + 1) / 2)
     } else {
       typingSpeedScore = this.normalizeTypingSpeed(metrics.typingSpeed)
     }
@@ -642,22 +647,29 @@ class EmotionDetectionEngine {
         ? `${metrics.typingSpeed.toFixed(0)} WPM (${relative.typingSpeedDeviation > 0 ? '+' : ''}${relative.typingSpeedDeviation.toFixed(1)}σ)`
         : `${metrics.typingSpeed.toFixed(0)} WPM`,
     })
-    scores.focused   += typingSpeedScore * 0.7
-    scores.excited   += typingSpeedScore * 0.9
-    scores.flow      += typingSpeedScore * 0.8
-    scores.tired     -= typingSpeedScore * 0.5
-    scores.bored     -= typingSpeedScore * 0.6
+
+    // 没打字不等于负面 — 阅读时不惩罚 focused/flow
+    if (metrics.typingSpeed > 5) {
+      scores.focused   += typingSpeedScore * 0.7
+      scores.excited   += typingSpeedScore * 0.9
+      scores.flow      += typingSpeedScore * 0.8
+    } else if (isReading) {
+      // 在阅读代码 — 仍可能 focused，给适度分
+      scores.focused += 0.3
+      scores.neutral += 0.1
+    }
+    scores.tired     -= typingSpeedScore * 0.3
+    scores.bored     -= typingSpeedScore * 0.4
 
     // 个性化加成：打字速度比自己平时慢很多 → 更倾向 frustrated/tired
     if (relative.calibrated && relative.typingSpeedDeviation < -1.5) {
-      scores.frustrated += 0.3
-      scores.tired += 0.2
+      scores.frustrated += 0.25
+      scores.tired += 0.15
     }
 
-    // 2. 错误率（退格）— 同样用偏差
+    // 2. 错误率（退格）
     let errorRateScore: number
     if (relative.calibrated && relative.backspaceRateDeviation > 0.5) {
-      // 退格率比平时高 → 更可能沮丧
       errorRateScore = clampScore(metrics.errorRate + relative.backspaceRateDeviation * 0.15)
     } else {
       errorRateScore = metrics.errorRate
@@ -669,25 +681,31 @@ class EmotionDetectionEngine {
         : `Backspace: ${(metrics.errorRate * 100).toFixed(0)}%`,
     })
     scores.frustrated += errorRateScore * 0.8
-    scores.tired      += errorRateScore * 0.4
+    scores.tired      += errorRateScore * 0.2   // 退格对 tired 影响减弱
     scores.stressed   += errorRateScore * 0.5
     scores.focused    -= errorRateScore * 0.3
     scores.flow       -= errorRateScore * 0.4
 
-    // 3. 停顿
+    // 3. 停顿 — 关键修复：只有"真正的发呆"才是 tired 信号
+    //    短停顿（<20s）或鼠标活跃 = 在思考/阅读，不算 tired
     const pauseScore = Math.min(metrics.pauseDuration / 30000, 1)
     factors.push({
-      type: 'pause_duration', weight: 0.2, value: pauseScore,
+      type: 'pause_duration', weight: 0.15, value: pauseScore,
       description: `Pause: ${(metrics.pauseDuration / 1000).toFixed(0)}s`,
     })
-    scores.tired  += pauseScore * 0.6
-    scores.bored  += pauseScore * 0.5
-    scores.flow   -= pauseScore * 0.6
+    if (isReading) {
+      // 在阅读 — 停顿是正常的，不加 tired
+      scores.focused += pauseScore * 0.15  // 看代码也是专注的一种
+    } else if (metrics.pauseDuration > 20_000 && !recentMouseActivity) {
+      // 真正的发呆（>20s 且没有鼠标活动）
+      scores.tired  += pauseScore * 0.35
+      scores.bored  += pauseScore * 0.3
+    }
+    scores.flow -= pauseScore * 0.3  // flow 需要持续输出，停顿减分合理
 
-    // 4. 文件切换 — 用偏差判断
+    // 4. 文件切换
     let tabSwitchScore: number
     if (relative.calibrated && relative.fileSwitchDeviation > 1) {
-      // 比平时切换文件频繁很多 → 压力
       tabSwitchScore = clampScore(Math.min(metrics.fileSwitches / 3, 1) + relative.fileSwitchDeviation * 0.1)
     } else {
       tabSwitchScore = Math.min(metrics.fileSwitches / 3, 1)
@@ -696,39 +714,55 @@ class EmotionDetectionEngine {
       type: 'tab_switching', weight: 0.15, value: tabSwitchScore,
       description: `Tab switches: ${metrics.fileSwitches}`,
     })
-    scores.stressed += tabSwitchScore * 0.7
-    scores.focused  -= tabSwitchScore * 0.5
-    scores.flow     -= tabSwitchScore * 0.6
+    if (metrics.fileSwitches >= 4) {
+      // 频繁切换 → 压力 / 忙碌
+      scores.stressed += tabSwitchScore * 0.6
+      scores.focused  -= tabSwitchScore * 0.3
+    } else if (metrics.fileSwitches >= 1) {
+      // 少量切换 → 正常浏览代码
+      scores.focused += 0.1
+    }
+    scores.flow -= tabSwitchScore * 0.4
 
-    // 5. 工作时长
+    // 5. 工作时长 — 只有超过 45 分钟才开始累积 tired
     const sessionDuration = Date.now() - this.stateStartTime
-    const sessionScore = Math.min(sessionDuration / (2 * 60 * 60 * 1000), 1)
+    const sessionMin = sessionDuration / 1000 / 60
+    const sessionScore = sessionMin > 45
+      ? Math.min((sessionMin - 45) / 75, 1)  // 45~120 分钟线性增长
+      : 0
     factors.push({
       type: 'session_duration', weight: 0.1, value: sessionScore,
-      description: `${(sessionDuration / 1000 / 60).toFixed(0)}min`,
+      description: `${sessionMin.toFixed(0)}min`,
     })
-    scores.tired += sessionScore * 0.5
-    scores.flow  += sessionScore * 0.3
+    scores.tired += sessionScore * 0.4
+    if (sessionMin > 15 && sessionMin < 60) {
+      scores.flow += 0.15  // 15-60 分钟是 flow 的黄金窗口
+    }
 
-    // 6. 时间段 — 用基线的活跃时段替代硬编码
+    // 6. 时间段
     const hour = new Date().getHours()
     const isUnusualHour = relative.calibrated ? !relative.isActiveHour : (hour < 6 || hour > 22)
-    const timeScore = isUnusualHour ? 0.8 : 0.2
+    const timeScore = isUnusualHour ? 0.8 : 0
     factors.push({
-      type: 'time_of_day', weight: 0.1, value: timeScore,
+      type: 'time_of_day', weight: 0.05, value: timeScore,
       description: relative.calibrated
         ? `${hour}:00 ${isUnusualHour ? '(非常用时段)' : ''}`
         : `${hour}:00`,
     })
-    scores.tired += timeScore * 0.5
+    // 只有非常用时段才给 tired 加分，正常时段不加
+    scores.tired += timeScore * 0.3
 
-    // 7. 活跃度
+    // 7. 活跃度 — 只有真正的完全空闲才判 bored/tired
     const idleDuration = Date.now() - this._lastActivityTime
-    if (idleDuration > 60000) {
-      scores.bored += 0.4
-      scores.tired += 0.3
-      scores.focused -= 0.3
-      scores.flow -= 0.5
+    if (idleDuration > 120_000) {
+      // 2 分钟完全无操作 → 可能走开了
+      scores.bored += 0.3
+      scores.tired += 0.2
+      scores.focused -= 0.2
+      scores.flow -= 0.4
+    } else if (idleDuration > 60_000) {
+      // 1 分钟无操作 → 可能在思考，轻微影响
+      scores.bored += 0.1
     }
 
     // 找出最高分
