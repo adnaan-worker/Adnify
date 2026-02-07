@@ -14,6 +14,7 @@ import {
   Layers,
   MessageSquare,
   Bug,
+  ListTodo,
 } from 'lucide-react'
 import { useStore } from '@store'
 import type { IndexStatus } from '@shared/types'
@@ -21,6 +22,7 @@ import { indexWorkerService, IndexProgress } from '@services/indexWorkerService'
 import BottomBarPopover from '../ui/BottomBarPopover'
 import ToolCallLogContent from '../panels/ToolCallLogContent'
 import ContextStatsContent from '../panels/ContextStatsContent'
+import PlanListContent from '../panels/PlanListContent'
 import { useAgentStore, selectMessages, selectCompressionStats, selectHandoffRequired, selectCompressionPhase } from '@renderer/agent'
 import { isAssistantMessage, TokenUsage } from '@renderer/agent/types'
 import { useDiagnosticsStore, getFileStats } from '@services/diagnosticsStore'
@@ -134,6 +136,19 @@ export default function StatusBar() {
   const handleIndexClick = () => setShowSettings(true)
   const handleDiagnosticsClick = () => setActiveSidePanel('problems')
   const toolCallLogs = useStore(state => state.toolCallLogs)
+  const plans = useAgentStore(state => state.plans)
+  const activePlanId = useAgentStore(state => state.activePlanId)
+  const loadPlansFromDisk = useAgentStore(state => state.loadPlansFromDisk)
+
+  // 工作区变化时加载已保存的计划
+  useEffect(() => {
+    if (workspacePath) {
+      loadPlansFromDisk(workspacePath)
+    }
+  }, [workspacePath, loadPlansFromDisk])
+
+  // 计算正在执行的计划数量
+  const executingPlansCount = plans.filter(p => p.status === 'executing').length
 
   return (
     <div className="h-8 bg-background-secondary/40 backdrop-blur-md flex items-center justify-between px-3 text-[10px] select-none text-text-muted z-50 font-medium border-t border-white/5">
@@ -261,10 +276,10 @@ export default function StatusBar() {
                   >
                     {/* 上下文使用率 */}
                     <div className={`flex items-center gap-1.5 ${compressionStats?.level === 4 ? 'text-red-400' :
-                        compressionStats?.level === 3 ? 'text-orange-400' :
-                          compressionStats?.level === 2 ? 'text-yellow-400' :
-                            compressionStats?.level === 1 ? 'text-blue-400' :
-                              'text-emerald-400'
+                      compressionStats?.level === 3 ? 'text-orange-400' :
+                        compressionStats?.level === 2 ? 'text-yellow-400' :
+                          compressionStats?.level === 1 ? 'text-blue-400' :
+                            'text-emerald-400'
                       }`}>
                       <Layers className="w-3 h-3 group-hover:scale-110 transition-transform" />
                       <span className="text-[10px] font-bold font-mono">
@@ -294,6 +309,27 @@ export default function StatusBar() {
 
         {/* Tools Group */}
         <div className="flex items-center gap-1 h-full">
+          {/* 计划列表 */}
+          {plans.length > 0 && (
+            <BottomBarPopover
+              icon={
+                <div className="relative">
+                  <ListTodo className="w-3.5 h-3.5" />
+                  {executingPlansCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-accent rounded-full animate-pulse" />
+                  )}
+                </div>
+              }
+              tooltip={language === 'zh' ? '任务计划' : 'Task Plans'}
+              title={language === 'zh' ? '任务计划' : 'Task Plans'}
+              badge={activePlanId ? undefined : plans.length}
+              width={340} height={360} language={language as 'en' | 'zh'}
+            >
+              <PlanListContent language={language as 'en' | 'zh'} />
+            </BottomBarPopover>
+          )}
+
+          {/* 工具调用日志 */}
           <BottomBarPopover
             icon={<ScrollText className="w-3.5 h-3.5" />}
             badge={toolCallLogs.length || undefined}

@@ -802,9 +802,11 @@ TIPS:
                 required: true,
                 items: {
                     type: 'object',
-                    description: 'Option item',
+                    description: 'Option item. Use "id" or "value" as unique identifier.',
                     properties: {
-                        id: { type: 'string', description: 'Unique option ID', required: true },
+                        // id 和 value 都可选，执行器会处理
+                        id: { type: 'string', description: 'Unique option ID' },
+                        value: { type: 'string', description: 'Alternative to id (will be used as id if id is not provided)' },
                         label: { type: 'string', description: 'Display label', required: true },
                         description: { type: 'string', description: 'Optional description' },
                     },

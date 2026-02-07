@@ -540,8 +540,15 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
     async ask_user(args, _ctx) {
         const question = args.question as string
-        const options = args.options as Array<{ id: string; label: string; description?: string }>
+        const rawOptions = args.options as Array<{ id?: string; value?: string; label: string; description?: string }>
         const multiSelect = (args.multiSelect as boolean) || false
+
+        // 兼容处理：支持 id 或 value 作为选项标识符
+        const options = rawOptions.map((opt, idx) => ({
+            id: opt.id || opt.value || `option-${idx}`,
+            label: opt.label,
+            description: opt.description,
+        }))
 
         // 返回 interactive 数据，由 loop.ts 负责设置到 store
         return {
@@ -586,13 +593,19 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             await api.file.write(mdPath, requirementsDoc)
 
             // 构建任务对象
+            // 处理 "default" 值，转换为真实的默认配置
+            const resolveDefault = (value: string | undefined, fallback: string) => {
+                if (!value || value === 'default' || value === 'Default') return fallback
+                return value
+            }
+
             const planTasks = tasks.map((t, idx) => ({
                 id: `task-${idx + 1}`,
                 title: t.title,
                 description: t.description,
-                provider: t.suggestedProvider || 'anthropic',
-                model: t.suggestedModel || 'claude-3-5-sonnet-20240620',
-                role: t.suggestedRole || 'coder',
+                provider: resolveDefault(t.suggestedProvider, 'anthropic'),
+                model: resolveDefault(t.suggestedModel, 'claude-sonnet-4-20250514'),
+                role: resolveDefault(t.suggestedRole, 'coder'),
                 dependencies: t.dependencies || [],
                 status: 'pending' as const,
             }))
@@ -743,10 +756,39 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         try {
             const planId = args.planId as string | undefined
 
+            // 验证计划存在且可执行
+            const { useAgentStore } = await import('../store/AgentStore')
+            const store = useAgentStore.getState()
+
+            const plan = planId
+                ? store.plans.find(p => p.id === planId)
+                : store.getActivePlan()
+
+            if (!plan) {
+                return {
+                    success: false,
+                    result: 'Error: No task plan found. You must first create a plan using `create_task_plan` before starting execution.\n\nPlease:\n1. Use `ask_user` to gather requirements\n2. Use `create_task_plan` to create a plan\n3. Wait for user to review and approve\n4. Then use `start_task_execution`'
+                }
+            }
+
+            if (plan.tasks.length === 0) {
+                return {
+                    success: false,
+                    result: 'Error: Plan has no tasks. Use `update_task_plan` to add tasks first.'
+                }
+            }
+
+            if (plan.status === 'executing') {
+                return {
+                    success: false,
+                    result: 'Error: Plan is already being executed.'
+                }
+            }
+
             const { startPlanExecution } = await import('../services/orchestratorExecutor')
 
             // 异步启动执行（不等待完成）
-            const result = await startPlanExecution(planId)
+            const result = await startPlanExecution(plan.id)
 
             if (!result.success) {
                 return { success: false, result: result.message }
@@ -754,7 +796,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
             return {
                 success: true,
-                result: `Started executing plan. Progress will be shown in the TaskBoard.\n\n${result.message}`,
+                result: `Started executing plan "${plan.name}" with ${plan.tasks.length} tasks.\n\nProgress will be shown in the TaskBoard.`,
                 meta: { stopLoop: true },
             }
         } catch (err) {

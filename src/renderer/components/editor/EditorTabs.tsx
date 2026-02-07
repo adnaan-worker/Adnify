@@ -4,6 +4,7 @@
 import { memo } from 'react'
 import { X, AlertCircle, AlertTriangle, RefreshCw, FileX } from 'lucide-react'
 import { getFileName } from '@shared/utils/pathUtils'
+import { useAgentStore } from '@renderer/agent'
 import type { OpenFile } from '@store'
 
 interface EditorTabsProps {
@@ -36,11 +37,25 @@ export const EditorTabs = memo(function EditorTabs({
   isLinting,
   onRunLint,
 }: EditorTabsProps) {
+  // 获取计划数据
+  const plans = useAgentStore(state => state.plans)
+
   return (
     <div className="h-9 flex items-center bg-background border-b border-border overflow-x-auto custom-scrollbar select-none">
       {openFiles.map((file) => {
         const isActive = file.path === activeFilePath
-        const fileName = getTabDisplayName(file.path)
+
+        // 计算显示名称
+        let fileName = getTabDisplayName(file.path)
+
+        // 如果是计划文件，尝试显示计划名称
+        if (file.path.includes('/.adnify/plan/') && file.path.endsWith('.json')) {
+          const planId = fileName.replace('.json', '')
+          const plan = plans.find(p => p.id === planId)
+          if (plan) {
+            fileName = `📋 ${plan.name}`
+          }
+        }
 
         return (
           <div

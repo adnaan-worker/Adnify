@@ -8,7 +8,7 @@ export { default as AgentStatusBar } from './AgentStatusBar'
 export { default as ChatMessage } from './ChatMessage'
 export { default as ChatPanel } from './ChatPanel'
 export { RichContentRenderer } from './RichContentRenderer'
-export { OptionCard } from './OptionCard'
+export { InteractiveCard } from './InteractiveCard'
 
 // 新增组件
 export { BranchSelector, MessageBranchActions } from './BranchControls'

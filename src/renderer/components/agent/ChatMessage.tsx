@@ -27,7 +27,7 @@ import {
 import FileChangeCard from './FileChangeCard'
 import ToolCallCard from './ToolCallCard'
 import ToolCallGroup from './ToolCallGroup'
-import { OptionCard } from './OptionCard'
+import { InteractiveCard } from './InteractiveCard'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
 import { MessageBranchActions } from './BranchControls'
@@ -695,7 +695,7 @@ const ChatMessage = React.memo(({
 
               {message.interactive && !message.isStreaming && (
                 <div className="mt-2 w-full">
-                  <OptionCard
+                  <InteractiveCard
                     content={message.interactive}
                     onSelect={(selectedIds) => {
                       const selectedLabels = message.interactive!.options

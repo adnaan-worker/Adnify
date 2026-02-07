@@ -19,7 +19,8 @@ import {
     Settings2,
     Sparkles,
 } from 'lucide-react'
-import { Button } from '@/renderer/components/ui'
+import { Button, Select } from '@/renderer/components/ui'
+import { MarkdownPreview } from '@/renderer/components/editor/FilePreview'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
 import { BUILTIN_PROVIDERS } from '@/shared/config/providers'
@@ -91,43 +92,53 @@ const ModelSelector = memo(function ModelSelector({
         return result
     }, [providerConfigs])
 
-    // 获取当前厂商的模型列表
-    const currentModels = useMemo(() => {
+
+
+    // 转换厂商列表为 Select 选项
+    const providerOptions = useMemo(() => {
+        return allProviders.map(p => ({
+            value: p.id,
+            label: p.displayName
+        }))
+    }, [allProviders])
+
+    // 获取当前厂商的模型列表（去重）并转换为 Select 选项
+    const modelOptions = useMemo(() => {
         const providerConfig = allProviders.find(p => p.id === provider)
-        return providerConfig?.models || []
+        const models = providerConfig?.models || []
+        // 使用 Set 去重
+        const uniqueModels = Array.from(new Set(models))
+
+        return uniqueModels.map(m => ({
+            value: m,
+            label: m
+        }))
     }, [allProviders, provider])
 
     return (
-        <div className="flex gap-2">
-            <select
-                className="px-2 py-1 text-xs rounded bg-surface border border-border text-text-primary disabled:opacity-50"
-                value={provider}
-                onChange={(e) => {
-                    const newProvider = e.target.value
-                    const newProviderConfig = allProviders.find(p => p.id === newProvider)
-                    const defaultModel = newProviderConfig?.models[0] || ''
-                    onChange(newProvider, defaultModel)
-                }}
-                disabled={disabled}
-            >
-                {allProviders.map((p) => (
-                    <option key={p.id} value={p.id}>
-                        {p.displayName}
-                    </option>
-                ))}
-            </select>
-            <select
-                className="px-2 py-1 text-xs rounded bg-surface border border-border text-text-primary disabled:opacity-50"
-                value={model}
-                onChange={(e) => onChange(provider, e.target.value)}
-                disabled={disabled}
-            >
-                {currentModels.map((m) => (
-                    <option key={m} value={m}>
-                        {m}
-                    </option>
-                ))}
-            </select>
+        <div className="flex gap-2 items-center">
+            <div className="w-32">
+                <Select
+                    options={providerOptions}
+                    value={provider}
+                    onChange={(val) => {
+                        const newProviderConfig = allProviders.find(p => p.id === val)
+                        const defaultModel = newProviderConfig?.models[0] || ''
+                        onChange(val, defaultModel)
+                    }}
+                    disabled={disabled}
+                    className="text-xs"
+                />
+            </div>
+            <div className="w-48">
+                <Select
+                    options={modelOptions}
+                    value={model}
+                    onChange={(val) => onChange(provider, val)}
+                    disabled={disabled}
+                    className="text-xs"
+                />
+            </div>
         </div>
     )
 })
@@ -160,7 +171,7 @@ const TaskCard = memo(function TaskCard({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className={`
-        relative rounded-lg border transition-all duration-200
+        relative rounded-lg border transition-all duration-200 overflow-hidden
         ${isActive
                     ? 'border-blue-500/50 bg-blue-500/5 shadow-lg shadow-blue-500/10'
                     : 'border-border bg-surface/50 hover:bg-surface/80'}
@@ -325,7 +336,7 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
         if (plan) {
             // 使用 orchestratorExecutor 启动执行
             const { startPlanExecution } = await import('@/renderer/agent/services/orchestratorExecutor')
-            const result = startPlanExecution(plan.id)
+            const result = await startPlanExecution(plan.id)
             if (!result.success) {
                 console.error('Failed to start execution:', result.message)
             }
@@ -383,23 +394,19 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
             {/* 内容区 */}
             <div className="flex-1 flex overflow-hidden">
                 {/* 需求文档 */}
-                <div className={`${showRequirements ? 'w-1/2' : 'w-0'} transition-all duration-300 overflow-hidden border-r border-border`}>
-                    <div className="h-full overflow-auto p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                            <FileText className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm font-medium text-text-primary">需求文档</span>
-                        </div>
-                        <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                            {requirementsContent ? (
-                                <div className="text-text-secondary text-sm">
-                                    {requirementsContent}
-                                </div>
-                            ) : (
-                                <p className="text-muted-foreground italic">
-                                    加载中...
-                                </p>
-                            )}
-                        </div>
+                <div className={`${showRequirements ? 'w-1/2' : 'w-0'} flex flex-col transition-all duration-300 overflow-hidden border-r border-border bg-background`}>
+                    <div className="flex-shrink-0 flex items-center gap-2 p-3 border-b border-border bg-surface/30">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm font-medium text-text-primary">需求文档</span>
+                    </div>
+                    <div className="flex-1 relative">
+                        {requirementsContent ? (
+                            <MarkdownPreview content={requirementsContent} fontSize={13} />
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-muted-foreground italic">
+                                加载中...
+                            </div>
+                        )}
                     </div>
                 </div>
 
