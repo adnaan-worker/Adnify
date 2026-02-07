@@ -129,7 +129,9 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
         `}
       >
         <span className="text-[10px] grayscale opacity-80">{getIcon(llmConfig.provider)}</span>
-        <span className="max-w-[120px] truncate">{llmConfig.model}</span>
+        <span className="max-w-[120px] truncate" title={llmConfig.model}>
+          {llmConfig.model.split('/').pop()}
+        </span>
         <ChevronDown className={`w-3 h-3 text-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 

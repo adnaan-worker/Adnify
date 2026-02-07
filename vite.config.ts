@@ -24,7 +24,10 @@ const EXTERNAL_DEPS = [
   'dugite',
   '@vscode/ripgrep',
   '@lancedb/lancedb',
-  'apache-arrow'
+  'apache-arrow',
+  '@xenova/transformers',
+  'onnxruntime-node',
+  'onnxruntime-web'
 ]
 
 // 路径别名配置
@@ -56,7 +59,7 @@ export default defineConfig({
             rollupOptions: {
               external: EXTERNAL_DEPS,
               onwarn(warning, warn) {
-                if (warning.code === 'EVAL' && warning.id?.includes('web-tree-sitter')) return
+                if (warning.code === 'EVAL' && (warning.id?.includes('web-tree-sitter') || warning.id?.includes('onnxruntime-web'))) return
                 warn(warning)
               }
             }
@@ -74,10 +77,13 @@ export default defineConfig({
               formats: ['cjs'],
               fileName: () => 'indexer.worker.js'
             },
+            commonjsOptions: {
+              ignoreDynamicRequires: true
+            },
             rollupOptions: {
-              external: ['electron', '@lancedb/lancedb', 'apache-arrow', 'web-tree-sitter'],
+              external: ['electron', '@lancedb/lancedb', 'apache-arrow', 'web-tree-sitter', '@xenova/transformers', 'onnxruntime-node', 'onnxruntime-web'],
               onwarn(warning, warn) {
-                if (warning.code === 'EVAL' && warning.id?.includes('web-tree-sitter')) return
+                if (warning.code === 'EVAL' && (warning.id?.includes('web-tree-sitter') || warning.id?.includes('onnxruntime-web'))) return
                 warn(warning)
               }
             }
@@ -100,7 +106,7 @@ export default defineConfig({
     rollupOptions: {
       // 忽略 web-tree-sitter 的 eval 警告（这是库内部使用，无法避免）
       onwarn(warning, warn) {
-        if (warning.code === 'EVAL' && warning.id?.includes('web-tree-sitter')) {
+        if (warning.code === 'EVAL' && (warning.id?.includes('web-tree-sitter') || warning.id?.includes('onnxruntime-web'))) {
           return
         }
         warn(warning)

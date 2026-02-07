@@ -66,6 +66,7 @@ export interface IndexStatus {
   totalChunks: number
   lastIndexedAt?: number
   error?: string
+  message?: string
 }
 
 // ==================== 项目摘要 ====================
@@ -98,13 +99,14 @@ export interface ProjectSummary {
 
 // ==================== Embedding 配置 ====================
 
-export type EmbeddingProvider = 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama' | 'custom'
+export type EmbeddingProvider = 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama' | 'transformers' | 'custom'
 
 export interface EmbeddingConfig {
   provider: EmbeddingProvider
   apiKey?: string
   model?: string
   baseUrl?: string
+  cacheDir?: string
 }
 
 export const DEFAULT_EMBEDDING_MODELS: Record<EmbeddingProvider, string> = {
@@ -114,6 +116,7 @@ export const DEFAULT_EMBEDDING_MODELS: Record<EmbeddingProvider, string> = {
   cohere: 'embed-english-v3.0',
   huggingface: 'sentence-transformers/all-MiniLM-L6-v2',
   ollama: 'nomic-embed-text',
+  transformers: 'Xenova/all-MiniLM-L6-v2',
   custom: '',
 }
 
@@ -124,6 +127,7 @@ export const EMBEDDING_ENDPOINTS: Record<EmbeddingProvider, string> = {
   cohere: 'https://api.cohere.ai/v1/embed',
   huggingface: 'https://api-inference.huggingface.co/pipeline/feature-extraction',
   ollama: 'http://localhost:11434/api/embeddings',
+  transformers: '',
   custom: '',
 }
 

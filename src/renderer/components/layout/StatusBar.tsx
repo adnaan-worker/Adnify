@@ -183,7 +183,7 @@ export default function StatusBar() {
         {workerProgress && !workerProgress.isComplete && workerProgress.total > 0 && (
           <div className="flex items-center gap-1.5 text-accent animate-fade-in px-2 bg-accent/5 rounded-full py-0.5 border border-accent/10">
             <Cpu className="w-3 h-3 animate-pulse" />
-            <span>{Math.round((workerProgress.processed / workerProgress.total) * 100)}%</span>
+            <span>{workerProgress.message || `${Math.round((workerProgress.processed / workerProgress.total) * 100)}%`}</span>
           </div>
         )}
 

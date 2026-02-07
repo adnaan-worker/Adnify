@@ -105,6 +105,7 @@ interface IndexStatusData {
   totalChunks: number
   lastIndexedAt?: number
   error?: string
+  message?: string
 }
 
 interface IndexSearchResult {

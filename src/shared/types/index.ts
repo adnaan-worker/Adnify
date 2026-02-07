@@ -76,6 +76,7 @@ export interface IndexStatus {
     totalChunks: number
     lastIndexedAt?: number
     error?: string
+    message?: string
 }
 
 export interface SymbolInfo {

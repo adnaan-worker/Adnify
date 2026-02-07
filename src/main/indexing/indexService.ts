@@ -18,17 +18,27 @@ import { BM25Index, SymbolIndex } from './search'
 import { ProjectSummaryGenerator } from './summary'
 import {
   IndexConfig, IndexStatus, IndexMode, SearchResult,
-  EmbeddingConfig, ProjectSummary, SymbolInfo, CodeChunk,
+  EmbeddingConfig, ProjectSummary, SymbolInfo, CodeChunk, IndexedChunk,
   DEFAULT_INDEX_CONFIG,
 } from './types'
+import { getUserConfigDir } from '../services/configPath'
 
 // Worker 消息类型
-interface WorkerResultMessage { type: 'result'; chunks: any[]; processed: number; total: number }
+interface WorkerResultMessage { type: 'result'; chunks: IndexedChunk[]; processed: number; total: number }
+interface WorkerUpdateResultMessage { type: 'update_result'; filePath: string; chunks: IndexedChunk[]; deleted: boolean }
+interface WorkerBatchUpdateResultMessage { type: 'batch_update_result'; results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> }
 interface WorkerCompleteMessage { type: 'complete'; totalChunks: number }
 interface WorkerErrorMessage { type: 'error'; error: string }
-type WorkerMessage = { type: 'progress'; processed: number; total: number } | WorkerResultMessage | WorkerCompleteMessage | WorkerErrorMessage
+type WorkerMessage =
+  | { type: 'progress'; processed: number; total: number; message?: string }
+  | WorkerResultMessage
+  | WorkerUpdateResultMessage
+  | WorkerBatchUpdateResultMessage
+  | WorkerCompleteMessage
+  | WorkerErrorMessage
 
 export class CodebaseIndexService {
+
   private workspacePath: string
   private config: IndexConfig
   private mainWindow: BrowserWindow | null = null
@@ -60,6 +70,10 @@ export class CodebaseIndexService {
   constructor(workspacePath: string, config?: Partial<IndexConfig>) {
     this.workspacePath = workspacePath
     this.config = { ...DEFAULT_INDEX_CONFIG, ...config }
+    // 注入缓存路径（用于 Worker 中的 Transformers.js）
+    if (!this.config.embedding.cacheDir) {
+      this.config.embedding.cacheDir = path.join(getUserConfigDir(), 'models')
+    }
     this.status.mode = this.config.mode
 
     // 初始化结构化索引组件
@@ -80,21 +94,30 @@ export class CodebaseIndexService {
     return path.join(this.workspacePath, '.adnify', 'structural-index.json')
   }
 
+  private get indexStatusPath(): string {
+    return path.join(this.workspacePath, '.adnify', 'index-status.json')
+  }
+
+  private initialized = false
+
   async initialize(): Promise<void> {
+    if (this.initialized) return
+
     await this.chunker.init()
 
     // 加载缓存的项目摘要
     this.projectSummary = await this.summaryGenerator.loadCache()
 
-    // 加载缓存的结构化索引
-    await this.loadStructuralIndex()
+    // 加载索引状态和结构化索引
+    await this.loadIndex()
 
     // 语义模式：初始化向量存储
     if (this.config.mode === 'semantic') {
       await this.initSemanticComponents()
     }
 
-    logger.index.info(`[IndexService] Initialized (${this.config.mode} mode) for:`, this.workspacePath)
+    this.initialized = true
+    logger.index.info(`[IndexService] Initialized (${this.config.mode} mode) for: `, this.workspacePath)
   }
 
   /** 加载结构化索引缓存 */
@@ -133,6 +156,48 @@ export class CodebaseIndexService {
       logger.index.info('[IndexService] Saved structural index')
     } catch (e) {
       logger.index.warn('[IndexService] Failed to save structural index:', e)
+    }
+  }
+
+  private async saveIndex(): Promise<void> {
+    try {
+      if (this.config.mode === 'structural') {
+        await this.saveStructuralIndex()
+      }
+
+      // 保存通用状态
+      const dir = path.dirname(this.indexStatusPath)
+      if (!fs.existsSync(dir)) {
+        await fs.promises.mkdir(dir, { recursive: true })
+      }
+      await fs.promises.writeFile(this.indexStatusPath, JSON.stringify(this.status, null, 2))
+    } catch (e) {
+      logger.index.warn('[IndexService] Failed to save index status:', e)
+    }
+  }
+
+  private async loadIndex(): Promise<void> {
+    try {
+      if (fs.existsSync(this.indexStatusPath)) {
+        const content = await fs.promises.readFile(this.indexStatusPath, 'utf-8')
+        const status = JSON.parse(content)
+        // 恢复状态，除了 isIndexing
+        this.status = { ...this.status, ...status, isIndexing: false, error: undefined, message: undefined }
+        logger.index.info('[IndexService] Loaded index status')
+      }
+
+      if (this.config.mode === 'structural') {
+        await this.loadStructuralIndex()
+      } else if (this.config.mode === 'semantic') {
+        // 语义模式下，chunks 数量可能需要从 vectorStore 获取？
+        // 暂时相信保存的状态。
+        // 也可以调用 vectorStore.count() 验证
+        // if (this.vectorStore) { 
+        //   this.status.totalChunks = await this.vectorStore.count()
+        // }
+      }
+    } catch (e) {
+      logger.index.warn('[IndexService] Failed to load index status:', e)
     }
   }
 
@@ -349,10 +414,10 @@ export class CodebaseIndexService {
           }
           updated++
         } catch (e) {
-          logger.index.warn(`[IndexService] Failed to update ${filePath}:`, e)
+          logger.index.warn(`[IndexService] Failed to update ${filePath}: `, e)
         }
       }
-      
+
       if (updated > 0) {
         // 重建 BM25 索引（必须调用以更新 IDF）
         this.bm25Index.build()
@@ -377,10 +442,10 @@ export class CodebaseIndexService {
   /** 从结构化索引中删除文件 */
   private async deleteFileFromStructuralIndex(filePath: string): Promise<void> {
     const relativePath = path.relative(this.workspacePath, filePath)
-    
+
     // 从 BM25 索引中删除
     this.bm25Index.deleteFile(relativePath)
-    
+
     // 从符号索引中删除
     this.symbolIndex.deleteFile(relativePath)
   }
@@ -388,20 +453,20 @@ export class CodebaseIndexService {
   /** 删除文件索引 */
   async deleteFileIndex(filePath: string): Promise<void> {
     const relativePath = path.relative(this.workspacePath, filePath)
-    
+
     // 结构化模式：从索引中删除
     if (this.config.mode === 'structural') {
       await this.deleteFileFromStructuralIndex(filePath)
       this.bm25Index.build()
       await this.saveStructuralIndex()
-      logger.index.info(`[IndexService] Deleted structural index for: ${relativePath}`)
+      logger.index.info(`[IndexService] Deleted structural index for: ${relativePath} `)
       return
     }
-    
+
     // 语义模式：从向量存储删除
     if (this.config.mode === 'semantic' && this.vectorStore) {
       await this.vectorStore.deleteFile(filePath)
-      logger.index.info(`[IndexService] Deleted semantic index for: ${relativePath}`)
+      logger.index.info(`[IndexService] Deleted semantic index for: ${relativePath} `)
     }
   }
 
@@ -489,7 +554,7 @@ export class CodebaseIndexService {
 
         this.status.totalChunks += chunks.length
       } catch (e) {
-        logger.index.warn(`[IndexService] Failed to index ${filePath}:`, e)
+        logger.index.warn(`[IndexService] Failed to index ${filePath}: `, e)
       }
 
       processed++
@@ -546,6 +611,14 @@ export class CodebaseIndexService {
           case 'progress':
             this.status.indexedFiles = message.processed
             if (message.total) this.status.totalFiles = message.total
+            // 如果有 message 字段，这里可以更新 status.currentFile 或者专门的 message 字段
+            // 目前 IndexStatus 只有 error 字段比较接近文本信息，或者我们可以扩展 IndexStatus
+            // 暂时先用 log 记录，或者扩展 IndexStatus
+            // 更好的方式是扩展 IndexStatus 添加 message 字段
+            if (message.message) {
+              this.status.message = message.message
+              this.emitProgress(true) // Force emit on message change
+            }
             this.emitProgress()
             break
 
@@ -558,10 +631,35 @@ export class CodebaseIndexService {
             this.emitProgress()
             break
 
+          case 'update_result':
+            if (message.deleted) {
+              await this.vectorStore!.deleteFile(message.filePath)
+            } else if (message.chunks?.length > 0) {
+              await this.vectorStore!.upsertFile(message.filePath, message.chunks)
+            }
+            this.emitProgress()
+            break
+
+          case 'batch_update_result':
+            for (const res of message.results) {
+              if (res.deleted) {
+                await this.vectorStore!.deleteFile(res.filePath)
+              } else if (res.chunks?.length > 0) {
+                await this.vectorStore!.upsertFile(res.filePath, res.chunks)
+              }
+            }
+            this.emitProgress()
+            break
+
           case 'complete':
             this.status.isIndexing = false
             this.status.lastIndexedAt = Date.now()
+            this.status.message = undefined // Clear message
+            if (typeof message.totalChunks === 'number') {
+              this.status.totalChunks = message.totalChunks
+            }
             logger.index.info(`[IndexService] Semantic indexing complete: ${this.status.totalChunks} chunks`)
+            this.saveIndex() // Save state
             this.emitProgress(true)
             break
 
@@ -569,6 +667,7 @@ export class CodebaseIndexService {
             logger.index.error('[IndexService] Worker error:', message.error)
             this.status.error = message.error
             this.status.isIndexing = false
+            this.status.message = undefined // Clear message
             this.emitProgress(true)
             break
         }
@@ -629,13 +728,13 @@ export class CodebaseIndexService {
 
     // BM25 结果
     bm25Results.forEach((result, rank) => {
-      const key = `${result.filePath}:${result.startLine}`
+      const key = `${result.filePath}:${result.startLine} `
       scoreMap.set(key, { result, score: result.score + (bm25Results.length - rank) / bm25Results.length })
     })
 
     // 符号匹配加分
     for (const symbol of symbolResults) {
-      const key = `${symbol.filePath}:${symbol.startLine}`
+      const key = `${symbol.filePath}:${symbol.startLine} `
       const existing = scoreMap.get(key)
       if (existing) {
         existing.score += 0.5
@@ -654,12 +753,12 @@ export class CodebaseIndexService {
     const scoreMap = new Map<string, { result: SearchResult; score: number }>()
 
     results1.forEach((result, rank) => {
-      const key = `${result.filePath}:${result.startLine}`
+      const key = `${result.filePath}:${result.startLine} `
       scoreMap.set(key, { result, score: 0.7 / (k + rank + 1) })
     })
 
     results2.forEach((result, rank) => {
-      const key = `${result.filePath}:${result.startLine}`
+      const key = `${result.filePath}:${result.startLine} `
       const existing = scoreMap.get(key)
       if (existing) {
         existing.score += 0.3 / (k + rank + 1)
@@ -682,7 +781,7 @@ export class CodebaseIndexService {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       try {
         this.mainWindow.webContents.send('index:progress', this.status)
-      } catch {}
+      } catch { }
     }
   }
 }

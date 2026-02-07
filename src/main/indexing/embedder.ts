@@ -25,6 +25,7 @@ const PROVIDER_MODEL_PATTERNS: Record<string, RegExp> = {
   cohere: /^embed-/i,
   huggingface: /^sentence-transformers\//i,
   ollama: /^(nomic|llama|mxbai)/i,
+  transformers: /^Xenova\//i,
 }
 
 // 每个 provider 的速率限制配置（保守值，适用于免费账户）
@@ -35,6 +36,7 @@ const RATE_LIMITS: Record<EmbeddingProvider, { rpm: number; batchSize: number }>
   cohere: { rpm: 100, batchSize: 96 },
   huggingface: { rpm: 30, batchSize: 1 },
   ollama: { rpm: 1000, batchSize: 1 },
+  transformers: { rpm: 10000, batchSize: 32 }, // 本地运行，限制主要取决于 CPU
   custom: { rpm: 60, batchSize: 50 },
 }
 
@@ -78,7 +80,7 @@ export class EmbeddingService {
     const limits = RATE_LIMITS[config.provider]
     this.rateLimiter = new RateLimiter(limits.rpm)
     this.batchSize = limits.batchSize
-    
+
     // 如果提供了 LLM 配置且 provider 是 custom，则使用 LLM Embeddings
     if (llmConfig && config.provider === 'custom' && !config.baseUrl) {
       this.llmConfig = llmConfig
@@ -127,7 +129,7 @@ export class EmbeddingService {
   updateConfig(config: Partial<EmbeddingConfig>): void {
     const newProvider = config.provider || this.config.provider
     const providerChanged = config.provider && config.provider !== this.config.provider
-    
+
     // 如果切换了 provider 且没有指定新 model，使用新 provider 的默认 model
     const modelToUse = providerChanged ? config.model : (config.model || this.config.model)
     const newModel = this.resolveModel(newProvider, modelToUse)
@@ -212,7 +214,7 @@ export class EmbeddingService {
     if (this.useLLMEmbeddings && this.llmConfig) {
       return this.embedLLM(texts)
     }
-    
+
     switch (this.config.provider) {
       case 'jina':
         return this.embedJina(texts)
@@ -226,6 +228,8 @@ export class EmbeddingService {
         return this.embedHuggingFace(texts)
       case 'ollama':
         return this.embedOllama(texts)
+      case 'transformers':
+        return this.embedTransformers(texts)
       case 'custom':
         return this.embedCustom(texts)
       default:
@@ -459,14 +463,14 @@ export class EmbeddingService {
     }
 
     const data = (await response.json()) as { data: { embedding: number[]; index?: number }[] }
-    
+
     // 处理可能有 index 字段的情况
     if (data.data[0]?.index !== undefined) {
       return data.data
         .sort((a, b) => (a.index || 0) - (b.index || 0))
         .map(item => item.embedding)
     }
-    
+
     return data.data.map(item => item.embedding)
   }
 
@@ -490,6 +494,60 @@ export class EmbeddingService {
     }
 
     return result
+  }
+
+  /**
+   * Transformers.js 本地 Embedding
+   */
+  private static transformersPipeline: any = null
+  private static loadingPromise: Promise<any> | null = null
+
+  private async embedTransformers(texts: string[]): Promise<number[][]> {
+    const model = this.config.model || 'Xenova/all-MiniLM-L6-v2'
+
+    // 懒加载 pipeline (带竞态条件处理)
+    if (!EmbeddingService.transformersPipeline) {
+      if (!EmbeddingService.loadingPromise) {
+        EmbeddingService.loadingPromise = (async () => {
+          logger.index.info('[EmbeddingService] Loading local transformers model:', model)
+          try {
+            const { pipeline, env } = await import('@xenova/transformers')
+
+            // 配置缓存目录
+            if (this.config.cacheDir) {
+              env.cacheDir = this.config.cacheDir
+            }
+            env.allowLocalModels = false // 允许从 HF 下载
+
+            const pipe = await pipeline('feature-extraction', model, {
+              quantized: true,
+            })
+
+            EmbeddingService.transformersPipeline = pipe
+            logger.index.info('[EmbeddingService] Local model loaded successfully')
+            return pipe
+          } catch (e) {
+            logger.index.error('[EmbeddingService] Failed to load local model:', e)
+            EmbeddingService.loadingPromise = null // Reset on error
+            throw e
+          }
+        })()
+      }
+
+      await EmbeddingService.loadingPromise
+    }
+
+    const extractor = EmbeddingService.transformersPipeline
+    const results: number[][] = []
+
+    for (const text of texts) {
+      // 使用 mean pooling 和 normalization
+      const output = await extractor(text, { pooling: 'mean', normalize: true })
+      // output.data 是 Float32Array
+      results.push(Array.from(output.data))
+    }
+
+    return results
   }
 
   /**

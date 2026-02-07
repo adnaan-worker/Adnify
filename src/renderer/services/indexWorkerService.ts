@@ -15,6 +15,7 @@ export interface IndexProgress {
   chunksCount: number
   isComplete: boolean
   error?: string
+  message?: string
 }
 
 export interface IndexResult {
@@ -46,7 +47,7 @@ class IndexWorkerService {
       this.stopListener = api.index.onProgress((status: IndexStatus) => {
         this.handleStatusUpdate(status)
       })
-      
+
       this.isInitialized = true
       logger.index.info('[IndexWorkerService] Initialized (IPC)')
     } catch (error) {
@@ -138,6 +139,7 @@ class IndexWorkerService {
       chunksCount: status.totalChunks,
       isComplete: !status.isIndexing,
       error: status.error,
+      message: status.message,
     }
 
     this.progressCallbacks.forEach(cb => cb(progress))

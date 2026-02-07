@@ -46,6 +46,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
     { id: 'voyage', name: 'Voyage AI', description: language === 'zh' ? '免费 5000万 tokens' : 'Free 50M tokens' },
     { id: 'cohere', name: 'Cohere', description: language === 'zh' ? '免费 100次/分钟' : 'Free 100 calls/min' },
     { id: 'ollama', name: 'Ollama', description: language === 'zh' ? '本地运行' : 'Local' },
+    { id: 'transformers', name: 'Transformers.js', description: language === 'zh' ? '本地原生 (无需 Ollama)' : 'Local Native (No Ollama)' },
     { id: 'openai', name: 'OpenAI', description: language === 'zh' ? '付费' : 'Paid' },
     { id: 'custom', name: language === 'zh' ? '自定义' : 'Custom', description: 'OpenAI API compatible' },
   ]
@@ -240,7 +241,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
               </div>
             )}
 
-            {embeddingConfig.provider !== 'ollama' && (
+            {embeddingConfig.provider !== 'ollama' && embeddingConfig.provider !== 'transformers' && (
               <div>
                 <label className="text-sm font-medium text-text-primary block mb-2">API Key</label>
                 <div className="relative">
@@ -303,9 +304,9 @@ export function IndexSettings({ language }: IndexSettingsProps) {
           <div className="p-4 bg-surface/30 rounded-xl border border-border-subtle mb-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-text-primary">
-                {indexStatus.isIndexing
+                {indexStatus.message || (indexStatus.isIndexing
                   ? (language === 'zh' ? '索引中...' : 'Indexing...')
-                  : (language === 'zh' ? '就绪' : 'Ready')}
+                  : (language === 'zh' ? '就绪' : 'Ready'))}
               </span>
               <span className="text-xs px-2 py-0.5 rounded bg-surface border border-border-subtle">
                 {indexStatus.mode === 'structural'

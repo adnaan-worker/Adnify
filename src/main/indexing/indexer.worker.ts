@@ -23,7 +23,7 @@ type WorkerMessage =
  * Worker 响应消息类型
  */
 type WorkerResponse =
-  | { type: 'progress'; processed: number; total: number }
+  | { type: 'progress'; processed: number; total: number; message?: string }
   | { type: 'result'; chunks: IndexedChunk[]; processed: number; total: number }
   | { type: 'update_result'; filePath: string; chunks: IndexedChunk[]; deleted: boolean }
   | { type: 'batch_update_result'; results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> }
@@ -44,7 +44,7 @@ async function getChunkers(config: IndexConfig): Promise<{ regexChunker: Chunker
   } else {
     regexChunker.updateConfig(config)
   }
-  
+
   if (!tsChunker) {
     tsChunker = new TreeSitterChunker(config)
     await tsChunker.init()
@@ -110,6 +110,17 @@ async function handleIndex(
   const embedder = new EmbeddingService(config.embedding)
   const limit = pLimit(10)
 
+  // 预热 Embedder (触发模型加载) 并通知 UI
+  if (config.mode === 'semantic' && config.embedding.provider === 'transformers') {
+    postResponse({ type: 'progress', processed: 0, total: totalFiles, message: 'Loading embedding model (first run may take longer)...' })
+    try {
+      await embedder.embed('warmup')
+    } catch (e) {
+      logger.index.error('Failed to load model during warmup:', e)
+    }
+    postResponse({ type: 'progress', processed: 0, total: totalFiles, message: 'Indexing...' })
+  }
+
   let processedFiles = 0
   let totalChunks = 0
   let skippedFiles = 0
@@ -126,7 +137,7 @@ async function handleIndex(
   const tasks = files.map(filePath => limit(async () => {
     try {
       const content = await fs.readFile(filePath, 'utf-8')
-      
+
       if (content.length > config.maxFileSize) {
         processedFiles++
         return
@@ -145,7 +156,7 @@ async function handleIndex(
       }
 
       const chunks = await chunkFile(tsChunker, regexChunker, filePath, content, workspacePath)
-      
+
       if (chunks.length > 0) {
         const texts = chunks.map(c => prepareTextForEmbedding(c))
         const vectors = await embedder.embedBatch(texts)
@@ -157,9 +168,9 @@ async function handleIndex(
         }
         totalChunks += chunks.length
       }
-      
+
       processedFiles++
-      
+
       if (pendingChunks.length >= RESULT_BATCH_SIZE) {
         flushChunks()
       } else if (processedFiles % 10 === 0) {
@@ -279,17 +290,17 @@ async function chunkFile(
   workspacePath: string
 ): Promise<CodeChunk[]> {
   let chunks: CodeChunk[] = []
-  
+
   try {
     chunks = await tsChunker.chunkFile(filePath, content, workspacePath)
   } catch (e) {
     logger.index.warn(`Tree-sitter failed for ${filePath}, falling back to regex`)
   }
-  
+
   if (chunks.length === 0) {
     chunks = regexChunker.chunkFile(filePath, content, workspacePath)
   }
-  
+
   return chunks
 }
 
