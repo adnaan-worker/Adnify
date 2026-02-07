@@ -43,6 +43,9 @@ class EmotionDetectionEngine {
   private currentFile = ''
   private currentProject = ''
 
+  /** 处于 focused/flow 时未广播的周期计数，用于定期写入 history 以让 Focus Time 累积 */
+  private _focusRecordTicker = 0
+
   // 实时计数器（在采样间隔内累积，每次采样时写入指标块）
   private liveCounters = {
     keystrokes: 0,
@@ -195,7 +198,8 @@ class EmotionDetectionEngine {
         hourlyProductivity[hour]++
       }
     }
-    const mostProductiveHour = hourlyProductivity.indexOf(Math.max(...hourlyProductivity))
+    const maxCount = Math.max(...hourlyProductivity)
+    const mostProductiveHour = maxCount > 0 ? hourlyProductivity.indexOf(maxCount) : -1
 
     return { focusTime, flowSessions, frustrationEpisodes, breakRecommendations, mostProductiveHour }
   }
@@ -368,6 +372,7 @@ class EmotionDetectionEngine {
 
     if (shouldBroadcast) {
       this.recordHistory(detection)
+      this._focusRecordTicker = 0
       EventBus.emit({ type: 'emotion:changed', emotion: detection })
 
       logger.agent.info('[EmotionEngine] State:', detection.state,
@@ -376,6 +381,15 @@ class EmotionDetectionEngine {
         `factors=${allFactors.length}`,
         `ctx=${context ? 'yes' : 'no'}`,
       )
+    } else if (detection.state === 'focused' || detection.state === 'flow') {
+      // 持续处于专注/心流时也定期写入 history，否则 Focus Time 只依赖 currentStateFocusTime 容易“没反应”
+      this._focusRecordTicker++
+      if (this._focusRecordTicker >= 2) {
+        this._focusRecordTicker = 0
+        this.recordHistory(detection)
+      }
+    } else {
+      this._focusRecordTicker = 0
     }
   }
 

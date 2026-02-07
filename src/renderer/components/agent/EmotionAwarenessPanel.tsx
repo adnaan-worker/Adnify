@@ -12,71 +12,67 @@
  * - 智能浮窗（EmotionCompanion）
  */
 
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { 
   Brain, Zap, Activity, Frown, Sun, Eye, EyeOff,
-  Volume2, VolumeX, Palette, Clock, TrendingUp
+  Volume2, VolumeX, Palette, Clock, TrendingUp, Play, ChevronDown, ChevronRight
 } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { emotionDetectionEngine } from '@/renderer/agent/services/emotionDetectionEngine'
-import { EventBus } from '@/renderer/agent/core/EventBus'
 import type { EmotionState, EmotionHistory } from '@/renderer/agent/types/emotion'
 import { cn } from '@utils/cn'
 import { useStore } from '@store'
-import { t } from '@/renderer/i18n'
-
-const EMOTION_COLORS: Record<EmotionState, string> = {
-  focused: '#3b82f6',
-  frustrated: '#f97316',
-  tired: '#8b5cf6',
-  excited: '#22c55e',
-  bored: '#6b7280',
-  stressed: '#06b6d4',
-  flow: '#6366f1',
-  neutral: '#94a3b8',
-}
+import { t, type TranslationKey } from '@/renderer/i18n'
+import { useEmotionHistory } from '@/renderer/hooks/useEmotionHistory'
+import {
+  EMOTION_COLORS,
+  loadEmotionPanelSettings,
+  saveEmotionPanelSettings,
+  computeInflectionPoints,
+  type InflectionPoint,
+} from '@/renderer/agent/emotion'
 
 export const EmotionAwarenessPanel: React.FC = () => {
   const { language } = useStore()
-  const [history, setHistory] = useState<EmotionHistory[]>([])
-  const [settings, setSettings] = useState({
-    ambientGlow: true,
-    soundEnabled: false,
-    companionEnabled: true,
-    autoAdapt: true,
-    sensitivity: 'medium' as 'low' | 'medium' | 'high',
-  })
+  const { history, productivity } = useEmotionHistory()
+  const [settings, setSettings] = useState(loadEmotionPanelSettings)
 
-  useEffect(() => {
-    // 注意：emotionAdapter 和 emotionDetectionEngine 都在应用级别初始化
-    // 这里只负责订阅数据更新和显示
+  const inflectionPoints = useMemo(() => computeInflectionPoints(history), [history])
 
-    const updateHistory = () => {
-      setHistory(emotionDetectionEngine.getHistory(24 * 60 * 60 * 1000))
-    }
-
-    // 订阅情绪变化事件
-    const unsubscribe = EventBus.on('emotion:changed', updateHistory)
-
-    // 初始加载
-    updateHistory()
-
-    // 添加定时器，每30秒更新一次（即使状态没变化，Focus Time 也会累积）
-    const intervalId = setInterval(updateHistory, 30 * 1000)
-
-    return () => {
-      unsubscribe()
-      clearInterval(intervalId)
-    }
-  }, [])
-
-  // 使用 useMemo 让 productivity 随 history 更新而重新计算
-  const productivity = useMemo(() => {
-    return emotionDetectionEngine.getProductivityReport()
+  // 第一次打开 = 假面板：无数据或数据不足 15 分钟，只展示欢迎 + 骨架 + 灰态趋势 + 折叠设置
+  const WELCOME_DATA_SPAN_MS = 15 * 60 * 1000
+  const hasEnoughData = useMemo(() => {
+    if (history.length === 0) return false
+    const oldest = Math.min(...history.map(h => h.timestamp))
+    return Date.now() - oldest >= WELCOME_DATA_SPAN_MS
   }, [history])
+  const isWelcomeState = !hasEnoughData
+
+  const [preferencesOpen, setPreferencesOpen] = useState(false)
+  const [welcomeDismissed, setWelcomeDismissed] = useState(() =>
+    typeof localStorage !== 'undefined' && localStorage.getItem('adnify-emotion-welcome-dismissed') === '1'
+  )
+
+  const handleStartWorking = () => {
+    setWelcomeDismissed(true)
+    try {
+      localStorage.setItem('adnify-emotion-welcome-dismissed', '1')
+    } catch (_) {}
+  }
 
   const toggleSetting = (key: keyof typeof settings) => {
-    setSettings(prev => ({ ...prev, [key]: !prev[key] }))
+    setSettings(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      saveEmotionPanelSettings(next)
+      return next
+    })
+  }
+
+  const setSensitivity = (sensitivity: 'low' | 'medium' | 'high') => {
+    setSettings(prev => {
+      const next = { ...prev, sensitivity }
+      saveEmotionPanelSettings(next)
+      return next
+    })
   }
 
   return (
@@ -91,54 +87,70 @@ export const EmotionAwarenessPanel: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* === 今日概览 === */}
-        <div className="p-4">
-          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            {t('emotion.todayOverview', language)}
-          </h3>
-          <div className="grid grid-cols-2 gap-2">
-            <StatCard
-              label={t('emotion.focusTime', language)}
-              value={`${Math.round(productivity.focusTime)}m`}
-              icon={<Zap className="w-3.5 h-3.5" />}
-              color="#3b82f6"
-            />
-            <StatCard
-              label={t('emotion.flowSessions', language)}
-              value={productivity.flowSessions}
-              icon={<Activity className="w-3.5 h-3.5" />}
-              color="#6366f1"
-            />
-            <StatCard
-              label={t('emotion.frustrationEpisodes', language)}
-              value={productivity.frustrationEpisodes}
-              icon={<Frown className="w-3.5 h-3.5" />}
-              color="#f97316"
-            />
-            <StatCard
-              label={t('emotion.mostProductiveHour', language)}
-              value={`${productivity.mostProductiveHour}:00`}
-              icon={<Clock className="w-3.5 h-3.5" />}
-              color="#eab308"
-            />
-          </div>
-        </div>
+        {isWelcomeState ? (
+          /* ========== 假面板：第一次打开 或 已点「开始工作」但数据未满 15 分钟 ========== */
+          <>
+            {/* Today Overview → 欢迎块（点击「开始正常工作」后收起） */}
+            <div className="p-4">
+              <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
+                {t('emotion.todayOverview', language)}
+              </h3>
+              {!welcomeDismissed && (
+                <div className="rounded-lg border border-border bg-surface/30 p-4 space-y-3">
+                  <h4 className="text-sm font-medium text-text-primary">
+                    {t('emotion.welcome.title', language)}
+                  </h4>
+                  <p className="text-xs text-text-muted leading-relaxed">
+                    {t('emotion.welcome.subtitle', language)}
+                  </p>
+                  <div className="pt-1">
+                    <p className="text-[10px] text-text-muted mb-2">
+                      {t('emotion.welcome.ctaHint', language)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleStartWorking}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent/20 text-accent text-xs font-medium hover:bg-accent/30 transition-colors"
+                    >
+                      <Play className="w-3 h-3" />
+                      {t('emotion.welcome.cta', language)}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/* 卡片 → Skeleton */}
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <StatCardSkeleton key={i} />
+                ))}
+              </div>
+            </div>
 
-        {/* === 情绪趋势 === */}
-        <div className="px-4 pb-4">
-          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <TrendingUp className="w-3 h-3" />
-            {t('emotion.trend', language)}
-          </h3>
-          <EmotionTimeline history={history} />
-        </div>
+            {/* Emotion Trend → 灰态占位 */}
+            <div className="px-4 pb-4">
+              <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <TrendingUp className="w-3 h-3" />
+                {t('emotion.trend', language)}
+              </h3>
+              <div className="h-20 rounded-lg border border-border bg-surface/20 flex items-center justify-center">
+                <p className="text-[10px] text-text-muted">
+                  {t('emotion.welcome.trendPlaceholder', language)}
+                </p>
+              </div>
+            </div>
 
-        {/* === 设置 === */}
-        <div className="px-4 pb-4 border-t border-border pt-4">
-          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            {t('emotion.preferences', language)}
-          </h3>
-          <div className="space-y-3">
+            {/* Preferences → 折叠 */}
+            <div className="px-4 pb-4 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={() => setPreferencesOpen((o) => !o)}
+                className="w-full flex items-center justify-between text-left py-1 text-xs font-medium text-text-muted hover:text-text-primary transition-colors"
+              >
+                {t('emotion.preferences', language)}
+                {preferencesOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              </button>
+              {preferencesOpen && (
+                <div className="space-y-3 mt-3">
             <SettingToggle
               icon={<Palette className="w-3.5 h-3.5" />}
               label={t('emotion.ambientGlow', language)}
@@ -175,7 +187,7 @@ export const EmotionAwarenessPanel: React.FC = () => {
                 {(['low', 'medium', 'high'] as const).map(level => (
                   <button
                     key={level}
-                    onClick={() => setSettings(prev => ({ ...prev, sensitivity: level }))}
+                    onClick={() => setSensitivity(level)}
                     className={cn(
                       "px-2 py-0.5 rounded text-[10px] transition-colors",
                       settings.sensitivity === level
@@ -188,14 +200,125 @@ export const EmotionAwarenessPanel: React.FC = () => {
                 ))}
               </div>
             </div>
-          </div>
-        </div>
+                </div>
+              )}
+            </div>
+            </>
+          ) : (
+            /* ========== 完整面板：已有约 15 分钟数据 ========== */
+            <>
+              <div className="p-4">
+                <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
+                  {t('emotion.todayOverview', language)}
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <StatCard
+                    label={t('emotion.focusTime', language)}
+                    value={`${Math.round(productivity.focusTime)}m`}
+                    icon={<Zap className="w-3.5 h-3.5" />}
+                    color="#3b82f6"
+                  />
+                  <StatCard
+                    label={t('emotion.flowSessions', language)}
+                    value={productivity.flowSessions}
+                    icon={<Activity className="w-3.5 h-3.5" />}
+                    color="#6366f1"
+                  />
+                  <StatCard
+                    label={t('emotion.frustrationEpisodes', language)}
+                    value={productivity.frustrationEpisodes}
+                    icon={<Frown className="w-3.5 h-3.5" />}
+                    color="#f97316"
+                  />
+                  <StatCard
+                    label={t('emotion.mostProductiveHour', language)}
+                    value={productivity.mostProductiveHour >= 0 ? `${productivity.mostProductiveHour}:00` : '—'}
+                    icon={<Clock className="w-3.5 h-3.5" />}
+                    color="#eab308"
+                  />
+                </div>
+              </div>
+
+              <div className="px-4 pb-4">
+                <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <TrendingUp className="w-3 h-3" />
+                  {t('emotion.trend', language)}
+                </h3>
+                <EmotionTimeline history={history} inflectionPoints={inflectionPoints} />
+              </div>
+
+              <div className="px-4 pb-4 border-t border-border pt-4">
+                <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
+                  {t('emotion.preferences', language)}
+                </h3>
+                <div className="space-y-3">
+                  <SettingToggle
+                    icon={<Palette className="w-3.5 h-3.5" />}
+                    label={t('emotion.ambientGlow', language)}
+                    description={t('emotion.ambientGlowDesc', language)}
+                    enabled={settings.ambientGlow}
+                    onToggle={() => toggleSetting('ambientGlow')}
+                  />
+                  <SettingToggle
+                    icon={settings.companionEnabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    label={t('emotion.companion', language)}
+                    description={t('emotion.companionDesc', language)}
+                    enabled={settings.companionEnabled}
+                    onToggle={() => toggleSetting('companionEnabled')}
+                  />
+                  <SettingToggle
+                    icon={settings.soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                    label={t('emotion.soundEffects', language)}
+                    description={t('emotion.soundEffectsDesc', language)}
+                    enabled={settings.soundEnabled}
+                    onToggle={() => toggleSetting('soundEnabled')}
+                  />
+                  <SettingToggle
+                    icon={<Sun className="w-3.5 h-3.5" />}
+                    label={t('emotion.autoAdapt', language)}
+                    description={t('emotion.autoAdaptDesc', language)}
+                    enabled={settings.autoAdapt}
+                    onToggle={() => toggleSetting('autoAdapt')}
+                  />
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-xs text-text-secondary">{t('emotion.sensitivity', language)}</span>
+                    <div className="flex items-center gap-1">
+                      {(['low', 'medium', 'high'] as const).map(level => (
+                        <button
+                          key={level}
+                          onClick={() => setSensitivity(level)}
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[10px] transition-colors",
+                            settings.sensitivity === level
+                              ? 'bg-accent/15 text-accent'
+                              : 'text-text-muted hover:bg-white/5'
+                          )}
+                        >
+                          {level === 'low' ? t('emotion.sensitivityLow', language) : level === 'medium' ? t('emotion.sensitivityMedium', language) : t('emotion.sensitivityHigh', language)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
       </div>
     </div>
   )
 }
 
 // === 子组件 ===
+
+const StatCardSkeleton: React.FC = () => (
+  <div className="p-3 bg-surface/30 rounded-lg border border-white/5 animate-pulse">
+    <div className="flex items-center gap-1.5 mb-1.5">
+      <div className="w-3.5 h-3.5 rounded bg-white/10" />
+      <div className="h-3 w-16 rounded bg-white/10" />
+    </div>
+    <div className="h-5 w-10 rounded bg-white/10" />
+  </div>
+)
 
 const StatCard: React.FC<{
   label: string
@@ -246,7 +369,7 @@ const SettingToggle: React.FC<{
   </button>
 )
 
-const EmotionTimeline: React.FC<{ history: EmotionHistory[] }> = ({ history }) => {
+const EmotionTimeline: React.FC<{ history: EmotionHistory[]; inflectionPoints: InflectionPoint[] }> = ({ history, inflectionPoints }) => {
   const { language } = useStore()
   // 按30分钟窗口聚合，最近12小时
   const timelineData = useMemo(() => {
@@ -294,6 +417,23 @@ const EmotionTimeline: React.FC<{ history: EmotionHistory[] }> = ({ history }) =
     return windows
   }, [history])
 
+  // 拐点按 30 分钟窗口归到对应柱子：timelineData[0]=12h前，timelineData[23]=现在
+  const windowSizeMs = 30 * 60 * 1000
+  const latestTime = timelineData.length > 0 ? timelineData[timelineData.length - 1].time : Date.now()
+  const inflectionsByWindow = useMemo(() => {
+    const map: Record<number, InflectionPoint[]> = {}
+    const len = timelineData.length
+    inflectionPoints.forEach((ip) => {
+      const age = latestTime - ip.timestamp
+      const idx = len - 1 - Math.floor(age / windowSizeMs)
+      if (idx >= 0 && idx < len) {
+        if (!map[idx]) map[idx] = []
+        map[idx].push(ip)
+      }
+    })
+    return map
+  }, [inflectionPoints, timelineData, latestTime])
+
   if (history.length === 0) {
     return (
       <div className="h-20 flex items-center justify-center text-text-muted text-xs">
@@ -302,8 +442,40 @@ const EmotionTimeline: React.FC<{ history: EmotionHistory[] }> = ({ history }) =
     )
   }
 
+  const stateLabelKey = (s: EmotionState): TranslationKey => `emotion.state.${s}` as TranslationKey
+  const renderInflectionTooltip = (ip: InflectionPoint) => {
+    if (ip.type === 'prolonged') {
+      const stateLabel = t(stateLabelKey(ip.state), language)
+      return t('emotion.inflection.prolonged', language, { duration: ip.durationMin, stateLabel })
+    }
+    if (ip.type === 'interrupted') return t('emotion.inflection.flowInterrupted', language)
+    return t('emotion.inflection.systemIntervention', language)
+  }
+
   return (
     <div className="space-y-1">
+      {/* 拐点标记行：小点 + tooltip */}
+      <div className="flex gap-0.5 h-4 items-center justify-start">
+        {timelineData.map((_, i) => {
+          const inflections = inflectionsByWindow[i] || []
+          if (inflections.length === 0) return <div key={i} className="flex-1" />
+          return (
+            <div key={i} className="flex-1 flex justify-center relative group/marker">
+              <div
+                className="w-1.5 h-1.5 rounded-full bg-amber-400/90 shrink-0 cursor-help"
+                title={inflections.map(renderInflectionTooltip).join('\n')}
+              />
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover/marker:block z-20 pointer-events-none">
+                <div className="bg-background-secondary border border-white/10 rounded px-2 py-1.5 text-[9px] text-text-secondary shadow-lg max-w-[180px]">
+                  {inflections.map((ip, j) => (
+                    <div key={j}>{renderInflectionTooltip(ip)}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
       {/* 时间轴条形图 */}
       <div className="flex gap-0.5 h-8 items-end">
         {timelineData.map((window, i) => {

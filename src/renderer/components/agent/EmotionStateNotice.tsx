@@ -18,17 +18,7 @@ import { EventBus } from '@/renderer/agent/core/EventBus'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
 import { useStore } from '@store'
 import { t } from '@/renderer/i18n'
-
-const EMOTION_META: Record<EmotionState, { emoji: string; color: string; translationKey: string }> = {
-  focused:    { emoji: '⚡', color: '#3b82f6', translationKey: 'emotion.state.focused' },
-  frustrated: { emoji: '😤', color: '#f97316', translationKey: 'emotion.state.frustrated' },
-  tired:      { emoji: '😴', color: '#8b5cf6', translationKey: 'emotion.state.tired' },
-  excited:    { emoji: '🚀', color: '#22c55e', translationKey: 'emotion.state.excited' },
-  bored:      { emoji: '😐', color: '#6b7280', translationKey: 'emotion.state.bored' },
-  stressed:   { emoji: '😰', color: '#06b6d4', translationKey: 'emotion.state.stressed' },
-  flow:       { emoji: '✨', color: '#6366f1', translationKey: 'emotion.state.flow' },
-  neutral:    { emoji: '💻', color: '#94a3b8', translationKey: 'emotion.state.neutral' },
-}
+import { EMOTION_META } from '@/renderer/agent/emotion'
 
 // 最短通知间隔
 const MIN_NOTICE_INTERVAL = 30_000  // 30 秒

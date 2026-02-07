@@ -6,66 +6,33 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { EventBus } from '@/renderer/agent/core/EventBus'
 import { emotionDetectionEngine } from '@/renderer/agent/services/emotionDetectionEngine'
-import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
 import { useStore } from '@store'
 import { t } from '@/renderer/i18n'
 import { Sparkles } from 'lucide-react'
+import { useEmotionState } from '@/renderer/hooks/useEmotionState'
+import { EMOTION_META, EMOTION_STATUS_MESSAGE_KEYS } from '@/renderer/agent/emotion'
 
-const EMOTION_META: Record<EmotionState, {
-  color: string
-  emoji: string
-  pulseSpeed: number  // 呼吸速度，越快越激烈
-  translationKey: string
-}> = {
-  focused:    { color: '#3b82f6', emoji: '⚡', pulseSpeed: 2.5, translationKey: 'emotion.state.focused' },
-  frustrated: { color: '#f97316', emoji: '😤', pulseSpeed: 1.2, translationKey: 'emotion.state.frustrated' },
-  tired:      { color: '#8b5cf6', emoji: '😴', pulseSpeed: 4.0, translationKey: 'emotion.state.tired' },
-  excited:    { color: '#22c55e', emoji: '🚀', pulseSpeed: 0.8, translationKey: 'emotion.state.excited' },
-  bored:      { color: '#6b7280', emoji: '😐', pulseSpeed: 3.5, translationKey: 'emotion.state.bored' },
-  stressed:   { color: '#06b6d4', emoji: '😰', pulseSpeed: 1.0, translationKey: 'emotion.state.stressed' },
-  flow:       { color: '#6366f1', emoji: '✨', pulseSpeed: 2.0, translationKey: 'emotion.state.flow' },
-  neutral:    { color: '#94a3b8', emoji: '💻', pulseSpeed: 3.0, translationKey: 'emotion.state.neutral' },
-}
-
-const EMOTION_MESSAGES: Record<EmotionState, string[]> = {
-  focused: ['emotion.status.focused.1', 'emotion.status.focused.2', 'emotion.status.focused.3'],
-  frustrated: ['emotion.status.frustrated.1', 'emotion.status.frustrated.2', 'emotion.status.frustrated.3'],
-  tired: ['emotion.status.tired.1', 'emotion.status.tired.2', 'emotion.status.tired.3'],
-  excited: ['emotion.status.excited.1', 'emotion.status.excited.2', 'emotion.status.excited.3'],
-  bored: ['emotion.status.bored.1', 'emotion.status.bored.2', 'emotion.status.bored.3'],
-  stressed: ['emotion.status.stressed.1', 'emotion.status.stressed.2', 'emotion.status.stressed.3'],
-  flow: ['emotion.status.flow.1', 'emotion.status.flow.2', 'emotion.status.flow.3'],
-  neutral: ['emotion.status.neutral.1', 'emotion.status.neutral.2', 'emotion.status.neutral.3'],
-}
+const EMOTION_MESSAGES = EMOTION_STATUS_MESSAGE_KEYS
 
 export const EmotionStatusIndicator: React.FC = () => {
   const { language } = useStore()
-  const [emotion, setEmotion] = useState<EmotionDetection | null>(null)
+  const emotion = useEmotionState()
   const [isHovered, setIsHovered] = useState(false)
   const [justChanged, setJustChanged] = useState(false)
   const [messageIndex, setMessageIndex] = useState(0)
 
   useEffect(() => {
-    // 初始化检测引擎
     emotionDetectionEngine.start()
-
-    const unsubscribe = EventBus.on('emotion:changed', (event) => {
-      setEmotion(event.emotion)
-      // 状态变化时闪烁提示
-      setJustChanged(true)
-      setMessageIndex(0) // 重置消息索引
-      setTimeout(() => setJustChanged(false), 3000)
-    })
-
-    // 获取初始状态
-    setEmotion(emotionDetectionEngine.getCurrentState())
-
-    return () => {
-      unsubscribe()
-    }
   }, [])
+
+  useEffect(() => {
+    if (!emotion) return
+    setJustChanged(true)
+    setMessageIndex(0)
+    const t = setTimeout(() => setJustChanged(false), 3000)
+    return () => clearTimeout(t)
+  }, [emotion?.state])
 
   // 轮播消息
   useEffect(() => {

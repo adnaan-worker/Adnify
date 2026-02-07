@@ -411,6 +411,11 @@ export const en = {
   'emotion.sensitivityMedium': 'Medium',
   'emotion.sensitivityHigh': 'High',
   'emotion.noData': 'No data yet, trends will be recorded after you start working',
+  'emotion.welcome.title': '👋 Welcome to Emotion Awareness',
+  'emotion.welcome.subtitle': 'This feature learns how you work — not how you feel.',
+  'emotion.welcome.cta': 'Start working normally',
+  'emotion.welcome.ctaHint': "We'll show insights after ~15 minutes.",
+  'emotion.welcome.trendPlaceholder': 'Your emotion trend will appear here after you work for a while.',
   'emotion.timeAgo12h': '12h ago',
   'emotion.timeAgo6h': '6h ago',
   'emotion.timeNow': 'Now',
@@ -483,4 +488,10 @@ export const en = {
   'emotion.status.neutral.1': 'Ready to code 💻',
   'emotion.status.neutral.2': 'Let\'s build',
   'emotion.status.neutral.3': 'Steady progress',
+  'emotion.status.clickToChange': 'Click to change message',
+
+  // Emotion Trend — inflection markers (拐点标记)
+  'emotion.inflection.prolonged': 'Here: {duration} min of {stateLabel}',
+  'emotion.inflection.flowInterrupted': 'Flow / focus interrupted',
+  'emotion.inflection.systemIntervention': 'System intervened here',
 } as const

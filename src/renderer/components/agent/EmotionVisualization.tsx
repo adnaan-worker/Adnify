@@ -7,21 +7,11 @@ import React from 'react'
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
 import { cn } from '@utils/cn'
+import { EMOTION_COLORS } from '@/renderer/agent/emotion'
 
 interface EmotionVisualizationProps {
   emotion: EmotionDetection
   history: Array<{ timestamp: number; state: EmotionState; intensity: number }>
-}
-
-const EMOTION_COLORS: Record<EmotionState, string> = {
-  focused: '#3b82f6',      // blue
-  frustrated: '#f97316',    // orange
-  tired: '#8b5cf6',         // purple
-  excited: '#22c55e',       // green
-  bored: '#6b7280',         // gray
-  stressed: '#06b6d4',      // cyan
-  flow: '#6366f1',          // indigo
-  neutral: '#94a3b8',       // slate
 }
 
 export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({

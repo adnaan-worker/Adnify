@@ -6,26 +6,26 @@
  * 放置在编辑器容器内，使用 pointer-events-none
  */
 
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { EventBus } from '@/renderer/agent/core/EventBus'
-import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
+import type { EmotionState } from '@/renderer/agent/types/emotion'
+import { useEmotionState } from '@/renderer/hooks/useEmotionState'
+import { EMOTION_COLORS } from '@/renderer/agent/emotion'
 
 const GLOW_CONFIG: Record<EmotionState, {
-  color: string
-  opacity: number       // 基础透明度
-  spread: number        // 光晕扩散范围（px）
-  animated: boolean     // 是否有动画
-  corners: ('tl' | 'tr' | 'bl' | 'br')[]  // 光晕出现的角落
+  opacity: number
+  spread: number
+  animated: boolean
+  corners: ('tl' | 'tr' | 'bl' | 'br')[]
 }> = {
-  focused:    { color: '#3b82f6', opacity: 0.06,  spread: 200, animated: false, corners: ['tl', 'br'] },
-  frustrated: { color: '#f97316', opacity: 0.08,  spread: 250, animated: true,  corners: ['tl', 'tr', 'bl', 'br'] },
-  tired:      { color: '#8b5cf6', opacity: 0.05,  spread: 300, animated: true,  corners: ['bl', 'br'] },
-  excited:    { color: '#22c55e', opacity: 0.07,  spread: 180, animated: true,  corners: ['tl', 'tr'] },
-  bored:      { color: '#6b7280', opacity: 0.03,  spread: 150, animated: false, corners: ['br'] },
-  stressed:   { color: '#06b6d4', opacity: 0.07,  spread: 220, animated: true,  corners: ['tl', 'tr', 'bl', 'br'] },
-  flow:       { color: '#6366f1', opacity: 0.05,  spread: 250, animated: true,  corners: ['tl', 'br'] },
-  neutral:    { color: '#94a3b8', opacity: 0,     spread: 0,   animated: false, corners: [] },
+  focused:    { opacity: 0.06,  spread: 200, animated: false, corners: ['tl', 'br'] },
+  frustrated: { opacity: 0.08,  spread: 250, animated: true,  corners: ['tl', 'tr', 'bl', 'br'] },
+  tired:      { opacity: 0.05,  spread: 300, animated: true,  corners: ['bl', 'br'] },
+  excited:    { opacity: 0.07,  spread: 180, animated: true,  corners: ['tl', 'tr'] },
+  bored:      { opacity: 0.03,  spread: 150, animated: false, corners: ['br'] },
+  stressed:   { opacity: 0.07,  spread: 220, animated: true,  corners: ['tl', 'tr', 'bl', 'br'] },
+  flow:       { opacity: 0.05,  spread: 250, animated: true,  corners: ['tl', 'br'] },
+  neutral:    { opacity: 0,     spread: 0,   animated: false, corners: [] },
 }
 
 const cornerPositions = {
@@ -40,17 +40,10 @@ const cornerPositions = {
 }
 
 export const EmotionAmbientGlow: React.FC = () => {
-  const [emotion, setEmotion] = useState<EmotionDetection | null>(null)
-
-  useEffect(() => {
-    const unsubscribe = EventBus.on('emotion:changed', (event) => {
-      setEmotion(event.emotion)
-    })
-    return () => unsubscribe()
-  }, [])
+  const emotion = useEmotionState()
 
   const state = emotion?.state || 'neutral'
-  const config = GLOW_CONFIG[state]
+  const config = { ...GLOW_CONFIG[state], color: EMOTION_COLORS[state] }
   const intensity = emotion?.intensity ?? 0
 
   // neutral 或 0 强度不渲染

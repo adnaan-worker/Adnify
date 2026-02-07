@@ -310,6 +310,9 @@ class EmotionAdapter {
       return
     }
 
+    // 环境音效已禁用：启动时先停掉任何可能残留的背景音
+    this.stopAmbientSound()
+
     // 订阅情绪变化事件
     this.unsubscribeEmotionChanged = EventBus.on('emotion:changed', (event) => {
       if (event.emotion) {
@@ -465,11 +468,9 @@ class EmotionAdapter {
   /** 环境音效功能已禁用，暂不开发 */
   private readonly AMBIENT_SOUND_ENABLED = false
 
-  private applySoundAdaptation(sound: EnvironmentAdaptation['sound']): void {
+  private applySoundAdaptation(_sound: EnvironmentAdaptation['sound']): void {
     this.stopAmbientSound()
-    if (!this.AMBIENT_SOUND_ENABLED) return
-    if (!sound.enabled || !sound.type || sound.type === 'none') return
-    this.playAmbientSound(sound.type, sound.volume)
+    // 环境音效已关闭，不再调用任何播放逻辑
   }
 
   private setupBreakReminders(
@@ -568,9 +569,10 @@ class EmotionAdapter {
   }
 
   /**
-   * 加载并播放网络音频
+   * 加载并播放网络音频（环境音效已关闭，此方法不再播放）
    */
   private async loadAndPlayAudio(url: string, volume: number): Promise<void> {
+    if (!this.AMBIENT_SOUND_ENABLED) return
     try {
       // 使用 HTMLAudioElement 播放（更简单，支持网络资源）
       const audio = new Audio(url)
@@ -615,10 +617,10 @@ class EmotionAdapter {
   }
 
   /**
-   * 回退方案：如果网络音频加载失败，使用生成的音效
+   * 回退方案：如果网络音频加载失败，使用生成的音效（环境音效已关闭，此方法不再播放）
    */
   private playFallbackSound(volume: number): void {
-    // 使用 Web Audio API 生成简单的环境音
+    if (!this.AMBIENT_SOUND_ENABLED) return
     try {
       if (!this.audioContext) {
         this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -656,34 +658,11 @@ class EmotionAdapter {
   }
 
   private async playAmbientSound(
-    type: 'focus' | 'relax' | 'energize' | 'none',
-    volume: number
+    _type: 'focus' | 'relax' | 'energize' | 'none',
+    _volume: number
   ): Promise<void> {
-    if (!type || type === 'none') {
-      this.stopAmbientSound()
-      return
-    }
-
-    // 先停掉之前的音频
+    // 环境音效已关闭：只停止、不播放
     this.stopAmbientSound()
-
-    // 获取对应类型的音乐 URL
-    const musicUrl = this.getMusicUrl(type)
-    
-    if (musicUrl) {
-      // 尝试加载网络音频
-      await this.loadAndPlayAudio(musicUrl, volume)
-    } else {
-      // 如果没有配置 URL，直接使用回退方案（生成的白噪音）
-      logger.agent.info(`[EmotionAdapter] No music URL configured for ${type}, using fallback sound`)
-      this.playFallbackSound(volume)
-    }
-
-    // 30 分钟后自动停止
-    const t = setTimeout(() => {
-      this.stopAmbientSound()
-    }, 30 * 60 * 1000)
-    this.pendingTimeouts.push(t)
   }
 
   private stopAmbientSound(): void {

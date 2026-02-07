@@ -411,6 +411,11 @@ export const zh = {
   'emotion.sensitivityMedium': '中',
   'emotion.sensitivityHigh': '高',
   'emotion.noData': '暂无数据，开始工作后将记录趋势',
+  'emotion.welcome.title': '👋 欢迎使用情绪感知',
+  'emotion.welcome.subtitle': '这里学习的是你的工作方式，而不是你的感受。',
+  'emotion.welcome.cta': '正常开始工作',
+  'emotion.welcome.ctaHint': '约 15 分钟后会显示洞察。',
+  'emotion.welcome.trendPlaceholder': '工作一段时间后，情绪趋势会显示在这里。',
   'emotion.timeAgo12h': '12h ago',
   'emotion.timeAgo6h': '6h ago',
   'emotion.timeNow': 'Now',
@@ -483,4 +488,10 @@ export const zh = {
   'emotion.status.neutral.1': '准备编码 💻',
   'emotion.status.neutral.2': '开始构建',
   'emotion.status.neutral.3': '稳步前进',
+  'emotion.status.clickToChange': '点击切换文案',
+
+  // 情绪趋势 — 拐点标记
+  'emotion.inflection.prolonged': '这里连续 {duration} 分钟 {stateLabel}',
+  'emotion.inflection.flowInterrupted': 'Flow/专注 被打断',
+  'emotion.inflection.systemIntervention': '这里系统主动介入',
 } as const
