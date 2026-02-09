@@ -240,10 +240,12 @@ MCP tools are prefixed with \`mcp_<server>__<tool>\`. They connect to external s
 - Do NOT make multiple MCP tool calls in parallel
 - Wait for each MCP call to complete before making the next one
 - Batch when the tool supports it
-- Handle failures gracefully - MCP tools may fail due to network/server issues`
+- Handle failures gracefully - MCP tools may fail due to network/server issues
+
+\`\`\`
 mcp_server__get_data items=["a", "b", "c"]  // If batch supported
 // OR make calls sequentially, waiting for each to complete
-\`\`\``
+\`\`\`\`;`
 
 // BASE_SYSTEM_INFO 不再需要，由 PromptBuilder 动态构建
 
