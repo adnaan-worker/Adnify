@@ -200,24 +200,17 @@ export const OUTPUT_FORMAT = `## Output Format
  * 工具使用指南 v2.0
  * 参考：Cursor Agent 2.0, Claude Code 2.0, Windsurf Wave 11
  * 
- * 注意：每个工具的详细使用规则已在工具定义的 description 中
- * 这里只保留通用规则和 edit_file 的详细指南
+ * 只保留通用规则，具体工具的使用方法在各工具的 description 中
  */
 export const TOOL_GUIDELINES = `## Tool Usage Guidelines
 
-### 🚫 FORBIDDEN PATTERNS (WILL BE REJECTED)
-
-**The following patterns are STRICTLY FORBIDDEN:**
+### 🚫 FORBIDDEN PATTERNS
 
 1. **Fragmented Operations** - Making multiple similar calls instead of batching
-2. **Redundant Operations** - Reading/searching what you already have
+2. **Redundant Operations** - Reading/searching what you already have  
 3. **Using bash for file ops** - cat/grep/sed instead of dedicated tools
 
-**If you find yourself about to make 3+ similar tool calls, STOP and reconsider.**
-
 ### ⚠️ CRITICAL RULES
-
-**You are an autonomous agent - keep working until the task is FULLY resolved.**
 
 1. **ACTION OVER DESCRIPTION**
    - DO NOT describe what you would do - USE TOOLS to actually do it
@@ -229,39 +222,11 @@ export const TOOL_GUIDELINES = `## Tool Usage Guidelines
 
 3. **NEVER GUESS FILE CONTENT**
    - If unsure, USE TOOLS to read/search
-   - Your edits must be based on actual file content
-
-### edit_file Tool - Detailed Guide
-
-The edit_file tool replaces \`old_string\` with \`new_string\`. It uses smart matching.
-
-**CRITICAL REQUIREMENTS:**
-1. \`old_string\` must UNIQUELY identify the location
-2. Include 3-5 lines of context BEFORE and AFTER
-3. Match EXACTLY including all whitespace
-
-**Good Example:**
-\`\`\`
-old_string: "function calculateTotal(items) {
-  let total = 0;
-  for (const item of items) {
-    total += item.price;"
-
-new_string: "function calculateTotal(items: Item[]): number {
-  let total = 0;
-  for (const item of items) {
-    total += item.price * item.quantity;"
-\`\`\`
-
-**If edit_file fails:**
-1. Read the file again with read_file
-2. Check exact whitespace and indentation
-3. Include MORE surrounding context
 
 ### Parallel Tool Calls
 
 When multiple independent operations are needed, batch them:
-- Reading multiple files → use read_multiple_files
+- Reading multiple files → use read_file with array
 - Searching different patterns → combine with |
 - Multiple edits to DIFFERENT files → parallel calls
 
@@ -271,33 +236,11 @@ DO NOT make parallel edits to the SAME file.
 
 MCP tools are prefixed with \`mcp_<server>__<tool>\`. They connect to external services.
 
-**⚠️ CRITICAL RULES FOR MCP TOOLS:**
-
-1. **ONE CALL AT A TIME** - Do NOT make multiple MCP tool calls in parallel
-   - MCP servers may have rate limits or sequential dependencies
-   - Wait for each MCP call to complete before making the next one
-
-2. **BATCH WHEN POSSIBLE** - If an MCP tool supports batch operations, use them
-   - Check tool description for batch/multiple item support
-   - Prefer one call with multiple items over multiple calls with single items
-
-3. **AVOID REDUNDANT CALLS** - Don't call the same MCP tool repeatedly for similar data
-   - Cache results mentally and reuse them
-   - If you need the same data again, reference your previous result
-
-4. **HANDLE FAILURES GRACEFULLY** - MCP tools may fail due to network/server issues
-   - If a call fails, wait briefly before retrying
-   - After 2 failures, inform the user and suggest alternatives
-
-**❌ WRONG (Fragmented MCP calls):**
-\`\`\`
-mcp_server__get_data item="a"
-mcp_server__get_data item="b"
-mcp_server__get_data item="c"  // 3 separate calls!
-\`\`\`
-
-**✅ CORRECT (Batched or sequential):**
-\`\`\`
+**⚠️ CRITICAL: ONE CALL AT A TIME**
+- Do NOT make multiple MCP tool calls in parallel
+- Wait for each MCP call to complete before making the next one
+- Batch when the tool supports it
+- Handle failures gracefully - MCP tools may fail due to network/server issues`
 mcp_server__get_data items=["a", "b", "c"]  // If batch supported
 // OR make calls sequentially, waiting for each to complete
 \`\`\``

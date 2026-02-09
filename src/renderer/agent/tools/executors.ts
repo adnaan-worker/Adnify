@@ -96,7 +96,36 @@ function resolvePath(p: unknown, workspacePath: string | null, allowRead = false
 
 export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
     async read_file(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
+        // 支持单个文件或多个文件
+        const pathArg = args.path
+        const paths = Array.isArray(pathArg) ? pathArg : [pathArg as string]
+        
+        // 如果是多个文件，使用并行读取
+        if (paths.length > 1) {
+            const pLimit = (await import('p-limit')).default
+            const limit = pLimit(5)
+
+            const results = await Promise.all(
+                paths.map(p => limit(async () => {
+                    try {
+                        const validPath = resolvePath(p, ctx.workspacePath, true)
+                        const content = await api.file.read(validPath)
+                        if (content !== null) {
+                            fileCacheService.markFileAsRead(validPath, content)
+                            return `\n--- File: ${p} ---\n${content}\n`
+                        }
+                        return `\n--- File: ${p} ---\n[File not found]\n`
+                    } catch (e: unknown) {
+                        return `\n--- File: ${p} ---\n[Error: ${(e as Error).message}]\n`
+                    }
+                }))
+            )
+
+            return { success: true, result: results.join('') }
+        }
+
+        // 单个文件读取（原有逻辑）
+        const path = resolvePath(paths[0], ctx.workspacePath, true)
         const content = await api.file.read(path)
         if (content === null) return { success: false, result: '', error: `File not found: ${path}` }
 
@@ -122,19 +151,23 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
     async list_directory(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath, true)
-        const items = await api.file.readDir(path)
-        if (!items) return { success: false, result: '', error: `Directory not found: ${path}` }
-        const result = items.map(item => `${item.isDirectory ? '📁' : '📄'} ${item.name}`).join('\n')
-        logger.agent.info(`[list_directory] Path: ${path}, Items: ${items.length}, Result length: ${result.length}`)
-        return { success: true, result: result || 'Empty directory' }
-    },
+        const recursive = args.recursive as boolean | undefined
+        const maxDepth = (args.max_depth as number) || 3
 
-    async get_dir_tree(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
-        const tree = await buildDirTree(path, (args.max_depth as number) || 3)
-        const result = formatDirTree(tree)
-        logger.agent.info(`[get_dir_tree] Path: ${path}, Tree nodes: ${tree.length}, Result length: ${result.length}`)
-        return { success: true, result: result || 'Empty directory tree' }
+        if (recursive) {
+            // 递归模式（原 get_dir_tree）
+            const tree = await buildDirTree(path, maxDepth)
+            const result = formatDirTree(tree)
+            logger.agent.info(`[list_directory] Recursive: Path: ${path}, Tree nodes: ${tree.length}, Result length: ${result.length}`)
+            return { success: true, result: result || 'Empty directory tree' }
+        } else {
+            // 非递归模式（原 list_directory）
+            const items = await api.file.readDir(path)
+            if (!items) return { success: false, result: '', error: `Directory not found: ${path}` }
+            const result = items.map(item => `${item.isDirectory ? '📁' : '📄'} ${item.name}`).join('\n')
+            logger.agent.info(`[list_directory] Non-recursive: Path: ${path}, Items: ${items.length}, Result length: ${result.length}`)
+            return { success: true, result: result || 'Empty directory' }
+        }
     },
 
     async search_files(args, ctx) {
@@ -189,105 +222,120 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         return { success: true, result: results.slice(0, 50).map(r => `${r.path}:${r.line}: ${r.text.trim()}`).join('\n') || 'No matches found' }
     },
 
-    async read_multiple_files(args, ctx) {
-        const paths = args.paths as string[]
-        const pLimit = (await import('p-limit')).default
-        const limit = pLimit(5) // 最多 5 个并发读取
-
-        const results = await Promise.all(
-            paths.map(p => limit(async () => {
-                try {
-                    const validPath = resolvePath(p, ctx.workspacePath, true)
-                    const content = await api.file.read(validPath)
-                    if (content !== null) {
-                        fileCacheService.markFileAsRead(validPath, content)
-                        return `\n--- File: ${p} ---\n${content}\n`
-                    }
-                    return `\n--- File: ${p} ---\n[File not found]\n`
-                } catch (e: unknown) {
-                    return `\n--- File: ${p} ---\n[Error: ${(e as Error).message}]\n`
-                }
-            }))
-        )
-
-        return { success: true, result: results.join('') }
-    },
-
     async edit_file(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath)
         const originalContent = await api.file.read(path)
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
 
-        const oldString = args.old_string as string
-        const newString = args.new_string as string
-        const replaceAll = args.replace_all as boolean | undefined
+        // 判断使用哪种模式
+        const hasStringMode = args.old_string || args.new_string
+        const hasLineMode = args.start_line || args.end_line || args.content
 
-        // 使用智能替换（支持多种容错策略）
-        const normalizedContent = normalizeLineEndings(originalContent)
-        const normalizedOld = normalizeLineEndings(oldString)
-        const normalizedNew = normalizeLineEndings(newString)
+        if (hasLineMode) {
+            // 行模式（原 replace_file_content）
+            const startLine = args.start_line as number
+            const endLine = args.end_line as number
+            const content = args.content as string
 
-        const result = smartReplace(normalizedContent, normalizedOld, normalizedNew, replaceAll)
-
-        if (!result.success) {
-            // 使用增强的错误分析
-            const { findSimilarContent, analyzeEditError, generateFixSuggestion } = await import('../utils/EditRetryStrategy')
-
-            const errorType = analyzeEditError(result.error || '')
-            const hasCache = fileCacheService.hasValidCache(path)
-
-            // 查找相似内容
-            const similar = findSimilarContent(normalizedContent, normalizedOld)
-
-            // 生成详细的修复建议
-            const suggestion = generateFixSuggestion(errorType, {
-                path,
-                oldString: normalizedOld,
-                similarContent: similar.similarText,
-                lineNumber: similar.lineNumber,
-            })
-
-            let errorMsg = result.error || 'Replace failed'
-
-            // 添加上下文信息
-            if (similar.found) {
-                errorMsg += `\n\n📍 Similar content found at line ${similar.lineNumber} (${Math.round((similar.similarity || 0) * 100)}% match)`
+            // 验证缓存
+            if (!fileCacheService.hasValidCache(path)) {
+                logger.agent.warn(`[edit_file] File ${path} not in cache, line numbers may be inaccurate`)
             }
 
-            if (!hasCache) {
-                errorMsg += '\n\n⚠️ File was not read before editing. Always use read_file first.'
+            if (originalContent === '') {
+                const success = await api.file.write(path, content)
+                if (success) fileCacheService.markFileAsRead(path, content)
+                return success
+                    ? { success: true, result: 'File written (was empty)', meta: { filePath: path, oldContent: '', newContent: content, linesAdded: content.split('\n').length, linesRemoved: 0 } }
+                    : { success: false, result: '', error: 'Failed to write file' }
             }
 
-            errorMsg += `\n\n💡 Suggestion: ${suggestion}`
+            const lines = originalContent.split('\n')
 
-            return { success: false, result: '', error: errorMsg }
-        }
+            // 验证行号范围
+            if (startLine < 1 || endLine > lines.length || startLine > endLine) {
+                return {
+                    success: false,
+                    result: '',
+                    error: `Invalid line range: ${startLine}-${endLine}. File has ${lines.length} lines. Use read_file to verify line numbers.`
+                }
+            }
 
-        const newContent = result.newContent!
-        const writeSuccess = await api.file.write(path, newContent)
-        if (!writeSuccess) return { success: false, result: '', error: 'Failed to write file' }
+            lines.splice(startLine - 1, endLine - startLine + 1, ...content.split('\n'))
+            const newContent = lines.join('\n')
 
-        // 更新文件缓存
-        fileCacheService.markFileAsRead(path, newContent)
+            const success = await api.file.write(path, newContent)
+            if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
-        // 通知 LSP 并等待诊断
-        await notifyLspAfterWrite(path)
+            fileCacheService.markFileAsRead(path, newContent)
+            await notifyLspAfterWrite(path)
 
-        const lineChanges = calculateLineChanges(originalContent, newContent)
+            const lineChanges = calculateLineChanges(originalContent, newContent)
+            return { success: true, result: 'File updated successfully (line mode)', meta: { filePath: path, oldContent: originalContent, newContent, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
+        } else {
+            // 字符串模式（原 edit_file）
+            const oldString = args.old_string as string
+            const newString = args.new_string as string
+            const replaceAll = args.replace_all as boolean | undefined
 
-        // 记录使用的匹配策略（用于调试）
-        const strategyInfo = result.strategy !== 'exact' ? ` (matched via ${result.strategy} strategy)` : ''
+            const normalizedContent = normalizeLineEndings(originalContent)
+            const normalizedOld = normalizeLineEndings(oldString)
+            const normalizedNew = normalizeLineEndings(newString)
 
-        return {
-            success: true,
-            result: `File updated successfully${strategyInfo}`,
-            meta: {
-                filePath: path,
-                oldContent: originalContent,
-                newContent,
-                linesAdded: lineChanges.added,
-                linesRemoved: lineChanges.removed,
-                matchStrategy: result.strategy
+            const result = smartReplace(normalizedContent, normalizedOld, normalizedNew, replaceAll)
+
+            if (!result.success) {
+                const { findSimilarContent, analyzeEditError, generateFixSuggestion } = await import('../utils/EditRetryStrategy')
+
+                const errorType = analyzeEditError(result.error || '')
+                const hasCache = fileCacheService.hasValidCache(path)
+
+                const similar = findSimilarContent(normalizedContent, normalizedOld)
+
+                const suggestion = generateFixSuggestion(errorType, {
+                    path,
+                    oldString: normalizedOld,
+                    similarContent: similar.similarText,
+                    lineNumber: similar.lineNumber,
+                })
+
+                let errorMsg = result.error || 'Replace failed'
+
+                if (similar.found) {
+                    errorMsg += `\n\n📍 Similar content found at line ${similar.lineNumber} (${Math.round((similar.similarity || 0) * 100)}% match)`
+                }
+
+                if (!hasCache) {
+                    errorMsg += '\n\n⚠️ File was not read before editing. Always use read_file first.'
+                }
+
+                errorMsg += `\n\n💡 Suggestion: ${suggestion}`
+
+                return { success: false, result: '', error: errorMsg }
+            }
+
+            const newContent = result.newContent!
+            const writeSuccess = await api.file.write(path, newContent)
+            if (!writeSuccess) return { success: false, result: '', error: 'Failed to write file' }
+
+            fileCacheService.markFileAsRead(path, newContent)
+            await notifyLspAfterWrite(path)
+
+            const lineChanges = calculateLineChanges(originalContent, newContent)
+
+            const strategyInfo = result.strategy !== 'exact' ? ` (matched via ${result.strategy} strategy)` : ''
+
+            return {
+                success: true,
+                result: `File updated successfully${strategyInfo}`,
+                meta: {
+                    filePath: path,
+                    oldContent: originalContent,
+                    newContent,
+                    linesAdded: lineChanges.added,
+                    linesRemoved: lineChanges.removed,
+                    matchStrategy: result.strategy
+                }
             }
         }
     },
@@ -304,54 +352,6 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
         const lineChanges = calculateLineChanges(originalContent, content)
         return { success: true, result: 'File written successfully', meta: { filePath: path, oldContent: originalContent, newContent: content, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
-    },
-
-    async replace_file_content(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath)
-        const originalContent = await api.file.read(path)
-        if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}` }
-
-        // 对于行号替换，建议先读取文件以确保行号准确
-        if (!fileCacheService.hasValidCache(path)) {
-            logger.agent.warn(`[replace_file_content] File ${path} not in cache, line numbers may be inaccurate`)
-        }
-
-        const content = args.content as string
-        if (originalContent === '') {
-            const success = await api.file.write(path, content)
-            if (success) fileCacheService.markFileAsRead(path, content)
-            return success
-                ? { success: true, result: 'File written (was empty)', meta: { filePath: path, oldContent: '', newContent: content, linesAdded: content.split('\n').length, linesRemoved: 0 } }
-                : { success: false, result: '', error: 'Failed to write file' }
-        }
-
-        const lines = originalContent.split('\n')
-        const startLine = args.start_line as number
-        const endLine = args.end_line as number
-
-        // 验证行号范围
-        if (startLine < 1 || endLine > lines.length || startLine > endLine) {
-            return {
-                success: false,
-                result: '',
-                error: `Invalid line range: ${startLine}-${endLine}. File has ${lines.length} lines. Use read_file to verify line numbers.`
-            }
-        }
-
-        lines.splice(startLine - 1, endLine - startLine + 1, ...content.split('\n'))
-        const newContent = lines.join('\n')
-
-        const success = await api.file.write(path, newContent)
-        if (!success) return { success: false, result: '', error: 'Failed to write file' }
-
-        // 更新文件缓存
-        fileCacheService.markFileAsRead(path, newContent)
-
-        // 通知 LSP 并等待诊断
-        await notifyLspAfterWrite(path)
-
-        const lineChanges = calculateLineChanges(originalContent, newContent)
-        return { success: true, result: 'File updated successfully', meta: { filePath: path, oldContent: originalContent, newContent, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
     },
 
     async create_file_or_folder(args, ctx) {

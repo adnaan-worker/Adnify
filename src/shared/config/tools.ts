@@ -60,53 +60,24 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     read_file: {
         name: 'read_file',
         displayName: 'Read File',
-        description: `Read file contents. MUST read before editing.
-
-### 🎯 OPTIMAL USAGE
-- **Default**: Read ENTIRE file (omit start_line/end_line)
-- **If truncated**: Use search_files to locate target, then read with line range
-
-### ⚠️ HANDLING TRUNCATION
-If you see "(file content truncated...)", the file is large. Do this:
-1. Use \`search_files\` to find the exact location of what you need
-2. Then use \`read_file\` with \`start_line/end_line\` to read that section
-3. Include ~50 lines of context around your target
-
-### 🚫 FORBIDDEN
-- ❌ Reading same file repeatedly without using search first
-- ❌ Multiple read_file calls for different files → use read_multiple_files
-
-### ✅ CORRECT (for large files)
-\`\`\`
-# Step 1: Find target location
-search_files path="js/main.js" pattern="functionName"
-# Result: js/main.js:150: function functionName()
-
-# Step 2: Read with context
-read_file path="js/main.js" start_line=130 end_line=200
-\`\`\``,
+        description: 'Read one or more files with line numbers. Pass a single path string or an array of paths. For large files, use start_line/end_line. MUST read before editing.',
         detailedDescription: `Read file contents from the filesystem with line numbers (1-indexed).
-- Returns content in "line_number: content" format
-- Large files (>6000 chars) will be truncated
-- When truncated, use search_files first to locate target`,
-        examples: [
-            'read_file path="src/main.ts" → Read entire file',
-            'read_file path="large.js" start_line=100 end_line=200 → Read specific section',
-        ],
-        criticalRules: [
-            'If truncated, use search_files to find target first',
-            'For 2+ files, use read_multiple_files instead',
-            'Include ~50 lines context when using line ranges',
-        ],
+- Single file: path="src/main.ts"
+- Multiple files: path=["src/a.ts", "src/b.ts"]
+- Large files will be truncated, use search_files to locate target first`,
         category: 'read',
         approvalType: 'none',
         parallel: true,
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts", NOT "./src/main.ts" or full path)', required: true },
-            start_line: { type: 'number', description: 'ONLY for files >1000 lines. Starting line (1-indexed)' },
-            end_line: { type: 'number', description: 'ONLY for files >1000 lines. Ending line (inclusive)' },
+            path: { 
+                type: 'string', 
+                description: 'File path (string) or multiple paths (array). Examples: "src/main.ts" or ["src/a.ts", "src/b.ts"]', 
+                required: true 
+            },
+            start_line: { type: 'number', description: 'Starting line for single file (1-indexed)' },
+            end_line: { type: 'number', description: 'Ending line for single file (inclusive)' },
         },
         validate: (data) => {
             if (data.start_line && data.end_line && (data.start_line as number) > (data.end_line as number)) {
@@ -116,85 +87,22 @@ read_file path="js/main.js" start_line=130 end_line=200
         },
     },
 
-    read_multiple_files: {
-        name: 'read_multiple_files',
-        displayName: 'Read Multiple Files',
-        description: `Read 2+ files in ONE call. ALWAYS use this instead of multiple read_file.
-
-### 🎯 OPTIMAL USAGE
-- Need to read 2+ files? Use THIS tool, not multiple read_file calls
-
-### ✅ CORRECT
-\`\`\`
-read_multiple_files paths=["src/a.ts", "src/b.ts", "src/c.ts"]
-\`\`\`
-
-### ❌ WRONG
-\`\`\`
-read_file path="src/a.ts"
-read_file path="src/b.ts"
-read_file path="src/c.ts"  // 3 calls instead of 1!
-\`\`\``,
-        detailedDescription: `Read multiple files in a single call for better efficiency.
-- Use when you need to read 2+ related files
-- Returns all file contents with clear separators
-- Parallel execution internally for speed`,
-        examples: [
-            'read_multiple_files paths=["src/types.ts", "src/utils.ts", "src/index.ts"]',
-        ],
-        criticalRules: [
-            'ALWAYS use this for 2+ files instead of multiple read_file calls',
-        ],
-        category: 'read',
-        approvalType: 'none',
-        parallel: true,
-        requiresWorkspace: true,
-        enabled: true,
-        parameters: {
-            paths: { type: 'array', description: 'Array of file paths relative to workspace root (e.g., ["src/a.ts", "src/b.ts"])', required: true, items: { type: 'string', description: 'File path relative to workspace root' } },
-        },
-    },
-
     list_directory: {
         name: 'list_directory',
         displayName: 'List Directory',
-        description: `List files in a directory.
-
-### 🎯 OPTIMAL USAGE
-- Use ONCE per directory, don't call repeatedly
-- For recursive view, use get_dir_tree instead`,
+        description: 'List directory contents. Use recursive=true for tree view of subdirectories. Use recursive=false (default) for single level.',
         detailedDescription: `List directory contents with file types and sizes.
-- Shows files and subdirectories
-- Includes file size and modification info`,
+- Non-recursive: shows immediate children only
+- Recursive: shows full tree up to max_depth`,
         category: 'read',
         approvalType: 'none',
         parallel: true,
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'Directory path relative to workspace root. Use "." for workspace root, "src" for src folder (NOT "./src")', required: true },
-        },
-    },
-
-    get_dir_tree: {
-        name: 'get_dir_tree',
-        displayName: 'Directory Tree',
-        description: `Get recursive directory tree. Use ONCE for project overview.
-
-### 🎯 OPTIMAL USAGE
-- Call ONCE at start to understand project structure
-- Don't call repeatedly - results are cached mentally`,
-        detailedDescription: `Get a tree view of directory structure.
-- Recursive listing up to max_depth
-- Useful for understanding project layout`,
-        category: 'read',
-        approvalType: 'none',
-        parallel: true,
-        requiresWorkspace: true,
-        enabled: true,
-        parameters: {
-            path: { type: 'string', description: 'Root directory path relative to workspace root. Use "." for workspace root, "src" for src folder (NOT "./src")', required: true },
-            max_depth: { type: 'number', description: 'Maximum depth (default: 3)', default: 3 },
+            path: { type: 'string', description: 'Directory path relative to workspace root. Use "." for workspace root', required: true },
+            recursive: { type: 'boolean', description: 'Show subdirectories recursively (default: false)', default: false },
+            max_depth: { type: 'number', description: 'Maximum depth for recursive listing (default: 3)', default: 3 },
         },
     },
 
@@ -202,30 +110,7 @@ read_file path="src/c.ts"  // 3 calls instead of 1!
     search_files: {
         name: 'search_files',
         displayName: 'Search Files',
-        description: `Search for text/patterns in files or single file.
-
-### 🎯 OPTIMAL USAGE
-- **Multiple patterns**: Combine with | in ONE call
-- **Single file**: Use file path as path parameter
-
-### ✅ CORRECT
-\`\`\`
-// Multiple patterns - ONE call
-search_files path="src" pattern="useState|useEffect|useCallback" is_regex=true
-
-// Single file search
-search_files path="src/styles.css" pattern="button|card|modal" is_regex=true
-\`\`\`
-
-### ❌ WRONG
-\`\`\`
-search_files path="src" pattern="useState"
-search_files path="src" pattern="useEffect"
-search_files path="src" pattern="useCallback"  // 3 calls instead of 1!
-\`\`\`
-
-### When NOT to Use
-- Conceptual queries ("how does auth work?") → use codebase_search`,
+        description: 'Search for text or regex patterns in files. Can search a directory or single file. Use | to combine multiple patterns in one call (e.g., "pattern1|pattern2"). For semantic search, use codebase_search instead.',
         detailedDescription: `Fast content search using ripgrep-style matching.
 - Supports regex patterns with is_regex=true
 - Use | to combine multiple patterns
@@ -254,19 +139,7 @@ search_files path="src" pattern="useCallback"  // 3 calls instead of 1!
     codebase_search: {
         name: 'codebase_search',
         displayName: 'Semantic Search',
-        description: `AI semantic search. Use for conceptual queries.
-
-### 🎯 OPTIMAL USAGE
-- Ask complete questions: "where is authentication handled?"
-- ONE call per concept - don't repeat similar queries
-
-### When to Use
-- Conceptual: "how does payment flow work?"
-- Finding related code by meaning
-
-### When NOT to Use
-- Exact text → use search_files
-- Symbol lookup → use search_files`,
+        description: 'AI-powered semantic search for finding code by meaning. Use for conceptual queries like "where is authentication handled". For exact text search, use search_files instead.',
         detailedDescription: `AI-powered semantic search for finding related code by meaning.
 - Understands natural language queries
 - Ask complete questions for best results`,
@@ -292,40 +165,10 @@ search_files path="src" pattern="useCallback"  // 3 calls instead of 1!
     edit_file: {
         name: 'edit_file',
         displayName: 'Edit File',
-        description: `Replace old_string with new_string. MUST read_file first.
-
-### 🎯 OPTIMAL USAGE
-- Read file ONCE before editing
-- Include 3-5 lines context for unique match
-- Make ALL changes to a file in ONE edit when possible
-
-### 🚫 FORBIDDEN
-- ❌ Editing without reading first
-- ❌ Multiple small edits to same file → combine into ONE edit
-
-### ✅ CORRECT
-\`\`\`
-read_file path="src/utils.ts"
-edit_file path="src/utils.ts" old_string="function calc(x) {
-  return x * 2;
-}" new_string="function calc(x: number): number {
-  return x * 2;
-}"
-\`\`\`
-
-### Error Recovery
-If "old_string not found": read_file again, copy EXACT content`,
-        detailedDescription: `Smart string replacement with fallback matching strategies.
-- old_string must UNIQUELY identify location
-- Include surrounding context for uniqueness`,
-        examples: [
-            'edit_file path="src/utils.ts" old_string="..." new_string="..."',
-        ],
-        criticalRules: [
-            'MUST read_file before editing',
-            'Include 3-5 lines context for unique match',
-            'Combine multiple changes into ONE edit when possible',
-        ],
+        description: 'Edit file by replacing text or line ranges. Two modes: 1) String replacement: provide old_string and new_string. 2) Line replacement: provide start_line, end_line, and content. CRITICAL: Must read_file first.',
+        detailedDescription: `Two editing modes:
+- String mode: old_string + new_string (include 3-5 lines context)
+- Line mode: start_line + end_line + content (use line numbers from read_file)`,
         commonErrors: [
             { error: 'old_string not found', solution: 'Read file again, copy exact content' },
             { error: 'Multiple matches', solution: 'Include more context lines' },
@@ -336,45 +179,42 @@ If "old_string not found": read_file again, copy EXACT content`,
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/utils.ts", NOT "./src/utils.ts")', required: true },
-            old_string: { type: 'string', description: 'Text to find (include 3-5 lines context)', required: true },
-            new_string: { type: 'string', description: 'Replacement text', required: true },
-            replace_all: { type: 'boolean', description: 'Replace all occurrences', default: false },
-        },
-    },
-
-    replace_file_content: {
-        name: 'replace_file_content',
-        displayName: 'Replace Lines',
-        description: `Replace line range. Use line numbers from read_file.
-
-### 🎯 OPTIMAL USAGE
-- Alternative to edit_file when you know exact line numbers
-- MUST read_file first to get accurate line numbers`,
-        detailedDescription: `Replace a range of lines with new content.
-- Use line numbers from read_file output
-- Both start_line and end_line are inclusive`,
-        examples: [
-            'replace_file_content path="src/config.ts" start_line=10 end_line=15 content="..."',
-        ],
-        criticalRules: [
-            'MUST read_file first for accurate line numbers',
-        ],
-        category: 'write',
-        approvalType: 'none',
-        parallel: false,
-        requiresWorkspace: true,
-        enabled: true,
-        parameters: {
-            path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/config.ts")', required: true },
-            start_line: { type: 'number', description: 'Start line (1-indexed)', required: true },
-            end_line: { type: 'number', description: 'End line (inclusive)', required: true },
-            content: { type: 'string', description: 'New content', required: true },
+            path: { type: 'string', description: 'File path relative to workspace root', required: true },
+            old_string: { type: 'string', description: 'Text to find (string mode, include 3-5 lines context)' },
+            new_string: { type: 'string', description: 'Replacement text (string mode)' },
+            start_line: { type: 'number', description: 'Start line (line mode, 1-indexed)' },
+            end_line: { type: 'number', description: 'End line (line mode, inclusive)' },
+            content: { type: 'string', description: 'New content (line mode)' },
+            replace_all: { type: 'boolean', description: 'Replace all occurrences (string mode)', default: false },
         },
         validate: (data) => {
-            if ((data.start_line as number) > (data.end_line as number)) {
-                return { valid: false, error: 'start_line must be <= end_line' }
+            // 验证模式选择
+            const hasStringMode = data.old_string || data.new_string
+            const hasLineMode = data.start_line || data.end_line || data.content
+            
+            if (hasStringMode && hasLineMode) {
+                return { valid: false, error: 'Cannot mix string mode and line mode parameters' }
             }
+            
+            if (!hasStringMode && !hasLineMode) {
+                return { valid: false, error: 'Must provide either (old_string + new_string) or (start_line + end_line + content)' }
+            }
+            
+            // 验证字符串模式
+            if (hasStringMode && (!data.old_string || data.new_string === undefined)) {
+                return { valid: false, error: 'String mode requires both old_string and new_string' }
+            }
+            
+            // 验证行模式
+            if (hasLineMode) {
+                if (!data.start_line || !data.end_line || !data.content) {
+                    return { valid: false, error: 'Line mode requires start_line, end_line, and content' }
+                }
+                if ((data.start_line as number) > (data.end_line as number)) {
+                    return { valid: false, error: 'start_line must be <= end_line' }
+                }
+            }
+            
             return { valid: true }
         },
     },
@@ -382,15 +222,7 @@ If "old_string not found": read_file again, copy EXACT content`,
     write_file: {
         name: 'write_file',
         displayName: 'Write File',
-        description: `Create new file or OVERWRITE entire file.
-
-### 🎯 OPTIMAL USAGE
-- New files: use this
-- Complete rewrite: use this
-- Partial changes: use edit_file instead (preserves content)
-
-### 🚫 WARNING
-This OVERWRITES entire file. For partial edits, use edit_file.`,
+        description: 'Create new file or completely overwrite existing file. WARNING: This replaces entire file content. For partial edits, use edit_file instead.',
         detailedDescription: `Write complete file content.
 - Creates new file if doesn't exist
 - OVERWRITES entire file if exists`,
@@ -455,16 +287,7 @@ This OVERWRITES entire file. For partial edits, use edit_file.`,
     run_command: {
         name: 'run_command',
         displayName: 'Run Command',
-        description: `Execute shell command. Requires approval.
-
-### 🎯 OPTIMAL USAGE
-- npm/yarn commands, git, build scripts
-- Use cwd parameter instead of cd
-
-### 🚫 NEVER USE FOR
-- Reading files → use read_file (NOT cat/head/tail)
-- Searching → use search_files (NOT grep/find)
-- Editing → use edit_file (NOT sed/awk)`,
+        description: 'Execute shell command. Requires user approval. Use cwd parameter to set working directory. Do NOT use for reading files (use read_file), searching (use search_files), or editing (use edit_file).',
         detailedDescription: `Execute shell commands in workspace.
 - Requires user approval
 - Use cwd parameter instead of cd commands`,
@@ -493,11 +316,7 @@ This OVERWRITES entire file. For partial edits, use edit_file.`,
     get_lint_errors: {
         name: 'get_lint_errors',
         displayName: 'Lint Errors',
-        description: `Get lint/compile errors. Use ONCE after editing.
-
-### 🎯 OPTIMAL USAGE
-- Call ONCE after editing a file
-- Don't call repeatedly for same file`,
+        description: 'Get TypeScript/ESLint errors for a file. Use after editing to verify code. Call once per file.',
         detailedDescription: `Get diagnostics (errors, warnings) for a file.
 - Shows TypeScript/ESLint errors
 - Use after editing to verify code`,
@@ -568,11 +387,7 @@ This OVERWRITES entire file. For partial edits, use edit_file.`,
     get_document_symbols: {
         name: 'get_document_symbols',
         displayName: 'Document Symbols',
-        description: `Get all symbols in file. Call ONCE per file.
-
-### 🎯 OPTIMAL USAGE
-- Call ONCE to understand file structure
-- Don't call repeatedly for same file`,
+        description: 'List all functions, classes, interfaces, and variables defined in a file. Use to understand file structure.',
         detailedDescription: `List all symbols defined in a file.
 - Shows functions, classes, interfaces, variables`,
         category: 'lsp',
