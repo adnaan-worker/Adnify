@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { workspaceManager } from '@renderer/services/workspaceManager'
+import { workspaceManager } from '@renderer/services/WorkspaceManager'
 
 describe('WorkspaceManager', () => {
   beforeEach(() => {
