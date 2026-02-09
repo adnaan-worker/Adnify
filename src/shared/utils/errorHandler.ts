@@ -387,6 +387,29 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
     }
   }
 
+  // 兜底：按 error.name 识别（兼容非 SDK 实例，如测试或 RPC 序列化后的错误）
+  if (error.name === 'NoContentGeneratedError') {
+    return {
+      code: ErrorCode.LLM_NO_CONTENT,
+      originalMessage,
+      retryable: true,
+    }
+  }
+  const statusCode = (error as any).statusCode
+  if (error.name === 'APICallError' && typeof statusCode === 'number') {
+    if (statusCode === 429) {
+      return { code: ErrorCode.API_RATE_LIMIT, originalMessage, retryable: true }
+    }
+    if (statusCode === 401 || statusCode === 403) {
+      return { code: ErrorCode.API_KEY_INVALID, originalMessage, retryable: false }
+    }
+    return {
+      code: ErrorCode.API_CALL_FAILED,
+      originalMessage,
+      retryable: (error as any).isRetryable ?? true,
+    }
+  }
+
   // 检查错误消息中的关键词（兜底）
   const msg = originalMessage.toLowerCase()
   if (msg.includes('network') || msg.includes('fetch') || msg.includes('econnrefused')) {
@@ -430,14 +453,12 @@ export function toAppError(error: unknown, language: 'en' | 'zh' = 'en'): AppErr
       return new AppError(friendlyMessage, mapped.code, mapped.retryable, error)
     }
     
-    // 普通 Error
-    const friendlyMessage = getErrorMessage(ErrorCode.UNKNOWN, language)
-    return new AppError(friendlyMessage, ErrorCode.UNKNOWN, false, error)
+    // 普通 Error：保留原始消息便于排查
+    return new AppError(error.message, ErrorCode.UNKNOWN, false, error)
   }
 
   if (typeof error === 'string') {
-    const friendlyMessage = getErrorMessage(ErrorCode.UNKNOWN, language)
-    return new AppError(friendlyMessage, ErrorCode.UNKNOWN, false)
+    return new AppError(error, ErrorCode.UNKNOWN, false)
   }
 
   const friendlyMessage = getErrorMessage(ErrorCode.UNKNOWN, language)

@@ -81,7 +81,12 @@ vi.mock('@store', () => ({
 
 describe('Tools Core - Parallel Execution', () => {
   let assistantId: string
+  let threadId: string
   let context: ToolExecutionContext
+
+  function getStore() {
+    return useAgentStore.getState().forThread(threadId)
+  }
 
   beforeEach(() => {
     // 重置 store
@@ -93,7 +98,7 @@ describe('Tools Core - Parallel Execution', () => {
 
     // 创建测试线程和消息
     const store = useAgentStore.getState()
-    const threadId = store.createThread()
+    threadId = store.createThread()
     assistantId = store.addAssistantMessage()
 
     context = {
@@ -118,7 +123,7 @@ describe('Tools Core - Parallel Execution', () => {
       ]
 
       const startTime = Date.now()
-      const { results } = await executeTools(toolCalls, context)
+      const { results } = await executeTools(toolCalls, context, getStore())
       const duration = Date.now() - startTime
 
       // 验证所有工具都执行了
@@ -143,17 +148,17 @@ describe('Tools Core - Parallel Execution', () => {
       const startTime = Date.now()
       const completionTimes: Record<string, number> = {}
 
-      // 监听工具完成事件
-      const store = useAgentStore.getState()
-      const originalUpdate = store.updateToolCall
-      store.updateToolCall = vi.fn((msgId, tcId, updates) => {
+      // 监听工具完成事件（patch 传入 executeTools 的 thread-bound store）
+      const store = getStore()
+      const originalUpdate = store.updateToolCall.bind(store)
+      store.updateToolCall = vi.fn((msgId: string, tcId: string, updates: { status?: string }) => {
         if (updates.status === 'success' || updates.status === 'error') {
           completionTimes[tcId] = Date.now() - startTime
         }
         return originalUpdate(msgId, tcId, updates)
-      })
+      }) as typeof store.updateToolCall
 
-      const { results } = await executeTools(toolCalls, context)
+      const { results } = await executeTools(toolCalls, context, store)
 
       // 验证所有工具都完成了
       expect(results).toHaveLength(4)
@@ -195,10 +200,10 @@ describe('Tools Core - Parallel Execution', () => {
         }
       })
 
-      await executeTools(toolCalls, context)
+      await executeTools(toolCalls, context, getStore())
 
-      // 验证并发数不超过限制（8）
-      expect(maxConcurrent).toBeLessThanOrEqual(8)
+      // 验证并发数不超过配置限制（默认 maxConcurrency 为 16）
+      expect(maxConcurrent).toBeLessThanOrEqual(16)
       expect(maxConcurrent).toBeGreaterThan(1) // 确实是并行的
 
       // 恢复原始实现
@@ -213,17 +218,16 @@ describe('Tools Core - Parallel Execution', () => {
       ]
 
       const updateOrder: string[] = []
-      const store = useAgentStore.getState()
-      const originalUpdate = store.updateToolCall
-      
-      store.updateToolCall = vi.fn((msgId, tcId, updates) => {
+      const store = getStore()
+      const originalUpdate = store.updateToolCall.bind(store)
+      store.updateToolCall = vi.fn((msgId: string, tcId: string, updates: { status?: string }) => {
         if (updates.status === 'success') {
           updateOrder.push(tcId)
         }
         return originalUpdate(msgId, tcId, updates)
-      })
+      }) as typeof store.updateToolCall
 
-      await executeTools(toolCalls, context)
+      await executeTools(toolCalls, context, store)
 
       // 验证更新顺序：快的先完成
       expect(updateOrder).toHaveLength(3)
@@ -259,7 +263,7 @@ describe('Tools Core - Parallel Execution', () => {
         { id: 'tc3', name: 'read_file', arguments: { path: 'good2.txt' } },
       ]
 
-      const { results } = await executeTools(toolCalls, context)
+      const { results } = await executeTools(toolCalls, context, getStore())
 
       // 验证所有工具都有结果（包括失败的）
       expect(results).toHaveLength(3)
@@ -304,16 +308,16 @@ describe('Tools Core - Parallel Execution', () => {
       const completionTimes: Record<string, number> = {}
       const startTime = Date.now()
       
-      const store = useAgentStore.getState()
-      const originalUpdate = store.updateToolCall
-      store.updateToolCall = vi.fn((msgId, tcId, updates) => {
+      const store = getStore()
+      const originalUpdate = store.updateToolCall.bind(store)
+      store.updateToolCall = vi.fn((msgId: string, tcId: string, updates: { status?: string }) => {
         if (updates.status === 'success') {
           completionTimes[tcId] = Date.now() - startTime
         }
         return originalUpdate(msgId, tcId, updates)
-      })
+      }) as typeof store.updateToolCall
 
-      const { results } = await executeTools(toolCalls, context)
+      const { results } = await executeTools(toolCalls, context, store)
 
       // 所有工具都应该完成
       expect(results).toHaveLength(4)
@@ -341,7 +345,7 @@ describe('Tools Core - Parallel Execution', () => {
       ]
 
       const startTime = Date.now()
-      await executeTools(toolCalls, context)
+      await executeTools(toolCalls, context, getStore())
       const duration = Date.now() - startTime
 
       // 并行执行应该快于串行
@@ -370,7 +374,7 @@ describe('Tools Core - Parallel Execution', () => {
         }
       })
 
-      await executeTools(toolCalls, context)
+      await executeTools(toolCalls, context, getStore())
 
       // tc3 (other.txt) 应该可以并行执行
       // tc1 和 tc2 (test.txt) 应该有依赖关系
@@ -393,7 +397,7 @@ describe('Tools Core - Parallel Execution', () => {
       ]
 
       const startTime = Date.now()
-      const { results } = await executeTools(toolCalls, context)
+      const { results } = await executeTools(toolCalls, context, getStore())
       const duration = Date.now() - startTime
 
       // 所有工具都应该成功
@@ -413,7 +417,7 @@ describe('Tools Core - Parallel Execution', () => {
       }))
 
       const startTime = Date.now()
-      const { results } = await executeTools(toolCalls, context)
+      const { results } = await executeTools(toolCalls, context, getStore())
       const duration = Date.now() - startTime
 
       // 所有工具都应该完成
