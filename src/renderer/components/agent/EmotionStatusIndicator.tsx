@@ -30,8 +30,8 @@ export const EmotionStatusIndicator: React.FC = () => {
     if (!emotion) return
     setJustChanged(true)
     setMessageIndex(0)
-    const t = setTimeout(() => setJustChanged(false), 3000)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setJustChanged(false), 3000)
+    return () => clearTimeout(timer)
   }, [emotion?.state])
 
   // 轮播消息
