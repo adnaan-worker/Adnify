@@ -236,7 +236,7 @@ export const EmotionCompanion: React.FC = () => {
       if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
       if (dismissFadeTimerRef.current) clearTimeout(dismissFadeTimerRef.current)
     }
-  }, [showMessage, dismiss, buildActionButtons])
+  }, [showMessage, dismiss, buildActionButtons, language])
 
   // ===== 反馈处理 =====
   const handleFeedback = useCallback((accurate: boolean) => {
