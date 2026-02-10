@@ -49,7 +49,7 @@ export const EmotionStatusIndicator: React.FC = () => {
   const state = emotion?.state || 'neutral'
   const meta = EMOTION_META[state]
   const intensity = emotion?.intensity ?? 0.5
-  const label = t(meta.translationKey as any, language)
+  const label = t(meta.translationKey, language)
   const messages = EMOTION_MESSAGES[state]
   const currentMessageKey = messages[messageIndex]
 

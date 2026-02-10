@@ -4,6 +4,7 @@
  */
 
 import type { EmotionState } from '../types/emotion'
+import type { TranslationKey } from '@/renderer/i18n'
 
 /** 各状态对应的颜色（条形图、图例、拐点等） */
 export const EMOTION_COLORS: Record<EmotionState, string> = {
@@ -22,7 +23,7 @@ export const EMOTION_META: Record<EmotionState, {
   color: string
   emoji: string
   pulseSpeed: number
-  translationKey: string
+  translationKey: TranslationKey
 }> = {
   focused:    { color: '#3b82f6', emoji: '⚡', pulseSpeed: 2.5, translationKey: 'emotion.state.focused' },
   frustrated: { color: '#f97316', emoji: '😤', pulseSpeed: 1.2, translationKey: 'emotion.state.frustrated' },

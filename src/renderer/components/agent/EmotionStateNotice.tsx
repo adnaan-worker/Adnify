@@ -97,8 +97,8 @@ export const EmotionStateNotice: React.FC = () => {
 
   const from = EMOTION_META[notice.fromState]
   const to = EMOTION_META[notice.toState]
-  const fromLabel = t(from.translationKey as any, language)
-  const toLabel = t(to.translationKey as any, language)
+  const fromLabel = t(from.translationKey, language)
+  const toLabel = t(to.translationKey, language)
 
   return (
     <AnimatePresence>
