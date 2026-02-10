@@ -3,10 +3,9 @@
  * 动态、有趣的视觉展示
  */
 
-import React, { useMemo } from 'react'
+cimport React, { useId, useMemo } from 'react'
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
-// import { cn } from '@utils/cn'
 import { EMOTION_COLORS } from '@/renderer/agent/emotion'
 
 interface EmotionVisualizationProps {
@@ -153,6 +152,7 @@ const EmotionWaveform: React.FC<{
   history: Array<{ timestamp: number; state: EmotionState; intensity: number }>
   color: string
 }> = ({ history, color }) => {
+  const gradientId = useId()
   if (history.length < 2) return null
 
   const width = 300
@@ -176,7 +176,7 @@ const EmotionWaveform: React.FC<{
       <svg width={width} height={height} className="overflow-visible">
         {/* 渐变定义 */}
         <defs>
-          <linearGradient id="waveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor={color} stopOpacity="0.8" />
             <stop offset="100%" stopColor={color} stopOpacity="0.2" />
           </linearGradient>
@@ -185,7 +185,7 @@ const EmotionWaveform: React.FC<{
         {/* 填充区域 */}
         <motion.path
           d={`${pathData} L ${width - padding} ${height - padding} L ${padding} ${height - padding} Z`}
-          fill="url(#waveGradient)"
+          fill={`url(#${gradientId})`}
           initial={{ pathLength: 0, opacity: 0 }}
           animate={{ pathLength: 1, opacity: 1 }}
           transition={{ duration: 1, ease: 'easeOut' }}
