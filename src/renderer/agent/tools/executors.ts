@@ -97,7 +97,20 @@ function resolvePath(p: unknown, workspacePath: string | null, allowRead = false
 export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
     async read_file(args, ctx) {
         // 支持单个文件或多个文件
-        const pathArg = args.path
+        let pathArg = args.path
+
+        // 鲁棒性增强：如果 path 是字符串形式的 JSON 数组（某些模型会这样做），尝试解析它
+        if (typeof pathArg === 'string' && pathArg.trim().startsWith('[') && pathArg.trim().endsWith(']')) {
+            try {
+                const parsed = JSON.parse(pathArg)
+                if (Array.isArray(parsed)) {
+                    pathArg = parsed
+                }
+            } catch (e) {
+                // 如果解析失败，保留原样，由 resolvePath 处理
+            }
+        }
+
         const paths = Array.isArray(pathArg) ? pathArg : [pathArg as string]
 
         // 如果是多个文件，使用并行读取
