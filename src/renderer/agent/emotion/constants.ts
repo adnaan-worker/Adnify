@@ -25,14 +25,14 @@ export const EMOTION_META: Record<EmotionState, {
   pulseSpeed: number
   translationKey: TranslationKey
 }> = {
-  focused:    { color: '#3b82f6', emoji: '⚡', pulseSpeed: 2.5, translationKey: 'emotion.state.focused' },
-  frustrated: { color: '#f97316', emoji: '😤', pulseSpeed: 1.2, translationKey: 'emotion.state.frustrated' },
-  tired:      { color: '#8b5cf6', emoji: '😴', pulseSpeed: 4.0, translationKey: 'emotion.state.tired' },
-  excited:    { color: '#22c55e', emoji: '🚀', pulseSpeed: 0.8, translationKey: 'emotion.state.excited' },
-  bored:      { color: '#6b7280', emoji: '😐', pulseSpeed: 3.5, translationKey: 'emotion.state.bored' },
-  stressed:   { color: '#06b6d4', emoji: '😰', pulseSpeed: 1.0, translationKey: 'emotion.state.stressed' },
-  flow:       { color: '#6366f1', emoji: '✨', pulseSpeed: 2.0, translationKey: 'emotion.state.flow' },
-  neutral:    { color: '#94a3b8', emoji: '💻', pulseSpeed: 3.0, translationKey: 'emotion.state.neutral' },
+  focused:    { color: EMOTION_COLORS.focused,    emoji: '⚡', pulseSpeed: 2.5, translationKey: 'emotion.state.focused' },
+  frustrated: { color: EMOTION_COLORS.frustrated,  emoji: '😤', pulseSpeed: 1.2, translationKey: 'emotion.state.frustrated' },
+  tired:      { color: EMOTION_COLORS.tired,       emoji: '😴', pulseSpeed: 4.0, translationKey: 'emotion.state.tired' },
+  excited:    { color: EMOTION_COLORS.excited,     emoji: '🚀', pulseSpeed: 0.8, translationKey: 'emotion.state.excited' },
+  bored:      { color: EMOTION_COLORS.bored,       emoji: '😐', pulseSpeed: 3.5, translationKey: 'emotion.state.bored' },
+  stressed:   { color: EMOTION_COLORS.stressed,    emoji: '😰', pulseSpeed: 1.0, translationKey: 'emotion.state.stressed' },
+  flow:       { color: EMOTION_COLORS.flow,        emoji: '✨', pulseSpeed: 2.0, translationKey: 'emotion.state.flow' },
+  neutral:    { color: EMOTION_COLORS.neutral,     emoji: '💻', pulseSpeed: 3.0, translationKey: 'emotion.state.neutral' },
 }
 
 /** StatusBar 轮播消息的 i18n key（每状态 3 条） */
