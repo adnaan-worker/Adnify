@@ -36,7 +36,7 @@ export const EmotionStateNotice: React.FC = () => {
   const [notice, setNotice] = useState<NoticeData | null>(null)
   const [isVisible, setIsVisible] = useState(false)
   const prevStateRef = useRef<EmotionState>('neutral')
-  const lastNoticeTimeRef = useRef(0)
+  const lastNoticeTimeRef = useRef(Date.now())
   const dismissTimerRef = useRef<NodeJS.Timeout | null>(null)
   const fadeTimerRef = useRef<NodeJS.Timeout | null>(null)
 
