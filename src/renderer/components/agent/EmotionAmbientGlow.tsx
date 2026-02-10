@@ -6,7 +6,7 @@
  * 放置在编辑器容器内，使用 pointer-events-none
  */
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { EmotionState } from '@/renderer/agent/types/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
@@ -28,23 +28,34 @@ const GLOW_CONFIG: Record<EmotionState, {
   neutral:    { opacity: 0,     spread: 0,   animated: false, corners: [] },
 }
 
-const cornerPositions = {
-  tl: { top: 0, left: 0, background: (color: string, spread: number, opacity: number) =>
-    `radial-gradient(circle at top left, ${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')} 0%, transparent ${spread}px)` },
-  tr: { top: 0, right: 0, background: (color: string, spread: number, opacity: number) =>
-    `radial-gradient(circle at top right, ${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')} 0%, transparent ${spread}px)` },
-  bl: { bottom: 0, left: 0, background: (color: string, spread: number, opacity: number) =>
-    `radial-gradient(circle at bottom left, ${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')} 0%, transparent ${spread}px)` },
-  br: { bottom: 0, right: 0, background: (color: string, spread: number, opacity: number) =>
-    `radial-gradient(circle at bottom right, ${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')} 0%, transparent ${spread}px)` },
+const cornerCSS: Record<string, React.CSSProperties> = {
+  tl: { top: 0, left: 0 },
+  tr: { top: 0, right: 0 },
+  bl: { bottom: 0, left: 0 },
+  br: { bottom: 0, right: 0 },
+}
+
+const cornerGradientOrigin: Record<string, string> = {
+  tl: 'top left',
+  tr: 'top right',
+  bl: 'bottom left',
+  br: 'bottom right',
+}
+
+function buildBackground(corner: string, color: string, spread: number, opacity: number): string {
+  const hex = Math.round(opacity * 255).toString(16).padStart(2, '0')
+  return `radial-gradient(circle at ${cornerGradientOrigin[corner]}, ${color}${hex} 0%, transparent ${spread}px)`
 }
 
 export const EmotionAmbientGlow: React.FC = () => {
   const emotion = useEmotionState()
 
   const state = emotion?.state || 'neutral'
-  const config = { ...GLOW_CONFIG[state], color: EMOTION_COLORS[state] }
   const intensity = emotion?.intensity ?? 0
+  const config = useMemo(() => ({
+    ...GLOW_CONFIG[state],
+    color: EMOTION_COLORS[state],
+  }), [state])
 
   // neutral 或 0 强度不渲染
   if (state === 'neutral' || intensity === 0 || config.opacity === 0) return null
@@ -63,19 +74,15 @@ export const EmotionAmbientGlow: React.FC = () => {
           exit={{ opacity: 0 }}
           transition={{ duration: 1.5 }}
         >
-          {config.corners.map((corner) => {
-            const pos = cornerPositions[corner]
-            return (
+          {config.corners.map((corner) => (
               <motion.div
                 key={corner}
                 className="absolute"
                 style={{
                   width: config.spread * 2,
                   height: config.spread * 2,
-                  ...Object.fromEntries(
-                    Object.entries(pos).filter(([key]) => key !== 'background')
-                  ),
-                  background: pos.background(config.color, config.spread, effectiveOpacity),
+                  ...cornerCSS[corner],
+                  background: buildBackground(corner, config.color, config.spread, effectiveOpacity),
                 }}
                 animate={config.animated ? {
                   opacity: [1, 0.6, 1],
@@ -87,8 +94,7 @@ export const EmotionAmbientGlow: React.FC = () => {
                   ease: 'easeInOut',
                 } : undefined}
               />
-            )
-          })}
+          ))}
         </motion.div>
       </AnimatePresence>
     </div>

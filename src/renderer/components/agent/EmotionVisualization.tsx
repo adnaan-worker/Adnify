@@ -3,10 +3,9 @@
  * 动态、有趣的视觉展示
  */
 
-import React from 'react'
+cimport React, { useId, useMemo } from 'react'
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
-// import { cn } from '@utils/cn'
 import { EMOTION_COLORS } from '@/renderer/agent/emotion'
 
 interface EmotionVisualizationProps {
@@ -18,12 +17,15 @@ export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({
   emotion,
   history,
 }) => {
-  // 创建动态的粒子效果
-  const particles = Array.from({ length: 20 }, (_, i) => ({
+  // 创建动态的粒子效果（仅初始化一次，避免每次渲染跳动）
+  const particles = useMemo(() => Array.from({ length: 20 }, (_, i) => ({
     id: i,
     delay: i * 0.1,
     duration: 2 + Math.random() * 2,
-  }))
+    left: Math.random() * 100,
+    top: Math.random() * 100,
+    xOffset: Math.random() * 20 - 10,
+  })), [])
 
   // 情绪强度映射到动画参数
   const intensity = useMotionValue(emotion.intensity)
@@ -50,12 +52,12 @@ export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({
               width: 4,
               height: 4,
               backgroundColor: color,
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
+              left: `${particle.left}%`,
+              top: `${particle.top}%`,
             }}
             animate={{
               y: [0, -30, 0],
-              x: [0, Math.random() * 20 - 10, 0],
+              x: [0, particle.xOffset, 0],
               opacity: [0, 0.8, 0],
               scale: [0, 1, 0],
             }}
@@ -150,7 +152,8 @@ const EmotionWaveform: React.FC<{
   history: Array<{ timestamp: number; state: EmotionState; intensity: number }>
   color: string
 }> = ({ history, color }) => {
-  if (history.length === 0) return null
+  const gradientId = useId()
+  if (history.length < 2) return null
 
   const width = 300
   const height = 60
@@ -173,7 +176,7 @@ const EmotionWaveform: React.FC<{
       <svg width={width} height={height} className="overflow-visible">
         {/* 渐变定义 */}
         <defs>
-          <linearGradient id="waveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor={color} stopOpacity="0.8" />
             <stop offset="100%" stopColor={color} stopOpacity="0.2" />
           </linearGradient>
@@ -182,7 +185,7 @@ const EmotionWaveform: React.FC<{
         {/* 填充区域 */}
         <motion.path
           d={`${pathData} L ${width - padding} ${height - padding} L ${padding} ${height - padding} Z`}
-          fill="url(#waveGradient)"
+          fill={`url(#${gradientId})`}
           initial={{ pathLength: 0, opacity: 0 }}
           animate={{ pathLength: 1, opacity: 1 }}
           transition={{ duration: 1, ease: 'easeOut' }}

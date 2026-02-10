@@ -35,11 +35,14 @@ export function computeInflectionPoints(history: EmotionHistory[]): InflectionPo
     }
   }
 
+  // 去重：同一时间戳只保留一种拐点
+  const usedTimestamps = new Set(points.map(p => p.timestamp))
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1]
     const curr = sorted[i]
-    if (FLOW_STATES.includes(prev.state) && NEGATIVE_STATES.includes(curr.state)) {
+    if (FLOW_STATES.includes(prev.state) && NEGATIVE_STATES.includes(curr.state) && !usedTimestamps.has(curr.timestamp)) {
       points.push({ type: 'interrupted', timestamp: curr.timestamp, fromState: prev.state, toState: curr.state })
+      usedTimestamps.add(curr.timestamp)
     }
   }
 

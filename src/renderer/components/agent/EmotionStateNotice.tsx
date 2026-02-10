@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { EventBus } from '@/renderer/agent/core/EventBus'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
 import { useStore } from '@store'
-import { t } from '@/renderer/i18n'
+import { t, type Language, type TranslationKey } from '@/renderer/i18n'
 import { EMOTION_META } from '@/renderer/agent/emotion'
 
 // 最短通知间隔
@@ -36,7 +36,7 @@ export const EmotionStateNotice: React.FC = () => {
   const [notice, setNotice] = useState<NoticeData | null>(null)
   const [isVisible, setIsVisible] = useState(false)
   const prevStateRef = useRef<EmotionState>('neutral')
-  const lastNoticeTimeRef = useRef(0)
+  const lastNoticeTimeRef = useRef(Date.now())
   const dismissTimerRef = useRef<NodeJS.Timeout | null>(null)
   const fadeTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -64,7 +64,7 @@ export const EmotionStateNotice: React.FC = () => {
       if (Date.now() - lastNoticeTimeRef.current < MIN_NOTICE_INTERVAL) return
 
       // 构建原因文案
-      const reason = buildReason(detection, prevState, newState)
+      const reason = buildReason(detection, prevState, newState, language)
 
       const toMeta = EMOTION_META[newState]
 
@@ -91,14 +91,14 @@ export const EmotionStateNotice: React.FC = () => {
       if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
       if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current)
     }
-  }, [])
+  }, [language])
 
   if (!notice) return null
 
   const from = EMOTION_META[notice.fromState]
   const to = EMOTION_META[notice.toState]
-  const fromLabel = t(from.translationKey as any, language)
-  const toLabel = t(to.translationKey as any, language)
+  const fromLabel = t(from.translationKey, language)
+  const toLabel = t(to.translationKey, language)
 
   return (
     <AnimatePresence>
@@ -163,6 +163,7 @@ function buildReason(
   detection: EmotionDetection,
   _prevState: EmotionState,
   newState: EmotionState,
+  language: Language,
 ): string {
   // 有上下文建议直接用
   if (detection.suggestions && detection.suggestions.length > 0) {
@@ -178,15 +179,8 @@ function buildReason(
     return topFactor.description
   }
 
-  // 兜底
-  const fallbacks: Partial<Record<EmotionState, string>> = {
-    focused: '进入专注状态，保持节奏',
-    frustrated: '遇到了一些困难',
-    tired: '工作时间较长了',
-    excited: '状态很好，效率很高',
-    stressed: '任务负载较重',
-    flow: '深度沉浸中',
-    bored: '工作内容缺少变化',
-  }
-  return fallbacks[newState] || '状态有所变化'
+  // 兜底（使用 i18n）
+  const key = `emotion.notice.${newState}` as TranslationKey
+  const text = t(key, language)
+  return text !== key ? text : t('emotion.notice.fallback' as TranslationKey, language)
 }

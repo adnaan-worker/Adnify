@@ -31,18 +31,17 @@ import {
   type InflectionPoint,
 } from '@/renderer/agent/emotion'
 
+const WELCOME_DATA_SPAN_MS = 15 * 60 * 1000
+
 export const EmotionAwarenessPanel: React.FC = () => {
   const { language } = useStore()
   const { history, productivity } = useEmotionHistory()
   const [settings, setSettings] = useState(loadEmotionPanelSettings)
 
   const inflectionPoints = useMemo(() => computeInflectionPoints(history), [history])
-
-  // 第一次打开 = 假面板：无数据或数据不足 15 分钟，只展示欢迎 + 骨架 + 灰态趋势 + 折叠设置
-  const WELCOME_DATA_SPAN_MS = 15 * 60 * 1000
   const hasEnoughData = useMemo(() => {
     if (history.length === 0) return false
-    const oldest = Math.min(...history.map(h => h.timestamp))
+    const oldest = history.reduce((min, h) => Math.min(min, h.timestamp), Infinity)
     return Date.now() - oldest >= WELCOME_DATA_SPAN_MS
   }, [history])
   const isWelcomeState = !hasEnoughData

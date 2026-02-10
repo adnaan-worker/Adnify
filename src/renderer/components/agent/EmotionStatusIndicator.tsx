@@ -30,8 +30,8 @@ export const EmotionStatusIndicator: React.FC = () => {
     if (!emotion) return
     setJustChanged(true)
     setMessageIndex(0)
-    const t = setTimeout(() => setJustChanged(false), 3000)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setJustChanged(false), 3000)
+    return () => clearTimeout(timer)
   }, [emotion?.state])
 
   // 轮播消息
@@ -44,12 +44,12 @@ export const EmotionStatusIndicator: React.FC = () => {
     }, 6000) // 每6秒切换一次
 
     return () => clearInterval(interval)
-  }, [emotion])
+  }, [emotion?.state])
 
   const state = emotion?.state || 'neutral'
   const meta = EMOTION_META[state]
   const intensity = emotion?.intensity ?? 0.5
-  const label = t(meta.translationKey as any, language)
+  const label = t(meta.translationKey, language)
   const messages = EMOTION_MESSAGES[state]
   const currentMessageKey = messages[messageIndex]
 

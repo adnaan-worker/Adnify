@@ -93,10 +93,12 @@ export const EmotionCompanion: React.FC = () => {
   const shownMessagesRef = useRef<Set<string>>(new Set())
   const prevEmotionStateRef = useRef<EmotionState>('neutral')
   const activeMessageRef = useRef<CompanionMessage | null>(null)
+  const dismissFadeTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const dismiss = useCallback(() => {
     setIsVisible(false)
-    setTimeout(() => {
+    if (dismissFadeTimerRef.current) clearTimeout(dismissFadeTimerRef.current)
+    dismissFadeTimerRef.current = setTimeout(() => {
       setActiveMessage(null)
       activeMessageRef.current = null
       setFeedbackGiven(false)
@@ -232,8 +234,9 @@ export const EmotionCompanion: React.FC = () => {
       unsubBreakMicro()
       unsubBreakSuggested()
       if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
+      if (dismissFadeTimerRef.current) clearTimeout(dismissFadeTimerRef.current)
     }
-  }, [showMessage, dismiss, buildActionButtons])
+  }, [showMessage, dismiss, buildActionButtons, language])
 
   // ===== 反馈处理 =====
   const handleFeedback = useCallback((accurate: boolean) => {

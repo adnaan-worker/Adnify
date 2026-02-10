@@ -49,7 +49,7 @@ export const EmotionEditorBar: React.FC = () => {
     }, 8000) // 每8秒切换一次消息
 
     return () => clearInterval(interval)
-  }, [emotion])
+  }, [emotion?.state])
 
   const handleClick = useCallback(() => {
     if (!emotion) return
@@ -57,18 +57,17 @@ export const EmotionEditorBar: React.FC = () => {
     setCurrentMessageIndex((prev) => (prev + 1) % extra.messages.length)
   }, [emotion])
 
-  if (!emotion || emotion.state === 'neutral') {
-    return null
-  }
-
-  const meta = EMOTION_META[emotion.state]
-  const extra = EDITOR_BAR_EXTRA[emotion.state]
-  const currentMessageKey = extra.messages[currentMessageIndex]
-  const intensity = emotion.intensity ?? 0.5
+  const isActive = emotion && emotion.state !== 'neutral'
+  const meta = isActive ? EMOTION_META[emotion.state] : null
+  const extra = isActive ? EDITOR_BAR_EXTRA[emotion.state] : null
+  const currentMessageKey = extra?.messages[currentMessageIndex]
+  const intensity = emotion?.intensity ?? 0.5
 
   return (
     <AnimatePresence>
+      {isActive && meta && extra && currentMessageKey && (
       <motion.div
+        key={emotion.state}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 10 }}
@@ -153,11 +152,7 @@ export const EmotionEditorBar: React.FC = () => {
                 `}
                 style={{ color: meta.color }}
                 onClick={() => {
-                  // 点击可以显示更多建议（未来可以扩展为详细建议面板）
-                  if (emotion.suggestions && emotion.suggestions.length > 0) {
-                    // 可以通过 toast 或其他方式显示建议
-                    console.log('Suggestions:', emotion.suggestions)
-                  }
+                  // TODO: 扩展为详细建议面板或 toast 通知
                 }}
               >
                 {extra.icon}
@@ -176,6 +171,7 @@ export const EmotionEditorBar: React.FC = () => {
           />
         </div>
       </motion.div>
+      )}
     </AnimatePresence>
   )
 }
