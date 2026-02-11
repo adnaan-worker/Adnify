@@ -825,6 +825,7 @@ export default function ChatPanel() {
     return (
       <ChatMessageUI
         key={msg.id}
+        messageId={msg.id}
         message={msg}
         onEdit={handleEditMessage}
         onRegenerate={handleRegenerate}

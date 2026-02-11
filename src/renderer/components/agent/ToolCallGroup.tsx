@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@/renderer/agent/types'
 import ToolCallCard from './ToolCallCard'
 import FileChangeCard from './FileChangeCard'
+import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
 
@@ -71,6 +72,21 @@ export default function ToolCallGroup({
                         onReject={isPending ? onRejectTool : undefined}
                         onOpenInEditor={onOpenDiff}
                         messageId={messageId}
+                    />
+                )
+            }
+
+            // AI 记忆提议使用极简内联渲染
+            if (tc.name === 'remember') {
+                return (
+                    <MemoryApprovalInline
+                        key={tc.id}
+                        content={tc.arguments.content as string}
+                        isAwaitingApproval={isPending}
+                        isSuccess={tc.status === 'success'}
+                        messageId={messageId || ''}
+                        toolCallId={tc.id}
+                        args={tc.arguments}
                     />
                 )
             }

@@ -1177,7 +1177,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         }
     },
 
-    async remember(args, ctx) {
+    async remember(args, _ctx) {
         const content = args.content as string
         if (!content) return { success: false, result: '', error: 'Missing content' }
 
