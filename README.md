@@ -50,14 +50,13 @@ Adnify 采用 Electron 多进程架构，结合 Web Worker 和 Node.js Worker Th
 
 <div align="center">
 
-<!-- 架构图：支持深色/浅色主题自动切换 -->
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="images/architecture-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="images/architecture-light.svg">
-  <img src="images/architecture-dark.svg" alt="Adnify 架构图" style="max-width: 100%; height: auto;" />
-</picture>
+<!-- 架构图 -->
+<a href="images/architecture-dark.svg" target="_blank">
+  <img src="images/architecture-dark.svg" alt="Adnify 架构图" width="100%" />
+</a>
 
 <p><em>多进程 + 多线程架构，充分利用多核 CPU，确保 UI 流畅响应</em></p>
+<p>💡 <strong>点击图片查看高清大图</strong></p>
 
 <details>
 <summary>📊 点击查看 Mermaid 源码（可在 <a href="https://mermaid.live/">Mermaid Live</a> 编辑）</summary>
@@ -236,8 +235,6 @@ graph TB
 </details>
 
 </div>
-
-> 💡 **查看大图**: 右键点击图片选择"在新标签页中打开图片"可查看高清大图，或直接访问 [架构图 SVG](images/architecture-dark.svg)
 
 ### 核心模块说明
 
