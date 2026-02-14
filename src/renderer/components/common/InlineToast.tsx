@@ -98,8 +98,8 @@ function IslandToast({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id
     >
       <div className={`
         flex items-center gap-3 pl-3 pr-4 py-2 rounded-full 
-        bg-[#0a0a0c] text-white
-        ring-1 ring-white/10 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.5)]
+        bg-surface text-text-primary
+        ring-1 ring-border shadow-[0_12px_40px_-12px_rgba(0,0,0,0.5)]
         min-w-[220px] max-w-[450px] overflow-hidden
       `}>
         {/* Icon with Ring Progress */}
@@ -116,9 +116,9 @@ function IslandToast({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id
                 strokeWidth="1.5"
                 strokeLinecap="round"
                 className={
-                  toast.type === 'error' ? 'text-red-500/40' : 
-                  toast.type === 'success' ? 'text-emerald-500/40' : 
-                  'text-accent/40'
+                  toast.type === 'error' ? 'text-status-error/40' :
+                    toast.type === 'success' ? 'text-status-success/40' :
+                      'text-accent/40'
                 }
                 initial={{ pathLength: 1 }}
                 animate={{ pathLength: 0 }}
@@ -129,23 +129,23 @@ function IslandToast({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id
 
           <div className={`
             w-full h-full rounded-full flex items-center justify-center
-            ${toast.type === 'error' ? 'bg-red-500/20 text-red-400' : 
-              toast.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 
-              'bg-accent/20 text-accent'}
+            ${toast.type === 'error' ? 'bg-status-error/20 text-status-error' :
+              toast.type === 'success' ? 'bg-status-success/20 text-status-success' :
+                'bg-accent/20 text-accent'}
           `}>
             <Icon className="w-4 h-4" strokeWidth={2.5} />
           </div>
         </div>
 
-        <span className="text-[13px] font-bold truncate flex-1 tracking-tight text-white/90">
+        <span className="text-[13px] font-bold truncate flex-1 tracking-tight text-text-primary/90">
           {toast.message}
         </span>
 
         <button
           onClick={() => onDismiss(toast.id)}
-          className="p-1 -mr-1 rounded-full hover:bg-white/10 transition-colors shrink-0 group/btn"
+          className="p-1 -mr-1 rounded-full hover:bg-surface-active transition-colors shrink-0 group/btn"
         >
-          <X className="w-3.5 h-3.5 text-white/40 group-hover:text-white" />
+          <X className="w-3.5 h-3.5 text-text-muted group-hover:text-text-primary" />
         </button>
       </div>
     </motion.div>
