@@ -290,6 +290,12 @@ export const createMessageSlice: StateCreator<
         const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
+        // 关键修复：先刷新文本缓冲区，确保所有文本都已写入
+        const store = get() as any
+        if (store._flushTextBuffer) {
+            store._flushTextBuffer(messageId)
+        }
+
         set(state => {
             const thread = state.threads[threadId]
             if (!thread) return state
