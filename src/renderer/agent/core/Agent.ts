@@ -179,6 +179,7 @@ export class AgentClass {
                 store.updateToolCall(task.assistantId, tc.id, {
                   status: 'error',
                   error: 'Aborted by user',
+                  streamingState: undefined,  // 清除流式状态
                 })
               }
             }

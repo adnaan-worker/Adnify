@@ -209,7 +209,10 @@ async function executeSingle(
 
   // 更新状态为运行中
   if (currentAssistantId) {
-    store.updateToolCall(currentAssistantId, toolCall.id, { status: 'running' })
+    store.updateToolCall(currentAssistantId, toolCall.id, { 
+      status: 'running',
+      streamingState: undefined,  // 清除流式状态
+    })
   }
   EventBus.emit({ type: 'tool:running', id: toolCall.id })
 
@@ -267,6 +270,7 @@ async function executeSingle(
         result: content,
         arguments: updatedArguments,
         richContent,
+        streamingState: undefined,  // 清除流式状态
       })
 
       store.addToolResult(toolCall.id, toolCall.name, content, result.success ? 'success' : 'tool_error')
@@ -303,7 +307,11 @@ async function executeSingle(
     })
 
     if (currentAssistantId) {
-      store.updateToolCall(currentAssistantId, toolCall.id, { status: 'error', result: errorMsg })
+      store.updateToolCall(currentAssistantId, toolCall.id, { 
+        status: 'error', 
+        result: errorMsg,
+        streamingState: undefined,  // 清除流式状态
+      })
       store.addToolResult(toolCall.id, toolCall.name, `Error: ${errorMsg}`, 'tool_error')
     }
     EventBus.emit({ type: 'tool:error', id: toolCall.id, error: errorMsg })
@@ -374,7 +382,8 @@ export async function executeTools(
           if (context.currentAssistantId) {
             store.updateToolCall(context.currentAssistantId, tc.id, {
               status: 'error',
-              result: errorMsg
+              result: errorMsg,
+              streamingState: undefined,  // 清除流式状态
             })
           }
 
@@ -403,7 +412,8 @@ export async function executeTools(
       if (context.currentAssistantId) {
         store.updateToolCall(context.currentAssistantId, tc.id, {
           status: 'error',
-          result: 'Skipped: dependency not met'
+          result: 'Skipped: dependency not met',
+          streamingState: undefined,  // 清除流式状态
         })
       }
       results.push({ toolCall: tc, result: { content: 'Skipped: dependency not met' } })
@@ -426,7 +436,10 @@ export async function executeTools(
       userRejected = true
       rejected.add(tc.id)
       if (context.currentAssistantId) {
-        store.updateToolCall(context.currentAssistantId, tc.id, { status: 'rejected' })
+        store.updateToolCall(context.currentAssistantId, tc.id, { 
+          status: 'rejected',
+          streamingState: undefined,  // 清除流式状态
+        })
       }
       EventBus.emit({ type: 'tool:rejected', id: tc.id })
       results.push({ toolCall: tc, result: { content: 'Rejected by user' } })

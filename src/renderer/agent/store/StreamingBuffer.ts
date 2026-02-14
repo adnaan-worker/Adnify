@@ -11,8 +11,6 @@ class StreamingBuffer {
     private buffer: Map<string, { content: string; threadId?: string }> = new Map()
     private rafId: number | null = null
     private flushCallback: FlushCallback | null = null
-    private lastFlushTime = 0
-    private readonly FLUSH_INTERVAL = 16 // 约 60fps
 
     setFlushCallback(callback: FlushCallback) {
         this.flushCallback = callback
@@ -20,7 +18,10 @@ class StreamingBuffer {
 
     append(messageId: string, content: string, threadId?: string): void {
         if (!content) return
+        
+        const isFirstData = !this.buffer.has(messageId)
         const existing = this.buffer.get(messageId)
+        
         if (existing) {
             this.buffer.set(messageId, {
                 content: existing.content + content,
@@ -29,31 +30,28 @@ class StreamingBuffer {
         } else {
             this.buffer.set(messageId, { content, threadId })
         }
-        this.scheduleFlush()
+        
+        // 优化：第一次数据立即刷新，后续数据节流
+        if (isFirstData) {
+            this.flushNow()
+        } else {
+            this.scheduleFlush()
+        }
     }
 
     private scheduleFlush(): void {
         if (this.rafId !== null) return
 
-        const now = performance.now()
-        const elapsed = now - this.lastFlushTime
-
-        if (elapsed >= this.FLUSH_INTERVAL) {
-            this.rafId = requestAnimationFrame(() => {
-                this.rafId = null
-                this.flush()
-            })
-        } else {
-            this.rafId = requestAnimationFrame(() => {
-                this.rafId = null
-                this.scheduleFlush()
-            })
-        }
+        // 简化逻辑：直接在下一帧刷新，不做复杂的时间判断
+        // requestAnimationFrame 本身就提供了约 60fps 的节流
+        this.rafId = requestAnimationFrame(() => {
+            this.rafId = null
+            this.flush()
+        })
     }
 
     private flush(): void {
         if (!this.flushCallback || this.buffer.size === 0) return
-        this.lastFlushTime = performance.now()
 
         const updates = new Map(this.buffer)
         this.buffer.clear()

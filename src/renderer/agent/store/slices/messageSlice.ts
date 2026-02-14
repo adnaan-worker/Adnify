@@ -556,6 +556,16 @@ export const createMessageSlice: StateCreator<
                             Object.entries(updates).filter(([_, v]) => v !== undefined)
                         ) as Partial<ToolCall>
 
+                        // 自动清理：如果状态变为非pending/awaiting，自动清除streamingState
+                        if (cleanUpdates.status && !['pending', 'awaiting'].includes(cleanUpdates.status)) {
+                            if (cleanUpdates.streamingState === undefined) {
+                                // 已经显式设置为undefined，保持
+                            } else if (!('streamingState' in cleanUpdates)) {
+                                // 没有提供streamingState，自动清除
+                                cleanUpdates.streamingState = undefined
+                            }
+                        }
+
                         // 创建新的 toolCall 对象（确保引用变化）
                         const updatedToolCall = { ...existingToolCall, ...cleanUpdates }
 
