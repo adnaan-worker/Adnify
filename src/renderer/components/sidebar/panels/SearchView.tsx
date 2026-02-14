@@ -142,11 +142,15 @@ export function SearchView() {
     if (content !== null) {
       openFile(filePath, content)
       setActiveFile(filePath)
-      window.dispatchEvent(
-        new CustomEvent('editor:goto-line', {
-          detail: { line: result.line, column: 1 },
-        })
-      )
+      
+      // 增加延迟，确保编辑器完全准备好
+      setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('editor:goto-line', {
+            detail: { line: result.line, column: 1 },
+          })
+        )
+      }, 200)
     }
   }
 

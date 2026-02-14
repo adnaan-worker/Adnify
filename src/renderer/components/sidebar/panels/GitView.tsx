@@ -19,7 +19,7 @@ import { getEditorConfig } from '@renderer/settings'
 import { toast } from '@components/common/ToastProvider'
 import { keybindingService } from '@services/keybindingService'
 import { Input, Button, Modal } from '@components/ui'
-import { getFileName } from '@shared/utils/pathUtils'
+import { getFileName, normalizePath } from '@shared/utils/pathUtils'
 import { ConflictResolver } from '@components/git/ConflictResolver'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
 
@@ -824,7 +824,7 @@ Commit message:`
     // 文件点击处理 - 打开 diff
     const handleFileClick = async (path: string, fileStatus: string, _staged: boolean) => {
         try {
-            const fullPath = `${workspacePath}/${path}`.replace(/\\/g, '/')
+            const fullPath = normalizePath(`${workspacePath}/${path}`)
             
             // 尝试读取文件内容
             const content = await api.file.read(fullPath)
@@ -1084,7 +1084,7 @@ Commit message:`
                                         onStage={() => handleStage(path)}
                                         onUnstage={() => {}}
                                         onDiscard={() => handleDiscard(path)}
-                                        onClick={() => setConflictFile(`${workspacePath}/${path}`.replace(/\\/g, '/'))}
+                                        onClick={() => setConflictFile(normalizePath(`${workspacePath}/${path}`))}
                                     />
                                 ))}
                             </div>

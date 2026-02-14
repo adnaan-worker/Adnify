@@ -153,12 +153,12 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
             encoding: options?.encoding,
           } : f
         )
-        // 使用已存在文件的路径，保持一致性
-        return { activeFilePath: existing.path, openFiles: updatedFiles }
+        // 使用规范化的路径，保持一致性
+        return { activeFilePath: normalizedPath, openFiles: updatedFiles }
       }
       return {
         openFiles: [...state.openFiles, {
-          path,
+          path: normalizedPath, // 存储规范化的路径
           content,
           isDirty: false,
           originalContent,
@@ -166,7 +166,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
           largeFileInfo: options?.largeFileInfo,
           encoding: options?.encoding,
         }],
-        activeFilePath: path,
+        activeFilePath: normalizedPath, // 使用规范化的路径
       }
     }),
 
@@ -180,7 +180,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
       return { openFiles: newOpenFiles, activeFilePath: newActivePath }
     }),
 
-  setActiveFile: (path) => set({ activeFilePath: path }),
+  setActiveFile: (path) => set({ activeFilePath: path ? normalizePath(path) : null }),
 
   updateFileContent: (path, content) =>
     set((state) => ({

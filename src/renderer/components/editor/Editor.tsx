@@ -121,6 +121,30 @@ export default function Editor() {
     }
   }, [activeFilePath])
 
+  // 监听跳转到行的事件
+  useEffect(() => {
+    const handleGotoLine = (event: CustomEvent<{ line: number; column: number }>) => {
+      // 使用 setTimeout 确保编辑器已经渲染
+      setTimeout(() => {
+        const editor = editorRef.current
+        if (!editor) {
+          console.warn('[Editor] Editor not ready for goto-line')
+          return
+        }
+
+        const { line, column } = event.detail
+        editor.revealLineInCenter(line)
+        editor.setPosition({ lineNumber: line, column })
+        editor.focus()
+      }, 100)
+    }
+
+    window.addEventListener('editor:goto-line', handleGotoLine as EventListener)
+    return () => {
+      window.removeEventListener('editor:goto-line', handleGotoLine as EventListener)
+    }
+  }, [])
+
   const handleBeforeMount: BeforeMount = (monacoInstance) => {
     const { currentTheme } = useStore.getState() as { currentTheme: ThemeName }
     defineMonacoTheme(monacoInstance, currentTheme)
