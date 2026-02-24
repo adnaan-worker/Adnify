@@ -90,6 +90,17 @@ body {
     radial-gradient(circle at 50% 0%, rgb(var(--accent) / 0.05) 0%, transparent 50%);
 }
 
+::selection {
+  background-color: rgb(var(--accent) / 0.2);
+  color: inherit;
+}
+
+input,
+textarea,
+[contenteditable] {
+  caret-color: rgb(var(--accent));
+}
+
 #root {
   height: 100vh;
   width: 100vw;
@@ -221,8 +232,13 @@ body {
 
 /* Button Sweep Effect */
 @keyframes btn-sweep {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(200%); }
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(200%);
+  }
 }
 
 .btn-sweep {
