@@ -110,7 +110,7 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
         <Tooltip content="Copy Code">
           <button
             onClick={handleCopy}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
@@ -268,29 +268,29 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
     : `Thinking for ${elapsed}s...`
 
   return (
-    <div className="my-3 group/think">
+    <div className="my-3 group/think rounded-xl overflow-hidden border border-text-primary/[0.05] bg-text-primary/[0.02]">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-1.5 text-text-muted/60 hover:text-text-muted transition-colors select-none"
+        className="flex w-full items-center gap-2 px-3 py-2 text-text-muted/50 hover:text-text-muted hover:bg-surface-hover transition-colors select-none"
       >
         <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}>
-          <ChevronDown className="w-3 h-3" />
+          <ChevronDown className="w-3.5 h-3.5" />
         </div>
-        <span className="text-[11px] font-medium">
+        <span className="text-[11px] font-medium tracking-wide">
           {durationText}
         </span>
       </button>
 
       {isExpanded && (
-        <div className={`mt-2 pl-3 border-l border-border/30 animate-slide-down scroll-shadow-container ${shadowClass}`}>
+        <div className={`relative animate-slide-down scroll-shadow-container ${shadowClass}`}>
           <div
             ref={scrollRef}
-            className="max-h-[200px] overflow-y-auto scrollbar-none"
+            className="max-h-[300px] overflow-y-auto scrollbar-none px-4 pb-3"
           >
             {content ? (
               <div
-                style={{ fontSize: `${fontSize}px` }}
-                className="text-text-muted/60 leading-relaxed whitespace-pre-wrap font-sans thinking-content"
+                style={{ fontSize: `${fontSize - 1}px` }}
+                className="text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans thinking-content"
               >
                 {fluidContent}
               </div>
@@ -742,7 +742,7 @@ const ChatMessage = React.memo(({
             {/* Header Row */}
             <div className="flex items-center gap-2.5 px-1 select-none">
               <span className="text-[11px] font-bold text-text-muted/60 uppercase tracking-tight">You</span>
-              <div className="w-7 h-7 rounded-full bg-surface/60 border border-white/10 flex items-center justify-center text-text-muted shadow-sm flex-shrink-0">
+              <div className="w-7 h-7 rounded-full bg-surface/60 border border-text-primary/10 flex items-center justify-center text-text-muted shadow-sm flex-shrink-0">
                 <User className="w-3.5 h-3.5" />
               </div>
             </div>
@@ -795,12 +795,12 @@ const ChatMessage = React.memo(({
                   </div>
                 </div>
               ) : (
-                <div className="relative bg-accent/15 text-text-primary border border-accent/20 px-4 py-2.5 rounded-[18px] rounded-tr-sm shadow-sm w-fit max-w-full">
+                <div className="relative bg-surface-active text-text-primary/95 px-4 py-3 rounded-[20px] rounded-tr-[4px] shadow-sm w-fit max-w-full border border-transparent">
                   {/* Images */}
                   {images.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2 justify-end">
                       {images.map((img, i) => (
-                        <div key={i} className="rounded-lg overflow-hidden border border-white/10 shadow-md h-28 group/img relative cursor-zoom-in">
+                        <div key={i} className="rounded-lg overflow-hidden border border-text-inverted/10 shadow-md h-28 group/img relative cursor-zoom-in">
                           <img
                             src={`data:${img.source.media_type};base64,${img.source.data}`}
                             alt="Upload"
@@ -820,20 +820,20 @@ const ChatMessage = React.memo(({
               {!isEditing && (
                 <div className="flex items-center gap-0.5 mt-1 mr-1 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-200">
                   <Tooltip content={tt.copy}>
-                    <button onClick={handleCopy} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-all">
+                    <button onClick={handleCopy} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all">
                       {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                     </button>
                   </Tooltip>
                   {onEdit && (
                     <Tooltip content={tt.edit}>
-                      <button onClick={handleStartEdit} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-all">
+                      <button onClick={handleStartEdit} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all">
                         <Edit2 className="w-3 h-3" />
                       </button>
                     </Tooltip>
                   )}
                   {hasCheckpoint && onRestore && (
                     <Tooltip content={tt.restore}>
-                      <button onClick={() => onRestore(message.id)} className="p-1 rounded-md text-text-muted hover:text-amber-400 hover:bg-white/5 transition-all">
+                      <button onClick={() => onRestore(message.id)} className="p-1 rounded-md text-text-muted hover:text-amber-400 hover:bg-surface-hover transition-all">
                         <RotateCcw className="w-3 h-3" />
                       </button>
                     </Tooltip>
@@ -860,7 +860,7 @@ const ChatMessage = React.memo(({
               {!message.isStreaming && (
                 <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
                   <Tooltip content={tt.copy}>
-                    <button onClick={handleCopy} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-all">
+                    <button onClick={handleCopy} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all">
                       {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </Tooltip>

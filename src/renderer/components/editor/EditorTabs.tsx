@@ -64,7 +64,7 @@ export const EditorTabs = memo(function EditorTabs({
               group relative flex items-center gap-2 px-4 h-full min-w-[120px] max-w-[200px] cursor-pointer transition-all duration-200 border-r border-border
               ${isActive
                 ? 'bg-transparent text-text-primary font-medium'
-                : 'bg-transparent text-text-muted hover:bg-white/5 hover:text-text-primary'}
+                : 'bg-transparent text-text-muted hover:bg-surface-hover hover:text-text-primary'}
               ${file.isDeleted ? 'opacity-60' : ''}
             `}
             onClick={() => onSelectFile(file.path)}
@@ -87,7 +87,7 @@ export const EditorTabs = memo(function EditorTabs({
             <span className={`text-[13px] truncate flex-1 ${file.isDeleted ? 'line-through text-text-muted' : ''}`}>{fileName}</span>
 
             <div
-              className="flex items-center justify-center w-5 h-5 rounded-lg hover:bg-white/10 transition-colors"
+              className="flex items-center justify-center w-5 h-5 rounded-lg hover:bg-surface-hover transition-colors"
               onClick={(e) => {
                 e.stopPropagation()
                 onCloseFile(file.path)
@@ -124,7 +124,7 @@ export const EditorTabs = memo(function EditorTabs({
           <button
             onClick={onRunLint}
             disabled={isLinting}
-            className="p-1.5 rounded-lg hover:bg-white/5 transition-colors disabled:opacity-50 group"
+            className="p-1.5 rounded-lg hover:bg-surface-hover transition-colors disabled:opacity-50 group"
             title="Run lint check"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-text-muted group-hover:text-text-primary ${isLinting ? 'animate-spin' : ''}`} />

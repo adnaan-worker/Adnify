@@ -34,7 +34,7 @@ export const Select = memo(function Select({
     const dropdownRef = useRef<HTMLDivElement>(null)
 
     const selectedOption = options.find(opt => opt.value === value)
-    
+
     // 使用自定义 hook 处理点击外部关闭
     useClickOutside(() => setIsOpen(false), isOpen, [containerRef, dropdownRef])
 
@@ -43,15 +43,15 @@ export const Select = memo(function Select({
             const rect = containerRef.current.getBoundingClientRect()
             const spaceBelow = window.innerHeight - rect.bottom
             const spaceAbove = rect.top
-            const shouldShowAbove = dropdownPosition === 'top' || 
+            const shouldShowAbove = dropdownPosition === 'top' ||
                 (dropdownPosition === 'auto' && spaceBelow < 250 && spaceAbove > spaceBelow)
-            
+
             setDropdownStyle({
                 position: 'fixed',
                 left: rect.left,
                 width: rect.width,
                 zIndex: 9999,
-                ...(shouldShowAbove 
+                ...(shouldShowAbove
                     ? { bottom: window.innerHeight - rect.top + 6 }
                     : { top: rect.bottom + 6 }
                 ),
@@ -73,9 +73,9 @@ export const Select = memo(function Select({
                     onClick={() => { onChange(option.value); setIsOpen(false); }}
                     className={`
                         w-full flex items-center justify-between px-3 py-2 text-sm text-left rounded-lg transition-all duration-200
-                        ${option.value === value 
-                            ? 'text-accent bg-accent/10 font-bold' 
-                            : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'
+                        ${option.value === value
+                            ? 'text-accent bg-accent/10 font-bold'
+                            : 'text-text-secondary hover:bg-text-primary/[0.05] hover:text-text-primary'
                         }
                     `}
                 >
@@ -95,12 +95,12 @@ export const Select = memo(function Select({
                 type="button"
                 onClick={() => !disabled && setIsOpen(!isOpen)}
                 disabled={disabled}
-        className={`
-          flex items-center justify-between w-full px-3 py-1.5 rounded-lg text-xs border transition-all duration-200
-          ${isOpen 
-            ? 'border-accent/50 ring-2 ring-accent/10 bg-surface' 
-            : 'bg-surface/50 border-border hover:bg-surface hover:border-border-active'
-          }
+                className={`
+          flex items-center justify-between w-full rounded-xl border px-3 h-10 py-1 text-sm shadow-[inset_0_1px_2px_rgba(0,0,0,0.1)] transition-all duration-200 ease-out
+          ${isOpen
+                        ? 'bg-surface/80 border-accent/40 ring-4 ring-accent/10 shadow-[0_0_0_1px_rgba(var(--accent)/0.2)]'
+                        : 'bg-surface/50 backdrop-blur-sm border-border hover:bg-surface hover:border-border-active'
+                    }
           ${className}
         `}
             >

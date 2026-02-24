@@ -66,7 +66,7 @@ export default function WelcomePage() {
   return (
     <div className="h-full w-full overflow-y-auto custom-scrollbar bg-transparent">
       <div className="min-h-full flex flex-col items-center justify-center p-8 lg:p-12 animate-scale-in">
-        
+
         {/* Header Section */}
         <div className="text-center mb-12 flex-shrink-0">
           <div className="inline-flex items-center justify-center mb-6 relative group">
@@ -79,47 +79,47 @@ export default function WelcomePage() {
 
         {/* Main Actions Grid */}
         <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
-          
+
           {/* Start Section */}
           <div className="space-y-6">
             <h2 className="text-[11px] font-black text-text-muted uppercase tracking-[0.2em] pl-1 opacity-50">Start</h2>
             <div className="grid gap-3">
               <button
                 onClick={handleOpenFolder}
-                className="flex items-center gap-4 p-4 rounded-2xl bg-surface/20 border border-border hover:border-accent/40 hover:bg-surface/40 text-left transition-all duration-300 group shadow-sm hover:shadow-xl"
+                className="flex items-center gap-4 p-5 rounded-[24px] bg-surface/40 backdrop-blur-xl border border-text-primary/[0.03] hover:border-accent/30 hover:bg-surface-active/60 text-left transition-all duration-300 group hover:-translate-y-[2px] hover:shadow-[0_12px_40px_-12px_rgba(var(--accent)/0.2)]"
               >
-                <div className="p-2.5 rounded-xl bg-accent/10 text-accent group-hover:bg-accent group-hover:text-white transition-colors">
-                  <FolderOpen className="w-5 h-5" strokeWidth={2} />
+                <div className="text-text-muted/60 group-hover:text-accent transition-colors duration-300 group-hover:scale-110">
+                  <FolderOpen className="w-7 h-7" strokeWidth={1.5} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-text-primary">打开文件夹</div>
-                  <div className="text-[11px] text-text-muted mt-0.5 font-medium opacity-70">Open a local project folder</div>
+                  <div className="text-sm font-bold text-text-primary transition-colors">打开文件夹</div>
+                  <div className="text-[11px] text-text-muted mt-1 font-medium opacity-70">Open a local project folder</div>
                 </div>
               </button>
 
               <button
                 onClick={handleOpenWorkspace}
-                className="flex items-center gap-4 p-4 rounded-2xl bg-surface/20 border border-border hover:border-purple-500/40 hover:bg-surface/40 text-left transition-all duration-300 group shadow-sm hover:shadow-xl"
+                className="flex items-center gap-4 p-5 rounded-[24px] bg-surface/40 backdrop-blur-xl border border-text-primary/[0.03] hover:border-purple-500/30 hover:bg-surface-active/60 text-left transition-all duration-300 group hover:-translate-y-[2px] hover:shadow-[0_12px_40px_-12px_rgba(168,85,247,0.2)]"
               >
-                <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-colors">
-                  <Folder className="w-5 h-5" strokeWidth={2} />
+                <div className="text-text-muted/60 group-hover:text-purple-400 transition-colors duration-300 group-hover:scale-110">
+                  <Folder className="w-7 h-7" strokeWidth={1.5} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-text-primary">打开工作区</div>
-                  <div className="text-[11px] text-text-muted mt-0.5 font-medium opacity-70">Open workspace file (.adnify)</div>
+                  <div className="text-sm font-bold text-text-primary transition-colors">打开工作区</div>
+                  <div className="text-[11px] text-text-muted mt-1 font-medium opacity-70">Open workspace file (.adnify)</div>
                 </div>
               </button>
 
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
                   onClick={() => api.window.new()}
-                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 border border-transparent hover:border-border text-xs font-bold text-text-secondary hover:text-text-primary transition-all"
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-text-primary/[0.03] border border-transparent hover:border-border text-xs font-bold text-text-secondary hover:text-text-primary transition-all"
                 >
                   <Plus className="w-4 h-4" /> 新建窗口
                 </button>
                 <button
                   onClick={() => setShowSettings(true)}
-                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 border border-transparent hover:border-border text-xs font-bold text-text-secondary hover:text-text-primary transition-all"
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-text-primary/[0.03] border border-transparent hover:border-border text-xs font-bold text-text-secondary hover:text-text-primary transition-all"
                 >
                   <Settings className="w-4 h-4" /> 设置
                 </button>
@@ -138,9 +138,9 @@ export default function WelcomePage() {
                   <button
                     key={workspace.path}
                     onClick={() => handleOpenRecent(workspace.path)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-text-secondary hover:bg-white/5 hover:text-text-primary transition-all duration-200 group"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-all duration-200 group"
                   >
-                    <div className="p-1.5 rounded-lg bg-white/5 text-text-muted group-hover:text-accent group-hover:bg-accent/10 transition-colors">
+                    <div className="p-1.5 rounded-lg bg-text-primary/[0.03] text-text-muted group-hover:text-accent group-hover:bg-accent/10 transition-colors">
                       <Folder className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -162,7 +162,7 @@ export default function WelcomePage() {
         {/* Footer Hint */}
         <div className="mt-16 text-center flex-shrink-0">
           <p className="text-[11px] text-text-muted font-bold uppercase tracking-widest opacity-40">
-            Press <kbd className="mx-1.5 px-2 py-1 bg-white/5 border border-border rounded-md text-text-primary font-mono text-[10px] shadow-sm">Ctrl+Shift+O</kbd> for commands
+            Press <kbd className="mx-1.5 px-2 py-1 bg-surface-muted border border-border-subtle rounded-md text-text-primary font-mono text-[10px] shadow-sm">Ctrl+Shift+O</kbd> for commands
           </p>
         </div>
       </div>

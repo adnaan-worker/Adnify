@@ -518,7 +518,7 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
                         </div>
                       </div>
                       {expandedEdits.has(edit.path) && (
-                        <div className="border-t border-border-subtle bg-black/20 animate-in fade-in slide-in-from-top-1 duration-300">
+                        <div className="border-t border-border-subtle bg-text-inverted/20 animate-in fade-in slide-in-from-top-1 duration-300">
                           <DiffViewer
                             originalContent={edit.originalContent}
                             modifiedContent={edit.newContent}
@@ -590,7 +590,7 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
                             )}
                           </div>
                           {expandedEdits.has(change.filePath) && change.oldContent !== null && change.newContent !== null && (
-                            <div className="border-t border-border-subtle bg-black/20 animate-in fade-in slide-in-from-top-1 duration-300">
+                            <div className="border-t border-border-subtle bg-text-inverted/20 animate-in fade-in slide-in-from-top-1 duration-300">
                               <DiffViewer
                                 originalContent={change.oldContent || ''}
                                 modifiedContent={change.newContent || ''}

@@ -17,7 +17,7 @@ export default function ActivityBar() {
   ] as const
 
   return (
-    <div className="w-[60px] bg-background-secondary/80 backdrop-blur-xl border-r border-white/5 flex flex-col z-30 select-none items-center py-4">
+    <div className="w-[60px] bg-background-secondary/80 backdrop-blur-xl border-r border-border-subtle flex flex-col z-30 select-none items-center py-4">
       {/* Top Actions */}
       <div className="flex-1 flex flex-col w-full items-center gap-3">
         {items.map((item) => (
@@ -27,15 +27,18 @@ export default function ActivityBar() {
               className={`
                 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 group relative
                 ${activeSidePanel === item.id
-                  ? 'bg-accent/15 text-accent shadow-[inset_0_0_12px_rgba(var(--accent)/0.2)]'
-                  : 'text-text-muted hover:text-text-primary hover:bg-white/5 hover:scale-105'}
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-text-muted hover:text-text-primary hover:bg-surface-hover active:scale-95'}
               `}
             >
+              {activeSidePanel === item.id && (
+                <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 w-[3px] h-6 bg-accent shadow-[0_0_8px_rgba(var(--accent)/0.6)] rounded-r-full" />
+              )}
               <item.icon
-                className={`w-5 h-5 transition-all duration-300 
-                  ${activeSidePanel === item.id ? 'drop-shadow-[0_0_8px_rgba(var(--accent)/0.5)] scale-110' : 'opacity-70 group-hover:opacity-100'}
+                className={`w-[22px] h-[22px] transition-all duration-300 
+                  ${activeSidePanel === item.id ? 'drop-shadow-[0_0_10px_rgba(var(--accent)/0.6)] scale-105' : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'}
                 `}
-                strokeWidth={1.5}
+                strokeWidth={activeSidePanel === item.id ? 2 : 1.5}
               />
             </button>
           </Tooltip>
@@ -47,17 +50,17 @@ export default function ActivityBar() {
         <Tooltip content={`${t('composer', language)} (Ctrl+Shift+I)`} side="right">
           <button
             onClick={() => setShowComposer(true)}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/5 transition-all duration-300 group hover:scale-105"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-hover active:scale-95 transition-all duration-300 group"
           >
-            <Sparkles className="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-accent transition-all group-hover:drop-shadow-[0_0_8px_rgba(var(--accent)/0.4)]" strokeWidth={1.5} />
+            <Sparkles className="w-[22px] h-[22px] opacity-70 group-hover:opacity-100 group-hover:text-accent transition-all group-hover:drop-shadow-[0_0_8px_rgba(var(--accent)/0.4)] group-hover:scale-105" strokeWidth={1.5} />
           </button>
         </Tooltip>
         <Tooltip content={t('settings', language)} side="right">
           <button
             onClick={() => setShowSettings(true)}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/5 transition-all duration-300 group hover:scale-105"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-hover active:scale-95 transition-all duration-300 group"
           >
-            <Settings className="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:rotate-90 transition-all duration-500" strokeWidth={1.5} />
+            <Settings className="w-[22px] h-[22px] opacity-70 group-hover:opacity-100 group-hover:rotate-45 transition-all duration-500" strokeWidth={1.5} />
           </button>
         </Tooltip>
       </div>

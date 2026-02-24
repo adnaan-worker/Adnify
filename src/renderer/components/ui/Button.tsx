@@ -17,14 +17,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
         const variants = {
             primary: `
-                bg-accent text-white rounded-xl border border-white/20
+                btn-sweep bg-accent text-white rounded-xl border border-border-subtle
                 shadow-[0_2px_8px_-2px_rgba(var(--accent)/0.5),inset_0_1px_1px_rgba(255,255,255,0.15)]
                 hover:bg-accent-hover hover:shadow-[0_8px_16px_-4px_rgba(var(--accent)/0.4),inset_0_1px_1px_rgba(255,255,255,0.2)]
                 hover:-translate-y-[1px]
             `,
             secondary: "bg-surface/50 backdrop-blur-md text-text-primary rounded-xl border border-border hover:bg-surface hover:border-border-active hover:shadow-sm",
-            ghost: "bg-transparent text-text-secondary rounded-lg hover:bg-white/5 hover:text-text-primary",
-            icon: "bg-transparent text-text-muted rounded-lg hover:bg-white/5 hover:text-text-primary p-0 aspect-square transition-colors",
+            ghost: "bg-transparent text-text-secondary rounded-lg hover:bg-text-primary/[0.05] hover:text-text-primary",
+            icon: "bg-transparent text-text-muted rounded-lg hover:bg-text-primary/[0.05] hover:text-text-primary p-0 aspect-square transition-colors",
             danger: "bg-status-error/10 text-status-error rounded-xl border border-status-error/20 hover:bg-status-error/20 hover:border-status-error/30 hover:shadow-[0_4px_12px_-4px_rgba(var(--status-error)/0.2)]",
             success: "bg-status-success/10 text-status-success rounded-xl border border-status-success/20 hover:bg-status-success/20 hover:border-status-success/30 hover:shadow-[0_4px_12px_-4px_rgba(var(--status-success)/0.2)]",
             outline: "bg-transparent border border-border-subtle text-text-secondary rounded-xl hover:border-accent/40 hover:text-text-primary hover:bg-accent/5"
@@ -34,7 +34,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             sm: "h-8 px-3 text-xs gap-1.5",
             md: "h-10 px-5 text-sm gap-2",
             lg: "h-12 px-7 text-base gap-2.5",
-            icon: "w-9 h-9" 
+            icon: "w-9 h-9"
         }
 
         return (

@@ -27,7 +27,7 @@ const sizes = {
     'full': 'max-w-full mx-4 h-[90vh]'
 }
 
-export const Modal: React.FC<ModalProps> = memo(function Modal({ 
+export const Modal: React.FC<ModalProps> = memo(function Modal({
     isOpen, onClose, title, children, size = 'md', noPadding = false, className = '', showCloseButton = true
 }) {
     useEscapeKey(onClose, isOpen)
@@ -39,16 +39,16 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
     return createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             {/* Backdrop */}
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.3 }}
-                className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
-                onClick={onClose} 
+                className="absolute inset-0 bg-text-inverted/40 backdrop-blur-sm"
+                onClick={onClose}
             />
-            
+
             {/* Modal Content */}
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 transition={{ type: "spring", duration: 0.5, bounce: 0.2 }}
@@ -67,10 +67,10 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
                 </div>
 
                 {title && (
-                    <div className="relative flex items-center justify-between px-6 py-5 border-b border-border/50 bg-white/[0.02] z-10 shrink-0">
+                    <div className="relative flex items-center justify-between px-6 py-5 border-b border-border/50 bg-text-primary/[0.02] z-10 shrink-0">
                         <h3 className="text-lg font-bold text-text-primary tracking-tight">{title}</h3>
                         {showCloseButton && (
-                            <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/5 text-text-muted hover:text-text-primary transition-all duration-200 group">
+                            <button onClick={onClose} className="p-2 rounded-xl hover:bg-text-primary/[0.05] text-text-muted hover:text-text-primary transition-all duration-200 group">
                                 <X className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
                             </button>
                         )}

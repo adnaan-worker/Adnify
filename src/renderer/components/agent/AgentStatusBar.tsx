@@ -167,7 +167,7 @@ export default function AgentStatusBar({
           <>
             {/* Header - 可折叠 */}
             <div
-              className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-white/[0.02] transition-colors"
+              className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-surface-hover transition-colors"
               onClick={() => setIsExpanded(!isExpanded)}
             >
               <div className="flex items-center gap-3">
@@ -291,7 +291,7 @@ function FileChangeRow({ change, onAccept, onReject, onReview }: FileChangeRowPr
 
   return (
     <div
-      className="flex items-center justify-between px-4 py-2 hover:bg-white/[0.03] cursor-pointer transition-colors group"
+      className="flex items-center justify-between px-4 py-2 hover:bg-surface-hover cursor-pointer transition-colors group"
       onClick={(e) => onReview(e, change.filePath)}
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">

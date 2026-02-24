@@ -193,7 +193,7 @@ export default function FileChangeCard({
                             <X className="w-3 h-3 text-red-400" />
                         </div>
                     ) : (
-                        <div className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center border border-border">
+                        <div className="w-5 h-5 rounded-full bg-text-primary/[0.05] flex items-center justify-center border border-border">
                             <FileCode className="w-3 h-3 text-text-muted" />
                         </div>
                     )}
@@ -218,7 +218,7 @@ export default function FileChangeCard({
                         <motion.span
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className="text-[10px] font-mono opacity-60 flex items-center gap-1.5 px-1.5 py-0.5 bg-white/5 rounded border border-border"
+                            className="text-[10px] font-mono opacity-60 flex items-center gap-1.5 px-1.5 py-0.5 bg-text-primary/[0.05] rounded border border-border"
                         >
                             {diffStats.added > 0 && (
                                 <span className="text-green-400">+{diffStats.added}</span>
@@ -241,7 +241,7 @@ export default function FileChangeCard({
                                 e.stopPropagation()
                                 onOpenInEditor(filePath, oldContent, newContent)
                             }}
-                            className="p-1.5 text-text-muted hover:text-accent hover:bg-white/10 rounded-md transition-colors"
+                            className="p-1.5 text-text-muted hover:text-accent hover:bg-surface-hover rounded-md transition-colors"
                             title="Open in Editor"
                         >
                             <ExternalLink className="w-4 h-4" />

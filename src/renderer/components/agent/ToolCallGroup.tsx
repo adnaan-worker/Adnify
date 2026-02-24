@@ -148,7 +148,7 @@ export default function ToolCallGroup({
                                 transition={{ duration: 0.2, ease: 'easeInOut' }}
                                 className="overflow-hidden"
                             >
-                                <div className="border-t border-border p-2 space-y-2 bg-black/5">
+                                <div className="border-t border-border p-2 space-y-2 bg-text-primary/[0.02]">
                                     {completedCalls.map(tc => renderToolCard(tc, { inFoldedGroup: true }))}
                                 </div>
                             </motion.div>

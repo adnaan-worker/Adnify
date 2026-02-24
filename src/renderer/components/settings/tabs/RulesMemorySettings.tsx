@@ -8,9 +8,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { rulesService, memoryService, type MemoryItem } from '@/renderer/agent'
 import { Button, Input } from '@components/ui'
-import { 
-  FileText, Brain, Plus, Trash2, Edit2, Check, X, 
-  RefreshCw, AlertCircle, ToggleLeft, ToggleRight 
+import {
+  FileText, Brain, Plus, Trash2, Edit2, Check, X,
+  RefreshCw, AlertCircle, ToggleLeft, ToggleRight
 } from 'lucide-react'
 
 interface RulesMemorySettingsProps {
@@ -219,7 +219,6 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
             />
             <Button
               variant="secondary"
-              size="sm"
               onClick={handleAddMemory}
               disabled={!newMemory.trim()}
               className="px-3"
@@ -242,11 +241,10 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
               memories.map((item) => (
                 <div
                   key={item.id}
-                  className={`group flex items-start gap-2 p-2.5 rounded-lg border transition-colors ${
-                    item.enabled 
-                      ? 'bg-black/20 border-border hover:border-accent/30' 
+                  className={`group flex items-start gap-2 p-2.5 rounded-lg border transition-colors ${item.enabled
+                      ? 'bg-black/20 border-border hover:border-accent/30'
                       : 'bg-black/10 border-border/50 opacity-60'
-                  }`}
+                    }`}
                 >
                   {editingId === item.id ? (
                     <>
@@ -277,9 +275,8 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
                     <>
                       <button
                         onClick={() => handleToggleMemory(item.id, item.enabled)}
-                        className={`p-0.5 transition-colors ${
-                          item.enabled ? 'text-accent' : 'text-text-muted'
-                        }`}
+                        className={`p-0.5 transition-colors ${item.enabled ? 'text-accent' : 'text-text-muted'
+                          }`}
                         title={item.enabled ? t('禁用', 'Disable') : t('启用', 'Enable')}
                       >
                         {item.enabled ? (

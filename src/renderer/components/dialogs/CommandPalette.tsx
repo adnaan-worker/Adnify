@@ -80,7 +80,7 @@ const CommandItem = memo(function CommandItem({
           {command.shortcut}
         </kbd>
       )}
-      
+
       {isSelected && !command.shortcut && (
         <div className="flex-shrink-0 text-[10px] font-mono text-text-muted bg-surface px-1.5 py-0.5 rounded border border-border opacity-0 group-hover:opacity-100 transition-opacity animate-fade-in">
           ⏎ Run
@@ -386,13 +386,13 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       onClick={onClose}
     >
       <div className="fixed inset-0 bg-background/20 backdrop-blur-sm transition-opacity" />
-      
+
       <div
         className="
             relative w-[640px] max-h-[60vh] flex flex-col
             bg-background/80 backdrop-blur-2xl 
             border border-border/50 rounded-2xl shadow-2xl shadow-black/40
-            overflow-hidden animate-scale-in ring-1 ring-white/5 origin-top
+            overflow-hidden animate-scale-in ring-1 ring-text-primary/5 origin-top
         "
         onClick={e => e.stopPropagation()}
       >
@@ -412,7 +412,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
           {query && (
             <button
               onClick={() => setQuery('')}
-              className="p-1 rounded-full hover:bg-white/10 transition-colors"
+              className="p-1 rounded-full hover:bg-surface-hover transition-colors"
             >
               <X className="w-4 h-4 text-text-muted" />
             </button>

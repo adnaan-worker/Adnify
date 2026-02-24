@@ -135,8 +135,8 @@ export default function ChatInput({
             ${isStreaming
             ? 'bg-surface/60 border-accent/20 ring-1 ring-accent/10 shadow-[0_8px_32px_-8px_rgba(var(--accent)/0.15)]'
             : isFocused
-              ? 'bg-background/80 border-accent/30 ring-1 ring-accent/10 shadow-[0_12px_40px_-12px_rgba(var(--accent)/0.2),0_0_0_1px_rgba(var(--accent)/0.05)] translate-y-[-2px]'
-              : 'bg-surface/50 border-border hover:border-border-active shadow-[0_8px_24px_-8px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.1)]'
+              ? 'bg-background/90 border-accent/40 shadow-[0_8px_40px_-12px_rgba(var(--accent)/0.25)] translate-y-[-1px] ring-1 ring-accent/20'
+              : 'bg-surface/50 border-text-primary/[0.08] hover:border-text-primary/[0.15] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.1)] hover:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.15)]'
           }
         `}
       >
@@ -177,10 +177,10 @@ export default function ChatInput({
             {contextItems.filter(item => ['File', 'Folder', 'CodeSelection'].includes(item.type)).map((item, i) => {
               const getContextStyle = (type: string) => {
                 switch (type) {
-                  case 'File': return { bg: 'bg-surface/50', text: 'text-text-secondary', border: 'border-border', Icon: FileText }
-                  case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20', Icon: Code }
-                  case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20', Icon: Folder }
-                  default: return { bg: 'bg-surface/50', text: 'text-text-muted', border: 'border-border', Icon: FileText }
+                  case 'File': return { bg: 'bg-text-primary/[0.04]', text: 'text-text-secondary', border: 'border-transparent', Icon: FileText }
+                  case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-transparent', Icon: Code }
+                  case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-transparent', Icon: Folder }
+                  default: return { bg: 'bg-text-primary/[0.04]', text: 'text-text-muted', border: 'border-transparent', Icon: FileText }
                 }
               }
 
@@ -278,10 +278,10 @@ export default function ChatInput({
               }
               className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)
                   ${isStreaming
-                  ? 'bg-surface/50 text-text-primary border border-white/10 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20'
+                  ? 'bg-surface/50 text-text-primary border border-text-primary/10 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20'
                   : isSendable
-                    ? 'bg-accent text-white shadow-lg shadow-accent/30 hover:shadow-accent/50 hover:scale-105 active:scale-95 border border-white/10'
-                    : 'bg-white/5 text-text-muted/30 cursor-not-allowed border border-transparent'
+                    ? 'bg-accent text-white shadow-lg shadow-accent/30 hover:shadow-accent/50 hover:scale-105 active:scale-95 border border-text-primary/10'
+                    : 'bg-text-primary/5 text-text-muted/30 cursor-not-allowed border border-transparent'
                 }
                   `}
             >
@@ -320,7 +320,7 @@ function ContextChip({ icon: Icon, label, color }: { icon: any, label: string, c
     cyan: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
     blue: 'text-blue-400 bg-blue-400/10 border-blue-400/20',
   }
-  
+
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 ${colorMap[color]} text-[11px] font-bold rounded-full border animate-fade-in select-none`}>
       <Icon className="w-3 h-3" />

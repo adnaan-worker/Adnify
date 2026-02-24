@@ -700,7 +700,7 @@ export default function ChatPanel() {
         // 如果用户消息是第一条，清空所有消息
         clearMessages()
       }
-      
+
       await sendMessage(userMsg.content)
     }
   }, [messages, deleteMessagesAfter, clearMessages, sendMessage, regenerateFromMessage, toast, language])
@@ -880,7 +880,7 @@ export default function ChatPanel() {
                 setSidebarOpen(true)
               }}
               title={language === 'zh' ? '历史记录' : 'Chat history'}
-              className="hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
+              className="hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
             >
               <History className="w-4 h-4" />
             </Button>
@@ -889,11 +889,11 @@ export default function ChatPanel() {
               size="icon"
               onClick={() => createThread()}
               title={language === 'zh' ? '新对话' : 'New chat'}
-              className="hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
+              className="hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
             >
               <Plus className="w-4 h-4" />
             </Button>
-            <div className="w-px h-4 bg-white/10 mx-1" />
+            <div className="w-px h-4 bg-text-primary/10 mx-1" />
             <Button
               variant="ghost"
               size="icon"

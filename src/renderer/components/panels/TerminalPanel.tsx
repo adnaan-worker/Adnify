@@ -73,7 +73,7 @@ const TerminalPanel = memo(function TerminalPanel() {
     const { setMode } = useModeStore()
     // 从 AgentStore 获取 setInputPrompt
     const setInputPrompt = useAgentStore(state => state.setInputPrompt)
-    
+
     // UI 状态
     const [isCollapsed, setIsCollapsed] = useState(false)
     const [height, setHeight] = useState(280)
@@ -86,7 +86,7 @@ const TerminalPanel = memo(function TerminalPanel() {
 
     // 终端状态（来自 terminalManager）
     const [managerState, setManagerState] = useState<TerminalManagerState>(() => terminalManager.getState())
-    
+
     const isSplitView = terminalLayout === 'split'
     const containerRefs = useRef<Map<string, HTMLDivElement>>(new Map())
     const mountedTerminals = useRef<Set<string>>(new Set())
@@ -98,20 +98,20 @@ const TerminalPanel = memo(function TerminalPanel() {
     const scriptButtonRef = useRef<HTMLButtonElement>(null)
 
     // ===== 订阅 terminalManager =====
-    
+
     useEffect(() => {
         return terminalManager.subscribe(setManagerState)
     }, [])
 
     // ===== 主题同步 =====
-    
+
     useEffect(() => {
         const theme = getTerminalTheme(currentTheme)
         terminalManager.setTheme(theme)
     }, [currentTheme])
 
     // ===== 挂载 xterm 到容器 =====
-    
+
     useEffect(() => {
         for (const terminal of managerState.terminals) {
             const container = containerRefs.current.get(terminal.id)
@@ -120,7 +120,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                 mountedTerminals.current.add(terminal.id)
             }
         }
-        
+
         // 清理已删除的终端
         for (const id of mountedTerminals.current) {
             if (!managerState.terminals.find(t => t.id === id)) {
@@ -130,7 +130,7 @@ const TerminalPanel = memo(function TerminalPanel() {
     }, [managerState.terminals])
 
     // ===== 初始化 =====
-    
+
     useEffect(() => {
         const loadShells = async () => {
             try {
@@ -149,7 +149,7 @@ const TerminalPanel = memo(function TerminalPanel() {
         if (newRoot && newRoot !== selectedRoot) {
             // 工作区变化，更新 selectedRoot
             setSelectedRoot(newRoot)
-            
+
             // 清理旧工作区的终端（它们的 cwd 已经不在新工作区内了）
             const oldTerminals = managerState.terminals.filter(t => !workspace?.roots?.includes(t.cwd))
             oldTerminals.forEach(t => terminalManager.closeTerminal(t.id))
@@ -181,22 +181,22 @@ const TerminalPanel = memo(function TerminalPanel() {
     }, [terminalVisible, managerState.terminals.length, availableShells.length, selectedRoot, workspace?.roots])
 
     // ===== 窗口大小调整 =====
-    
+
     useEffect(() => {
         if (!terminalVisible || isCollapsed || !managerState.activeId) return
-        
+
         const handleResize = () => {
             const targets = isSplitView ? managerState.terminals : managerState.terminals.filter(t => t.id === managerState.activeId)
             targets.forEach(t => terminalManager.fitTerminal(t.id))
         }
-        
+
         window.addEventListener('resize', handleResize)
         setTimeout(handleResize, 100)
         return () => window.removeEventListener('resize', handleResize)
     }, [terminalVisible, isCollapsed, managerState.activeId, height, isSplitView, managerState.terminals.length])
 
     // ===== 拖拽调整高度 =====
-    
+
     const startResizing = useCallback((e: React.MouseEvent) => {
         e.preventDefault()
         setIsResizing(true)
@@ -204,21 +204,21 @@ const TerminalPanel = memo(function TerminalPanel() {
 
     useEffect(() => {
         if (!isResizing) return
-        
+
         const handleMouseMove = (e: MouseEvent) => {
             const newHeight = window.innerHeight - e.clientY - 24
             if (newHeight > 100 && newHeight < window.innerHeight - 100) {
                 setHeight(newHeight)
             }
         }
-        
+
         const stopResizing = () => {
             setIsResizing(false)
             if (managerState.activeId) {
                 terminalManager.fitTerminal(managerState.activeId)
             }
         }
-        
+
         window.addEventListener('mousemove', handleMouseMove)
         window.addEventListener('mouseup', stopResizing)
         return () => {
@@ -232,11 +232,11 @@ const TerminalPanel = memo(function TerminalPanel() {
     useClickOutside(() => setShowScriptMenu(false), showScriptMenu, [scriptMenuRef, scriptButtonRef])
 
     // ===== 操作函数 =====
-    
+
     const createTerminal = useCallback(async (shellPath?: string, shellName?: string) => {
         const cwd = selectedRoot || workspace?.roots?.[0] || ''
         if (!cwd) return
-        
+
         await terminalManager.createTerminal({
             name: shellName || availableShells[0]?.label || 'Terminal',
             cwd,
@@ -272,13 +272,13 @@ const TerminalPanel = memo(function TerminalPanel() {
     const runScript = useCallback(async (name: string) => {
         setShowScriptMenu(false)
         if (!terminalVisible) setTerminalVisible(true)
-        
+
         let targetId = managerState.activeId
         if (!targetId && managerState.terminals.length === 0) {
             targetId = await createTerminal() as unknown as string
         }
         targetId = targetId || managerState.terminals[managerState.terminals.length - 1]?.id
-        
+
         if (targetId) {
             terminalManager.focusTerminal(targetId)
             terminalManager.writeToTerminal(targetId, `npm run ${name}\r`)
@@ -286,7 +286,7 @@ const TerminalPanel = memo(function TerminalPanel() {
     }, [terminalVisible, setTerminalVisible, managerState.activeId, managerState.terminals, createTerminal])
 
     // ===== 渲染 =====
-    
+
     if (!terminalVisible) return null
 
     const { terminals, activeId } = managerState
@@ -297,12 +297,12 @@ const TerminalPanel = memo(function TerminalPanel() {
             <div className="bg-transparent flex flex-col transition-none relative z-10" style={{ height: isCollapsed ? 40 : height }}>
                 {/* 拖拽调整高度的区域 */}
                 <div className="absolute top-0 left-0 right-0 h-1 cursor-row-resize z-50 hover:bg-accent/50 transition-colors" onMouseDown={startResizing} />
-                
+
                 {/* 标题栏 */}
                 <div className="h-9 min-h-[36px] flex items-center justify-between border-t border-border/50 bg-background-secondary/95 backdrop-blur-md select-none relative z-20 px-1">
                     {/* 左侧：图标和标签页 */}
                     <div className="flex items-center flex-1 min-w-0 h-full overflow-hidden">
-                        <div className="flex-shrink-0 flex items-center justify-center w-9 h-full cursor-pointer hover:bg-white/5 text-text-muted transition-colors border-r border-border/50" onClick={() => setIsCollapsed(!isCollapsed)}>
+                        <div className="flex-shrink-0 flex items-center justify-center w-9 h-full cursor-pointer hover:bg-surface-hover text-text-muted transition-colors border-r border-border/50" onClick={() => setIsCollapsed(!isCollapsed)}>
                             <TerminalIcon className="w-4 h-4" />
                         </div>
                         <div className="flex items-center overflow-x-auto no-scrollbar flex-1 h-full">
@@ -312,16 +312,16 @@ const TerminalPanel = memo(function TerminalPanel() {
                                     onClick={() => terminalManager.setActiveTerminal(term.id)}
                                     className={`
                                         relative flex items-center gap-2 px-3 h-full cursor-pointer min-w-[120px] max-w-[200px] flex-shrink-0 group transition-all border-r border-border/50
-                                        ${activeId === term.id 
-                                            ? 'bg-surface text-text-primary font-medium shadow-[inset_0_2px_0_0_rgba(var(--accent))]' 
-                                            : 'bg-transparent text-text-muted hover:bg-white/5 hover:text-text-secondary'}
+                                        ${activeId === term.id
+                                            ? 'bg-surface text-text-primary font-medium shadow-[inset_0_2px_0_0_rgba(var(--accent))]'
+                                            : 'bg-transparent text-text-muted hover:bg-surface-hover hover:text-text-secondary'}
                                     `}
                                 >
                                     <span className="truncate flex-1 text-xs">{term.name}</span>
-                                    <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        onClick={(e) => closeTerminal(term.id, e)} 
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={(e) => closeTerminal(term.id, e)}
                                         className={`h-4 w-4 rounded-md transition-all ${activeId === term.id ? 'opacity-0 group-hover:opacity-100' : 'opacity-0 group-hover:opacity-100'} hover:bg-red-500/10 hover:text-red-500`}
                                     >
                                         <X className="w-3 h-3" />
@@ -334,12 +334,12 @@ const TerminalPanel = memo(function TerminalPanel() {
                     {/* 固定位置的按钮区 (不在 overflow-hidden 内) */}
                     <div className="flex items-center h-full">
                         <div className="relative flex-shrink-0 h-full flex items-center px-1 border-r border-border/50">
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => setShowShellMenu(!showShellMenu)} 
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setShowShellMenu(!showShellMenu)}
                                 ref={shellButtonRef}
-                                className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary hover:bg-white/5"
+                                className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover"
                             >
                                 <Plus className="w-4 h-4" />
                             </Button>
@@ -376,9 +376,9 @@ const TerminalPanel = memo(function TerminalPanel() {
                             <Sparkles className="w-3.5 h-3.5" />
                         </Button>
                         <div className="w-[1px] h-4 bg-border/50 mx-1" />
-                        <Button variant="ghost" size="icon" onClick={() => { createTerminal(); setTerminalLayout('split'); }} className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary" title="Split Terminal"><SplitSquareHorizontal className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => activeId && terminalManager.getXterm(activeId)?.clear()} className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary" title="Clear"><Trash2 className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" onClick={closePanel} className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary hover:bg-white/5" title="Close"><X className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => { createTerminal(); setTerminalLayout('split'); }} className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover" title="Split Terminal"><SplitSquareHorizontal className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => activeId && terminalManager.getXterm(activeId)?.clear()} className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover" title="Clear"><Trash2 className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={closePanel} className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover" title="Close"><X className="w-3.5 h-3.5" /></Button>
                     </div>
                 </div>
 
@@ -396,7 +396,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                             >
                                 {isSplitView && (
                                     <div className="absolute top-0 right-0 p-1 z-10 opacity-0 group-hover/term:opacity-100 transition-opacity">
-                                        <Button variant="ghost" size="icon" onClick={(e) => closeTerminal(term.id, e)} className="h-6 w-6 bg-background/80 hover:bg-red-500 hover:text-white">
+                                        <Button variant="ghost" size="icon" onClick={(e) => closeTerminal(term.id, e)} className="h-6 w-6 bg-background/80 hover:bg-red-500 hover:text-text-inverted">
                                             <X className="w-3 h-3" />
                                         </Button>
                                     </div>

@@ -75,11 +75,11 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold border
+          flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold border border-transparent
           transition-all duration-200
           ${isOpen
-            ? 'bg-surface text-text-primary border-accent/30 shadow-[0_0_0_2px_rgba(var(--accent)/0.1)]'
-            : 'bg-surface/50 border-border text-text-secondary hover:text-text-primary hover:bg-surface hover:border-border-active'
+            ? 'bg-surface-active text-text-primary shadow-[0_0_0_2px_rgba(var(--accent)/0.15)]'
+            : 'bg-white/[0.03] text-text-secondary hover:text-text-primary hover:bg-white/[0.08]'
           }
         `}
       >

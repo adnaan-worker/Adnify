@@ -23,13 +23,13 @@ export default function ChatContextStats({ stats, language, compact = false }: C
           title={language === 'zh' ? `上下文使用量: ${(stats.totalChars / 1000).toFixed(1)}K / ${(stats.maxChars / 1000).toFixed(0)}K` : `Context usage: ${(stats.totalChars / 1000).toFixed(1)}K / ${(stats.maxChars / 1000).toFixed(0)}K`}
         >
           <Database className="w-3 h-3" />
-          <div className="w-12 h-1 bg-white/5 rounded-full overflow-hidden">
+          <div className="w-12 h-1 bg-text-primary/10 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ${usagePercent > 0.95
-                  ? 'bg-status-error shadow-[0_0_5px_rgba(var(--status-error),0.5)]'
-                  : usagePercent > 0.8
-                    ? 'bg-status-warning'
-                    : 'bg-accent shadow-[0_0_5px_rgba(var(--accent),0.5)]'
+                ? 'bg-status-error shadow-[0_0_5px_rgba(var(--status-error),0.5)]'
+                : usagePercent > 0.8
+                  ? 'bg-status-warning'
+                  : 'bg-accent shadow-[0_0_5px_rgba(var(--accent),0.5)]'
                 }`}
               style={{ width: `${Math.min(100, usagePercent * 100)}%` }}
             />
@@ -70,13 +70,13 @@ export default function ChatContextStats({ stats, language, compact = false }: C
         <span className="font-medium">
           {(stats.totalChars / 1000).toFixed(1)}K / {(stats.maxChars / 1000).toFixed(0)}K
         </span>
-        <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
+        <div className="w-16 h-1 bg-text-primary/10 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 shadow-[0_0_5px_rgba(var(--accent),0.5)] ${usagePercent > 0.95
-                ? 'bg-status-error'
-                : usagePercent > 0.8
-                  ? 'bg-status-warning'
-                  : 'bg-accent'
+              ? 'bg-status-error'
+              : usagePercent > 0.8
+                ? 'bg-status-warning'
+                : 'bg-accent'
               }`}
             style={{ width: `${Math.min(100, usagePercent * 100)}%` }}
           />

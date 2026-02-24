@@ -414,7 +414,7 @@ const ToolCallCard = memo(function ToolCallCard({
                                     e.stopPropagation()
                                     handleCopyResult()
                                 }}
-                                className="p-1 hover:bg-white/10 rounded text-text-muted hover:text-text-primary transition-colors"
+                                className="p-1 hover:bg-surface-hover rounded text-text-muted hover:text-text-primary transition-colors"
                             >
                                 <Copy className="w-3 h-3" />
                             </button>

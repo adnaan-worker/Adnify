@@ -142,7 +142,7 @@ const FileMatchItem = memo(function FileMatchItem({
       <div className="flex-shrink-0">
         <FileIcon filename={fileName} size={18} />
       </div>
-      
+
       <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
         <div className="text-sm font-medium truncate leading-none">
           <HighlightedText text={fileName} matches={fileNameMatches} />
@@ -299,13 +299,13 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
       onClick={onClose}
     >
       <div className="fixed inset-0 bg-background/20 backdrop-blur-sm transition-opacity" />
-      
+
       <div
         className="
             relative w-[640px] max-h-[65vh] flex flex-col
             bg-background/80 backdrop-blur-2xl 
             border border-border/50 rounded-2xl shadow-2xl shadow-black/40
-            overflow-hidden animate-scale-in origin-top
+            overflow-hidden animate-scale-in origin-top ring-1 ring-text-primary/5
         "
         onClick={e => e.stopPropagation()}
       >

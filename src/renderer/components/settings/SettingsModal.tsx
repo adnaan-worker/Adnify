@@ -329,7 +329,7 @@ export default function SettingsModal() {
                             {saved ? (language === 'zh' ? '所有更改已保存' : 'All changes saved') : (language === 'zh' ? '有未保存的更改' : 'Unsaved changes')}
                         </span>
                         <div className="flex items-center gap-3">
-                            <Button variant="ghost" onClick={() => setShowSettings(false)} className="hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary rounded-lg">
+                            <Button variant="ghost" onClick={() => setShowSettings(false)} className="hover:bg-text-inverted/[0.05] hover:bg-text-primary/[0.05] text-text-secondary rounded-lg">
                                 {language === 'zh' ? '取消' : 'Cancel'}
                             </Button>
                             <Button

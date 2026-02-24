@@ -27,7 +27,7 @@ import FileIcon from '../common/FileIcon'
 import { getFileType } from '../editor/FilePreview'
 
 // 每个节点的高度（像素）
-const ITEM_HEIGHT = 28
+const ITEM_HEIGHT = 30
 // 额外渲染的缓冲区节点数
 const BUFFER_SIZE = 5
 
@@ -560,9 +560,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
           setTimeout(() => document.body.removeChild(dragImage), 0)
         }}
         className={`
-          group flex items-center gap-2 pr-2 cursor-pointer transition-all duration-150 relative select-none rounded-md mx-2 my-[1px]
+          group flex items-center gap-2 pr-2 cursor-pointer transition-all duration-150 relative select-none rounded-md mx-2 my-0
           ${isActive
-            ? 'bg-accent/10 text-text-primary font-medium'
+            ? 'bg-accent/15 text-text-primary font-medium'
             : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
           }
         `}
@@ -577,7 +577,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       >
         {/* Active Indicator - Premium Glow */}
         {isActive && (
-          <div className="absolute left-0 top-[6px] bottom-[6px] w-[3px] bg-accent rounded-r-full shadow-[0_0_12px_rgba(var(--accent),0.8)] z-10" />
+          <div className="absolute left-[-8px] top-[6px] bottom-[6px] w-[3px] bg-accent rounded-r-full shadow-[0_0_12px_rgba(var(--accent),0.6)] z-10" />
         )}
 
         {/* Indent Guide - Very subtle line */}

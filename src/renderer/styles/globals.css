@@ -219,6 +219,33 @@ body {
   animation: text-shimmer 1.5s ease-in-out infinite;
 }
 
+/* Button Sweep Effect */
+@keyframes btn-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.btn-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-sweep::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transform: translateX(-100%) skewX(-15deg);
+  pointer-events: none;
+}
+
+.btn-sweep:hover::after {
+  animation: btn-sweep 1.2s ease-in-out infinite;
+}
+
 /* Scroll shadow for thinking block */
 .scroll-shadow-container {
   position: relative;

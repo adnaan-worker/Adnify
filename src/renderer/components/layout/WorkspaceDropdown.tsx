@@ -83,15 +83,15 @@ export default function WorkspaceDropdown() {
                 className={`
                     flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-200 group
                     border border-transparent
-                    ${isOpen 
-                        ? 'bg-accent/10 text-accent border-accent/20' 
-                        : 'hover:bg-white/5 text-text-secondary hover:text-text-primary hover:border-white/5'}
+                    ${isOpen
+                        ? 'bg-accent/10 text-accent border-accent/20'
+                        : 'hover:bg-surface-hover text-text-secondary hover:text-text-primary hover:border-text-primary/5'}
                 `}
             >
-                <div className={`p-1 rounded-md transition-colors ${isOpen ? 'bg-accent/20' : 'bg-white/5 group-hover:bg-white/10'}`}>
+                <div className={`p-1 rounded-md transition-colors ${isOpen ? 'bg-accent/20' : 'bg-text-primary/5 group-hover:bg-text-primary/10'}`}>
                     <Folder className="w-3.5 h-3.5" />
                 </div>
-                
+
                 <div className="flex flex-col items-start text-left leading-none min-w-[80px] max-w-[160px]">
                     <span className="text-xs font-medium truncate w-full text-text-secondary group-hover:text-text-primary transition-colors">
                         {currentWorkspaceName}
@@ -111,45 +111,45 @@ export default function WorkspaceDropdown() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 4, scale: 0.98 }}
                         transition={{ duration: 0.15, ease: "easeOut" }}
-                        className="absolute top-full left-0 mt-2 w-72 p-1.5 bg-background/80 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden"
+                        className="absolute top-full left-0 mt-2 w-72 p-1.5 bg-background/80 backdrop-blur-xl border border-border rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden"
                     >
                         <div className="space-y-0.5">
-                            <MenuItem 
-                                icon={Monitor} 
-                                label="新建窗口" 
+                            <MenuItem
+                                icon={Monitor}
+                                label="新建窗口"
                                 description="打开一个新的编辑器窗口"
-                                onClick={() => handleAction(() => api.window.new())} 
+                                onClick={() => handleAction(() => api.window.new())}
                             />
-                            <MenuItem 
-                                icon={FolderOpen} 
+                            <MenuItem
+                                icon={FolderOpen}
                                 label="打开文件夹..."
                                 onClick={() => handleAction(async () => {
                                     const result = await api.file.openFolder()
                                     if (result && typeof result === 'string') await workspaceManager.openFolder(result)
-                                })} 
+                                })}
                             />
-                            <MenuItem 
-                                icon={LayoutGrid} 
+                            <MenuItem
+                                icon={LayoutGrid}
                                 label="打开工作区..."
                                 onClick={() => handleAction(async () => {
                                     const result = await api.workspace.open()
                                     if (result && !('redirected' in result)) await workspaceManager.switchTo(result)
-                                })} 
+                                })}
                             />
-                            <MenuItem 
-                                icon={Plus} 
+                            <MenuItem
+                                icon={Plus}
                                 label="添加文件夹"
                                 onClick={() => handleAction(async () => {
                                     const path = await api.workspace.addFolder()
                                     if (path) await workspaceManager.addFolder(path)
-                                })} 
+                                })}
                             />
                         </div>
 
                         {/* 最近打开 */}
                         {recentWorkspaces.length > 0 && (
                             <>
-                                <div className="h-px bg-white/5 my-1.5 mx-2" />
+                                <div className="h-px bg-border my-1.5 mx-2" />
                                 <div className="px-3 py-1.5 flex items-center gap-2">
                                     <History className="w-3 h-3 text-accent" />
                                     <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Recent</span>
@@ -162,7 +162,7 @@ export default function WorkspaceDropdown() {
                                             <button
                                                 key={recent.path}
                                                 onClick={() => handleOpenRecent(recent.path)}
-                                                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-white/5 hover:text-text-primary transition-all group relative overflow-hidden"
+                                                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-all group relative overflow-hidden"
                                                 title={recent.path}
                                             >
                                                 <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -187,7 +187,7 @@ function MenuItem({ icon: Icon, label, description, onClick }: { icon: any, labe
     return (
         <button
             onClick={onClick}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-sm text-text-secondary hover:bg-white/5 hover:text-text-primary transition-all group relative overflow-hidden"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-all group relative overflow-hidden"
         >
             <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity" />
             <Icon className="w-4 h-4 text-text-muted group-hover:text-accent transition-colors relative z-10" />
