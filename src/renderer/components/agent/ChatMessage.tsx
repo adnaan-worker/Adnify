@@ -608,9 +608,12 @@ const AssistantMessageContent = React.memo(({
     <>
       {groups.map((group, groupIdx) => {
         // Simple visibility check
-        if (groupIdx > visibleIndex) return null
+        // If we are streaming and this is the last group, always show it
+        const isStreamingLastGroup = isStreaming && groupIdx === groups.length - 1;
 
-        const isLastVisible = groupIdx === visibleIndex
+        if (groupIdx > visibleIndex && !isStreamingLastGroup) return null
+
+        const isLastVisible = groupIdx === visibleIndex || isStreamingLastGroup
 
         if (group.type === 'part') {
           return (

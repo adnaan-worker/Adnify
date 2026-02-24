@@ -34,13 +34,15 @@ export const useFluidTypewriter = (
 
     // State
     const [displayedLength, setDisplayedLength] = useState(() => {
-        // If not streaming, or content is empty, show full/empty immediately
+        // If we are definitely not streaming, show all
         if (!isStreaming) return content.length
-        // If content is very short (just starting), show immediately to avoid lag
-        if (content.length < 5) return content.length
+
+        // If we are streaming, start at 0 so it types out
         return 0
     })
 
+    const displayedLengthRef = useRef(displayedLength)
+    displayedLengthRef.current = displayedLength
 
     const lastFrameTime = useRef<number>(0)
     const animationFrameId = useRef<number>()
@@ -51,62 +53,72 @@ export const useFluidTypewriter = (
         isStreamingRef.current = isStreaming
     }, [isStreaming])
 
-    // If streaming stops, ensure we snap to end eventually, or immediately?
-    // User wants "silky", so let's let it finish typing even if stream stops, 
-    // unless the jump is huge.
+    // If streaming stops, ensure we snap to end
     useEffect(() => {
-        if (!isStreaming) {
-            // If we were typing and stream stopped, we might want to fast-forward
-            // but for now, let's just snap to ensure consistency like original logic
-            // providing a "settled" state.
-            setDisplayedLength(content.length)
+        if (!isStreaming && displayedLengthRef.current < content.length) {
+            // We give it a tiny delay to allow any final animation frames to settle
+            // before hard-snapping, which feels less jarring.
+            const timer = setTimeout(() => {
+                setDisplayedLength(content.length)
+            }, 50)
+            return () => clearTimeout(timer)
         }
     }, [isStreaming, content.length])
 
     // Animation Loop
     useEffect(() => {
         // Only animate if we are behind
-        if (displayedLength >= content.length) {
+        if (displayedLengthRef.current >= content.length) {
             return
         }
 
         const animate = (time: number) => {
             if (!lastFrameTime.current) lastFrameTime.current = time
-            const delta = time - lastFrameTime.current
+            let delta = time - lastFrameTime.current
+
+            // Cap delta to prevent huge jumps if tab was in background or paused
+            if (delta > 50) delta = 16.6
+
             lastFrameTime.current = time
 
-            // Calculate dynamic speed
-            // If we are far behind, speed up significantly
-            const remaining = content.length - displayedLength
+            const remaining = content.length - displayedLengthRef.current
+            if (remaining <= 0) {
+                lastFrameTime.current = 0
+                return
+            }
 
             // Speed = Base + (Remaining * Factor)
-            // Using time-based delta (assuming ~60fps, delta ~16.6ms)
-            // Normalize speed to "chars per 16ms frame"
             const currentSpeed = baseSpeed + (remaining * accelerationFactor)
+            let increment = currentSpeed * (delta / 16.6)
 
-            // Increment length based on time delta to be framerate independent
-            // (delta / 16.6) is the ratio of a "standard frame"
-            const increment = currentSpeed * (delta / 16.6)
+            // Ensure we at least move forward slightly if delta > 0
+            if (delta > 0 && increment < 0.1) increment = 0.1
+
+            let caughtUp = false
 
             setDisplayedLength(prev => {
                 const next = prev + increment
                 if (next >= content.length) {
+                    caughtUp = true
                     return content.length
                 }
                 return next
             })
 
-            if (displayedLength < content.length) {
+            if (!caughtUp && delta >= 0) {
                 animationFrameId.current = requestAnimationFrame(animate)
+            } else {
+                lastFrameTime.current = 0
             }
         }
 
         animationFrameId.current = requestAnimationFrame(animate)
+
         return () => {
             if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current)
-            lastFrameTime.current = 0
+            // DO NOT reset lastFrameTime.current here, so the next render continues smoothly
         }
-    }, [content.length, displayedLength, baseSpeed, accelerationFactor])
+    }, [content.length, baseSpeed, accelerationFactor])
 
     // Derive string from length
     const displayedContent = useMemo(() => {
