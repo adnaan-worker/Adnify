@@ -53,9 +53,21 @@ function createBuiltinModel(
                 apiKey,
                 baseURL: baseUrl || providerDef.baseUrl,
             })
-            // ⚠️ 必须使用 .chat() 确保使用 Chat Completions API (/v1/chat/completions)
-            // 直接调用 openai(model) 会使用 Responses API (/v1/responses)
-            return openai.chat(model)
+            
+            // 检测是否为推理模型（需要使用 Responses API）
+            const isReasoningModel = model.toLowerCase().includes('o1') || 
+                                    model.toLowerCase().includes('o3') ||
+                                    model.toLowerCase().includes('o4') ||
+                                    model.toLowerCase().includes('codex') ||
+                                    model.toLowerCase().includes('reasoner')
+            
+            if (isReasoningModel) {
+                // 推理模型使用 Responses API (/v1/responses)
+                return openai.responses(model)
+            } else {
+                // 标准模型使用 Chat Completions API (/v1/chat/completions)
+                return openai.chat(model)
+            }
         }
 
         case 'anthropic': {
