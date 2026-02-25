@@ -79,8 +79,24 @@
   --radius-full: 9999px;
 }
 
+/* --- Global Custom Premium Cursors --- */
+:root {
+  /* Dark Mode (Default) Cursors: White body, Black outline */
+  --cursor-default: url('data:image/svg+xml;utf8,<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M10 6L22 17L16.2 17.6L19 23.5L16.5 24.5L13.8 18.6L9.5 22.5V6Z" fill="%23ffffff" stroke="%23000000" stroke-width="1" stroke-linejoin="round"/></svg>') 10 6, default;
+  --cursor-pointer: url('data:image/svg+xml;utf8,<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M13.5 13V6.5C13.5 5.67 14.17 5 15 5C15.83 5 16.5 5.67 16.5 6.5V14H18C18 14 19 10 20 10C21 10 21.5 10.67 21.5 11.5V15H22.5C23.33 15 24 15.67 24 16.5V20.5C24 23 22 25 19.5 25H12.5C10 25 8.5 23 8.5 20.5V15L11.5 11.5L13.5 13Z" fill="%23ffffff" stroke="%23000000" stroke-width="1" stroke-linejoin="round"/></svg>') 15 5, pointer;
+  --cursor-text: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M12 4h8v2h-3v20h3v2h-8v-2h3V6h-3V4z" fill="%23ffffff" stroke="%23000000" stroke-width="0.5"/></svg>') 16 16, text;
+  --cursor-ew-resize: url('data:image/svg+xml;utf8,<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M8 12L4 16L8 20V17H24V20L28 16L24 12V15H8V12Z" fill="%23ffffff" stroke="%23000000" stroke-width="1" stroke-linejoin="round"/></svg>') 16 16, ew-resize;
+  --cursor-ns-resize: url('data:image/svg+xml;utf8,<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M12 8L16 4L20 8H17V24H20L16 28L12 24H15V8H12Z" fill="%23ffffff" stroke="%23000000" stroke-width="1" stroke-linejoin="round"/></svg>') 16 16, ns-resize;
+}
+
 [data-theme='light'] {
   color-scheme: light;
+  /* Light Mode Cursors: Black body, White outline */
+  --cursor-default: url('data:image/svg+xml;utf8,<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M10 6L22 17L16.2 17.6L19 23.5L16.5 24.5L13.8 18.6L9.5 22.5V6Z" fill="%23000000" stroke="%23ffffff" stroke-width="1.5" stroke-linejoin="round"/></svg>') 10 6, default;
+  --cursor-pointer: url('data:image/svg+xml;utf8,<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M13.5 13V6.5C13.5 5.67 14.17 5 15 5C15.83 5 16.5 5.67 16.5 6.5V14H18C18 14 19 10 20 10C21 10 21.5 10.67 21.5 11.5V15H22.5C23.33 15 24 15.67 24 16.5V20.5C24 23 22 25 19.5 25H12.5C10 25 8.5 23 8.5 20.5V15L11.5 11.5L13.5 13Z" fill="%23000000" stroke="%23ffffff" stroke-width="1.5" stroke-linejoin="round"/></svg>') 15 5, pointer;
+  --cursor-text: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M12 4h8v2h-3v20h3v2h-8v-2h3V6h-3V4z" fill="%23000000" stroke="%23ffffff" stroke-width="1"/></svg>') 16 16, text;
+  --cursor-ew-resize: url('data:image/svg+xml;utf8,<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M8 12L4 16L8 20V17H24V20L28 16L24 12V15H8V12Z" fill="%23000000" stroke="%23ffffff" stroke-width="1.5" stroke-linejoin="round"/></svg>') 16 16, ew-resize;
+  --cursor-ns-resize: url('data:image/svg+xml;utf8,<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M12 8L16 4L20 8H17V24H20L16 28L12 24H15V8H12Z" fill="%23000000" stroke="%23ffffff" stroke-width="1.5" stroke-linejoin="round"/></svg>') 16 16, ns-resize;
 }
 
 body {
@@ -88,17 +104,44 @@ body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   background-image:
     radial-gradient(circle at 50% 0%, rgb(var(--accent) / 0.05) 0%, transparent 50%);
+  cursor: var(--cursor-default);
+}
+
+/* Apply Custom Cursors Globally & Intercept Tailwind Utilities */
+a,
+button,
+[role="button"],
+label,
+select,
+summary,
+.cursor-pointer {
+  cursor: var(--cursor-pointer) !important;
+}
+
+input,
+textarea,
+[contenteditable],
+.cursor-text,
+.monaco-editor .view-lines,
+.monaco-editor .margin,
+.ProseMirror {
+  cursor: var(--cursor-text) !important;
+  caret-color: rgb(var(--accent));
+}
+
+.cursor-ew-resize,
+.cursor-col-resize {
+  cursor: var(--cursor-ew-resize) !important;
+}
+
+.cursor-ns-resize,
+.cursor-row-resize {
+  cursor: var(--cursor-ns-resize) !important;
 }
 
 ::selection {
   background-color: rgb(var(--accent) / 0.2);
   color: inherit;
-}
-
-input,
-textarea,
-[contenteditable] {
-  caret-color: rgb(var(--accent));
 }
 
 #root {
@@ -110,24 +153,39 @@ textarea,
 
 /* --- Premium Scrollbars (MacOS Style) --- */
 ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
+  background-color: transparent;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background-color: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(120, 120, 120, 0.2);
-  border: 3px solid transparent;
-  background-clip: content-box;
-  border-radius: 99px;
-  transition: background-color 0.2s;
+  background-color: rgba(150, 150, 150, 0);
+  border: 4px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+  min-height: 40px;
+  transition: background-color 0.3s ease;
 }
 
+/* Show thumb gently on hover of any scrollable container */
+*:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(150, 150, 150, 0.25);
+}
+
+/* Darker thumb when directly hovering the scrollbar itself */
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(120, 120, 120, 0.4);
+  background-color: rgba(150, 150, 150, 0.45);
+  border-width: 3px;
+}
+
+/* Even darker when actively dragging */
+::-webkit-scrollbar-thumb:active {
+  background-color: rgba(150, 150, 150, 0.6);
+  border-width: 3px;
 }
 
 ::-webkit-scrollbar-corner {

@@ -138,6 +138,7 @@ export interface ElectronAPI {
   newWindow: () => void
   getWindowId: () => Promise<number>
   resizeWindow: (width: number, height: number, minWidth?: number, minHeight?: number) => Promise<void>
+  setTheme: (theme: 'light' | 'dark' | 'system', bgColor?: string) => Promise<boolean>
 
   // File operations
   openFile: () => Promise<{ path: string; content: string } | null>
@@ -393,6 +394,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getWindowId: () => ipcRenderer.invoke('window:getId'),
   resizeWindow: (width: number, height: number, minWidth?: number, minHeight?: number) =>
     ipcRenderer.invoke('window:resize', width, height, minWidth, minHeight),
+  setTheme: (theme: 'light' | 'dark' | 'system', bgColor?: string) => ipcRenderer.invoke('window:setTheme', theme, bgColor),
 
   openFile: () => ipcRenderer.invoke('file:open'),
   openFolder: () => ipcRenderer.invoke('file:openFolder'),

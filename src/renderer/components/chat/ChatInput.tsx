@@ -19,6 +19,7 @@ import {
 import { useStore } from '@store'
 import { getFileName } from '@shared/utils/pathUtils'
 import { WorkMode } from '@/renderer/modes/types'
+import { motion, AnimatePresence } from 'framer-motion'
 import { t } from '@renderer/i18n'
 import { Button } from '../ui'
 import ModelSelector from './ModelSelector'
@@ -160,64 +161,77 @@ export default function ChatInput({
           </div>
         )}
 
-        {/* Context Chips */}
-        {(contextItems.length > 0 || fileRefs.length > 0 || hasCodebaseRef || hasSymbolsRef || hasGitRef || hasTerminalRef || hasWebRef || (activeFilePath && onAddFile && !activeFilePath.includes('.adnify'))) && (
-          <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
-            {/* Active File Suggestion - 不显示 .adnify 目录下的文件 */}
-            {activeFilePath && onAddFile && !activeFilePath.includes('.adnify') && !contextItems.some(item => item.type === 'File' && (item as FileContext).uri === activeFilePath) && (
-              <button
-                onClick={() => onAddFile(activeFilePath)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-accent/5 text-accent text-[11px] font-bold rounded-full border border-accent/10 animate-fade-in select-none hover:bg-accent/15 transition-colors hover:border-accent/30"
-              >
-                <Plus className="w-3 h-3" strokeWidth={3} />
-                <span>{getFileName(activeFilePath)}</span>
-              </button>
-            )}
-            {/* Context Items */}
-            {contextItems.filter(item => ['File', 'Folder', 'CodeSelection'].includes(item.type)).map((item, i) => {
-              const getContextStyle = (type: string) => {
-                switch (type) {
-                  case 'File': return { bg: 'bg-text-primary/[0.04]', text: 'text-text-secondary', border: 'border-transparent', Icon: FileText }
-                  case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-transparent', Icon: Code }
-                  case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-transparent', Icon: Folder }
-                  default: return { bg: 'bg-text-primary/[0.04]', text: 'text-text-muted', border: 'border-transparent', Icon: FileText }
-                }
-              }
-
-              const style = getContextStyle(item.type)
-              const label = (() => {
-                switch (item.type) {
-                  case 'File':
-                  case 'Folder': {
-                    const uri = (item as any).uri || ''
-                    return getFileName(uri) || uri
-                  }
-                  case 'CodeSelection': {
-                    const uri = (item as any).uri || ''
-                    const range = (item as any).range as [number, number] | undefined
-                    const name = getFileName(uri) || uri
-                    return range ? `${name}:${range[0]}-${range[1]}` : name
-                  }
-                  default: return 'Context'
-                }
-              })()
-
-              return (
-                <span
-                  key={`ctx-${i}`}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 ${style.bg} ${style.text} text-[11px] font-medium rounded-full border ${style.border} animate-fade-in select-none group/chip transition-all hover:border-opacity-100 hover:shadow-sm`}
+        {/* Context Display Area (Top) */}
+        {(contextItems.length > 0 || hasCodebaseRef || hasSymbolsRef || hasGitRef || hasTerminalRef || hasWebRef || fileRefs.length > 0 || (activeFilePath && onAddFile && !contextItems.some(i => i.type === 'File' && (i as FileContext).uri === activeFilePath))) && (
+          <div className="flex flex-wrap items-center gap-1.5 px-4 pt-3 pb-1 border-b border-border/10">
+            <AnimatePresence>
+              {/* Active File Suggestion */}
+              {activeFilePath && onAddFile && !contextItems.some(i => i.type === 'File' && (i as FileContext).uri === activeFilePath) && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  onClick={() => {
+                    onAddFile(activeFilePath)
+                    // 这里如果能自动清除输入框里的失焦状态体验会更好，暂通过 state 刷新实现
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-accent/5 text-accent text-[11px] font-bold rounded-full border border-accent/10 select-none hover:bg-accent/15 transition-colors hover:border-accent/30"
                 >
-                  <style.Icon className="w-3 h-3 opacity-70" />
-                  <span className="max-w-[120px] truncate">{label}</span>
-                  <button
-                    onClick={() => onRemoveContextItem(item)}
-                    className="ml-0.5 p-0.5 rounded-full hover:bg-black/20 text-current hover:text-red-400 opacity-60 group-hover/chip:opacity-100 transition-all"
+                  <Plus className="w-3 h-3" strokeWidth={3} />
+                  <span>{getFileName(activeFilePath)}</span>
+                </motion.button>
+              )}
+
+              {/* Context Items */}
+              {contextItems.filter(item => ['File', 'Folder', 'CodeSelection'].includes(item.type)).map((item, i) => {
+                const getContextStyle = (type: string) => {
+                  switch (type) {
+                    case 'File': return { bg: 'bg-text-primary/[0.04]', text: 'text-text-secondary', border: 'border-transparent', Icon: FileText }
+                    case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-transparent', Icon: Code }
+                    case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-transparent', Icon: Folder }
+                    default: return { bg: 'bg-text-primary/[0.04]', text: 'text-text-muted', border: 'border-transparent', Icon: FileText }
+                  }
+                }
+
+                const style = getContextStyle(item.type)
+                const label = (() => {
+                  switch (item.type) {
+                    case 'File':
+                    case 'Folder': {
+                      const uri = (item as any).uri || ''
+                      return getFileName(uri) || uri
+                    }
+                    case 'CodeSelection': {
+                      const uri = (item as any).uri || ''
+                      const range = (item as any).range as [number, number] | undefined
+                      const name = getFileName(uri) || uri
+                      return range ? `${name}:${range[0]}-${range[1]}` : name
+                    }
+                    default: return 'Context'
+                  }
+                })()
+
+                return (
+                  <motion.span
+                    key={`${item.type}-${(item as any).uri || i}`}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8, filter: 'blur(4px)' }}
+                    transition={{ duration: 0.15 }}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 ${style.bg} ${style.text} text-[11px] font-medium rounded-full border ${style.border} select-none group/chip transition-all hover:border-opacity-100 hover:shadow-sm`}
                   >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )
-            })}
+                    <style.Icon className="w-3 h-3 opacity-70" />
+                    <span className="max-w-[120px] truncate">{label}</span>
+                    <button
+                      onClick={() => onRemoveContextItem(item)}
+                      className="ml-0.5 p-0.5 rounded-full hover:bg-black/20 text-current hover:text-red-400 opacity-60 group-hover/chip:opacity-100 transition-all"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </motion.span>
+                )
+              })}
+            </AnimatePresence>
 
             {/* Other Reference Chips */}
             {hasCodebaseRef && <ContextChip icon={Database} label="@codebase" color="green" />}

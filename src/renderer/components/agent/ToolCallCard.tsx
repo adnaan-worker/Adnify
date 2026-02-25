@@ -141,8 +141,12 @@ const ToolCallCard = memo(function ToolCallCard({
             const question = args.question as string
             return question ? question.slice(0, 30) + (question.length > 30 ? '...' : '') : ''
         }
+
+        // Return null/empty string by default
         return ''
     }, [toolCall.name, args])
+
+    const isMissingDescription = !description && (isStreaming || isRunning)
 
     const handleCopyResult = () => {
         if (toolCall.result) {
@@ -270,9 +274,15 @@ const ToolCallCard = memo(function ToolCallCard({
                         <div className="flex items-center justify-between px-3 py-1.5 bg-surface/30 border-b border-border">
                             <span className="text-text-muted flex items-center gap-2 text-xs">
                                 <FileCode className="w-3 h-3" />
-                                <span className="font-medium text-text-primary">{getFileName(filePath)}</span>
+                                {filePath ? (
+                                    <span className="font-medium text-text-primary">{getFileName(filePath)}</span>
+                                ) : (isStreaming || isRunning) ? (
+                                    <span className="font-medium text-text-primary italic opacity-70">editing...</span>
+                                ) : (
+                                    <span className="font-medium text-text-primary opacity-50">&lt;empty path&gt;</span>
+                                )}
                                 {isStreaming && (
-                                    <span className="text-accent text-[10px] flex items-center gap-1">
+                                    <span className="text-accent text-[10px] flex items-center gap-1 ml-2">
                                         <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                                         Writing...
                                     </span>
@@ -432,12 +442,19 @@ const ToolCallCard = memo(function ToolCallCard({
     const cardStyle = useMemo(() => {
         if (isAwaitingApproval) return 'border-yellow-500/30 bg-yellow-500/5'
         if (isError) return 'border-red-500/20 bg-red-500/5'
-        if (isStreaming || isRunning) return 'border-accent/30 bg-accent/5'
-        return 'border-border bg-surface/30 hover:bg-surface/50'
+        if (isStreaming || isRunning) return 'border-accent/50 bg-accent/5 shadow-[0_0_15px_-3px_rgba(var(--accent),0.15)] outline outline-1 outline-offset-1 outline-accent/20 animate-pulse-subtle'
+        return 'border-border bg-surface/30 hover:bg-surface/50 transition-colors'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
     return (
-        <div className={`group my-1 rounded-xl border overflow-hidden ${cardStyle} animate-slide-in-right ${isRunning ? 'animate-pulse-subtle' : ''}`}>
+        <div className={`group my-1 rounded-xl border overflow-hidden ${cardStyle} animate-slide-in-right relative`}>
+            {/* Animated Dashed Border for running state */}
+            {(isStreaming || isRunning) && (
+                <div className="absolute inset-0 pointer-events-none rounded-xl border border-dashed border-accent/40 animate-[spin_10s_linear_infinite]"
+                    style={{ WebkitMaskImage: 'linear-gradient(to bottom right, black, transparent)', opacity: 0.5 }}
+                />
+            )}
+
             {/* Header */}
             <div className="flex items-center gap-3 px-3 py-2 cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
                 {/* Status Icon */}
@@ -462,7 +479,7 @@ const ToolCallCard = memo(function ToolCallCard({
                 </div>
 
                 {/* Title & Description */}
-                <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
+                <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
                     <span
                         className={`text-sm font-medium whitespace-nowrap ${isStreaming || isRunning ? 'text-accent' : 'text-text-secondary'}`}
                     >
@@ -473,8 +490,13 @@ const ToolCallCard = memo(function ToolCallCard({
                             <span className="text-text-muted/30">|</span>
                             <span className="text-xs truncate font-mono text-text-muted">{description}</span>
                         </>
+                    ) : isMissingDescription ? (
+                        <>
+                            <span className="text-text-muted/30">|</span>
+                            <span className="text-xs truncate font-mono text-text-muted italic opacity-70">editing...</span>
+                        </>
                     ) : (isStreaming || isRunning) && (
-                        <span className="text-xs text-text-muted/50 italic animate-pulse">Processing...</span>
+                        <span className="text-xs text-text-muted/50 italic animate-pulse ml-2">Processing...</span>
                     )}
                 </div>
 

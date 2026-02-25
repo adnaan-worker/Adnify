@@ -37,7 +37,6 @@ export default function FileChangeCard({
     const args = toolCall.arguments as Record<string, unknown>
     const meta = args._meta as Record<string, unknown> | undefined
     const filePath = (args.path || meta?.filePath) as string || ''
-    const fileName = filePath ? getFileName(filePath) : ''
     const isStreaming = args._streaming === true
     const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
     const isSuccess = toolCall.status === 'success'
@@ -148,7 +147,7 @@ export default function FileChangeCard({
     const cardStyle = useMemo(() => {
         if (isAwaitingApproval) return 'border-status-warning/30 bg-status-warning/5 shadow-[0_0_15px_-3px_rgba(var(--status-warning),0.1)]'
         if (isError) return 'border-status-error/20 bg-status-error/5 shadow-[0_0_15px_-3px_rgba(var(--status-error),0.1)]'
-        if (isStreaming || isRunning) return 'border-accent/30 bg-accent/5 shadow-[0_0_15px_-3px_rgba(var(--accent),0.15)]'
+        if (isStreaming || isRunning) return 'border-accent/50 bg-accent/5 shadow-[0_0_15px_-3px_rgba(var(--accent),0.15)] outline outline-1 outline-offset-1 outline-accent/20 animate-pulse-subtle'
         return 'border-border bg-surface/30 backdrop-blur-sm hover:bg-surface/50 hover:border-border hover:shadow-lg hover:shadow-black/20'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
@@ -160,10 +159,16 @@ export default function FileChangeCard({
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
             className={`
-                group my-2 rounded-xl border transition-colors duration-300 overflow-hidden
+                group my-2 rounded-xl border transition-colors duration-300 overflow-hidden relative
                 ${cardStyle}
             `}
         >
+            {/* Animated Dashed Border for running state */}
+            {(isStreaming || isRunning) && (
+                <div className="absolute inset-0 pointer-events-none rounded-xl border border-dashed border-accent/40 animate-[spin_10s_linear_infinite]"
+                    style={{ WebkitMaskImage: 'linear-gradient(to bottom right, black, transparent)', opacity: 0.5 }}
+                />
+            )}
             {/* Header */}
             <div
                 className="flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none relative"
@@ -199,20 +204,24 @@ export default function FileChangeCard({
                     )}
                 </div>
 
-                {/* Title & Stats */}
-                <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
-                    {fileName ? (
-                        <span className={`text-sm font-medium transition-colors truncate ${(isStreaming || isRunning)
-                            ? 'text-shimmer'
-                            : 'text-text-secondary group-hover:text-text-primary'
-                            }`}>
-                            {fileName}
-                        </span>
-                    ) : (isStreaming || isRunning) ? (
-                        <div className="h-4 w-24 bg-surface/50 rounded animate-pulse" />
-                    ) : (
-                        <span className="text-sm font-medium text-text-muted">Unknown File</span>
-                    )}
+                {/* File Info */}
+                <div className="flex-1 min-w-0 flex items-center justify-between relative z-10">
+                    <div className="flex items-center gap-2 truncate">
+                        {filePath ? (
+                            <>
+                                <span className={isNewFile ? 'text-status-success font-medium text-sm' : 'text-text-primary font-medium text-sm'}>
+                                    {getFileName(filePath)}
+                                </span>
+                                <span className="text-text-muted/60 text-xs truncate">
+                                    {filePath}
+                                </span>
+                            </>
+                        ) : (isStreaming || isRunning) ? (
+                            <span className="font-medium text-sm italic opacity-70 text-text-primary">editing...</span>
+                        ) : (
+                            <span className="font-medium text-sm text-text-primary opacity-50">&lt;empty path&gt;</span>
+                        )}
+                    </div>
 
                     {(isSuccess || newContent) && (
                         <motion.span

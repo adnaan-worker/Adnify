@@ -10,7 +10,6 @@ import {
   Upload
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Logo } from '@/renderer/components/common/Logo'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useAgent } from '@/renderer/hooks/useAgent'
 import { useAgentStore, selectHandoffRequired } from '@/renderer/agent'
@@ -33,6 +32,7 @@ import AgentStatusBar from './AgentStatusBar'
 import { keybindingService } from '@/renderer/services/keybindingService'
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
 import SlashCommandPopup from './SlashCommandPopup'
+import EmptyChatSuggestions from '../chat/EmptyChatSuggestions'
 import { Button } from '../ui'
 import { useToast } from '@/renderer/components/common/ToastProvider'
 import ConversationSidebar from './ConversationSidebar'
@@ -847,7 +847,42 @@ export default function ChatPanel() {
     )
   }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall?.id, messageCheckpoints])
 
+  const virtuosoComponents = useMemo(() => ({
+    EmptyPlaceholder: () => (
+      <div className="flex flex-col h-full w-full bg-background/40 backdrop-blur-3xl relative overflow-hidden">
+        {/* Background Ambience - More subtle & Animated */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <motion.div
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.3, 0.5, 0.3],
+              x: [0, 20, 0]
+            }}
+            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] mix-blend-screen"
+          />
+          <motion.div
+            animate={{
+              scale: [1, 1.1, 1],
+              opacity: [0.2, 0.4, 0.2],
+              x: [0, -30, 0]
+            }}
+            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+            className="absolute bottom-[-10%] left-[-20%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[120px] mix-blend-screen"
+          />
+        </div>
 
+        <div className="relative z-10 w-full h-full">
+          <EmptyChatSuggestions onSelectSuggestion={(prompt) => {
+            setInput(prompt)
+            if (textareaRef.current) {
+              textareaRef.current.focus()
+            }
+          }} />
+        </div>
+      </div>
+    )
+  }), [language, setInput, textareaRef])
 
   return (
     <div
@@ -964,54 +999,7 @@ export default function ChatPanel() {
             style={{ minHeight: '100px' }}
             overscan={200}
             atBottomThreshold={200}
-            components={{
-              EmptyPlaceholder: () => (
-                <div className="flex flex-col h-full w-full bg-background/40 backdrop-blur-3xl relative overflow-hidden">
-                  {/* Background Ambience - More subtle & Animated */}
-                  <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    <motion.div
-                      animate={{
-                        scale: [1, 1.2, 1],
-                        opacity: [0.3, 0.5, 0.3],
-                        x: [0, 20, 0]
-                      }}
-                      transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-                      className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] mix-blend-screen"
-                    />
-                    <motion.div
-                      animate={{
-                        scale: [1, 1.1, 1],
-                        opacity: [0.2, 0.4, 0.2],
-                        x: [0, -30, 0]
-                      }}
-                      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                      className="absolute bottom-[-10%] left-[-20%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[120px] mix-blend-screen"
-                    />
-                  </div>
-
-                  <div className="flex-1 flex flex-col items-center justify-center p-8 select-none z-10">
-                    <div className="relative mb-8">
-                      <motion.div
-                        animate={{ opacity: [0.5, 0.8, 0.5], scale: [1, 1.05, 1] }}
-                        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                        className="absolute inset-0 bg-accent/20 blur-3xl rounded-full"
-                      />
-                      <div className="relative w-20 h-20 bg-surface/40 backdrop-blur-2xl rounded-2xl border border-border flex items-center justify-center shadow-2xl shadow-accent/10">
-                        <Logo className="w-10 h-10 text-accent opacity-90" glow />
-                      </div>
-                    </div>
-                    <div className="text-center space-y-3">
-                      <h1 className="text-2xl font-bold text-text-primary tracking-tight">
-                        Adnify Agent
-                      </h1>
-                      <p className="text-sm text-text-muted max-w-[280px] leading-relaxed opacity-60">
-                        {language === 'zh' ? '今天我能帮你构建什么？' : 'What can I help you build today?'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )
-            }}
+            components={virtuosoComponents}
           />
 
           {/* Scroll to Bottom Button */}
@@ -1142,6 +1130,6 @@ export default function ChatPanel() {
           </div>
         </div>
       </div>
-    </div>
+    </div >
   )
 }

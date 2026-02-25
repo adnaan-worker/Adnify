@@ -2,7 +2,7 @@
  * 窗口控制 IPC handlers
  */
 
-import { ipcMain, BrowserWindow, app } from 'electron'
+import { ipcMain, BrowserWindow, app, nativeTheme } from 'electron'
 import { logger } from '@shared/utils/Logger'
 
 // 标记是否已注册基础窗口控制
@@ -12,7 +12,7 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
   // 基础窗口控制（只注册一次）
   if (!basicHandlersRegistered) {
     basicHandlersRegistered = true
-    
+
     ipcMain.on('window:minimize', (event) => {
       const win = BrowserWindow.fromWebContents(event.sender)
       win?.minimize()
@@ -41,6 +41,16 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
       return app.getVersion()
     })
 
+    // 同步系统主题
+    ipcMain.handle('window:setTheme', (event, theme: 'light' | 'dark' | 'system', bgColor?: string) => {
+      nativeTheme.themeSource = theme
+      if (bgColor) {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        win?.setBackgroundColor(bgColor)
+      }
+      return true
+    })
+
     // 渲染端准备完毕通知
     ipcMain.on('app:ready', (event) => {
       const win = BrowserWindow.fromWebContents(event.sender)
@@ -63,7 +73,7 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
         if (minWidth !== undefined && minHeight !== undefined) {
           win.setMinimumSize(minWidth, minHeight)
         }
-        
+
         // 使用 Electron 内置的动画参数
         win.setSize(width, height, true)
         win.center()
@@ -75,7 +85,7 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
   // 移除旧的 handler 再注册新的
   try {
     ipcMain.removeHandler('window:new')
-  } catch {}
+  } catch { }
   ipcMain.handle('window:new', () => {
     createWindow(true)
   })
