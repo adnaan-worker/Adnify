@@ -1,0 +1,30 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background: Squircle (Light/Dawn Theme) -->
+  <rect x="0" y="0" width="512" height="512" rx="128" fill="#ffffff" />
+  
+  <!-- Subtle Gradient Stroke (Light Theme) -->
+  <rect x="10" y="10" width="492" height="492" rx="118" stroke="url(#borderGradientDawn)" stroke-width="20" stroke-opacity="0.3" />
+
+  <!-- Logo Content (Scaled Connected A) -->
+  <g transform="translate(106, 106) scale(3)">
+    <path d="M20 90 L40 30" stroke="url(#logoGradientDawn)" stroke-width="12" stroke-linecap="round" />
+    <path d="M60 30 L80 90" stroke="url(#logoGradientDawn)" stroke-width="12" stroke-linecap="round" />
+    <circle cx="50" cy="55" r="8" fill="#2563eb" />
+    <path d="M32 55 L42 55" stroke="#3b82f6" stroke-width="6" stroke-linecap="round" />
+    <path d="M58 55 L68 55" stroke="#3b82f6" stroke-width="6" stroke-linecap="round" />
+    <circle cx="50" cy="20" r="5" fill="#9333ea" />
+  </g>
+
+  <!-- Defs -->
+  <defs>
+    <!-- Darker gradient for better contrast on white background -->
+    <linearGradient id="logoGradientDawn" x1="20" y1="90" x2="80" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563eb" /> <!-- Blue 600 -->
+      <stop offset="1" stop-color="#9333ea" /> <!-- Purple 600 -->
+    </linearGradient>
+    <linearGradient id="borderGradientDawn" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563eb" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#a855f7" stop-opacity="0.05"/>
+    </linearGradient>
+  </defs>
+</svg>

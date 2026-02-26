@@ -84,7 +84,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                         className="text-center space-y-3 max-w-md mx-auto"
                     >
                         <h1 className="text-4xl font-black text-text-primary tracking-tight">
-                            ADNIFY
+                            Adnify
                         </h1>
                         <p className="text-sm text-text-secondary leading-relaxed font-medium opacity-80">
                             {language === 'zh'

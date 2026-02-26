@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { User, Copy, Check, RefreshCw, Edit2, RotateCcw, ChevronDown, X, Search } from 'lucide-react'
+import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Search } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -168,11 +168,11 @@ const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isS
       >
         <div className="flex items-center gap-2">
           {isStreaming ? (
-            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            <Search className="w-3.5 h-3.5 text-accent animate-pulse" />
           ) : (
             <Search className="w-3.5 h-3.5" />
           )}
-          <span className="text-[11px] font-bold uppercase tracking-tight">
+          <span className={`text-[11px] font-bold uppercase tracking-tight ${isStreaming ? 'text-shimmer' : ''}`}>
             {language === 'zh' ? '自动关联上下文' : 'Auto-Context'}
           </span>
         </div>
@@ -295,9 +295,8 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
                 {fluidContent}
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-text-muted/30 italic text-xs py-1">
-                <RefreshCw className="w-3 h-3 animate-spin" />
-                <span>Analyzing...</span>
+              <div className="flex items-center gap-2 text-text-muted/50 italic text-xs py-1">
+                <span className="text-shimmer">Analyzing...</span>
               </div>
             )}
           </div>

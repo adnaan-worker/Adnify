@@ -15,7 +15,6 @@ import {
   ExternalLink,
   Square,
   ChevronDown,
-  Loader2,
   FileCode,
   FilePlus,
   FileX,
@@ -134,8 +133,8 @@ export default function AgentStatusBar({
             <div className="flex items-center gap-2.5">
               {isStreaming ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
-                  <span className="text-[11px] font-medium text-accent/80">
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                  <span className="text-[11px] font-medium text-shimmer">
                     {streamingStatus || 'Processing...'}
                   </span>
                 </>

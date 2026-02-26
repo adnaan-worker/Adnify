@@ -8,7 +8,6 @@ import {
     Check,
     X,
     ChevronDown,
-    Loader2,
     Terminal,
     Search,
     Copy,
@@ -330,7 +329,7 @@ const ToolCallCard = memo(function ToolCallCard({
                                 {filePath ? (
                                     <span className="font-medium text-text-primary">{getFileName(filePath)}</span>
                                 ) : (isStreaming || isRunning) ? (
-                                    <span className="font-medium text-text-primary italic opacity-70">editing...</span>
+                                    <span className="font-medium text-shimmer italic">editing...</span>
                                 ) : (
                                     <span className="font-medium text-text-primary opacity-50">&lt;empty path&gt;</span>
                                 )}
@@ -513,7 +512,9 @@ const ToolCallCard = memo(function ToolCallCard({
                 {/* Status Icon */}
                 <div className="shrink-0">
                     {isStreaming || isRunning ? (
-                        <Loader2 className="w-4 h-4 text-accent animate-spin" />
+                        <div className="w-4 h-4 rounded-full bg-accent/10 flex items-center justify-center border border-accent/20">
+                            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                        </div>
                     ) : isSuccess ? (
                         <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
                             <Check className="w-2.5 h-2.5 text-green-400" />
@@ -534,17 +535,17 @@ const ToolCallCard = memo(function ToolCallCard({
                 {/* Title & Description */}
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
                     <span
-                        className={`text-sm font-medium whitespace-nowrap ${isStreaming || isRunning ? 'text-accent' : 'text-text-secondary'}`}
+                        className={`text-sm font-medium whitespace-nowrap ${isStreaming || isRunning ? 'text-shimmer' : 'text-text-secondary'}`}
                     >
                         {TOOL_LABELS[toolCall.name] || toolCall.name}
                     </span>
                     {statusText ? (
                         <>
                             <span className="text-text-muted/30">|</span>
-                            <span className="text-xs truncate text-text-muted">{statusText}</span>
+                            <span className={`text-xs truncate ${isStreaming || isRunning ? 'text-shimmer' : 'text-text-muted'}`}>{statusText}</span>
                         </>
                     ) : (isStreaming || isRunning) && (
-                        <span className="text-xs text-text-muted/50 italic animate-pulse ml-2">Processing...</span>
+                        <span className="text-xs text-shimmer italic ml-2">Processing...</span>
                     )}
                 </div>
 

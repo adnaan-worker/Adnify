@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
-import { Check, X, ChevronDown, ExternalLink, Loader2, FileCode } from 'lucide-react'
+import { Check, X, ChevronDown, ExternalLink, FileCode } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@renderer/agent/types'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
@@ -141,7 +141,27 @@ export default function FileChangeCard({
     }, [isExpanded])
 
     // 判断是否是新建文件
-    const isNewFile = !oldContent && !!newContent
+    // 注意：不能仅依据 !oldContent 判断，因为编辑状态下初始可能没有 oldContent 流回来
+    const isNewFile = ['create_file', 'create_file_or_folder'].includes(toolCall.name) ||
+        (!oldContent && !!newContent && !['edit_file', 'replace_file_content', 'write_file'].includes(toolCall.name))
+
+    // 获取动态状态文案（例如：Creating xxx...）
+    const actionText = useMemo(() => {
+        if (!filePath) return ''
+        const name = getFileName(filePath)
+
+        // 如果工具名明确是编辑类，强制使用 Editing
+        const isEditingTool = ['edit_file', 'replace_file_content', 'write_file'].includes(toolCall.name)
+        const isCreating = !isEditingTool && (['create_file', 'create_file_or_folder'].includes(toolCall.name) || isNewFile)
+
+        const action = isCreating ? 'Creating' : 'Editing'
+        const actionPast = isCreating ? 'Created' : 'Updated'
+
+        if (isRunning || isStreaming) return `${action} ${name}...`
+        if (isSuccess) return `${actionPast} ${name}`
+        if (isError) return `Failed to ${action.toLowerCase()} ${name}`
+        return `${action} ${name}`
+    }, [filePath, isRunning, isStreaming, isSuccess, isError, toolCall.name, isNewFile])
 
     // 计算卡片样式
     const cardStyle = useMemo(() => {
@@ -163,11 +183,11 @@ export default function FileChangeCard({
                 ${cardStyle}
             `}
         >
-            {/* Animated Dashed Border for running state */}
+            {/* ToolCall Card Background Sweeping Effect */}
             {(isStreaming || isRunning) && (
-                <div className="absolute inset-0 pointer-events-none rounded-xl border border-dashed border-accent/40 animate-[spin_10s_linear_infinite]"
-                    style={{ WebkitMaskImage: 'linear-gradient(to bottom right, black, transparent)', opacity: 0.5 }}
-                />
+                <div className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden">
+                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/20 to-transparent animate-shimmer" />
+                </div>
             )}
             {/* Header */}
             <div
@@ -185,9 +205,8 @@ export default function FileChangeCard({
                 {/* Status Icon */}
                 <div className="shrink-0 relative z-10">
                     {isStreaming || isRunning ? (
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-accent/20 rounded-full animate-ping" />
-                            <Loader2 className="w-4 h-4 text-accent animate-spin relative z-10" />
+                        <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center border border-accent/20">
+                            <FileCode className="w-3 h-3 text-accent" />
                         </div>
                     ) : isSuccess ? (
                         <div className="w-5 h-5 rounded-full bg-green-500/10 flex items-center justify-center border border-green-500/20">
@@ -208,16 +227,11 @@ export default function FileChangeCard({
                 <div className="flex-1 min-w-0 flex items-center justify-between relative z-10">
                     <div className="flex items-center gap-2 truncate">
                         {filePath ? (
-                            <>
-                                <span className={isNewFile ? 'text-status-success font-medium text-sm' : 'text-text-primary font-medium text-sm'}>
-                                    {getFileName(filePath)}
-                                </span>
-                                <span className="text-text-muted/60 text-xs truncate">
-                                    {filePath}
-                                </span>
-                            </>
+                            <span className={`${isNewFile ? 'text-status-success' : 'text-text-primary'} ${isStreaming || isRunning ? 'text-shimmer text-sm font-medium' : 'font-medium text-sm'}`}>
+                                {actionText}
+                            </span>
                         ) : (isStreaming || isRunning) ? (
-                            <span className="font-medium text-sm italic opacity-70 text-text-primary">editing...</span>
+                            <span className="font-medium text-sm italic text-shimmer">editing...</span>
                         ) : (
                             <span className="font-medium text-sm text-text-primary opacity-50">&lt;empty path&gt;</span>
                         )}
