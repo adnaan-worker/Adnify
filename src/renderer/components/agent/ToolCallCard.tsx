@@ -95,58 +95,111 @@ const ToolCallCard = memo(function ToolCallCard({
         }
     }, [isRunning, isStreaming])
 
-    // 获取简短描述
-    const description = useMemo(() => {
+    // 获取动态状态文本 (替换原有的重复文件名逻辑)
+    const statusText = useMemo(() => {
         const name = toolCall.name
-        // 终端命令
+        const status = toolCall.status
+        const isRunning = status === 'running' || status === 'pending' || isStreaming
+        const isSuccess = status === 'success'
+        const isError = status === 'error'
+
+        const formatPath = (p: string | unknown) => p ? getFileName(p as string) : ''
+
+        // 终端
         if (name === 'run_command') {
-            return args.command as string
+            const cmd = args.command as string
+            if (!cmd) return isRunning ? 'Preparing cmd...' : ''
+            if (isRunning) return `Executing ${cmd}`
+            if (isSuccess) return `Executed ${cmd}`
+            if (isError) return `Command failed: ${cmd}`
+            return cmd
         }
-        // 文件路径类工具
-        if ([
-            'read_file', 'write_file', 'create_file', 'edit_file',
-            'create_file_or_folder', 'delete_file_or_folder',
-            'replace_file_content', 'get_lint_errors',
-            'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'
-        ].includes(name)) {
-            const path = args.path as string
-            return path ? getFileName(path) : ''
-        }
-        // 多文件读取
+
+        // 读取多文件
         if (name === 'read_multiple_files') {
-            const paths = args.paths as string[]
-            return paths?.length ? `${paths.length} files` : ''
+            const count = (args.paths as string[])?.length || 0
+            if (isRunning) return `Reading ${count} files...`
+            if (isSuccess) return `Read ${count} files`
+            if (isError) return `Failed to read files`
+            return `Reading files`
         }
-        // 目录类
-        if (name === 'list_directory' || name === 'get_dir_tree') {
-            const path = args.path as string
-            return path ? getFileName(path) || '.' : '.'
+
+        // 读取单文件或目录
+        if (['read_file', 'list_directory', 'get_dir_tree'].includes(name)) {
+            const target = formatPath(args.path)
+            if (!target) return isRunning ? 'Reading...' : ''
+            if (isRunning) return `Reading ${target}...`
+            if (isSuccess) return `Read ${target}`
+            if (isError) return `Failed to read ${target}`
+            return `Reading ${target}`
         }
-        // 搜索类
-        if (name === 'search_files') {
-            const pattern = (args.pattern || args.query) as string
-            return pattern ? `"${pattern}"` : ''
+
+        // 写入/创建
+        if (['write_file', 'create_file', 'create_file_or_folder'].includes(name)) {
+            const target = formatPath(args.path)
+            if (!target) return isRunning ? 'Creating...' : ''
+            if (isRunning) return `Creating ${target}...`
+            if (isSuccess) return `Created ${target}`
+            if (isError) return `Failed to create ${target}`
+            return `Creating ${target}`
         }
-        if (name === 'codebase_search' || name === 'web_search' || name === 'uiux_search') {
-            const query = args.query as string
-            return query ? `"${query}"` : ''
+
+        // 编辑
+        if (['edit_file', 'replace_file_content'].includes(name)) {
+            const target = formatPath(args.path)
+            if (!target) return isRunning ? 'Editing...' : ''
+            if (isRunning) return `Editing ${target}...`
+            if (isSuccess) return `Updated ${target}`
+            if (isError) return `Failed to edit ${target}`
+            return `Editing ${target}`
         }
+
+        // 删除
+        if (name === 'delete_file_or_folder') {
+            const target = formatPath(args.path)
+            if (!target) return isRunning ? 'Deleting...' : ''
+            if (isRunning) return `Deleting ${target}...`
+            if (isSuccess) return `Deleted ${target}`
+            if (isError) return `Failed to delete ${target}`
+            return `Deleting ${target}`
+        }
+
+        // 搜索
+        if (['search_files', 'codebase_search', 'web_search', 'uiux_search'].includes(name)) {
+            const query = (args.pattern || args.query) as string
+            const qStr = query ? `"${query}"` : ''
+            if (!qStr) return isRunning ? 'Searching...' : ''
+            if (isRunning) return `Searching ${qStr}...`
+            if (isSuccess) return `Searched ${qStr}`
+            if (isError) return `Search failed`
+            return `Searching ${qStr}`
+        }
+
         // URL
         if (name === 'read_url') {
             const url = args.url as string
-            return url ? new URL(url).hostname : ''
-        }
-        // Plan
-        if (name === 'ask_user') {
-            const question = args.question as string
-            return question ? question.slice(0, 30) + (question.length > 30 ? '...' : '') : ''
+            let hostname = ''
+            if (url) { try { hostname = new URL(url).hostname } catch { hostname = url } }
+            if (!hostname) return isRunning ? 'Reading URL...' : ''
+            if (isRunning) return `Reading ${hostname}...`
+            if (isSuccess) return `Read ${hostname}`
+            if (isError) return `Failed to read ${hostname}`
+            return `Reading ${hostname}`
         }
 
-        // Return null/empty string by default
-        return ''
-    }, [toolCall.name, args])
+        // LSP类
+        if (['get_lint_errors', 'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'].includes(name)) {
+            const target = formatPath(args.path)
+            if (!target) return isRunning ? 'Analyzing...' : ''
+            if (isRunning) return `Analyzing ${target}...`
+            if (isSuccess) return `Analyzed ${target}`
+            if (isError) return `Analysis failed`
+            return `Analyzing ${target}`
+        }
 
-    const isMissingDescription = !description && (isStreaming || isRunning)
+        // 默认 fallback
+        return isRunning ? 'Processing...' : ''
+    }, [toolCall.name, toolCall.status, args, isStreaming])
 
     const handleCopyResult = () => {
         if (toolCall.result) {
@@ -448,11 +501,11 @@ const ToolCallCard = memo(function ToolCallCard({
 
     return (
         <div className={`group my-1 rounded-xl border overflow-hidden ${cardStyle} animate-slide-in-right relative`}>
-            {/* Animated Dashed Border for running state */}
+            {/* Sweeping Light Effect for running state */}
             {(isStreaming || isRunning) && (
-                <div className="absolute inset-0 pointer-events-none rounded-xl border border-dashed border-accent/40 animate-[spin_10s_linear_infinite]"
-                    style={{ WebkitMaskImage: 'linear-gradient(to bottom right, black, transparent)', opacity: 0.5 }}
-                />
+                <div className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden">
+                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/20 to-transparent animate-shimmer" />
+                </div>
             )}
 
             {/* Header */}
@@ -485,15 +538,10 @@ const ToolCallCard = memo(function ToolCallCard({
                     >
                         {TOOL_LABELS[toolCall.name] || toolCall.name}
                     </span>
-                    {description ? (
+                    {statusText ? (
                         <>
                             <span className="text-text-muted/30">|</span>
-                            <span className="text-xs truncate font-mono text-text-muted">{description}</span>
-                        </>
-                    ) : isMissingDescription ? (
-                        <>
-                            <span className="text-text-muted/30">|</span>
-                            <span className="text-xs truncate font-mono text-text-muted italic opacity-70">editing...</span>
+                            <span className="text-xs truncate text-text-muted">{statusText}</span>
                         </>
                     ) : (isStreaming || isRunning) && (
                         <span className="text-xs text-text-muted/50 italic animate-pulse ml-2">Processing...</span>

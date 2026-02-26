@@ -33,19 +33,54 @@ const WINDOW_CONFIG = {
 // Store（延迟初始化）
 // ==========================================
 let bootstrapStore: Store<Record<string, unknown>>
-let mainStore: Store<Record<string, unknown>>
+let credentialsStore: Store<Record<string, unknown>>
+let preferencesStore: Store<Record<string, unknown>>
+let workspaceMetaStore: Store<Record<string, unknown>>
+
+/**
+ * 辅助函数：根据 key 路由到正确的 store
+ * 
+ * 路由规则：
+ * - credentials.* / providerConfigs → credentialsStore
+ * - workspace.* / lastWorkspacePath / recentWorkspaces / embeddingConfig / indexOptions → workspaceMetaStore
+ * - 其余 → preferencesStore
+ */
+function resolveStore(key: string): Store<Record<string, unknown>> {
+  if (key.startsWith('credentials.') || key === 'providerConfigs') return credentialsStore
+  if (
+    key.startsWith('workspace.') ||
+    key === 'lastWorkspacePath' ||
+    key === 'lastWorkspaceSession' ||
+    key === 'recentWorkspaces' ||
+    key === 'embeddingConfig' ||
+    key === 'indexOptions'
+  ) return workspaceMetaStore
+  return preferencesStore
+}
 
 async function initStores() {
   const fs = await import('fs')
   const { default: Store } = await import('electron-store')
-  
+
   bootstrapStore = new Store({ name: 'bootstrap' })
   const customConfigPath = bootstrapStore.get('customConfigPath') as string | undefined
-  const storeOptions: { name: string; cwd?: string } = { name: 'config' }
-  if (customConfigPath && fs.existsSync(customConfigPath)) {
-    storeOptions.cwd = customConfigPath
+  const baseCwd = (customConfigPath && fs.existsSync(customConfigPath)) ? customConfigPath : undefined
+
+  const mkOpts = (name: string) => baseCwd ? { name, cwd: baseCwd } : { name }
+
+  credentialsStore = new Store(mkOpts('credentials'))
+  preferencesStore = new Store(mkOpts('preferences'))
+  workspaceMetaStore = new Store(mkOpts('workspace-meta'))
+
+  // 迁移旧 config.json（如果存在）
+  try {
+    const { migrateLegacyConfig } = await import('./services/configMigration')
+    const { getUserConfigDir } = await import('./services/configPath')
+    const configDir = baseCwd || getUserConfigDir()
+    migrateLegacyConfig(configDir, credentialsStore, preferencesStore, workspaceMetaStore)
+  } catch (err) {
+    logger.system.error('[Main] Config migration error:', err)
   }
-  mainStore = new Store(storeOptions)
 }
 
 // ==========================================
@@ -255,20 +290,20 @@ async function initializeModules(firstWin: BrowserWindow) {
   securityManager = security.securityManager
 
   // 从配置加载自定义 LSP 安装路径
-  const customLspPath = mainStore.get('lspSettings.customBinDir') as string | undefined
+  const customLspPath = preferencesStore.get('lspSettings.customBinDir') as string | undefined
   if (customLspPath) {
     lspInstaller.setCustomLspBinDir(customLspPath)
   }
 
   // 注册窗口控制
   windowIpc.registerWindowHandlers(createWindow)
-  
+
   // 注册更新服务
   updaterIpc.registerUpdaterHandlers()
   updaterService.updateService.initialize(firstWin)
 
   // 配置安全模块
-  const securityConfig = mainStore.get('securitySettings', {
+  const securityConfig = preferencesStore.get('securitySettings', {
     enablePermissionConfirm: true,
     enableAuditLog: true,
     strictWorkspaceMode: true,
@@ -286,9 +321,11 @@ async function initializeModules(firstWin: BrowserWindow) {
   ipc.registerAllHandlers({
     getMainWindow,
     createWindow,
-    mainStore,
+    resolveStore,
+    credentialsStore,
+    preferencesStore,
+    workspaceMetaStore,
     bootstrapStore,
-    setMainStore: (store: Store<Record<string, unknown>>) => { mainStore = store },
     findWindowByWorkspace,
     setWindowWorkspace: (id: number, roots: string[]) => windowWorkspaces.set(id, roots),
     getWindowWorkspace: (id: number) => windowWorkspaces.get(id) || null,
@@ -325,12 +362,12 @@ async function initializeModules(firstWin: BrowserWindow) {
 // 捕获未处理的异常（包括原生模块异常）
 process.on('uncaughtException', (error: Error) => {
   logger.system.error('[Main] Uncaught Exception:', error)
-  
+
   // 如果是 node-pty 相关的错误，提供更友好的提示
   if (error.message?.includes('Napi::Error') || error.message?.includes('node-pty')) {
     logger.system.error('[Main] node-pty native module error detected. Please run: npm run rebuild')
   }
-  
+
   // 不退出应用，让用户继续使用其他功能
   // 只在开发模式下显示错误
   if (!app.isPackaged) {
@@ -341,7 +378,7 @@ process.on('uncaughtException', (error: Error) => {
 // 捕获未处理的 Promise 拒绝
 process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
   logger.system.error('[Main] Unhandled Rejection:', reason)
-  
+
   if (!app.isPackaged) {
     console.error('Unhandled rejection at:', promise, 'reason:', reason)
   }
@@ -356,10 +393,10 @@ app.whenReady().then(async () => {
   await initStores()
 
   // 2. 检查是否启用文件日志
-  const appSettings = mainStore.get('app-settings') as any
+  const appSettings = preferencesStore.get('app-settings') as any
   const enableFileLogging = appSettings?.enableFileLogging ?? false
   logger.system.info('[Main] File logging setting loaded:', { enableFileLogging, type: typeof enableFileLogging })
-  
+
   if (enableFileLogging) {
     const { getUserConfigDir } = await import('./services/configPath')
     const logPath = path.join(getUserConfigDir(), 'logs', 'main.log')

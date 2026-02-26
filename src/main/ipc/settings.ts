@@ -20,9 +20,9 @@ interface SecurityModuleRef {
 let securityRef: SecurityModuleRef | null = null
 
 export function registerSettingsHandlers(
-  mainStore: Store,
+  resolveStore: (key: string) => Store,
+  preferencesStore: Store,
   _bootstrapStore: Store,
-  setMainStore: (store: Store) => void,
   securityModule?: SecurityModuleRef
 ) {
   // 保存安全模块引用
@@ -31,18 +31,19 @@ export function registerSettingsHandlers(
   }
 
   // 获取设置
-  ipcMain.handle('settings:get', (_, key: string) => mainStore.get(key))
+  ipcMain.handle('settings:get', (_, key: string) => resolveStore(key).get(key))
 
   // 设置值（自动清理无效字段）
   ipcMain.handle('settings:set', (_event, key: string, value: unknown) => {
+    const store = resolveStore(key)
     // 清理配置值，移除不存在的字段
     const cleanedValue = cleanConfigValue(key, value)
 
     // electron-store 不允许设置 undefined，需要使用 delete
     if (cleanedValue === undefined) {
-      mainStore.delete(key as any)
+      store.delete(key as any)
     } else {
-      mainStore.set(key, cleanedValue)
+      store.set(key, cleanedValue)
     }
 
     // 广播给所有窗口
@@ -87,14 +88,14 @@ export function registerSettingsHandlers(
       securityRef.updateWhitelist(defaultShellCommands, defaultGitCommands)
     }
 
-    // 保存到配置
-    const currentSecuritySettings = mainStore.get('securitySettings', {}) as any
+    // 保存到配置（安全设置在 preferencesStore 中）
+    const currentSecuritySettings = preferencesStore.get('securitySettings', {}) as any
     const newSecuritySettings = {
       ...currentSecuritySettings,
       allowedShellCommands: defaultShellCommands,
       allowedGitSubcommands: defaultGitCommands
     }
-    mainStore.set('securitySettings', newSecuritySettings)
+    preferencesStore.set('securitySettings', newSecuritySettings)
 
     return { shell: defaultShellCommands, git: defaultGitCommands }
   })
@@ -104,22 +105,13 @@ export function registerSettingsHandlers(
     return getUserConfigDir()
   })
 
-  // 设置配置路径
+  // 设置配置路径（不再支持迁移整个 store，只设置路径）
   ipcMain.handle('settings:setConfigPath', async (_, newPath: string) => {
     try {
       if (!fs.existsSync(newPath)) {
         fs.mkdirSync(newPath, { recursive: true })
       }
-
-      // 保存新路径
       setUserConfigDir(newPath)
-
-      // 迁移当前配置到新位置
-      const currentData = mainStore.store
-      const newStore = new Store({ name: 'config', cwd: newPath })
-      newStore.store = currentData
-      setMainStore(newStore)
-
       return true
     } catch (err) {
       logger.ipc.error('[Settings] Failed to set config path:', err)
@@ -127,9 +119,9 @@ export function registerSettingsHandlers(
     }
   })
 
-  // 恢复工作区 (Legacy fallback, secureFile.ts has a better one)
+  // 恢复工作区 (Legacy fallback)
   ipcMain.handle('workspace:restore:legacy', () => {
-    return mainStore.get('lastWorkspacePath')
+    return resolveStore('lastWorkspacePath').get('lastWorkspacePath')
   })
 
   // 获取用户数据路径
@@ -142,7 +134,7 @@ export function registerSettingsHandlers(
     try {
       const path = require('path')
       const logPath = path.join(getUserConfigDir(), 'logs', 'main.log')
-      
+
       if (fs.existsSync(logPath)) {
         const content = fs.readFileSync(logPath, 'utf-8')
         // 返回最后 10000 行或 1MB 的内容

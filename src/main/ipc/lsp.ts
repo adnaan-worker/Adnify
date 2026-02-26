@@ -7,8 +7,8 @@ import { toAppError } from '@shared/utils/errorHandler'
 import { ipcMain } from 'electron'
 import { lspManager, LanguageId } from '../lspManager'
 import { EXTENSION_TO_LANGUAGE } from '@shared/languages'
-import { 
-  getLspServerStatus, 
+import {
+  getLspServerStatus,
   installServer,
   installBasicServers,
   getLspBinDir,
@@ -45,11 +45,11 @@ async function getServerForUri(uri: string, workspacePath: string): Promise<stri
   return lspManager.ensureServerForFile(filePath, languageId, workspacePath)
 }
 
-// mainStore 引用，用于保存 LSP 配置
-let _mainStore: any = null
+// preferencesStore 引用，用于保存 LSP 配置
+let _preferencesStore: any = null
 
-export function registerLspHandlers(mainStore?: any): void {
-  _mainStore = mainStore
+export function registerLspHandlers(preferencesStore?: any): void {
+  _preferencesStore = preferencesStore
 
   // 启动服务器
   ipcMain.handle('lsp:start', async (_, workspacePath: string) => {
@@ -329,7 +329,7 @@ export function registerLspHandlers(mainStore?: any): void {
       // 先获取 call hierarchy item
       const items = await lspManager.prepareCallHierarchy(serverName, params.uri, params.line, params.character)
       if (!items || items.length === 0) return []
-      
+
       // 获取 incoming calls
       return await lspManager.getIncomingCalls(serverName, items[0])
     } catch {
@@ -345,7 +345,7 @@ export function registerLspHandlers(mainStore?: any): void {
       // 先获取 call hierarchy item
       const items = await lspManager.prepareCallHierarchy(serverName, params.uri, params.line, params.character)
       if (!items || items.length === 0) return []
-      
+
       // 获取 outgoing calls
       return await lspManager.getOutgoingCalls(serverName, items[0])
     } catch {
@@ -411,11 +411,11 @@ export function registerLspHandlers(mainStore?: any): void {
   ipcMain.handle('lsp:setCustomBinDir', (_, customPath: string | null) => {
     setCustomLspBinDir(customPath)
     // 保存到配置文件
-    if (_mainStore) {
+    if (_preferencesStore) {
       if (customPath) {
-        _mainStore.set('lspSettings.customBinDir', customPath)
+        _preferencesStore.set('lspSettings.customBinDir', customPath)
       } else {
-        _mainStore.delete('lspSettings.customBinDir')
+        _preferencesStore.delete('lspSettings.customBinDir')
       }
     }
     return { success: true }

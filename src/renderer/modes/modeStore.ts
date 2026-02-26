@@ -1,10 +1,16 @@
 /**
  * 模式状态管理
+ * 
+ * 通过 electron-store (preferencesStore) 持久化，
+ * 与其他设置统一存储后端，通过 IPC 调用 settings:get/set
  */
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { WorkMode } from './types'
+import { api } from '@/renderer/services/electronAPI'
+
+const STORE_KEY = 'modeStore'
 
 interface ModeState {
     /** 当前工作模式 */
@@ -23,6 +29,32 @@ interface ModeActions {
 }
 
 type ModeStore = ModeState & ModeActions
+
+/**
+ * 自定义 Storage：通过 IPC 存到 electron-store 的 preferencesStore
+ * 统一与其他设置的存储后端，避免使用 localStorage
+ */
+const electronStoreStorage = {
+    getItem: async (name: string): Promise<string | null> => {
+        try {
+            const value = await api.settings.get(`${STORE_KEY}.${name}`)
+            return value ? JSON.stringify(value) : null
+        } catch {
+            return null
+        }
+    },
+    setItem: async (name: string, value: string): Promise<void> => {
+        try {
+            const parsed = JSON.parse(value)
+            await api.settings.set(`${STORE_KEY}.${name}`, parsed)
+        } catch { /* ignore */ }
+    },
+    removeItem: async (name: string): Promise<void> => {
+        try {
+            await api.settings.set(`${STORE_KEY}.${name}`, undefined)
+        } catch { /* ignore */ }
+    },
+}
 
 export const useModeStore = create<ModeStore>()(
     persist(
@@ -54,6 +86,7 @@ export const useModeStore = create<ModeStore>()(
         }),
         {
             name: 'adnify-mode-store',
+            storage: createJSONStorage(() => electronStoreStorage),
             partialize: (state) => ({
                 currentMode: state.currentMode
             })

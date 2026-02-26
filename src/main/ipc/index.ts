@@ -33,9 +33,12 @@ import {
 export interface IPCContext {
   getMainWindow: () => BrowserWindow | null
   createWindow: () => BrowserWindow
-  mainStore: Store
+  /** 根据 key 路由到正确的 store */
+  resolveStore: (key: string) => Store
+  credentialsStore: Store
+  preferencesStore: Store
+  workspaceMetaStore: Store
   bootstrapStore: Store
-  setMainStore: (store: Store) => void
   // 窗口-工作区管理（用于单项目单窗口模式）
   findWindowByWorkspace?: (roots: string[]) => BrowserWindow | null
   setWindowWorkspace?: (windowId: number, roots: string[]) => void
@@ -46,13 +49,13 @@ export interface IPCContext {
  * 注册所有安全的 IPC handlers
  */
 export function registerAllHandlers(context: IPCContext) {
-  const { getMainWindow, createWindow, mainStore, bootstrapStore, setMainStore } = context
+  const { getMainWindow, createWindow, resolveStore, preferencesStore, workspaceMetaStore, bootstrapStore } = context
 
   // 窗口控制
   registerWindowHandlers(createWindow)
 
   // 文件操作（安全版）
-  registerSecureFileHandlers(getMainWindow, mainStore, (event) => {
+  registerSecureFileHandlers(getMainWindow, workspaceMetaStore, (event) => {
     // 优先使用请求来源窗口的工作区（支持多窗口隔离）
     if (event && context.getWindowWorkspace) {
       const windowId = event.sender.id
@@ -62,14 +65,14 @@ export function registerAllHandlers(context: IPCContext) {
       }
     }
     // 回退到全局存储
-    return mainStore.get('lastWorkspaceSession') as { roots: string[] } | null
+    return workspaceMetaStore.get('lastWorkspaceSession') as { roots: string[] } | null
   }, {
     findWindowByWorkspace: context.findWindowByWorkspace,
     setWindowWorkspace: context.setWindowWorkspace,
   })
 
-  // 设置（传入安全模块引用）
-  registerSettingsHandlers(mainStore, bootstrapStore, setMainStore, {
+  // 设置（传入 resolveStore 和各 store 引用）
+  registerSettingsHandlers(resolveStore, preferencesStore, bootstrapStore, {
     securityManager,
     updateWhitelist,
     getWhitelist
@@ -86,7 +89,7 @@ export function registerAllHandlers(context: IPCContext) {
       }
     }
     // 回退到全局存储
-    return mainStore.get('lastWorkspaceSession') as { roots: string[] } | null
+    return workspaceMetaStore.get('lastWorkspaceSession') as { roots: string[] } | null
   }, context.getWindowWorkspace)
 
   // 搜索
@@ -95,11 +98,11 @@ export function registerAllHandlers(context: IPCContext) {
   // LLM
   registerLLMHandlers(getMainWindow)
 
-  // 索引 - 传入 mainStore 以读取保存的 embedding 配置
-  registerIndexingHandlers(getMainWindow, mainStore)
+  // 索引 - 传入 workspaceMetaStore 以读取保存的 embedding 配置
+  registerIndexingHandlers(getMainWindow, workspaceMetaStore)
 
   // LSP 语言服务
-  registerLspHandlers(mainStore)
+  registerLspHandlers(preferencesStore)
 
   // HTTP 请求（用于 web_search / read_url）
   registerHttpHandlers()

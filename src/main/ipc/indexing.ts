@@ -8,21 +8,21 @@ import { getIndexService, initIndexServiceWithConfig, EmbeddingConfig, IndexMode
 import { ok, failFromError, Result } from '@shared/types/result'
 import Store from 'electron-store'
 
-let _mainStore: Store | null = null
+let _configStore: Store | null = null
 
 function getSavedConfig(): Partial<IndexConfig> | undefined {
-  if (!_mainStore) return undefined
-  return _mainStore.get('indexConfig') as Partial<IndexConfig> | undefined
+  if (!_configStore) return undefined
+  return _configStore.get('indexConfig') as Partial<IndexConfig> | undefined
 }
 
 function saveConfig(updates: Partial<IndexConfig>): void {
-  if (!_mainStore) return
+  if (!_configStore) return
   const current = getSavedConfig() || {}
-  _mainStore.set('indexConfig', { ...current, ...updates })
+  _configStore.set('indexConfig', { ...current, ...updates })
 }
 
-export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | null, mainStore?: Store) {
-  _mainStore = mainStore || null
+export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | null, configStore?: Store) {
+  _configStore = configStore || null
 
   // 初始化
   ipcMain.handle('index:initialize', async (_, workspacePath: string): Promise<Result<void>> => {

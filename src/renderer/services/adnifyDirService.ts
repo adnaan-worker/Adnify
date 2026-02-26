@@ -4,7 +4,9 @@
  * 所有项目级数据都存储在 .adnify 目录下：
  * .adnify/
  *   ├── index/              # 代码库向量索引
- *   ├── sessions.json       # Agent 会话历史（包含检查点）
+ *   ├── sessions/           # Agent 会话（按线程拆分）
+ *   │   ├── _meta.json      # 线程元数据（currentThreadId, threadIds）
+ *   │   └── {threadId}.json # 单个线程数据
  *   ├── settings.json       # 项目级设置
  *   ├── workspace-state.json # 工作区状态（打开的文件等）
  *   └── rules.md            # 项目 AI 规则
@@ -19,7 +21,7 @@ export const ADNIFY_DIR_NAME = '.adnify'
 // 子目录和文件
 export const ADNIFY_FILES = {
   INDEX_DIR: 'index',
-  SESSIONS: 'sessions.json',
+  SESSIONS_DIR: 'sessions',
   SETTINGS: 'settings.json',
   WORKSPACE_STATE: 'workspace-state.json',
   RULES: 'rules.md',
@@ -29,18 +31,13 @@ type AdnifyFile = typeof ADNIFY_FILES[keyof typeof ADNIFY_FILES]
 
 // ============ 数据类型定义 ============
 
-/** Agent 会话数据 */
-export interface SessionsData {
-  /** zustand store 数据 */
-  'adnify-agent-store'?: {
-    state: {
-      threads: Record<string, unknown>
-      currentThreadId: string | null
-    }
-    version: number
-  }
-  /** 其他会话相关数据 */
-  [key: string]: unknown
+/** 线程元数据 */
+export interface SessionMeta {
+  currentThreadId: string | null
+  threadIds: string[]
+  /** 非线程数据（branches, messageCheckpoints 等） */
+  extra: Record<string, unknown>
+  version: number
 }
 
 /** 工作区状态 */
@@ -101,6 +98,13 @@ const DEFAULT_PROJECT_SETTINGS: ProjectSettingsData = {
   },
 }
 
+const DEFAULT_SESSION_META: SessionMeta = {
+  currentThreadId: null,
+  threadIds: [],
+  extra: {},
+  version: 0,
+}
+
 // ============ 服务实现 ============
 
 class AdnifyDirService {
@@ -110,22 +114,26 @@ class AdnifyDirService {
 
   // 内存缓存
   private cache: {
-    sessions: SessionsData | null
+    sessionMeta: SessionMeta | null
+    threads: Map<string, unknown>
     workspaceState: WorkspaceStateData | null
     settings: ProjectSettingsData | null
   } = {
-      sessions: null,
+      sessionMeta: null,
+      threads: new Map(),
       workspaceState: null,
       settings: null,
     }
 
   // 脏标记
   private dirty: {
-    sessions: boolean
+    sessionMeta: boolean
+    dirtyThreads: Set<string>
     workspaceState: boolean
     settings: boolean
   } = {
-      sessions: false,
+      sessionMeta: false,
+      dirtyThreads: new Set(),
       workspaceState: false,
       settings: false,
     }
@@ -142,7 +150,6 @@ class AdnifyDirService {
     try {
       const adnifyPath = `${rootPath}/${ADNIFY_DIR_NAME}`
       const exists = await api.file.exists(adnifyPath)
-
       if (!exists) {
         await api.file.ensureDir(adnifyPath)
       }
@@ -152,6 +159,13 @@ class AdnifyDirService {
       const indexExists = await api.file.exists(indexPath)
       if (!indexExists) {
         await api.file.ensureDir(indexPath)
+      }
+
+      // 创建 sessions 子目录
+      const sessionsPath = `${adnifyPath}/${ADNIFY_FILES.SESSIONS_DIR}`
+      const sessionsExists = await api.file.exists(sessionsPath)
+      if (!sessionsExists) {
+        await api.file.ensureDir(sessionsPath)
       }
 
       this.initializedRoots.add(rootPath)
@@ -176,6 +190,7 @@ class AdnifyDirService {
 
     this.primaryRoot = rootPath
     await this.initialize(rootPath)
+    await this.migrateOldSessions()
     await this.loadAllData()
     this.initialized = true
     logger.system.info('[AdnifyDir] Primary root set:', rootPath)
@@ -185,8 +200,8 @@ class AdnifyDirService {
     this.primaryRoot = null
     this.initializedRoots.clear()
     this.initialized = false
-    this.cache = { sessions: null, workspaceState: null, settings: null }
-    this.dirty = { sessions: false, workspaceState: false, settings: false }
+    this.cache = { sessionMeta: null, threads: new Map(), workspaceState: null, settings: null }
+    this.dirty = { sessionMeta: false, dirtyThreads: new Set(), workspaceState: false, settings: false }
     logger.system.info('[AdnifyDir] Reset')
   }
 
@@ -201,10 +216,20 @@ class AdnifyDirService {
 
     const promises: Promise<void>[] = []
 
-    if (this.dirty.sessions && this.cache.sessions) {
-      promises.push(this.writeJsonFile(ADNIFY_FILES.SESSIONS, this.cache.sessions))
-      this.dirty.sessions = false
+    // 刷新 session meta
+    if (this.dirty.sessionMeta && this.cache.sessionMeta) {
+      promises.push(this.writeSessionFile('_meta.json', this.cache.sessionMeta))
+      this.dirty.sessionMeta = false
     }
+
+    // 刷新 dirty 线程（只写变化的）
+    for (const threadId of this.dirty.dirtyThreads) {
+      const data = this.cache.threads.get(threadId)
+      if (data) {
+        promises.push(this.writeSessionFile(`${threadId}.json`, data))
+      }
+    }
+    this.dirty.dirtyThreads.clear()
 
     if (this.dirty.workspaceState && this.cache.workspaceState) {
       promises.push(this.writeJsonFile(ADNIFY_FILES.WORKSPACE_STATE, this.cache.workspaceState))
@@ -253,49 +278,148 @@ class AdnifyDirService {
     return `${this.getDirPath(rootPath)}/${file}`
   }
 
-  // ============ 数据操作 (基于 Primary Root) ============
+  // ============ Session 操作（线程级别） ============
 
-  async getSessions(): Promise<SessionsData> {
-    if (this.cache.sessions) return this.cache.sessions
-    if (!this.isInitialized()) return {}
-    const data = await this.readJsonFile<SessionsData>(ADNIFY_FILES.SESSIONS)
-    this.cache.sessions = data || {}
-    return this.cache.sessions
+  async getSessionMeta(): Promise<SessionMeta> {
+    if (this.cache.sessionMeta) return this.cache.sessionMeta
+    if (!this.isInitialized()) return { ...DEFAULT_SESSION_META }
+    const data = await this.readSessionFile<SessionMeta>('_meta.json')
+    this.cache.sessionMeta = data || { ...DEFAULT_SESSION_META }
+    return this.cache.sessionMeta
   }
 
-  /**
-   * 保存 sessions（立即写入，用于关键操作）
-   */
-  async saveSessions(data: SessionsData): Promise<void> {
-    this.cache.sessions = data
-    this.dirty.sessions = true
-    if (this.isInitialized()) {
-      await this.writeJsonFile(ADNIFY_FILES.SESSIONS, data)
-      this.dirty.sessions = false
+  async getThreadData(threadId: string): Promise<unknown | null> {
+    if (this.cache.threads.has(threadId)) return this.cache.threads.get(threadId)!
+    if (!this.isInitialized()) return null
+    const data = await this.readSessionFile<unknown>(`${threadId}.json`)
+    if (data) {
+      this.cache.threads.set(threadId, data)
     }
+    return data
   }
 
   /**
-   * 更新 sessions 部分数据（立即写入，用于关键操作）
+   * 设置线程数据为脏（延迟写入）
+   * 这是 agentStorage 调用的主入口
    */
-  async updateSessionsPartial(key: string, value: unknown): Promise<void> {
-    const sessions = await this.getSessions()
-    sessions[key] = value
-    await this.saveSessions(sessions)
-  }
-
-  /**
-   * 设置 sessions 部分数据为脏（延迟写入，用于频繁更新）
-   * 这是推荐的高频更新方法
-   */
-  setSessionsPartialDirty(key: string, value: unknown): void {
-    if (!this.cache.sessions) {
-      this.cache.sessions = {}
-    }
-    this.cache.sessions[key] = value
-    this.dirty.sessions = true
+  setThreadDirty(threadId: string, data: unknown): void {
+    this.cache.threads.set(threadId, data)
+    this.dirty.dirtyThreads.add(threadId)
     this.scheduleFlush()
   }
+
+  /**
+   * 设置 session meta 为脏（延迟写入）
+   */
+  setSessionMetaDirty(meta: SessionMeta): void {
+    this.cache.sessionMeta = meta
+    this.dirty.sessionMeta = true
+    this.scheduleFlush()
+  }
+
+  /**
+   * 删除线程数据文件
+   */
+  async deleteThreadData(threadId: string): Promise<void> {
+    this.cache.threads.delete(threadId)
+    this.dirty.dirtyThreads.delete(threadId)
+
+    // 更新 meta
+    const meta = await this.getSessionMeta()
+    meta.threadIds = meta.threadIds.filter(id => id !== threadId)
+    this.setSessionMetaDirty(meta)
+
+    // 删除文件
+    if (this.isInitialized()) {
+      try {
+        const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.json`
+        await api.file.delete(filePath)
+      } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * 清除所有 session 数据
+   */
+  async clearAllSessions(): Promise<void> {
+    const meta = await this.getSessionMeta()
+    for (const threadId of meta.threadIds) {
+      this.cache.threads.delete(threadId)
+      try {
+        const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.json`
+        await api.file.delete(filePath)
+      } catch { /* ignore */ }
+    }
+    this.cache.sessionMeta = { ...DEFAULT_SESSION_META }
+    this.dirty.sessionMeta = true
+    this.dirty.dirtyThreads.clear()
+    await this.writeSessionFile('_meta.json', this.cache.sessionMeta)
+  }
+
+  /**
+   * 兼容方法：供 agentStorage 使用
+   * 从线程级文件构建完整的 store persist 数据
+   */
+  async getFullSessionData(): Promise<Record<string, unknown> | null> {
+    const meta = await this.getSessionMeta()
+    if (meta.threadIds.length === 0 && !meta.currentThreadId) return null
+
+    const threads: Record<string, unknown> = {}
+    for (const threadId of meta.threadIds) {
+      const data = await this.getThreadData(threadId)
+      if (data) threads[threadId] = data
+    }
+
+    return {
+      state: {
+        threads,
+        currentThreadId: meta.currentThreadId,
+        ...meta.extra,
+      },
+      version: meta.version,
+    }
+  }
+
+  /**
+   * 兼容方法：供 agentStorage 使用
+   * 将完整 store persist 数据拆分到线程级文件
+   */
+  setFullSessionDataDirty(_storeKey: string, parsed: Record<string, unknown>): void {
+    const state = parsed.state as Record<string, unknown> | undefined
+    if (!state) return
+
+    const threads = (state.threads || {}) as Record<string, unknown>
+    const currentThreadId = state.currentThreadId as string | null
+    const { threads: _, currentThreadId: __, ...extra } = state
+
+    // 更新 meta
+    const threadIds = Object.keys(threads)
+    const meta: SessionMeta = {
+      currentThreadId,
+      threadIds,
+      extra,
+      version: (parsed.version as number) || 0,
+    }
+    this.setSessionMetaDirty(meta)
+
+    // 标记变化的线程为 dirty
+    for (const [threadId, data] of Object.entries(threads)) {
+      const cached = this.cache.threads.get(threadId)
+      // 只在数据有变化时才标记（简单引用比较）
+      if (cached !== data) {
+        this.setThreadDirty(threadId, data)
+      }
+    }
+
+    // 清理已删除的线程缓存
+    for (const cachedId of this.cache.threads.keys()) {
+      if (!threads[cachedId]) {
+        this.cache.threads.delete(cachedId)
+      }
+    }
+  }
+
+  // ============ workspace / settings 操作 ============
 
   async getWorkspaceState(): Promise<WorkspaceStateData> {
     if (this.cache.workspaceState) return this.cache.workspaceState
@@ -364,16 +488,87 @@ class AdnifyDirService {
 
   // ============ 内部方法 ============
 
+  /**
+   * 旧 sessions.json → 新 sessions/ 目录迁移
+   */
+  private async migrateOldSessions(): Promise<void> {
+    if (!this.primaryRoot) return
+
+    const oldPath = `${this.getDirPath()}/sessions.json`
+    try {
+      const exists = await api.file.exists(oldPath)
+      if (!exists) return
+
+      const content = await api.file.read(oldPath)
+      if (!content) return
+
+      const oldData = JSON.parse(content)
+
+      // 旧格式：{ 'adnify-agent-store': { state: { threads, currentThreadId }, version } }
+      const storeData = oldData['adnify-agent-store']
+      if (!storeData?.state?.threads) {
+        // 无有效数据，删除旧文件
+        await api.file.delete(oldPath)
+        return
+      }
+
+      const { threads, currentThreadId, ...extra } = storeData.state as Record<string, unknown>
+      const threadsMap = threads as Record<string, unknown>
+      const threadIds = Object.keys(threadsMap)
+
+      // 写入各线程文件
+      for (const [threadId, data] of Object.entries(threadsMap)) {
+        await this.writeSessionFile(`${threadId}.json`, data)
+      }
+
+      // 写入 meta
+      const meta: SessionMeta = {
+        currentThreadId: currentThreadId as string | null,
+        threadIds,
+        extra,
+        version: storeData.version || 0,
+      }
+      await this.writeSessionFile('_meta.json', meta)
+
+      // 删除旧文件
+      await api.file.delete(oldPath)
+      logger.system.info(`[AdnifyDir] Migrated sessions.json → sessions/ (${threadIds.length} threads)`)
+    } catch (error) {
+      logger.system.error('[AdnifyDir] Sessions migration failed:', error)
+    }
+  }
+
   private async loadAllData(): Promise<void> {
-    const [sessions, workspaceState, settings] = await Promise.all([
-      this.readJsonFile<SessionsData>(ADNIFY_FILES.SESSIONS),
+    const [sessionMeta, workspaceState, settings] = await Promise.all([
+      this.readSessionFile<SessionMeta>('_meta.json'),
       this.readJsonFile<WorkspaceStateData>(ADNIFY_FILES.WORKSPACE_STATE),
       this.readJsonFile<ProjectSettingsData>(ADNIFY_FILES.SETTINGS),
     ])
-    this.cache.sessions = sessions || {}
+    this.cache.sessionMeta = sessionMeta || { ...DEFAULT_SESSION_META }
     this.cache.workspaceState = workspaceState || { ...DEFAULT_WORKSPACE_STATE }
     this.cache.settings = settings ? { ...DEFAULT_PROJECT_SETTINGS, ...settings } : { ...DEFAULT_PROJECT_SETTINGS }
     logger.system.info('[AdnifyDir] Loaded all data from disk')
+  }
+
+  private async readSessionFile<T>(fileName: string): Promise<T | null> {
+    try {
+      const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${fileName}`
+      const content = await api.file.read(filePath)
+      if (!content) return null
+      return JSON.parse(content) as T
+    } catch {
+      return null
+    }
+  }
+
+  private async writeSessionFile<T>(fileName: string, data: T): Promise<void> {
+    try {
+      const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${fileName}`
+      const content = JSON.stringify(data, null, 2)
+      await api.file.write(filePath, content)
+    } catch (error) {
+      logger.system.error(`[AdnifyDir] Failed to write session file ${fileName}:`, error)
+    }
   }
 
   private async readJsonFile<T>(file: AdnifyFile): Promise<T | null> {
