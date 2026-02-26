@@ -6,7 +6,7 @@ import { Language } from '@renderer/i18n'
 import type { LLMConfig, AutoApproveSettings, AgentConfig, WebSearchConfig } from '@shared/config/types'
 import type { ProviderModelConfig } from '@shared/config/settings'
 
-export type SettingsTab = 'provider' | 'editor' | 'snippets' | 'agent' | 'rules' | 'mcp' | 'lsp' | 'keybindings' | 'indexing' | 'security' | 'system'
+export type SettingsTab = 'provider' | 'editor' | 'snippets' | 'agent' | 'rules' | 'skills' | 'mcp' | 'lsp' | 'keybindings' | 'indexing' | 'security' | 'system'
 
 export interface ProviderSettingsProps {
     localConfig: LLMConfig
@@ -33,21 +33,21 @@ export interface EditorSettingsState {
     autoSave: 'off' | 'afterDelay' | 'onFocusChange'
     autoSaveDelay: number
     theme: string
-    
+
     // AI 补全
     completionEnabled: boolean
     completionDebounceMs: number
     completionMaxTokens: number
     completionTriggerChars: string[]
-    
+
     // 终端
     terminalScrollback: number
     terminalMaxOutputLines: number
-    
+
     // LSP
     lspTimeoutMs: number
     lspCompletionTimeoutMs: number
-    
+
     // 性能
     largeFileWarningThresholdMB: number
     largeFileLineCount: number

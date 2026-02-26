@@ -15,6 +15,7 @@ import { DEFAULT_AGENT_CONFIG } from '@shared/config/agentConfig'
 import { PERFORMANCE_DEFAULTS } from '@shared/config/defaults'
 import { rulesService, type ProjectRules } from '../services/rulesService'
 import { memoryService, type MemoryItem } from '../services/memoryService'
+import { skillService, type SkillItem } from '../services/skillService'
 
 // 从 promptTemplates 导入静态常量
 import {
@@ -89,6 +90,7 @@ export interface PromptContext {
   personality: string
   projectRules: ProjectRules | null
   memories: MemoryItem[]
+  skills: SkillItem[]
   customInstructions: string | null
   templateId?: string
   projectSummary?: string | null
@@ -162,6 +164,11 @@ ${summary.trim()}
 Note: This is an auto-generated project summary. Use it to understand the codebase structure before exploring files.`
 }
 
+function buildSkills(skills: SkillItem[]): string | null {
+  const prompt = skillService.buildSkillsPrompt(skills)
+  return prompt || null
+}
+
 // ============================================
 // 主构建函数
 // ============================================
@@ -184,6 +191,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
+    buildSkills(ctx.skills),
     buildCustomInstructions(ctx.customInstructions),
   ]
 
@@ -205,6 +213,7 @@ export function buildChatPrompt(ctx: PromptContext): string {
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
+    buildSkills(ctx.skills),
     buildCustomInstructions(ctx.customInstructions),
   ]
 
@@ -246,10 +255,11 @@ export async function buildAgentSystemPrompt(
     throw new Error(`Template not found: ${promptTemplateId}`)
   }
 
-  // 并行加载动态内容（包括项目摘要）
-  const [projectRules, memories, projectSummary] = await Promise.all([
+  // 并行加载动态内容（包括项目摘要和 Skills）
+  const [projectRules, memories, skills, projectSummary] = await Promise.all([
     rulesService.getRules(),
     memoryService.getMemories(),
+    skillService.getSkills(),
     workspacePath ? loadProjectSummary(workspacePath) : Promise.resolve(null),
   ])
 
@@ -264,6 +274,7 @@ export async function buildAgentSystemPrompt(
     personality: template.personality,
     projectRules,
     memories,
+    skills,
     customInstructions: customInstructions || null,
     templateId: template.id,
     projectSummary,

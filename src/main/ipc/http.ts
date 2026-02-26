@@ -42,7 +42,7 @@ async function fetchWithJinaReader(url: string, timeout = 60000): Promise<ReadUr
         const req = https.request(options, (res) => {
             let data = ''
             res.setEncoding('utf8')
-            
+
             res.on('data', (chunk) => {
                 data += chunk
                 // 限制响应大小
@@ -128,8 +128,8 @@ async function fetchUrlDirect(url: string, timeout = 60000): Promise<ReadUrlResu
             const req = protocol.request(options, (res) => {
                 // 处理重定向
                 if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                    const redirectUrl = res.headers.location.startsWith('http') 
-                        ? res.headers.location 
+                    const redirectUrl = res.headers.location.startsWith('http')
+                        ? res.headers.location
                         : `${parsedUrl.protocol}//${parsedUrl.host}${res.headers.location}`
                     fetchUrlDirect(redirectUrl, timeout).then(resolve)
                     return
@@ -231,10 +231,11 @@ async function fetchUrl(url: string, timeout = 60000): Promise<ReadUrlResult> {
     }
 
     // 对于 JSON/API 端点，直接抓取更合适
-    const isApiEndpoint = url.includes('/api/') || 
-                          url.endsWith('.json') || 
-                          url.includes('raw.githubusercontent.com')
-    
+    const isApiEndpoint = url.includes('/api/') ||
+        url.endsWith('.json') ||
+        url.includes('raw.githubusercontent.com') ||
+        url.includes('api.github.com')
+
     if (isApiEndpoint) {
         logger.ipc.debug('[HTTP] API endpoint detected, using direct fetch')
         return fetchUrlDirect(url, timeout)
@@ -243,7 +244,7 @@ async function fetchUrl(url: string, timeout = 60000): Promise<ReadUrlResult> {
     // 优先使用 Jina Reader
     logger.ipc.debug('[HTTP] Trying Jina Reader for:', url)
     const jinaResult = await fetchWithJinaReader(url, timeout)
-    
+
     if (jinaResult.success) {
         logger.ipc.debug('[HTTP] Jina Reader succeeded')
         return jinaResult
@@ -361,12 +362,12 @@ async function searchWithGoogle(query: string, apiKey: string, cx: string, maxRe
             res.on('end', () => {
                 try {
                     const json = JSON.parse(data)
-                    
+
                     // 检查 API 错误
                     if (json.error) {
-                        resolve({ 
-                            success: false, 
-                            error: `Google API error: ${json.error.message || json.error.code}` 
+                        resolve({
+                            success: false,
+                            error: `Google API error: ${json.error.message || json.error.code}`
                         })
                         return
                     }
@@ -451,20 +452,20 @@ async function searchWithDuckDuckGo(query: string, maxResults: number): Promise<
 // 解析 DuckDuckGo HTML 响应
 function parseDuckDuckGoHtml(html: string, maxResults: number): SearchResult[] {
     const results: SearchResult[] = []
-    
+
     // DuckDuckGo HTML 版本的结果在 class="result" 的 div 中
     // 标题在 class="result__a" 的 a 标签中
     // 摘要在 class="result__snippet" 的 a 标签中
-    
+
     // 匹配结果块
     const resultRegex = /<div[^>]*class="[^"]*result[^"]*"[^>]*>[\s\S]*?<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>[\s\S]*?<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([^<]*)<\/a>/gi
-    
+
     let match
     while ((match = resultRegex.exec(html)) !== null && results.length < maxResults) {
         let url = match[1]
         const title = decodeHtmlEntities(match[2].trim())
         const snippet = decodeHtmlEntities(match[3].trim())
-        
+
         // DuckDuckGo 的链接是重定向链接，需要提取真实 URL
         if (url.includes('uddg=')) {
             const uddgMatch = url.match(/uddg=([^&]+)/)
@@ -472,20 +473,20 @@ function parseDuckDuckGoHtml(html: string, maxResults: number): SearchResult[] {
                 url = decodeURIComponent(uddgMatch[1])
             }
         }
-        
+
         if (title && url) {
             results.push({ title, url, snippet })
         }
     }
-    
+
     // 如果上面的正则没匹配到，尝试更宽松的匹配
     if (results.length === 0) {
         const linkRegex = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]*)"[^>]*>([^<]+)<\/a>/gi
         const snippetRegex = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([^<]+)<\/a>/gi
-        
+
         const links: { url: string; title: string }[] = []
         const snippets: string[] = []
-        
+
         while ((match = linkRegex.exec(html)) !== null) {
             let url = match[1]
             if (url.includes('uddg=')) {
@@ -494,11 +495,11 @@ function parseDuckDuckGoHtml(html: string, maxResults: number): SearchResult[] {
             }
             links.push({ url, title: decodeHtmlEntities(match[2].trim()) })
         }
-        
+
         while ((match = snippetRegex.exec(html)) !== null) {
             snippets.push(decodeHtmlEntities(match[1].trim()))
         }
-        
+
         for (let i = 0; i < Math.min(links.length, maxResults); i++) {
             results.push({
                 title: links[i].title,
@@ -507,7 +508,7 @@ function parseDuckDuckGoHtml(html: string, maxResults: number): SearchResult[] {
             })
         }
     }
-    
+
     return results
 }
 

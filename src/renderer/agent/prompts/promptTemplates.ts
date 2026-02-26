@@ -713,6 +713,7 @@ export function getPromptTemplatePreview(templateId: string): string {
     personality: template.personality,
     projectRules: { content: '[Project-specific rules from .adnify/rules.md]', source: 'preview', lastModified: 0 },
     memories: [],
+    skills: [],
     customInstructions: '[User-defined custom instructions]',
     templateId: template.id,
   }

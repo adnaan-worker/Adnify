@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Check } from 'lucide-react'
+import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check } from 'lucide-react'
 import { useStore } from '@store'
 import { PROVIDERS } from '@/shared/config/providers'
 import { getEditorConfig } from '@renderer/settings'
@@ -21,7 +21,8 @@ import {
     SystemSettings,
     McpSettings,
     LspSettings,
-    SnippetSettings
+    SnippetSettings,
+    SkillSettings
 } from './tabs'
 
 export default function SettingsModal() {
@@ -206,6 +207,7 @@ export default function SettingsModal() {
         { id: 'snippets', label: language === 'zh' ? '代码片段' : 'Snippets', icon: <FileCode className="w-4 h-4" /> },
         { id: 'agent', label: language === 'zh' ? '智能体' : 'Agent', icon: <Settings2 className="w-4 h-4" /> },
         { id: 'rules', label: language === 'zh' ? '规则与记忆' : 'Rules & Memory', icon: <Brain className="w-4 h-4" /> },
+        { id: 'skills', label: 'Skills', icon: <Zap className="w-4 h-4" /> },
         { id: 'mcp', label: 'MCP', icon: <Plug className="w-4 h-4" /> },
         { id: 'lsp', label: language === 'zh' ? '语言服务' : 'LSP', icon: <Braces className="w-4 h-4" /> },
         { id: 'keybindings', label: language === 'zh' ? '快捷键' : 'Keybindings', icon: <Keyboard className="w-4 h-4" /> },
@@ -314,6 +316,7 @@ export default function SettingsModal() {
                                 />
                             )}
                             {activeTab === 'rules' && <RulesMemorySettings language={language} />}
+                            {activeTab === 'skills' && <SkillSettings language={language} />}
                             {activeTab === 'keybindings' && <KeybindingPanel />}
                             {activeTab === 'mcp' && <McpSettings language={language} mcpConfig={localMcpConfig} setMcpConfig={setLocalMcpConfig} />}
                             {activeTab === 'lsp' && <LspSettings language={language} />}

@@ -48,6 +48,8 @@ export { sessionService } from './services/sessionService'
 export { rulesService } from './services/rulesService'
 export { memoryService } from './services/memoryService'
 export type { MemoryItem } from './services/memoryService'
+export { skillService } from './services/skillService'
+export type { SkillItem } from './services/skillService'
 export { composerService } from './services/composerService'
 
 // 上下文管理
