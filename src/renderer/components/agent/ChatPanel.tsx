@@ -579,6 +579,14 @@ export default function ChatPanel() {
         replacement = '@symbols '
         contextItem = { type: 'Symbols' }
         break
+      case 'skill':
+        replacement = `@${candidate.data.skillId} `
+        contextItem = {
+          type: 'Skill',
+          skillId: candidate.data.skillId,
+          name: candidate.data.name
+        }
+        break
       case 'file':
       case 'folder':
         replacement = `@${candidate.description || candidate.label} `

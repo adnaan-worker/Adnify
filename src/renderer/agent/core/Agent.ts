@@ -66,6 +66,7 @@ export class AgentClass {
       customInstructions?: string
       promptTemplateId?: string
       orchestratorPhase?: 'planning' | 'executing'
+      mentionedSkills?: string[]
     }
   ): Promise<void> {
     const store = useAgentStore.getState()
@@ -107,8 +108,16 @@ export class AgentClass {
       // 避免后续耗时任务（提示词构建、隐式搜索）阻塞首屏显示
       await new Promise(resolve => setTimeout(resolve, 0))
 
+      // 3. 提取提到的 Skills
+      const mentionedSkills = contextItems
+        .filter(item => item.type === 'Skill')
+        .map(item => (item as import('../types').SkillContext).skillId)
+
       // 4. 构建系统提示词（异步执行）
-      const systemPrompt = await buildAgentSystemPrompt(chatMode, workspacePath, promptOptions)
+      const systemPrompt = await buildAgentSystemPrompt(chatMode, workspacePath, {
+        ...promptOptions,
+        mentionedSkills: mentionedSkills.length > 0 ? mentionedSkills : undefined
+      })
 
       // 5. 准备上下文（搜索状态会更新到刚才创建的助手消息中）
       const userQuery = this.extractUserQuery(userMessage)

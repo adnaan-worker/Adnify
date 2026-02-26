@@ -13,6 +13,7 @@ export type ContextItemType =
   | 'Symbols'
   | 'Web'
   | 'Problems'
+  | 'Skill'
 
 export interface FileContext {
   type: 'File'
@@ -57,6 +58,12 @@ export interface ProblemsContext {
   uri?: string
 }
 
+export interface SkillContext {
+  type: 'Skill'
+  skillId: string
+  name: string
+}
+
 /** 上下文项联合类型 */
 export type ContextItem =
   | FileContext
@@ -68,3 +75,4 @@ export type ContextItem =
   | SymbolsContext
   | WebContext
   | ProblemsContext
+  | SkillContext

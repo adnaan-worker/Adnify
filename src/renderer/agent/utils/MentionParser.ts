@@ -5,9 +5,10 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { FileText, Folder, Database, Globe, FileCode, Terminal, GitBranch, AlertCircle } from 'lucide-react'
+import { FileText, Folder, Database, Globe, FileCode, Terminal, GitBranch, AlertCircle, Wrench } from 'lucide-react'
+import { skillService } from '@/renderer/agent/services/skillService'
 
-export type MentionType = 'file' | 'folder' | 'codebase' | 'web' | 'git' | 'terminal' | 'symbols' | 'problems'
+export type MentionType = 'file' | 'folder' | 'codebase' | 'web' | 'git' | 'terminal' | 'symbols' | 'problems' | 'skill'
 
 export interface MentionCandidate {
     id: string
@@ -115,7 +116,32 @@ export class MentionParser {
             }
         })
 
-        // 2. 搜索文件
+        // 2. 匹配已安装的 Skills
+        try {
+            const skills = await skillService.getSkills()
+            const enabledSkills = skills.filter(s => s.enabled)
+
+            for (const skill of enabledSkills) {
+                const label = `@${skill.name.toLowerCase()}`
+                if (label.includes(lowerQuery)) {
+                    suggestions.push({
+                        id: `skill-${skill.filePath}`,
+                        type: 'skill',
+                        label: label,
+                        description: skill.description || 'Custom Skill',
+                        icon: Wrench,
+                        data: {
+                            skillId: skill.name.toLowerCase(),
+                            name: skill.name
+                        }
+                    })
+                }
+            }
+        } catch (err) {
+            logger.agent.error('Error fetching skills for mention:', err)
+        }
+
+        // 3. 搜索文件
         if (workspacePath && (options.includeFiles || options.includeFolders)) {
             try {
                 const files = await this.searchFiles(workspacePath, lowerQuery, options)

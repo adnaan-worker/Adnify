@@ -242,9 +242,11 @@ export async function buildAgentSystemPrompt(
     promptTemplateId?: string
     /** Orchestrator 阶段 */
     orchestratorPhase?: 'planning' | 'executing'
+    /** 被提到的 Skills (按需加载) */
+    mentionedSkills?: string[]
   }
 ): Promise<string> {
-  const { openFiles = [], activeFile, customInstructions, promptTemplateId, orchestratorPhase } = options || {}
+  const { openFiles = [], activeFile, customInstructions, promptTemplateId, orchestratorPhase, mentionedSkills } = options || {}
 
   // 获取模板
   const template = promptTemplateId
@@ -256,12 +258,21 @@ export async function buildAgentSystemPrompt(
   }
 
   // 并行加载动态内容（包括项目摘要和 Skills）
-  const [projectRules, memories, skills, projectSummary] = await Promise.all([
+  let [projectRules, memories, skills, projectSummary] = await Promise.all([
     rulesService.getRules(),
     memoryService.getMemories(),
     skillService.getSkills(),
     workspacePath ? loadProjectSummary(workspacePath) : Promise.resolve(null),
   ])
+
+  // 按需过滤技能
+  // 如果提供了 mentionedSkills（用户显式 @ 的），只加载这些
+  // 如果 mentionedSkills 是空数组或未定义（没有 @ 任何 skill），则不加载任何 skill
+  if (mentionedSkills && mentionedSkills.length > 0) {
+    skills = skills.filter(s => mentionedSkills.includes(s.name.toLowerCase()))
+  } else {
+    skills = []
+  }
 
   // 构建上下文
   const ctx: PromptContext = {
