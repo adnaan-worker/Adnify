@@ -15,7 +15,7 @@
     "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
     "dev:main": "node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc -p tsconfig.main.json --watch",
     "dev:renderer": "vite",
-    "build": "npm run build:main && npm run build:renderer",
+    "build": "vite build",
     "build:main": "node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
     "start": "electron .",
