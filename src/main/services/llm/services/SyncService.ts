@@ -62,7 +62,8 @@ export class SyncService {
         tools: coreTools,
         maxOutputTokens: config.maxTokens || 1000,
         temperature: config.temperature ?? 0.3,
-        topP: config.topP,
+        // topP 为 1 时等于默认行为，无需传递；且部分模型不允许与 temperature 共存
+        topP: config.topP !== undefined && config.topP < 1 ? config.topP : undefined,
         topK: config.topK,
         seed: config.seed,
       })

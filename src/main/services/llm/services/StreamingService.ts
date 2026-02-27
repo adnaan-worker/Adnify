@@ -86,7 +86,9 @@ export class StreamingService {
         // 核心参数
         maxOutputTokens: config.maxTokens,
         temperature: config.temperature,
-        topP: config.topP,
+        // topP 为 1 时等于默认行为（不过滤），无需传递
+        // 且部分模型（如 Claude）不允许 temperature 和 topP 同时指定
+        topP: config.topP !== undefined && config.topP < 1 ? config.topP : undefined,
         topK: config.topK,
         frequencyPenalty: config.frequencyPenalty,
         presencePenalty: config.presencePenalty,
