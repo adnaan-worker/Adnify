@@ -62,6 +62,7 @@ export const EXTENSION_TO_LANGUAGE: Record<string, string> = {
     html: 'html',
     htm: 'html',
     vue: 'vue',
+    nvue: 'vue',
     svelte: 'svelte',
 
     // Web - Styles
