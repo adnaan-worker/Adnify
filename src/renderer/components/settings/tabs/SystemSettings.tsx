@@ -60,7 +60,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
     const getCurrentSettings = (): SettingsState => {
         const cached = settingsService.getCache()
         if (cached) return cached
-        
+
         // 如果缓存不存在，从 store 构建
         return {
             llmConfig: store.llmConfig,
@@ -100,7 +100,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
         try {
             const text = await file.text()
             const result = importSettings(text)
-            
+
             if (!result.success || !result.settings) {
                 toast.error(result.error || (language === 'zh' ? '导入失败' : 'Import failed'))
                 return
@@ -114,7 +114,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
             if (settings.promptTemplateId) store.set('promptTemplateId', settings.promptTemplateId)
             if (settings.agentConfig) store.set('agentConfig', settings.agentConfig)
             if (settings.aiInstructions !== undefined) store.set('aiInstructions', settings.aiInstructions)
-            
+
             // 应用 provider 配置
             if (settings.providerConfigs) {
                 for (const [id, config] of Object.entries(settings.providerConfigs)) {
@@ -129,6 +129,9 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                     model: settings.llmConfig.model || store.llmConfig.model,
                 })
             }
+
+            // 保存设置到持久化存储
+            await store.save()
 
             toast.success(language === 'zh' ? '配置已导入' : 'Settings imported')
         } catch (error) {
@@ -146,22 +149,22 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
             // 1. 清除 localStorage 缓存
             const keysToRemove = ['adnify-editor-config', 'adnify-workspace', 'adnify-sessions', 'adnify-threads']
             keysToRemove.forEach(key => localStorage.removeItem(key))
-            
+
             // 2. 清除代码库索引
             try {
                 // @ts-ignore
                 await (window.electronAPI as any).clearIndex?.()
             } catch { }
-            
+
             // 3. 清除持久化编辑器配置
             await api.settings.set('editorConfig', undefined)
-            
+
             // 4. 清除 Agent 文件读取缓存
             Agent.clearSession()
-            
+
             // 5. 清除 Memory 服务缓存
             memoryService.clearCache()
-            
+
             toast.success(language === 'zh' ? '缓存已清除' : 'Cache cleared')
         } catch (error) {
             logger.settings.error('Failed to clear cache:', error)
@@ -236,8 +239,8 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                             <div>
                                 <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '配置存储路径' : 'Config Storage Path'}</div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {language === 'zh' 
-                                        ? '所有配置文件（config.json、mcp.json 等）的存储位置' 
+                                    {language === 'zh'
+                                        ? '所有配置文件（config.json、mcp.json 等）的存储位置'
                                         : 'Storage location for all config files (config.json, mcp.json, etc.)'}
                                 </div>
                             </div>
@@ -310,13 +313,13 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                                     {language === 'zh' ? '启用文件日志' : 'Enable File Logging'}
                                 </div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {language === 'zh' 
-                                        ? '将应用日志保存到文件，用于调试和问题排查' 
+                                    {language === 'zh'
+                                        ? '将应用日志保存到文件，用于调试和问题排查'
                                         : 'Save application logs to file for debugging and troubleshooting'}
                                 </div>
                             </div>
-                            <Switch 
-                                checked={enableFileLogging} 
+                            <Switch
+                                checked={enableFileLogging}
                                 onChange={(e) => handleToggleFileLogging(e.target.checked)}
                             />
                         </div>
@@ -340,18 +343,18 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                                 </div>
 
                                 <div className="flex gap-3">
-                                    <Button 
-                                        variant="secondary" 
-                                        size="sm" 
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
                                         onClick={handleOpenLogFile}
                                         className="rounded-xl px-4 flex-1"
                                     >
                                         <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
                                         {language === 'zh' ? '打开日志文件' : 'Open Log File'}
                                     </Button>
-                                    <Button 
-                                        variant="secondary" 
-                                        size="sm" 
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
                                         onClick={handleExportLogs}
                                         className="rounded-xl px-4 flex-1"
                                     >
@@ -363,8 +366,8 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                                 <div className="flex items-start gap-2 text-[10px] font-medium text-blue-500 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20">
                                     <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                                     <div>
-                                        {language === 'zh' 
-                                            ? '日志文件会自动轮转，最多保留 5 个文件（每个最大 10MB）。生产环境默认只记录警告和错误。' 
+                                        {language === 'zh'
+                                            ? '日志文件会自动轮转，最多保留 5 个文件（每个最大 10MB）。生产环境默认只记录警告和错误。'
                                             : 'Log files rotate automatically, keeping up to 5 files (10MB each). Production mode logs warnings and errors only.'}
                                     </div>
                                 </div>
@@ -375,8 +378,8 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                             <div className="flex items-start gap-2 text-[10px] font-medium text-text-muted bg-white/5 px-3 py-2 rounded-lg border border-border">
                                 <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                                 <div>
-                                    {language === 'zh' 
-                                        ? '文件日志已禁用。启用后可以查看详细的应用运行日志，包括 LSP 安装、错误信息等。' 
+                                    {language === 'zh'
+                                        ? '文件日志已禁用。启用后可以查看详细的应用运行日志，包括 LSP 安装、错误信息等。'
                                         : 'File logging is disabled. Enable it to view detailed application logs including LSP installation, errors, etc.'}
                                 </div>
                             </div>
@@ -399,8 +402,8 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                             <div>
                                 <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '导出配置' : 'Export Settings'}</div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {language === 'zh' 
-                                        ? '将当前配置导出为 JSON 文件，方便备份或迁移' 
+                                    {language === 'zh'
+                                        ? '将当前配置导出为 JSON 文件，方便备份或迁移'
                                         : 'Export current settings to JSON file for backup or migration'}
                                 </div>
                             </div>
@@ -409,17 +412,17 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                                 {language === 'zh' ? '导出' : 'Export'}
                             </Button>
                         </div>
-                        
+
                         <div className="flex items-center justify-between py-2">
                             <div className="text-xs text-text-muted">
                                 {language === 'zh' ? '包含 API 密钥（不推荐）' : 'Include API keys (not recommended)'}
                             </div>
-                            <Switch 
-                                checked={includeApiKeys} 
+                            <Switch
+                                checked={includeApiKeys}
                                 onChange={(e) => setIncludeApiKeys(e.target.checked)}
                             />
                         </div>
-                        
+
                         {includeApiKeys && (
                             <div className="flex items-center gap-2 text-[10px] font-medium text-yellow-500 bg-yellow-500/10 px-3 py-2 rounded-lg border border-yellow-500/20">
                                 <AlertTriangle className="w-3.5 h-3.5" />

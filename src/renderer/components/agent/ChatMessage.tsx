@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Search } from 'lucide-react'
+import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Search, Wrench } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -155,8 +155,6 @@ interface ThinkingBlockProps {
   onTypingComplete?: () => void
 }
 
-// 搜索块组件 - 专门用于显示 Auto-Context 结果
-// ... SearchBlock implementation remains same, skipping specific lines to avoid duplication if possible ...
 const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isStreaming?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(true)
   const { language } = useStore()
@@ -207,6 +205,67 @@ const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isS
   )
 })
 SearchBlock.displayName = 'SearchBlock'
+
+// 技能块组件 - 专门用于显示激活的 Skill
+const SkillBlock = React.memo(({ items }: { items: any[] }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const { language } = useStore()
+
+  if (items.length === 0) return null
+
+  const skillNames = items.map(item => item.skillId).join(', ')
+  const isMultiple = items.length > 1
+
+  return (
+    <div className="my-2 overflow-hidden rounded-xl border border-indigo-500/10 bg-indigo-500/5 transition-all duration-300">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex w-full items-center justify-between px-3 py-1.5 text-indigo-500/80 hover:bg-indigo-500/5 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Wrench className="w-3 h-3 text-indigo-500" />
+          <span className="text-[10px] font-bold uppercase tracking-wider">
+            {language === 'zh' ? (isMultiple ? '已激活技能组' : '已激活技能') : (isMultiple ? 'Activated Skills' : 'Activated Skill')}:
+          </span>
+          <span className="text-[11px] font-medium text-indigo-500/90 truncate max-w-[200px]">
+            {skillNames}
+          </span>
+        </div>
+        <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} transition={{ duration: 0.2 }}>
+          <ChevronDown className="w-3 h-3 opacity-60" />
+        </motion.div>
+      </button>
+
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-2.5 pt-0.5 space-y-2">
+              {items.map((item, i) => (
+                <div key={item.skillId || i} className="flex flex-col gap-0.5 border-t border-indigo-500/5 pt-1.5 first:border-0 first:pt-0">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1 h-1 rounded-full bg-indigo-500/40" />
+                    <span className="text-[11px] font-bold text-indigo-500/90">{item.skillId}</span>
+                  </div>
+                  {item.description && (
+                    <div className="text-[10px] text-text-muted/60 leading-relaxed font-sans pl-2.5">
+                      {item.description}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+})
+SkillBlock.displayName = 'SkillBlock'
 
 const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, onTypingComplete }: ThinkingBlockProps) => {
   const [isExpanded, setIsExpanded] = useState(isStreaming)
@@ -876,6 +935,12 @@ const ChatMessage = React.memo(({
             </div>
 
             <div className="w-full text-[15px] leading-relaxed text-text-primary/90 pl-1">
+              {/* Active Skills Bar */}
+              {isAssistantMessage(message) && message.contextItems?.some((item: any) => item.type === 'Skill') && (
+                <div className="w-full mb-2 animate-fade-in">
+                  <SkillBlock items={message.contextItems.filter((item: any) => item.type === 'Skill')} />
+                </div>
+              )}
               <div className="prose-custom w-full max-w-none">
                 {message.parts && (
                   <AssistantMessageContent

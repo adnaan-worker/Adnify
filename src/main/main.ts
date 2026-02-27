@@ -33,29 +33,13 @@ const WINDOW_CONFIG = {
 // Store（延迟初始化）
 // ==========================================
 let bootstrapStore: Store<Record<string, unknown>>
-let credentialsStore: Store<Record<string, unknown>>
-let preferencesStore: Store<Record<string, unknown>>
-let workspaceMetaStore: Store<Record<string, unknown>>
+let configStore: Store<Record<string, unknown>>
 
 /**
- * 辅助函数：根据 key 路由到正确的 store
- * 
- * 路由规则：
- * - credentials.* / providerConfigs → credentialsStore
- * - workspace.* / lastWorkspacePath / recentWorkspaces / embeddingConfig / indexOptions → workspaceMetaStore
- * - 其余 → preferencesStore
+ * 辅助函数：统一返回 configStore
  */
-function resolveStore(key: string): Store<Record<string, unknown>> {
-  if (key.startsWith('credentials.') || key === 'providerConfigs') return credentialsStore
-  if (
-    key.startsWith('workspace.') ||
-    key === 'lastWorkspacePath' ||
-    key === 'lastWorkspaceSession' ||
-    key === 'recentWorkspaces' ||
-    key === 'embeddingConfig' ||
-    key === 'indexOptions'
-  ) return workspaceMetaStore
-  return preferencesStore
+function resolveStore(_key: string): Store<Record<string, unknown>> {
+  return configStore
 }
 
 async function initStores() {
@@ -68,19 +52,8 @@ async function initStores() {
 
   const mkOpts = (name: string) => baseCwd ? { name, cwd: baseCwd } : { name }
 
-  credentialsStore = new Store(mkOpts('credentials'))
-  preferencesStore = new Store(mkOpts('preferences'))
-  workspaceMetaStore = new Store(mkOpts('workspace-meta'))
+  configStore = new Store(mkOpts('config'))
 
-  // 迁移旧 config.json（如果存在）
-  try {
-    const { migrateLegacyConfig } = await import('./services/configMigration')
-    const { getUserConfigDir } = await import('./services/configPath')
-    const configDir = baseCwd || getUserConfigDir()
-    migrateLegacyConfig(configDir, credentialsStore, preferencesStore, workspaceMetaStore)
-  } catch (err) {
-    logger.system.error('[Main] Config migration error:', err)
-  }
 }
 
 // ==========================================
@@ -290,7 +263,7 @@ async function initializeModules(firstWin: BrowserWindow) {
   securityManager = security.securityManager
 
   // 从配置加载自定义 LSP 安装路径
-  const customLspPath = preferencesStore.get('lspSettings.customBinDir') as string | undefined
+  const customLspPath = configStore.get('lspSettings.customBinDir') as string | undefined
   if (customLspPath) {
     lspInstaller.setCustomLspBinDir(customLspPath)
   }
@@ -303,7 +276,7 @@ async function initializeModules(firstWin: BrowserWindow) {
   updaterService.updateService.initialize(firstWin)
 
   // 配置安全模块
-  const securityConfig = preferencesStore.get('securitySettings', {
+  const securityConfig = configStore.get('securitySettings', {
     enablePermissionConfirm: true,
     enableAuditLog: true,
     strictWorkspaceMode: true,
@@ -322,9 +295,9 @@ async function initializeModules(firstWin: BrowserWindow) {
     getMainWindow,
     createWindow,
     resolveStore,
-    credentialsStore,
-    preferencesStore,
-    workspaceMetaStore,
+    credentialsStore: configStore,
+    preferencesStore: configStore,
+    workspaceMetaStore: configStore,
     bootstrapStore,
     findWindowByWorkspace,
     setWindowWorkspace: (id: number, roots: string[]) => windowWorkspaces.set(id, roots),
@@ -393,7 +366,7 @@ app.whenReady().then(async () => {
   await initStores()
 
   // 2. 检查是否启用文件日志
-  const appSettings = preferencesStore.get('app-settings') as any
+  const appSettings = configStore.get('app-settings') as any
   const enableFileLogging = appSettings?.enableFileLogging ?? false
   logger.system.info('[Main] File logging setting loaded:', { enableFileLogging, type: typeof enableFileLogging })
 

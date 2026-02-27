@@ -31,7 +31,9 @@ export function registerSettingsHandlers(
   }
 
   // 获取设置
-  ipcMain.handle('settings:get', (_, key: string) => resolveStore(key).get(key))
+  ipcMain.handle('settings:get', (_, key: string) => {
+    return resolveStore(key).get(key)
+  })
 
   // 设置值（自动清理无效字段）
   ipcMain.handle('settings:set', (_event, key: string, value: unknown) => {

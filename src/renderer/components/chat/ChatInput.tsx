@@ -14,6 +14,7 @@ import {
   Plus,
   Folder,
   Globe,
+  Wrench,
   Image as ImageIcon
 } from 'lucide-react'
 import { useStore } from '@store'
@@ -183,12 +184,13 @@ export default function ChatInput({
               )}
 
               {/* Context Items */}
-              {contextItems.filter(item => ['File', 'Folder', 'CodeSelection'].includes(item.type)).map((item, i) => {
+              {contextItems.filter(item => ['File', 'Folder', 'CodeSelection', 'Skill'].includes(item.type)).map((item, i) => {
                 const getContextStyle = (type: string) => {
                   switch (type) {
                     case 'File': return { bg: 'bg-text-primary/[0.04]', text: 'text-text-secondary', border: 'border-transparent', Icon: FileText }
                     case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-transparent', Icon: Code }
                     case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-transparent', Icon: Folder }
+                    case 'Skill': return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', Icon: Wrench }
                     default: return { bg: 'bg-text-primary/[0.04]', text: 'text-text-muted', border: 'border-transparent', Icon: FileText }
                   }
                 }
@@ -206,6 +208,9 @@ export default function ChatInput({
                       const range = (item as any).range as [number, number] | undefined
                       const name = getFileName(uri) || uri
                       return range ? `${name}:${range[0]}-${range[1]}` : name
+                    }
+                    case 'Skill': {
+                      return `@${(item as any).skillId || 'skill'}`
                     }
                     default: return 'Context'
                   }

@@ -305,7 +305,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                 variant="secondary"
                                 onClick={handleSearch}
                                 disabled={searching || !searchQuery.trim()}
-                                className="px-3"
+                                className="px-3 shrink-0"
                             >
                                 {searching ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                             </Button>
@@ -367,7 +367,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                 size="sm"
                                 onClick={handleGithubInstall}
                                 disabled={githubInstalling || !githubUrl.trim()}
-                                className="text-xs"
+                                className="text-xs shrink-0"
                             >
                                 {githubInstalling ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : t('克隆安装', 'Clone')}
                             </Button>
@@ -394,7 +394,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                 size="sm"
                                 onClick={handleCreate}
                                 disabled={creating || !newSkillName.trim()}
-                                className="text-xs"
+                                className="text-xs shrink-0"
                             >
                                 {creating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : t('创建', 'Create')}
                             </Button>

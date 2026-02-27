@@ -139,6 +139,7 @@ export const createMessageSlice: StateCreator<
             isStreaming: true,
             parts: [],
             toolCalls: [],
+            contextItems: [...(contextItems || [])],
         }
 
         set(state => {
