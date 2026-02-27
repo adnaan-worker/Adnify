@@ -9,7 +9,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
-import { joinPath } from '@shared/utils/pathUtils'
+import { joinPath, platform } from '@shared/utils/pathUtils'
 import { parse as parseYaml } from 'yaml'
 
 // ============================================
@@ -240,15 +240,20 @@ class SkillService {
                 await api.file.delete(joinPath(tmpDir, '.git'))
                 await api.file.rename(tmpDir, targetDir)
             } else {
-                // SKILL.md 在子目录，用 robocopy 解引用符号链接复制该子目录
+                // SKILL.md 在子目录，解引用符号链接复制该子目录
                 await api.file.mkdir(targetDir)
+                const copyCommand = platform.isWindows
+                    ? `robocopy "${foundDir}" "${targetDir}" /E /NFL /NDL /NJH /NJS /NP`
+                    : `cp -rL "${foundDir}/." "${targetDir}"`
                 const copyResult = await api.shell.executeBackground({
-                    command: `robocopy "${foundDir}" "${targetDir}" /E /NFL /NDL /NJH /NJS /NP`,
+                    command: copyCommand,
                     cwd: workspacePath,
                     timeout: 30000,
                 })
-                // robocopy 返回值 < 8 表示成功
-                if (copyResult.exitCode !== undefined && copyResult.exitCode >= 8) {
+                const copyFailed = platform.isWindows
+                    ? (copyResult.exitCode !== undefined && copyResult.exitCode >= 8)
+                    : (copyResult.exitCode !== 0)
+                if (copyFailed) {
                     await api.file.delete(targetDir)
                     await api.file.delete(tmpDir)
                     return { success: false, error: `Failed to copy skill directory: ${copyResult.error || copyResult.output}` }
@@ -326,14 +331,20 @@ class SkillService {
                 await api.file.delete(joinPath(tmpDir, '.git'))
                 await api.file.rename(tmpDir, targetDir)
             } else {
-                // SKILL.md 在子目录，用 robocopy 解引用符号链接复制该子目录
+                // SKILL.md 在子目录，解引用符号链接复制该子目录
                 await api.file.mkdir(targetDir)
+                const copyCommand = platform.isWindows
+                    ? `robocopy "${foundDir}" "${targetDir}" /E /NFL /NDL /NJH /NJS /NP`
+                    : `cp -rL "${foundDir}/." "${targetDir}"`
                 const copyResult = await api.shell.executeBackground({
-                    command: `robocopy "${foundDir}" "${targetDir}" /E /NFL /NDL /NJH /NJS /NP`,
+                    command: copyCommand,
                     cwd: workspacePath,
                     timeout: 30000,
                 })
-                if (copyResult.exitCode !== undefined && copyResult.exitCode >= 8) {
+                const copyFailed = platform.isWindows
+                    ? (copyResult.exitCode !== undefined && copyResult.exitCode >= 8)
+                    : (copyResult.exitCode !== 0)
+                if (copyFailed) {
                     await api.file.delete(targetDir)
                     await api.file.delete(tmpDir)
                     return { success: false, error: `Failed to copy skill directory: ${copyResult.error || copyResult.output}` }
