@@ -338,8 +338,11 @@ graph TB
 
 - **Multi-LLM Support**: OpenAI, Anthropic Claude, Google Gemini, DeepSeek, Ollama, Custom API
 - **Quick Model Switching**: Dropdown selector at bottom of chat panel, grouped by provider
-- **MCP Protocol Support**: Integrated Model Context Protocol for external tool extensions
-- **MCP Rich Content Rendering**: Tool execution results support Markdown, images, tables, and more
+- **⚡ Skills System (NEW)**: Plugin-based system based on agentskills.io standard, supports installation from marketplace (skills.sh) or GitHub
+- **🔌 MCP Protocol Support**: Integrated Model Context Protocol for external tool extensions
+- **💾 AI Memory & Approval**: Project-level memory storage with manual approval mechanism for AI-written memories
+- **🎨 Enhanced Response Preview**: Tool results support rich rendering (Markdown, Images, Tables) with fluid typewriter animation
+- **🪵 Eye Style Logs**: Redesigned color-highlighted log system for both Main and Renderer processes
 
 ![alt text](images/tool.png)
 
@@ -474,6 +477,21 @@ Open Settings → Index tab, select Embedding provider (recommend Jina AI), conf
 ### Using Plan Mode
 
 Switch to Plan Mode, describe task goal, AI auto-creates step-by-step plan and executes progressively, supports progress tracking and visualization preview.
+
+### ⚡ Skills System Usage
+
+Skills are instruction packages that give AI specialized capabilities (e.g., optimization for specific frameworks, complex test writing).
+
+1. **Browse & Install**:
+   - Open Settings → **Skills** tab.
+   - **Search Market**: Click "Search Market" to find community-contributed skills on `skills.sh`.
+   - **GitHub Install**: Enter a GitHub repo URL containing a `SKILL.md` file to clone it directly.
+   - **Create Manually**: Create an exclusive skill for the current project and edit the generated `SKILL.md` template.
+2. **How it Works**:
+   - Enabled skills are automatically injected into the AI's System Prompt.
+   - When a task touches on the skill's domain, the AI will automatically follow the expert instructions in the skill package.
+3. **Management**:
+   - You can enable/disable specific skills in settings at any time, or click the "Folder" icon to edit the skill's source code directly.
 
 ---
 

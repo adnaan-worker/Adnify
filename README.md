@@ -338,8 +338,11 @@ graph TB
 
 - **多 LLM 支持**: OpenAI, Anthropic Claude, Google Gemini, DeepSeek, Ollama, 自定义 API
 - **快速模型切换**: 聊天面板底部下拉选择器，按厂商分组快速切换模型
-- **MCP 协议支持**: 集成 Model Context Protocol，支持外部工具扩展
-- **MCP 富文本渲染**: 工具执行结果支持 Markdown、图片、表格等富文本展示
+- **⚡ Skills 系统 (NEW)**: 基于 agentskills.io 标准的插件化系统，支持从市场 (skills.sh) 或 GitHub 安装领域级技能包
+- **🔌 MCP 协议支持**: 集成 Model Context Protocol，支持外部工具扩展
+- **💾 AI 记忆与审批**: 项目级记忆存储，支持 AI 写入记忆时的人工审批机制
+- **🎨 增强型消息预览**: 工具执行结果支持 Markdown、图片、表格等富文本展示，流式打字机动画
+- **🪵 Eye Style 日志**: 重新设计的彩色高亮日志系统，主/渲染进程调试信息一目了然
 
 ![alt text](images/tool.png)
 
@@ -469,6 +472,21 @@ npm run dist
 ### 使用 Plan Mode
 
 切换到 Plan Mode，描述任务目标，AI 自动创建分步计划并逐步执行，支持进度追踪和可视化预览。
+
+### ⚡ Skills 系统使用
+
+Skills 是让 AI 获得特定领域（如特定框架优化、复杂测试编写等）专业能力的指令包。
+
+1. **浏览与安装**:
+   - 打开设置 → **Skills** 选项卡。
+   - **搜索市场**: 点击"搜索市场"，在 `skills.sh` 寻找社区贡献的技能。
+   - **GitHub 安装**: 输入包含 `SKILL.md` 的 GitHub 仓库地址直接克隆。
+   - **手动创建**: 为当前项目创建专属技能，编辑生成的 `SKILL.md` 即可。
+2. **生效方式**:
+   - 启用的技能会自动注入 AI 提示词（System Prompt）。
+   - 当任务触及技能相关领域时，AI 将自动遵循技能包中的专家指令。
+3. **管理**:
+   - 你可以随时在设置中启用/禁用特定技能，或点击"文件夹"图标直接编辑技能源码。
 
 ---
 
