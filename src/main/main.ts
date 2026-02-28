@@ -248,13 +248,12 @@ function createWindow(isEmpty = false): BrowserWindow {
 
 async function initializeModules(firstWin: BrowserWindow) {
   // 并行加载所有模块
-  const [ipc, lsp, security, windowIpc, lspInstaller, updaterIpc, updaterService] = await Promise.all([
+  const [ipc, lsp, security, windowIpc, lspInstaller, updaterService] = await Promise.all([
     import('./ipc'),
     import('./lspManager'),
     import('./security'),
     import('./ipc/window'),
     import('./lsp/installer'),
-    import('./ipc/updater'),
     import('./services/updater'),
   ])
 
@@ -268,11 +267,10 @@ async function initializeModules(firstWin: BrowserWindow) {
     lspInstaller.setCustomLspBinDir(customLspPath)
   }
 
-  // 注册窗口控制
+  // 窗口控制已在创建窗口前注册，此处仅确保 window:new 等依赖 createWindow 的 handler 生效
   windowIpc.registerWindowHandlers(createWindow)
 
-  // 注册更新服务
-  updaterIpc.registerUpdaterHandlers()
+  // 更新服务：IPC 已在创建窗口前注册，此处仅初始化主窗口引用
   updaterService.updateService.initialize(firstWin)
 
   // 配置安全模块
@@ -385,10 +383,16 @@ app.whenReady().then(async () => {
     logger.system.info('[Main] File logging is disabled')
   }
 
-  // 3. 创建窗口
+  // 3. 先注册窗口与更新 IPC，避免渲染进程加载时 handler 未就绪（setTheme / updater 等）
+  const { registerWindowHandlers } = await import('./ipc/window')
+  registerWindowHandlers(createWindow)
+  const { registerUpdaterHandlers } = await import('./ipc/updater')
+  registerUpdaterHandlers()
+
+  // 4. 创建窗口
   const firstWin = createWindow()
 
-  // 4. 后台加载模块（不阻塞窗口显示）
+  // 5. 后台加载模块（不阻塞窗口显示）
   initializeModules(firstWin).catch(err => {
     logger.system.error('[Main] Module initialization failed:', err)
   })
