@@ -91,6 +91,10 @@ export interface LLMConfig {
     protocol?: import('@shared/config/providers').ApiProtocol
     /** 启用深度思考（如 Claude extended thinking, OpenAI o1） */
     enableThinking?: boolean
+    /** 思考 token 预算（Anthropic budgetTokens / Gemini 2.5 thinkingBudget），默认 10000 */
+    thinkingBudget?: number
+    /** 推理深度（OpenAI reasoningEffort / Gemini 3 thinkingLevel） */
+    reasoningEffort?: 'low' | 'medium' | 'high'
 }
 
 export interface LLMParameters {

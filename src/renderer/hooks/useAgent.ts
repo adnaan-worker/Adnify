@@ -116,6 +116,8 @@ export function useAgent() {
         temperature: llmConfig.temperature,
         topP: llmConfig.topP,
         enableThinking: llmConfig.enableThinking,
+        thinkingBudget: llmConfig.thinkingBudget,
+        reasoningEffort: llmConfig.reasoningEffort,
         protocol: llmConfig.protocol,
         contextLimit: agentConfig.maxContextTokens,
       },
