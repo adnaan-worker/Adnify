@@ -28,12 +28,13 @@ export interface ModelTestResult {
  * 注册健康检查 IPC handlers
  */
 export function registerHealthCheckHandlers() {
-  ipcMain.handle('healthCheck:check', async (_, provider: string, apiKey: string, baseUrl?: string, timeout = 10000) => {
+  ipcMain.handle('healthCheck:check', async (_, provider: string, apiKey: string, baseUrl?: string, timeout = 10000, protocol?: string) => {
     const startTime = Date.now()
 
     const defaultUrls: Record<string, string> = {
       openai: 'https://api.openai.com/v1',
-      anthropic: 'https://api.anthropic.com/v1',
+      anthropic: 'https://api.anthropic.com',
+      gemini: 'https://generativelanguage.googleapis.com',
       deepseek: 'https://api.deepseek.com/v1',
       groq: 'https://api.groq.com/openai/v1',
       mistral: 'https://api.mistral.ai/v1',
@@ -41,20 +42,37 @@ export function registerHealthCheckHandlers() {
       nvidia: 'https://integrate.api.nvidia.com/v1',
     }
 
-    const url = baseUrl || defaultUrls[provider] || defaultUrls.openai
+    const url = (baseUrl || defaultUrls[provider] || defaultUrls.openai).replace(/\/$/, '')
+    const activeProtocol = protocol || (provider === 'gemini' ? 'google' : provider === 'anthropic' ? 'anthropic' : 'openai')
 
     try {
-      logger.ipc.info(`[HealthCheck] Checking ${provider} at ${url}`)
+      logger.ipc.info(`[HealthCheck] Checking ${provider} at ${url} (protocol: ${activeProtocol})`)
 
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), timeout)
 
-      const response = await fetch(`${url}/models`, {
+      let fetchUrl: string
+      let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+
+      if (activeProtocol === 'google') {
+        // Google Gemini: GET /v1beta/models?key=
+        fetchUrl = url.includes('/v1') ? `${url}/models` : `${url}/v1beta/models`
+        if (apiKey) fetchUrl += `?key=${apiKey}`
+      } else if (activeProtocol === 'anthropic') {
+        // Anthropic: GET /v1/messages 不可用，改用简单的模型列表或 POST 测试
+        // 尝试 /v1/models（较新版本支持）
+        fetchUrl = `${url}/v1/models`
+        headers['x-api-key'] = apiKey
+        headers['anthropic-version'] = '2023-06-01'
+      } else {
+        // OpenAI / OpenAI-Responses / 其他兼容协议: GET /models
+        fetchUrl = `${url}/models`
+        headers['Authorization'] = `Bearer ${apiKey}`
+      }
+
+      const response = await fetch(fetchUrl, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         signal: controller.signal,
       })
 
@@ -63,34 +81,15 @@ export function registerHealthCheckHandlers() {
 
       if (response.ok) {
         logger.ipc.info(`[HealthCheck] ${provider} is healthy (${latency}ms)`)
-        const result: HealthCheckResult = {
-          provider,
-          status: 'healthy',
-          latency,
-          checkedAt: new Date(),
-        }
-        return result
+        return { provider, status: 'healthy', latency, checkedAt: new Date() } as HealthCheckResult
       } else {
         logger.ipc.warn(`[HealthCheck] ${provider} returned HTTP ${response.status}`)
-        const result: HealthCheckResult = {
-          provider,
-          status: 'unhealthy',
-          latency,
-          error: `HTTP ${response.status}`,
-          checkedAt: new Date(),
-        }
-        return result
+        return { provider, status: 'unhealthy', latency, error: `HTTP ${response.status}`, checkedAt: new Date() } as HealthCheckResult
       }
     } catch (err) {
       const error = toAppError(err)
       logger.ipc.error(`[HealthCheck] ${provider} check failed:`, error.message)
-      const result: HealthCheckResult = {
-        provider,
-        status: 'unhealthy',
-        error: error.message || 'Connection failed',
-        checkedAt: new Date(),
-      }
-      return result
+      return { provider, status: 'unhealthy', error: error.message || 'Connection failed', checkedAt: new Date() } as HealthCheckResult
     }
   })
 
@@ -102,7 +101,7 @@ export function registerHealthCheckHandlers() {
       }
 
       logger.ipc.info(`[ModelTest] Testing model ${config.model} for provider ${config.provider}`)
-      
+
       const model = createModel(config)
       const { text } = await generateText({
         model,
@@ -136,7 +135,7 @@ export function registerHealthCheckHandlers() {
 
       const defaultUrls: Record<string, string> = {
         openai: 'https://api.openai.com/v1',
-        anthropic: 'https://api.anthropic.com/v1',
+        anthropic: 'https://api.anthropic.com',
         gemini: 'https://generativelanguage.googleapis.com',
         deepseek: 'https://api.deepseek.com/v1',
         groq: 'https://api.groq.com/openai/v1',
@@ -150,7 +149,7 @@ export function registerHealthCheckHandlers() {
       }
 
       // 根据协议或提供商确定请求方式
-      const activeProtocol = protocol || (provider === 'gemini' ? 'google' : 'openai')
+      const activeProtocol = protocol || (provider === 'gemini' ? 'google' : provider === 'anthropic' ? 'anthropic' : 'openai')
 
       if (activeProtocol === 'google' || provider === 'gemini') {
         // Google Gemini API
@@ -161,13 +160,13 @@ export function registerHealthCheckHandlers() {
           fetchUrl += `?key=${apiKey}`
         }
       } else if (activeProtocol === 'anthropic') {
-        // Anthropic 原生没有公开的模型列表接口
-        // 但许多兼容层实现了 /models
-        fetchUrl = `${url.endsWith('/') ? url.slice(0, -1) : url}/models`
+        // Anthropic
+        const base = url.endsWith('/') ? url.slice(0, -1) : url
+        fetchUrl = `${base}/v1/models`
         headers['x-api-key'] = apiKey
         headers['anthropic-version'] = '2023-06-01'
       } else {
-        // OpenAI 协议 (默认)
+        // OpenAI / OpenAI-Responses / 其他兼容协议
         fetchUrl = `${url.endsWith('/') ? url.slice(0, -1) : url}/models`
         headers['Authorization'] = `Bearer ${apiKey}`
       }

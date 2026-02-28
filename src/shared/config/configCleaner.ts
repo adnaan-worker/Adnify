@@ -231,6 +231,8 @@ export interface AppSettingsSchema {
     provider?: string
     model?: string
     enableThinking?: boolean
+    thinkingBudget?: number
+    reasoningEffort?: 'low' | 'medium' | 'high'
     // 核心参数
     temperature?: number
     maxTokens?: number
@@ -279,6 +281,10 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
     if (typeof llm.provider === 'string') cleaned.llmConfig.provider = llm.provider
     if (typeof llm.model === 'string') cleaned.llmConfig.model = llm.model
     if (typeof llm.enableThinking === 'boolean') cleaned.llmConfig.enableThinking = llm.enableThinking
+    if (typeof llm.thinkingBudget === 'number') cleaned.llmConfig.thinkingBudget = llm.thinkingBudget
+    if (llm.reasoningEffort === 'low' || llm.reasoningEffort === 'medium' || llm.reasoningEffort === 'high') {
+      cleaned.llmConfig.reasoningEffort = llm.reasoningEffort
+    }
 
     // 核心参数
     if (typeof llm.temperature === 'number') cleaned.llmConfig.temperature = llm.temperature

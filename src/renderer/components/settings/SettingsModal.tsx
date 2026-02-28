@@ -94,19 +94,25 @@ export default function SettingsModal() {
     }, [llmConfig, providerConfigs, language, autoApprove, agentConfig, aiInstructions, webSearchConfig, mcpConfig, enableFileLogging])
 
     const handleSave = useCallback(async () => {
-        // 合并当前 provider 的配置（包括 headers）
-        const currentProviderLocalConfig = localProviderConfigs[localConfig.provider] || {}
-        const finalProviderConfigs = {
-            ...localProviderConfigs,
-            [localConfig.provider]: {
-                ...currentProviderLocalConfig,
-                apiKey: localConfig.apiKey,
-                baseUrl: localConfig.baseUrl,
-                timeout: localConfig.timeout,
-                model: localConfig.model,
-                headers: localConfig.headers,  // 保存 headers
+        // 合并当前 provider 的配置（仅当 provider 仍存在时，避免重建已删除的 provider）
+        const currentProvider = localConfig.provider
+        const providerExists = localProviderConfigs[currentProvider] !== undefined ||
+            !!PROVIDERS[currentProvider]
+
+        const finalProviderConfigs = providerExists
+            ? {
+                ...localProviderConfigs,
+                [currentProvider]: {
+                    ...localProviderConfigs[currentProvider],
+                    apiKey: localConfig.apiKey,
+                    baseUrl: localConfig.baseUrl,
+                    timeout: localConfig.timeout,
+                    model: localConfig.model,
+                    headers: localConfig.headers,
+                    protocol: localConfig.protocol,
+                }
             }
-        }
+            : { ...localProviderConfigs }
 
         // 更新 Store 状态（包括 headers）
         set('llmConfig', localConfig)

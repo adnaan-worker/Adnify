@@ -190,12 +190,47 @@ export function resolveImportPath(importPath: string, currentFilePath: string, w
 
 /**
  * 平台检测
+ * 
+ * 支持两种运行环境：
+ * - main 进程：使用 process.platform（Node.js）
+ * - renderer 进程（sandbox: true）：process 不可用，使用 navigator fallback
  */
-export const platform = {
-  isWindows: typeof process !== 'undefined' && process.platform === 'win32',
-  isMac: typeof process !== 'undefined' && process.platform === 'darwin',
-  isLinux: typeof process !== 'undefined' && process.platform === 'linux',
+function detectPlatform() {
+  // 1. Node.js / Electron main 进程
+  if (typeof process !== 'undefined' && process.platform) {
+    return {
+      isWindows: process.platform === 'win32',
+      isMac: process.platform === 'darwin',
+      isLinux: process.platform === 'linux',
+    }
+  }
+
+  // 2. Renderer 进程 fallback：navigator.userAgentData（现代 Chromium API）
+  if (typeof navigator !== 'undefined') {
+    const uad = (navigator as any).userAgentData
+    if (uad?.platform) {
+      const p = uad.platform.toLowerCase()
+      return {
+        isWindows: p === 'windows',
+        isMac: p === 'macos',
+        isLinux: p === 'linux',
+      }
+    }
+
+    // 3. 兜底：navigator.userAgent
+    const ua = navigator.userAgent || ''
+    return {
+      isWindows: ua.includes('Windows'),
+      isMac: ua.includes('Macintosh') || ua.includes('Mac OS'),
+      isLinux: ua.includes('Linux') && !ua.includes('Android'),
+    }
+  }
+
+  // 4. 未知环境
+  return { isWindows: false, isMac: false, isLinux: false }
 }
+
+export const platform = detectPlatform()
 
 /**
  * 获取可执行文件名（Windows 自动添加 .exe 扩展名）

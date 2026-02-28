@@ -15,7 +15,7 @@
 export type AuthType = 'bearer' | 'api-key' | 'header' | 'query' | 'none'
 
 /** API 协议类型 */
-export type ApiProtocol = 'openai' | 'anthropic' | 'google' | 'custom'
+export type ApiProtocol = 'openai' | 'openai-responses' | 'anthropic' | 'google' | 'custom'
 
 /** 认证配置（仅用于 UI 显示） */
 export interface AuthConfig {
@@ -103,6 +103,12 @@ export interface UserProviderConfig {
 /** 协议默认配置映射 */
 const PROTOCOL_CONFIGS: Record<ApiProtocol, ProtocolConfig> = {
   openai: {
+    authHeader: {
+      name: 'Authorization',
+      template: 'Bearer {{apiKey}}',
+    },
+  },
+  'openai-responses': {
     authHeader: {
       name: 'Authorization',
       template: 'Bearer {{apiKey}}',

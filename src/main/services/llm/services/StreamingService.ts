@@ -121,31 +121,42 @@ export class StreamingService {
       }
 
       // 启用 thinking 模式（各厂商配置不同）
+      // 使用 spread 合并，避免覆盖已有的 providerOptions（如 parallelToolCalls）
       if (config.enableThinking) {
-        if (config.provider === 'gemini') {
-          // Google Gemini: thinkingConfig
+        const protocol = config.protocol || ''
+
+        if (config.provider === 'gemini' || protocol === 'google') {
+          // Google Gemini: 区分 Gemini 3 (thinkingLevel) 和 Gemini 2.5 (thinkingBudget)
+          const isGemini3 = /gemini-3/i.test(config.model)
           streamParams.providerOptions = {
+            ...streamParams.providerOptions,
             google: {
-              thinkingConfig: {
-                includeThoughts: true,
-              },
+              ...(streamParams.providerOptions?.google as object),
+              thinkingConfig: isGemini3
+                ? { thinkingLevel: config.reasoningEffort || 'medium', includeThoughts: true }
+                : { thinkingBudget: config.thinkingBudget || 10000, includeThoughts: true },
             },
           }
-        } else if (config.provider === 'anthropic') {
-          // Anthropic Claude: thinking.type = "enabled"
+        } else if (config.provider === 'anthropic' || protocol === 'anthropic') {
+          // Anthropic Claude: thinking 需要 type + budgetTokens（必须参数）
           streamParams.providerOptions = {
+            ...streamParams.providerOptions,
             anthropic: {
+              ...(streamParams.providerOptions?.anthropic as object),
               thinking: {
                 type: 'enabled',
+                budgetTokens: config.thinkingBudget || 10000,
               },
             },
           }
-        } else if (config.provider === 'openai') {
-          // OpenAI: reasoningEffort + forceReasoning
+        } else {
+          // OpenAI (chat/responses) 及其他兼容协议
           streamParams.providerOptions = {
+            ...streamParams.providerOptions,
             openai: {
-              reasoningEffort: 'medium',
-              forceReasoning: true,
+              ...(streamParams.providerOptions?.openai as object),
+              reasoningEffort: config.reasoningEffort || 'medium',
+              reasoningSummary: 'detailed',
             },
           }
         }
