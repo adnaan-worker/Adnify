@@ -46,7 +46,7 @@ export async function getLLMConfigForTask(
                 baseUrl: providerConfig?.baseUrl || builtinProvider?.baseUrl,
                 maxTokens: builtinProvider?.defaults?.maxTokens || 8192,
                 temperature: builtinProvider?.defaults?.temperature || 0.7,
-                protocol: builtinProvider?.protocol,
+                protocol: providerConfig?.protocol || builtinProvider?.protocol,
             }
         }
         return null
@@ -59,7 +59,7 @@ export async function getLLMConfigForTask(
         baseUrl: providerConfig?.baseUrl || builtinProvider?.baseUrl,
         maxTokens: builtinProvider?.defaults?.maxTokens || 8192,
         temperature: builtinProvider?.defaults?.temperature || 0.7,
-        protocol: builtinProvider?.protocol,
+        protocol: providerConfig?.protocol || builtinProvider?.protocol,
     }
 }
 

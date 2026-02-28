@@ -105,11 +105,11 @@ function cleanProviderConfig(
 
 function mergeProviderConfigs(
   saved: Record<string, ProviderConfig> | undefined
-): Record<string, ProviderConfig> {
+): Record<string, ProviderModelConfig> {
   const defaults = SETTINGS.providerConfigs.default
   if (!saved) return { ...defaults }
 
-  const merged: Record<string, ProviderConfig> = { ...defaults }
+  const merged: Record<string, ProviderModelConfig> = { ...defaults }
   for (const [id, config] of Object.entries(saved)) {
     if (isBuiltinProvider(id)) {
       merged[id] = { ...defaults[id], ...config }
@@ -122,7 +122,7 @@ function mergeProviderConfigs(
 
 function mergeLLMConfig(
   saved: Partial<LLMConfig> | undefined,
-  providerConfigs: Record<string, ProviderConfig>
+  providerConfigs: Record<string, ProviderModelConfig>
 ): LLMConfig {
   const defaults = SETTINGS.llmConfig.default
   if (!saved) return defaults
