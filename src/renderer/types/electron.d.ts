@@ -512,7 +512,7 @@ export interface ElectronAPI {
   httpSetGoogleSearch: (apiKey: string, cx: string) => Promise<{ success: boolean }>
 
   // Health Check
-  healthCheckProvider: (provider: string, apiKey: string, baseUrl?: string, timeout?: number) => Promise<{
+  healthCheckProvider: (provider: string, apiKey: string, baseUrl?: string, timeout?: number, protocol?: string) => Promise<{
     provider: string
     status: 'healthy' | 'unhealthy' | 'unknown'
     latency?: number

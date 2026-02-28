@@ -21,6 +21,7 @@ const BUILTIN_PROVIDER_IDS = ['openai', 'anthropic', 'gemini', 'deepseek', 'groq
 // 协议类型选项
 const PROTOCOL_OPTIONS = [
   { value: 'openai', label: 'OpenAI Compatible' },
+  { value: 'openai-responses', label: 'OpenAI Responses API' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'google', label: 'Google (Gemini)' },
   { value: 'custom', label: 'Custom' },
@@ -42,7 +43,7 @@ function TestConnectionButton({ localConfig, language }: { localConfig: any; lan
     setErrorMsg('')
     try {
       const { checkProviderHealth } = await import('@/renderer/services/healthCheckService')
-      const result = await checkProviderHealth(localConfig.provider, localConfig.apiKey, localConfig.baseUrl)
+      const result = await checkProviderHealth(localConfig.provider, localConfig.apiKey, localConfig.baseUrl, localConfig.protocol)
       if (result.status === 'healthy') {
         setStatus('success')
         toast.success(language === 'zh' ? `连接成功！延迟: ${result.latency}ms` : `Connected! Latency: ${result.latency}ms`)
@@ -103,9 +104,9 @@ function TestModelButton({ localConfig, language }: { localConfig: any; language
     try {
       const { testModelCall } = await import('@/renderer/services/healthCheckService')
       const result = await testModelCall(localConfig)
-      
+
       if (result.success) {
-        const message = language === 'zh' 
+        const message = language === 'zh'
           ? `调用成功！延时: ${result.latency}ms, 结果: ${result.content}`
           : `Call success! Latency: ${result.latency}ms, Result: ${result.content}`
         toast.success(message)
@@ -134,21 +135,21 @@ function TestModelButton({ localConfig, language }: { localConfig: any; language
   )
 }
 
-function FetchModelsButton({ 
-  provider, 
-  apiKey, 
-  baseUrl, 
-  protocol, 
-  language, 
+function FetchModelsButton({
+  provider,
+  apiKey,
+  baseUrl,
+  protocol,
+  language,
   existingModels = [],
   onModelsFetched,
   onModelRemoved,
   onBatchRemoved
-}: { 
-  provider: string; 
-  apiKey: string; 
-  baseUrl?: string; 
-  protocol?: string; 
+}: {
+  provider: string;
+  apiKey: string;
+  baseUrl?: string;
+  protocol?: string;
   language: 'en' | 'zh';
   existingModels?: string[];
   onModelsFetched: (models: string[]) => void;
@@ -158,6 +159,7 @@ function FetchModelsButton({
   const [fetching, setFetching] = useState(false)
   const [showList, setShowList] = useState(false)
   const [fetchedModels, setFetchedModels] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -179,6 +181,7 @@ function FetchModelsButton({
     }
 
     setFetching(true)
+    setSearchQuery('')
     try {
       const { fetchModelsCall } = await import('@/renderer/services/healthCheckService')
       const result = await fetchModelsCall(provider, apiKey, baseUrl, protocol)
@@ -235,22 +238,62 @@ function FetchModelsButton({
     }
   }, [showList])
 
+  // 搜索过滤
+  const filteredModels = searchQuery
+    ? fetchedModels.filter(m => m.toLowerCase().includes(searchQuery.toLowerCase()))
+    : fetchedModels
+
   const dropdownMenu = showList && fetchedModels.length > 0 && createPortal(
-    <div 
+    <div
       id="fetch-models-portal"
-      className="fixed z-[9999] mt-2 w-56 max-h-72 overflow-hidden bg-surface border border-border rounded-xl shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col"
-      style={{ 
-        top: coords.top, 
-        left: Math.max(10, coords.left + coords.width - 224) // 224 is w-56
+      className="fixed z-[9999] mt-2 w-72 overflow-hidden bg-surface border border-border rounded-xl shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col"
+      style={{
+        top: coords.top,
+        left: Math.max(10, coords.left + coords.width - 288),
+        maxHeight: Math.min(384, window.innerHeight - coords.top - 24), // 动态计算：视口底部留 24px 安全边距
       }}
     >
-      <div className="p-2 border-b border-border bg-background/50 flex-shrink-0">
-        <div className="text-[9px] font-bold text-text-muted uppercase tracking-wider px-2">
-          {language === 'zh' ? `找到 ${fetchedModels.length} 个模型` : `Found ${fetchedModels.length} models`}
+      {/* 搜索和统计 */}
+      <div className="p-2 border-b border-border bg-background/50 flex-shrink-0 space-y-1.5">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder={language === 'zh' ? '搜索模型...' : 'Search models...'}
+          className="w-full px-2.5 py-1.5 text-xs bg-surface/50 border border-border rounded-lg outline-none focus:border-accent/50 transition-colors text-text-primary placeholder:text-text-muted"
+          autoFocus
+        />
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[9px] font-bold text-text-muted uppercase tracking-wider">
+            {searchQuery
+              ? (language === 'zh' ? `匹配 ${filteredModels.length}/${fetchedModels.length}` : `${filteredModels.length}/${fetchedModels.length} matched`)
+              : (language === 'zh' ? `共 ${fetchedModels.length} 个模型` : `${fetchedModels.length} models`)
+            }
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                const toAdd = filteredModels.filter(m => !existingModels.includes(m))
+                if (toAdd.length > 0) onModelsFetched(toAdd)
+              }}
+              className="text-[9px] text-accent hover:text-accent-hover px-1.5 py-0.5 rounded hover:bg-accent/10 transition-colors"
+            >
+              {language === 'zh' ? '全选' : 'All'}
+            </button>
+            <button
+              onClick={() => {
+                const toRemove = filteredModels.filter(m => existingModels.includes(m))
+                if (toRemove.length > 0) onBatchRemoved?.(toRemove)
+              }}
+              className="text-[9px] text-red-400 hover:text-red-300 px-1.5 py-0.5 rounded hover:bg-red-400/10 transition-colors"
+            >
+              {language === 'zh' ? '全取消' : 'None'}
+            </button>
+          </div>
         </div>
       </div>
       <div className="overflow-y-auto flex-1 p-1 custom-scrollbar">
-        {fetchedModels.map(model => {
+        {filteredModels.map(model => {
           const isAdded = existingModels.includes(model)
           return (
             <button
@@ -262,11 +305,10 @@ function FetchModelsButton({
                   onModelsFetched([model])
                 }
               }}
-              className={`w-full text-left px-3 py-1.5 text-[11px] rounded-lg transition-all flex items-center justify-between group mb-0.5 ${
-                isAdded 
-                  ? 'text-accent bg-accent/5 hover:bg-accent/10' 
-                  : 'text-text-secondary hover:text-accent hover:bg-accent/5 active:scale-[0.98]'
-              }`}
+              className={`w-full text-left px-3 py-1.5 text-[11px] rounded-lg transition-all flex items-center justify-between group mb-0.5 ${isAdded
+                ? 'text-accent bg-accent/5 hover:bg-accent/10'
+                : 'text-text-secondary hover:text-accent hover:bg-accent/5 active:scale-[0.98]'
+                }`}
             >
               <span className="truncate mr-2 flex-1">{model}</span>
               {isAdded ? (
@@ -312,12 +354,12 @@ function FetchModelsButton({
 
   return (
     <div className="relative inline-block" ref={containerRef}>
-      <Button 
+      <Button
         ref={buttonRef}
-        variant="secondary" 
-        size="sm" 
-        onClick={handleFetch} 
-        disabled={fetching} 
+        variant="secondary"
+        size="sm"
+        onClick={handleFetch}
+        disabled={fetching}
         className="h-8 px-2.5 flex items-center gap-1.5"
         title={language === 'zh' ? '从 API 获取模型列表' : 'Fetch models from API'}
       >
@@ -352,11 +394,11 @@ function InlineCustomProviderForm({
       toast.error(language === 'zh' ? '请填写名称和 API 端点' : 'Please enter name and API endpoint')
       return
     }
-    onSave({ 
-      displayName: displayName.trim(), 
-      baseUrl: baseUrl.trim(), 
-      apiKey, 
-      protocol, 
+    onSave({
+      displayName: displayName.trim(),
+      baseUrl: baseUrl.trim(),
+      apiKey,
+      protocol,
       model: model.trim() || customModels[0] || '',
       customModels: [...new Set([...customModels, ...(model ? [model] : [])])]
     })
@@ -437,17 +479,17 @@ function InlineCustomProviderForm({
             <label className="text-xs font-medium text-text-secondary">
               {language === 'zh' ? '默认模型' : 'Default Model'}
             </label>
-            <FetchModelsButton 
-                provider="custom"
-                apiKey={apiKey}
-                baseUrl={baseUrl}
-                protocol={protocol}
-                language={language}
-                existingModels={customModels}
-                onModelsFetched={handleFetchModels}
-                onModelRemoved={(m) => setCustomModels(customModels.filter(x => x !== m))}
-                onBatchRemoved={handleBatchRemoveModels}
-              />
+            <FetchModelsButton
+              provider="custom"
+              apiKey={apiKey}
+              baseUrl={baseUrl}
+              protocol={protocol}
+              language={language}
+              existingModels={customModels}
+              onModelsFetched={handleFetchModels}
+              onModelRemoved={(m) => setCustomModels(customModels.filter(x => x !== m))}
+              onBatchRemoved={handleBatchRemoveModels}
+            />
           </div>
           <Input
             value={model}
@@ -467,8 +509,8 @@ function InlineCustomProviderForm({
             {customModels.map(m => (
               <div key={m} className="group flex items-center gap-1.5 px-2 py-1 bg-surface/50 rounded-md border border-border text-xs text-text-secondary hover:border-accent/30 transition-all">
                 <span className="truncate max-w-[150px]">{m}</span>
-                <button 
-                  onClick={() => setCustomModels(customModels.filter(x => x !== m))} 
+                <button
+                  onClick={() => setCustomModels(customModels.filter(x => x !== m))}
                   className="text-text-muted hover:text-red-400 opacity-50 group-hover:opacity-100 transition-all"
                 >
                   <X className="w-3 h-3" />
@@ -506,7 +548,7 @@ export function ProviderSettings({
   const [newModelName, setNewModelName] = useState('')
   const [isAddingCustom, setIsAddingCustom] = useState(false)
   const [logitBiasString, setLogitBiasString] = useState('')
-  
+
   // Headers 状态
   const [customHeaders, setCustomHeaders] = useState<Array<{ key: string; value: string }>>([])
 
@@ -533,15 +575,15 @@ export function ProviderSettings({
   useEffect(() => {
     setLogitBiasString(localConfig.logitBias ? JSON.stringify(localConfig.logitBias, null, 2) : '')
   }, [localConfig.logitBias])
-  
+
   // 不再使用 useEffect 同步，而是在初始化时设置
   // customHeaders 只用于额外的请求头，不包括默认请求头
-  
+
   // 添加模型到本地配置
   const handleAddModel = (name?: string) => {
     const modelName = name || newModelName
     if (!modelName.trim()) return
-    
+
     const namesToAdd = modelName.split(',').map(s => s.trim()).filter(Boolean)
     handleBatchAddModels(namesToAdd)
     if (!name) setNewModelName('')
@@ -553,7 +595,7 @@ export function ProviderSettings({
 
     const currentConfig = localProviderConfigs[localConfig.provider] || {}
     const currentModels = currentConfig.customModels || []
-    
+
     // 过滤掉已存在的
     const newModels = models.filter(n => !currentModels.includes(n))
     if (newModels.length === 0) return
@@ -565,10 +607,10 @@ export function ProviderSettings({
         customModels: [...currentModels, ...newModels]
       }
     }
-    
+
     setLocalProviderConfigs(updatedConfigs)
     setProvider(localConfig.provider, updatedConfigs[localConfig.provider])
-    
+
     toast.success(language === 'zh' ? `已添加 ${newModels.length} 个模型` : `Added ${newModels.length} models`)
   }
 
@@ -581,7 +623,7 @@ export function ProviderSettings({
   const handleBatchRemoveModels = (models: string[]) => {
     const currentConfig = localProviderConfigs[localConfig.provider]
     if (!currentConfig) return
-    
+
     const updatedConfigs = {
       ...localProviderConfigs,
       [localConfig.provider]: {
@@ -589,10 +631,10 @@ export function ProviderSettings({
         customModels: (currentConfig.customModels || []).filter(m => !models.includes(m))
       }
     }
-    
+
     setLocalProviderConfigs(updatedConfigs)
     setProvider(localConfig.provider, updatedConfigs[localConfig.provider])
-    
+
     if (models.length === 1) {
       toast.success(language === 'zh' ? `已删除模型: ${models[0]}` : `Removed model: ${models[0]}`)
     } else {
@@ -601,20 +643,24 @@ export function ProviderSettings({
   }
 
   // 选择内置 Provider
-  const handleSelectBuiltinProvider = (providerId: string) => {
-    // 保存当前配置（包括 headers）
-    const updatedConfigs = {
-      ...localProviderConfigs,
-      [localConfig.provider]: {
-        ...localProviderConfigs[localConfig.provider],
-        apiKey: localConfig.apiKey,
-        baseUrl: localConfig.baseUrl,
-        timeout: localConfig.timeout,
-        model: localConfig.model,
-        headers: localConfig.headers,  // 保存当前 provider 的 headers
-      },
+  const handleSelectBuiltinProvider = (providerId: string, skipSaveCurrent = false) => {
+    // 保存当前配置（仅当当前 provider 未被删除时）
+    let updatedConfigs = localProviderConfigs
+    if (!skipSaveCurrent && (localProviderConfigs[localConfig.provider] || BUILTIN_PROVIDER_IDS.includes(localConfig.provider))) {
+      updatedConfigs = {
+        ...localProviderConfigs,
+        [localConfig.provider]: {
+          ...localProviderConfigs[localConfig.provider],
+          apiKey: localConfig.apiKey,
+          baseUrl: localConfig.baseUrl,
+          timeout: localConfig.timeout,
+          model: localConfig.model,
+          headers: localConfig.headers,
+          protocol: localConfig.protocol,
+        },
+      }
+      setLocalProviderConfigs(updatedConfigs)
     }
-    setLocalProviderConfigs(updatedConfigs)
 
     // 加载新 Provider 配置
     const nextConfig = updatedConfigs[providerId] || {}
@@ -626,8 +672,8 @@ export function ProviderSettings({
       baseUrl: nextConfig.baseUrl || providerInfo?.baseUrl || '',
       timeout: nextConfig.timeout || providerInfo?.defaults.timeout || 120000,
       model: nextConfig.model || providerInfo?.models[0] || '',
-      headers: nextConfig.headers,  // 加载新 provider 的 headers
-      protocol: providerInfo?.protocol, // 增加协议同步
+      headers: nextConfig.headers,
+      protocol: nextConfig.protocol || providerInfo?.protocol,
     })
     setIsAddingCustom(false)
   }
@@ -678,16 +724,16 @@ export function ProviderSettings({
       createdAt: Date.now(),
       updatedAt: Date.now(),
     }
-    
+
     // 只更新本地状态，保存时由 SettingsModal 统一处理
     setLocalProviderConfigs({
       ...localProviderConfigs,
       [id]: newConfig
     })
-    
+
     toast.success(language === 'zh' ? `已添加 ${config.displayName}` : `Added ${config.displayName}`)
     setIsAddingCustom(false)
-    
+
     // 自动选择新添加的 Provider
     setLocalConfig({
       ...localConfig,
@@ -710,14 +756,16 @@ export function ProviderSettings({
       variant: 'danger',
     })
     if (confirmed) {
-      // 从本地配置中删除
-      const { [id]: _, ...rest } = localProviderConfigs
-      setLocalProviderConfigs(rest)
-      
-      // 如果当前选中的是被删除的provider，切换到默认provider
+      // 如果当前选中的是被删除的 provider，先切换到默认（跳过保存当前配置）
       if (localConfig.provider === id) {
-        handleSelectBuiltinProvider('openai')
+        handleSelectBuiltinProvider('openai', true)
       }
+
+      // 从本地配置中删除（放在切换之后，确保不会被重新创建）
+      setLocalProviderConfigs(prev => {
+        const { [id]: _, ...rest } = prev
+        return rest
+      })
     }
   }
 
@@ -830,11 +878,11 @@ export function ProviderSettings({
                     {language === 'zh' ? '模型配置' : 'Model Configuration'}
                   </h5>
                 </div>
-                <FetchModelsButton 
+                <FetchModelsButton
                   provider={localConfig.provider}
                   apiKey={localConfig.apiKey}
                   baseUrl={localConfig.baseUrl}
-                  protocol={isCustomSelected ? selectedCustomConfig?.protocol : undefined}
+                  protocol={isCustomSelected ? selectedCustomConfig?.protocol : localConfig.protocol}
                   language={language}
                   existingModels={(() => {
                     const models = new Set<string>()
@@ -857,72 +905,72 @@ export function ProviderSettings({
 
               <ScrollShadow maxHeight="500px" className="pr-2">
                 <div className="space-y-4 pr-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-text-secondary">
-                    {language === 'zh' ? '选择模型' : 'Select Model'}
-                  </label>
-                  <Select
-                    value={localConfig.model}
-                    onChange={(value) => setLocalConfig({ ...localConfig, model: value })}
-                    options={(() => {
-                      const modelsSet = new Set<string>()
-                      
-                      // 1. 获取当前 provider 的内置模型或自定义配置的基础模型
-                      if (isCustomSelected && selectedCustomConfig) {
-                        (selectedCustomConfig.customModels || []).forEach((m) => modelsSet.add(m))
-                      } else if (selectedProvider) {
-                        selectedProvider.models.forEach((m) => modelsSet.add(m))
-                      }
-                      
-                      // 2. 获取本地存储的额外自定义模型
-                      const localCustomModels = localProviderConfigs[localConfig.provider]?.customModels || []
-                      localCustomModels.forEach((m) => modelsSet.add(m))
-                      
-                      // 3. 确保当前选中的模型也在列表中
-                      if (localConfig.model) {
-                        modelsSet.add(localConfig.model)
-                      }
-                      
-                      return Array.from(modelsSet).map((m) => ({ value: m, label: m }))
-                    })()}
-                    className="w-full bg-background/50 border-border"
-                  />
-                </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-text-secondary">
+                      {language === 'zh' ? '选择模型' : 'Select Model'}
+                    </label>
+                    <Select
+                      value={localConfig.model}
+                      onChange={(value) => setLocalConfig({ ...localConfig, model: value })}
+                      options={(() => {
+                        const modelsSet = new Set<string>()
 
-                {/* 添加自定义模型 */}
-                <div className="pt-2">
-                  <div className="flex gap-2">
-                    <Input
-                      value={newModelName}
-                      onChange={(e) => setNewModelName(e.target.value)}
-                      placeholder={language === 'zh' ? '输入模型名称 (支持逗号分隔)...' : 'Enter model names (Supports comma)...'}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
-                      className="flex-1 h-9 text-xs bg-background/50 border-border"
+                        // 1. 获取当前 provider 的内置模型或自定义配置的基础模型
+                        if (isCustomSelected && selectedCustomConfig) {
+                          (selectedCustomConfig.customModels || []).forEach((m) => modelsSet.add(m))
+                        } else if (selectedProvider) {
+                          selectedProvider.models.forEach((m) => modelsSet.add(m))
+                        }
+
+                        // 2. 获取本地存储的额外自定义模型
+                        const localCustomModels = localProviderConfigs[localConfig.provider]?.customModels || []
+                        localCustomModels.forEach((m) => modelsSet.add(m))
+
+                        // 3. 确保当前选中的模型也在列表中
+                        if (localConfig.model) {
+                          modelsSet.add(localConfig.model)
+                        }
+
+                        return Array.from(modelsSet).map((m) => ({ value: m, label: m }))
+                      })()}
+                      className="w-full bg-background/50 border-border"
                     />
-                    <Button variant="secondary" size="sm" onClick={() => handleAddModel()} disabled={!newModelName.trim()} className="h-9 px-3">
-                      <Plus className="w-4 h-4" />
-                    </Button>
                   </div>
 
-                  {(localProviderConfigs[localConfig.provider]?.customModels?.length ?? 0) > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {localProviderConfigs[localConfig.provider]?.customModels?.map((model: string) => (
-                        <div
-                          key={model}
-                          className="group flex items-center gap-1.5 px-2 py-1 bg-surface/50 rounded-md border border-border text-xs text-text-secondary hover:border-border"
-                        >
-                          <span>{model}</span>
-                          <button
-                            onClick={() => handleRemoveModel(model)}
-                            className="text-text-muted hover:text-red-400 opacity-50 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
+                  {/* 添加自定义模型 */}
+                  <div className="pt-2">
+                    <div className="flex gap-2">
+                      <Input
+                        value={newModelName}
+                        onChange={(e) => setNewModelName(e.target.value)}
+                        placeholder={language === 'zh' ? '输入模型名称 (支持逗号分隔)...' : 'Enter model names (Supports comma)...'}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
+                        className="flex-1 h-9 text-xs bg-background/50 border-border"
+                      />
+                      <Button variant="secondary" size="sm" onClick={() => handleAddModel()} disabled={!newModelName.trim()} className="h-9 px-3">
+                        <Plus className="w-4 h-4" />
+                      </Button>
                     </div>
-                  )}
-                </div>
+
+                    {(localProviderConfigs[localConfig.provider]?.customModels?.length ?? 0) > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {localProviderConfigs[localConfig.provider]?.customModels?.map((model: string) => (
+                          <div
+                            key={model}
+                            className="group flex items-center gap-1.5 px-2 py-1 bg-surface/50 rounded-md border border-border text-xs text-text-secondary hover:border-border"
+                          >
+                            <span>{model}</span>
+                            <button
+                              onClick={() => handleRemoveModel(model)}
+                              className="text-text-muted hover:text-red-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </ScrollShadow>
             </section>
@@ -939,494 +987,559 @@ export function ProviderSettings({
               <ScrollShadow maxHeight="500px" className="pr-2">
                 <div className="space-y-5 pr-2">
 
-              {/* Max Tokens */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-text-secondary">{language === 'zh' ? '最大 Token' : 'Max Tokens'}</label>
-                  <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                    {localConfig.maxTokens ?? LLM_DEFAULTS.maxTokens}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={1024}
-                  max={32768}
-                  step={1024}
-                  value={localConfig.maxTokens ?? LLM_DEFAULTS.maxTokens}
-                  onChange={(e) => setLocalConfig({
-                    ...localConfig,
-                    maxTokens: parseInt(e.target.value)
-                  })}
-                  className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                />
-              </div>
-
-              {/* Temperature */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-text-secondary">
-                    {language === 'zh' ? '随机性 (Temperature)' : 'Temperature'}
-                  </label>
-                  <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                    {(localConfig.temperature ?? LLM_DEFAULTS.temperature).toFixed(1)}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={2}
-                  step={0.1}
-                  value={localConfig.temperature ?? LLM_DEFAULTS.temperature}
-                  onChange={(e) => setLocalConfig({
-                    ...localConfig,
-                    temperature: parseFloat(e.target.value)
-                  })}
-                  className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                />
-                <div className="flex justify-between text-[10px] text-text-muted px-1">
-                  <span>{language === 'zh' ? '精确' : 'Precise'}</span>
-                  <span>{language === 'zh' ? '创意' : 'Creative'}</span>
-                </div>
-              </div>
-
-              {/* Top P */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-xs text-text-secondary">Top P</label>
-                    <p className="text-[10px] text-text-muted">
-                      {language === 'zh'
-                        ? '核采样：仅考虑累积概率达到 P 的 Token 集合'
-                        : 'Nucleus sampling: considers tokens with top_p probability mass'}
-                    </p>
+                  {/* Max Tokens */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-text-secondary">{language === 'zh' ? '最大 Token' : 'Max Tokens'}</label>
+                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                        {localConfig.maxTokens ?? LLM_DEFAULTS.maxTokens}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={1024}
+                      max={32768}
+                      step={1024}
+                      value={localConfig.maxTokens ?? LLM_DEFAULTS.maxTokens}
+                      onChange={(e) => setLocalConfig({
+                        ...localConfig,
+                        maxTokens: parseInt(e.target.value)
+                      })}
+                      className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
+                    />
                   </div>
-                  <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                    {(localConfig.topP ?? LLM_DEFAULTS.topP).toFixed(2)}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={localConfig.topP ?? LLM_DEFAULTS.topP}
-                  onChange={(e) => setLocalConfig({
-                    ...localConfig,
-                    topP: parseFloat(e.target.value)
-                  })}
-                  className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                />
-              </div>
 
-              {/* Top K */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-xs text-text-secondary">Top K</label>
-                    <p className="text-[10px] text-text-muted">
-                      {language === 'zh'
-                        ? '仅从概率最高的 K 个 Token 中采样'
-                        : 'Limits selection to the top K tokens'}
-                    </p>
+                  {/* Temperature */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-text-secondary">
+                        {language === 'zh' ? '随机性 (Temperature)' : 'Temperature'}
+                      </label>
+                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                        {(localConfig.temperature ?? LLM_DEFAULTS.temperature).toFixed(1)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      value={localConfig.temperature ?? LLM_DEFAULTS.temperature}
+                      onChange={(e) => setLocalConfig({
+                        ...localConfig,
+                        temperature: parseFloat(e.target.value)
+                      })}
+                      className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
+                    />
+                    <div className="flex justify-between text-[10px] text-text-muted px-1">
+                      <span>{language === 'zh' ? '精确' : 'Precise'}</span>
+                      <span>{language === 'zh' ? '创意' : 'Creative'}</span>
+                    </div>
                   </div>
-                  <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                    {localConfig.topK ?? 'Default'}
-                  </span>
-                </div>
-                <input
-                  type="number"
-                  min={0}
-                  value={localConfig.topK ?? ''}
-                  onChange={(e) => setLocalConfig({
-                    ...localConfig,
-                    topK: e.target.value ? parseInt(e.target.value) : undefined
-                  })}
-                  placeholder="Default"
-                  className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
-                />
-              </div>
 
-              {/* 深度思考模式 */}
-              <div className="flex items-center justify-between pt-3 border-t border-border/50">
-                <div className="space-y-0.5 flex-1">
-                  <label className="text-xs font-medium text-text-secondary">
-                    {language === 'zh' ? '深度思考模式' : 'Extended Thinking'}
-                  </label>
-                  <p className="text-[10px] text-text-muted">
-                    {language === 'zh'
-                      ? '启用后，模型会进行更深入的推理（如 Claude extended thinking）'
-                      : 'Enable deeper reasoning (e.g., Claude extended thinking)'}
-                  </p>
-                </div>
-                <Switch
-                  checked={localConfig.enableThinking}
-                  onChange={(e) => setLocalConfig({ ...localConfig, enableThinking: e.target.checked })}
-                  className="flex-shrink-0"
-                />
-              </div>
-
-              {/* Frequency Penalty */}
-              <div className="space-y-3 pt-3 border-t border-border/50">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-xs text-text-secondary">Frequency Penalty</label>
-                    <p className="text-[10px] text-text-muted">
-                      {language === 'zh'
-                        ? '根据 Token 出现频率降低其重复概率'
-                        : 'Penalizes tokens based on their frequency in the text'}
-                    </p>
-                  </div>
-                  <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                    {(localConfig.frequencyPenalty || 0).toFixed(1)}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={-2}
-                  max={2}
-                  step={0.1}
-                  value={localConfig.frequencyPenalty || 0}
-                  onChange={(e) => setLocalConfig({
-                    ...localConfig,
-                    frequencyPenalty: parseFloat(e.target.value)
-                  })}
-                  className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                />
-              </div>
-
-              {/* Presence Penalty */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-xs text-text-secondary">Presence Penalty</label>
-                    <p className="text-[10px] text-text-muted">
-                      {language === 'zh'
-                        ? '根据 Token 是否出现过降低其重复概率'
-                        : 'Penalizes tokens based on their presence in the text'}
-                    </p>
-                  </div>
-                  <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                    {(localConfig.presencePenalty || 0).toFixed(1)}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={-2}
-                  max={2}
-                  step={0.1}
-                  value={localConfig.presencePenalty || 0}
-                  onChange={(e) => setLocalConfig({
-                    ...localConfig,
-                    presencePenalty: parseFloat(e.target.value)
-                  })}
-                  className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                />
-              </div>
-
-              {/* Seed */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-xs text-text-secondary">Seed</label>
-                    <p className="text-[10px] text-text-muted">
-                      {language === 'zh'
-                        ? '固定随机种子以获得可重现的结果'
-                        : 'Fixed seed for reproducible outputs'}
-                    </p>
-                  </div>
-                  <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                    {localConfig.seed ?? 'Random'}
-                  </span>
-                </div>
-                <input
-                  type="number"
-                  value={localConfig.seed ?? ''}
-                  onChange={(e) => setLocalConfig({
-                    ...localConfig,
-                    seed: e.target.value ? parseInt(e.target.value) : undefined
-                  })}
-                  placeholder="Random"
-                  className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
-                />
-              </div>
-
-              {/* Stop Sequences */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-xs text-text-secondary">Stop Sequences</label>
-                    <p className="text-[10px] text-text-muted">
-                      {language === 'zh'
-                        ? '遇到这些字符时停止生成'
-                        : 'Stop generation when these sequences are encountered'}
-                    </p>
-                  </div>
-                  <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
-                    Comma separated
-                  </span>
-                </div>
-                <input
-                  type="text"
-                  value={localConfig.stopSequences?.join(', ') || ''}
-                  onChange={(e) => {
-                    const val = e.target.value
-                    setLocalConfig({
-                      ...localConfig,
-                      stopSequences: val ? val.split(',').map(s => s.trim()).filter(Boolean) : undefined
-                    })
-                  }}
-                  placeholder="e.g. \n, User:"
-                  className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
-                />
-              </div>
-
-              {/* Logit Bias */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-xs text-text-secondary">Logit Bias (JSON)</label>
-                    <p className="text-[10px] text-text-muted">
-                      {language === 'zh'
-                        ? '调整特定 Token 出现的概率 (-100 到 100)'
-                        : 'Modify likelihood of specific tokens (-100 to 100)'}
-                    </p>
-                  </div>
-                  <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
-                    Token ID: Bias
-                  </span>
-                </div>
-                <textarea
-                  value={logitBiasString}
-                  onChange={(e) => setLogitBiasString(e.target.value)}
-                  onBlur={() => {
-                    try {
-                      if (!logitBiasString.trim()) {
-                        setLocalConfig({ ...localConfig, logitBias: undefined })
-                        return
-                      }
-                      const parsed = JSON.parse(logitBiasString)
-                      if (typeof parsed === 'object' && parsed !== null) {
-                        setLocalConfig({ ...localConfig, logitBias: parsed })
-                      }
-                    } catch {
-                      // Invalid JSON
-                    }
-                  }}
-                  placeholder='{"50256": -100}'
-                  className="w-full h-20 bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all font-mono"
-                />
-              </div>
-
-              {/* Custom Headers */}
-              <div className="space-y-3 pt-3 border-t border-border/50">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-xs text-text-secondary">
-                      {language === 'zh' ? '自定义请求头' : 'Custom Headers'}
-                    </label>
-                    <p className="text-[10px] text-text-muted">
-                      {language === 'zh'
-                        ? '添加额外的 HTTP 请求头（如组织 ID、项目 ID 等）'
-                        : 'Add extra HTTP headers (e.g., organization ID, project ID, etc.)'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setCustomHeaders([...customHeaders, { key: '', value: '' }])
-                    }}
-                    className="text-xs text-accent hover:text-accent-hover flex items-center gap-1 flex-shrink-0"
-                  >
-                    <Plus className="w-3 h-3" />
-                    {language === 'zh' ? '添加' : 'Add'}
-                  </button>
-                </div>
-
-                {/* 默认请求头（可编辑） */}
-                {(() => {
-                  const protocol = getCurrentProtocol()
-                  const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
-                  const defaultKeys = Object.keys(defaultHeaders)
-                  
-                  return defaultKeys.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
-                        {language === 'zh' ? '默认请求头（可修改）' : 'Default Headers (Editable)'}
+                  {/* Top P */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-xs text-text-secondary">Top P</label>
+                        <p className="text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '核采样：仅考虑累积概率达到 P 的 Token 集合'
+                            : 'Nucleus sampling: considers tokens with top_p probability mass'}
+                        </p>
                       </div>
-                      {defaultKeys.map((key) => {
-                        const defaultValue = defaultHeaders[key]
-                        const currentValue = localConfig.headers?.[key] ?? defaultValue
-                        return (
-                          <div key={key} className="p-3 bg-surface/20 rounded-lg border border-accent/20 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <Input
-                                type="text"
-                                value={key}
-                                onChange={(e) => {
-                                  const newKey = e.target.value
-                                  if (!newKey) return
-                                  
-                                  // 重命名 key
-                                  const newHeaders = { ...localConfig.headers }
-                                  delete newHeaders[key]
-                                  newHeaders[newKey] = currentValue
-                                  setLocalConfig({
-                                    ...localConfig,
-                                    headers: newHeaders
-                                  })
-                                }}
-                                className="flex-1 bg-background/50 border-border text-xs font-mono h-8"
-                              />
-                              <span className="text-[10px] text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20 flex-shrink-0 ml-2">
-                                {language === 'zh' ? '默认' : 'Default'}
-                              </span>
-                            </div>
-                            <Input
-                              type="text"
-                              value={currentValue}
-                              onChange={(e) => {
-                                const newHeaders = { ...localConfig.headers, [key]: e.target.value }
-                                setLocalConfig({
-                                  ...localConfig,
-                                  headers: newHeaders
-                                })
-                              }}
-                              placeholder={defaultValue}
-                              className="bg-background/50 border-border text-xs font-mono h-8"
-                            />
+                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                        {(localConfig.topP ?? LLM_DEFAULTS.topP).toFixed(2)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={localConfig.topP ?? LLM_DEFAULTS.topP}
+                      onChange={(e) => setLocalConfig({
+                        ...localConfig,
+                        topP: parseFloat(e.target.value)
+                      })}
+                      className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
+                    />
+                  </div>
+
+                  {/* Top K */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-xs text-text-secondary">Top K</label>
+                        <p className="text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '仅从概率最高的 K 个 Token 中采样'
+                            : 'Limits selection to the top K tokens'}
+                        </p>
+                      </div>
+                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                        {localConfig.topK ?? 'Default'}
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      value={localConfig.topK ?? ''}
+                      onChange={(e) => setLocalConfig({
+                        ...localConfig,
+                        topK: e.target.value ? parseInt(e.target.value) : undefined
+                      })}
+                      placeholder="Default"
+                      className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
+                    />
+                  </div>
+
+                  {/* 深度思考模式 */}
+                  <div className="space-y-3 pt-3 border-t border-border/50">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5 flex-1">
+                        <label className="text-xs font-medium text-text-secondary">
+                          {language === 'zh' ? '深度思考模式' : 'Extended Thinking'}
+                        </label>
+                        <p className="text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '启用后，模型会进行更深入的推理（如 Claude thinking, OpenAI o1/o3）'
+                            : 'Enable deeper reasoning (e.g., Claude thinking, OpenAI o1/o3)'}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={localConfig.enableThinking}
+                        onChange={(e) => setLocalConfig({ ...localConfig, enableThinking: e.target.checked })}
+                        className="flex-shrink-0"
+                      />
+                    </div>
+
+                    {/* 思考模式详细配置 - 仅在启用时展示 */}
+                    {localConfig.enableThinking && (
+                      <div className="space-y-3 pl-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                        {/* 推理深度 */}
+                        <div className="space-y-2">
+                          <div className="space-y-0.5">
+                            <label className="text-xs text-text-secondary">
+                              {language === 'zh' ? '推理深度' : 'Reasoning Effort'}
+                            </label>
                             <p className="text-[10px] text-text-muted">
-                              {language === 'zh' 
-                                ? '使用 {{apiKey}} 作为 API Key 的占位符' 
-                                : 'Use {{apiKey}} as placeholder for API Key'}
+                              {language === 'zh'
+                                ? 'OpenAI / Gemini 3 使用此参数控制推理深度'
+                                : 'Controls reasoning depth for OpenAI / Gemini 3'}
                             </p>
                           </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })()}
+                          <Select
+                            options={[
+                              { value: 'low', label: language === 'zh' ? '低' : 'Low' },
+                              { value: 'medium', label: language === 'zh' ? '中' : 'Medium' },
+                              { value: 'high', label: language === 'zh' ? '高' : 'High' },
+                            ]}
+                            value={localConfig.reasoningEffort || 'medium'}
+                            onChange={(val) => setLocalConfig({ ...localConfig, reasoningEffort: val as 'low' | 'medium' | 'high' })}
+                          />
+                        </div>
 
-                {/* 自定义请求头 */}
-                {customHeaders.length > 0 && (
-                  <div className="space-y-2">
-                    {Object.keys(getProviderDefaultHeaders(localConfig.provider, getCurrentProtocol())).length > 0 && (
-                      <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
-                        {language === 'zh' ? '额外请求头' : 'Additional Headers'}
-                      </div>
-                    )}
-                    {customHeaders.map((header, index) => (
-                      <div key={index} className="space-y-1.5 p-2.5 bg-background/30 rounded-lg border border-border/50">
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1 space-y-1.5">
-                            <Select
-                              value={header.key}
-                              onChange={(value) => {
-                                const newHeaders = [...customHeaders]
-                                newHeaders[index].key = value
-                                setCustomHeaders(newHeaders)
-                                // 更新 localConfig - 合并默认请求头和自定义请求头
-                                const protocol = getCurrentProtocol()
-                                const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
-                                const customHeadersObj: Record<string, string> = {}
-                                newHeaders.forEach(h => {
-                                  if (h.key && h.key !== 'X-Custom-Header') {
-                                    customHeadersObj[h.key] = h.value || ''
-                                  }
-                                })
-                                // 合并：默认请求头 + 自定义请求头（自定义会覆盖默认）
-                                const allHeaders = { ...defaultHeaders, ...customHeadersObj }
-                                setLocalConfig({
-                                  ...localConfig,
-                                  headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
-                                })
-                              }}
-                              options={[
-                                { value: '', label: language === 'zh' ? '选择请求头' : 'Select header' },
-                                { value: 'X-Request-ID', label: 'X-Request-ID' },
-                                { value: 'X-Organization', label: 'X-Organization' },
-                                { value: 'X-Project-ID', label: 'X-Project-ID' },
-                                { value: 'User-Agent', label: 'User-Agent' },
-                                { value: 'Content-Type', label: 'Content-Type' },
-                                { value: 'Accept', label: 'Accept' },
-                                { value: 'X-Custom-Header', label: language === 'zh' ? '自定义...' : 'Custom...' }
-                              ]}
-                              className="w-full bg-surface-active border-border text-xs h-8"
-                            />
-                            {header.key === 'X-Custom-Header' && (
-                              <Input
-                                type="text"
-                                value=""
-                                onChange={(e) => {
-                                  const newHeaders = [...customHeaders]
-                                  newHeaders[index].key = e.target.value
-                                  setCustomHeaders(newHeaders)
-                                }}
-                                placeholder={language === 'zh' ? '请求头名称' : 'Header name'}
-                                className="bg-surface-active border-border text-xs font-mono h-8"
-                              />
-                            )}
-                            <Input
-                              type="text"
-                              value={header.value}
-                              onChange={(e) => {
-                                const newHeaders = [...customHeaders]
-                                newHeaders[index].value = e.target.value
-                                setCustomHeaders(newHeaders)
-                                // 更新 localConfig - 合并默认请求头和自定义请求头
-                                const protocol = getCurrentProtocol()
-                                const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
-                                const customHeadersObj: Record<string, string> = {}
-                                newHeaders.forEach(h => {
-                                  if (h.key && h.key !== 'X-Custom-Header') {
-                                    customHeadersObj[h.key] = h.value || ''
-                                  }
-                                })
-                                const allHeaders = { ...defaultHeaders, ...customHeadersObj }
-                                setLocalConfig({
-                                  ...localConfig,
-                                  headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
-                                })
-                              }}
-                              placeholder={language === 'zh' ? '值' : 'Value'}
-                              className="bg-surface-active border-border text-xs font-mono h-8"
-                            />
+                        {/* Thinking Budget */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <label className="text-xs text-text-secondary">
+                                {language === 'zh' ? '思考 Token 预算' : 'Thinking Budget'}
+                              </label>
+                              <p className="text-[10px] text-text-muted">
+                                {language === 'zh'
+                                  ? 'Anthropic / Gemini 2.5 使用此参数控制思考 token 上限'
+                                  : 'Max thinking tokens for Anthropic / Gemini 2.5'}
+                              </p>
+                            </div>
+                            <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                              {(localConfig.thinkingBudget || 10000).toLocaleString()}
+                            </span>
                           </div>
-                          <button
-                            onClick={() => {
-                              const newHeaders = customHeaders.filter((_, i) => i !== index)
-                              setCustomHeaders(newHeaders)
-                              // 更新 localConfig - 合并默认请求头和自定义请求头
-                              const protocol = getCurrentProtocol()
-                              const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
-                              const customHeadersObj: Record<string, string> = {}
-                              newHeaders.forEach(h => {
-                                if (h.key && h.key !== 'X-Custom-Header') {
-                                  customHeadersObj[h.key] = h.value || ''
-                                }
-                              })
-                              const allHeaders = { ...defaultHeaders, ...customHeadersObj }
-                              setLocalConfig({
-                                ...localConfig,
-                                headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
-                              })
-                            }}
-                            className="p-1 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded transition-colors flex-shrink-0 mt-0.5"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
+                          <input
+                            type="range"
+                            min={1024}
+                            max={100000}
+                            step={1024}
+                            value={localConfig.thinkingBudget || 10000}
+                            onChange={(e) => setLocalConfig({
+                              ...localConfig,
+                              thinkingBudget: parseInt(e.target.value)
+                            })}
+                            className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
+                          />
+                          <div className="flex justify-between text-[10px] text-text-muted px-1">
+                            <span>1K</span>
+                            <span>100K</span>
+                          </div>
                         </div>
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
 
-                {customHeaders.length === 0 && Object.keys(getProviderDefaultHeaders(localConfig.provider, getCurrentProtocol())).length === 0 && (
-                  <div className="text-[10px] text-text-muted bg-background/50 px-3 py-2 rounded-lg border border-border text-center">
-                    {language === 'zh'
-                      ? '点击"添加"按钮添加自定义请求头'
-                      : 'Click "Add" to add custom headers'}
+                  {/* Frequency Penalty */}
+                  <div className="space-y-3 pt-3 border-t border-border/50">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-xs text-text-secondary">Frequency Penalty</label>
+                        <p className="text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '根据 Token 出现频率降低其重复概率'
+                            : 'Penalizes tokens based on their frequency in the text'}
+                        </p>
+                      </div>
+                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                        {(localConfig.frequencyPenalty || 0).toFixed(1)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={-2}
+                      max={2}
+                      step={0.1}
+                      value={localConfig.frequencyPenalty || 0}
+                      onChange={(e) => setLocalConfig({
+                        ...localConfig,
+                        frequencyPenalty: parseFloat(e.target.value)
+                      })}
+                      className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
+                    />
                   </div>
-                )}
-              </div>
+
+                  {/* Presence Penalty */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-xs text-text-secondary">Presence Penalty</label>
+                        <p className="text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '根据 Token 是否出现过降低其重复概率'
+                            : 'Penalizes tokens based on their presence in the text'}
+                        </p>
+                      </div>
+                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                        {(localConfig.presencePenalty || 0).toFixed(1)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={-2}
+                      max={2}
+                      step={0.1}
+                      value={localConfig.presencePenalty || 0}
+                      onChange={(e) => setLocalConfig({
+                        ...localConfig,
+                        presencePenalty: parseFloat(e.target.value)
+                      })}
+                      className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
+                    />
+                  </div>
+
+                  {/* Seed */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-xs text-text-secondary">Seed</label>
+                        <p className="text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '固定随机种子以获得可重现的结果'
+                            : 'Fixed seed for reproducible outputs'}
+                        </p>
+                      </div>
+                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                        {localConfig.seed ?? 'Random'}
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      value={localConfig.seed ?? ''}
+                      onChange={(e) => setLocalConfig({
+                        ...localConfig,
+                        seed: e.target.value ? parseInt(e.target.value) : undefined
+                      })}
+                      placeholder="Random"
+                      className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
+                    />
+                  </div>
+
+                  {/* Stop Sequences */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-xs text-text-secondary">Stop Sequences</label>
+                        <p className="text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '遇到这些字符时停止生成'
+                            : 'Stop generation when these sequences are encountered'}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
+                        Comma separated
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={localConfig.stopSequences?.join(', ') || ''}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setLocalConfig({
+                          ...localConfig,
+                          stopSequences: val ? val.split(',').map(s => s.trim()).filter(Boolean) : undefined
+                        })
+                      }}
+                      placeholder="e.g. \n, User:"
+                      className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
+                    />
+                  </div>
+
+                  {/* Logit Bias */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-xs text-text-secondary">Logit Bias (JSON)</label>
+                        <p className="text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '调整特定 Token 出现的概率 (-100 到 100)'
+                            : 'Modify likelihood of specific tokens (-100 to 100)'}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
+                        Token ID: Bias
+                      </span>
+                    </div>
+                    <textarea
+                      value={logitBiasString}
+                      onChange={(e) => setLogitBiasString(e.target.value)}
+                      onBlur={() => {
+                        try {
+                          if (!logitBiasString.trim()) {
+                            setLocalConfig({ ...localConfig, logitBias: undefined })
+                            return
+                          }
+                          const parsed = JSON.parse(logitBiasString)
+                          if (typeof parsed === 'object' && parsed !== null) {
+                            setLocalConfig({ ...localConfig, logitBias: parsed })
+                          }
+                        } catch {
+                          // Invalid JSON
+                        }
+                      }}
+                      placeholder='{"50256": -100}'
+                      className="w-full h-20 bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all font-mono"
+                    />
+                  </div>
+
+                  {/* Custom Headers */}
+                  <div className="space-y-3 pt-3 border-t border-border/50">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <label className="text-xs text-text-secondary">
+                          {language === 'zh' ? '自定义请求头' : 'Custom Headers'}
+                        </label>
+                        <p className="text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '添加额外的 HTTP 请求头（如组织 ID、项目 ID 等）'
+                            : 'Add extra HTTP headers (e.g., organization ID, project ID, etc.)'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setCustomHeaders([...customHeaders, { key: '', value: '' }])
+                        }}
+                        className="text-xs text-accent hover:text-accent-hover flex items-center gap-1 flex-shrink-0"
+                      >
+                        <Plus className="w-3 h-3" />
+                        {language === 'zh' ? '添加' : 'Add'}
+                      </button>
+                    </div>
+
+                    {/* 默认请求头（可编辑） */}
+                    {(() => {
+                      const protocol = getCurrentProtocol()
+                      const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
+                      const defaultKeys = Object.keys(defaultHeaders)
+
+                      return defaultKeys.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
+                            {language === 'zh' ? '默认请求头（可修改）' : 'Default Headers (Editable)'}
+                          </div>
+                          {defaultKeys.map((key) => {
+                            const defaultValue = defaultHeaders[key]
+                            const currentValue = localConfig.headers?.[key] ?? defaultValue
+                            return (
+                              <div key={key} className="p-3 bg-surface/20 rounded-lg border border-accent/20 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Input
+                                    type="text"
+                                    value={key}
+                                    onChange={(e) => {
+                                      const newKey = e.target.value
+                                      if (!newKey) return
+
+                                      // 重命名 key
+                                      const newHeaders = { ...localConfig.headers }
+                                      delete newHeaders[key]
+                                      newHeaders[newKey] = currentValue
+                                      setLocalConfig({
+                                        ...localConfig,
+                                        headers: newHeaders
+                                      })
+                                    }}
+                                    className="flex-1 bg-background/50 border-border text-xs font-mono h-8"
+                                  />
+                                  <span className="text-[10px] text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20 flex-shrink-0 ml-2">
+                                    {language === 'zh' ? '默认' : 'Default'}
+                                  </span>
+                                </div>
+                                <Input
+                                  type="text"
+                                  value={currentValue}
+                                  onChange={(e) => {
+                                    const newHeaders = { ...localConfig.headers, [key]: e.target.value }
+                                    setLocalConfig({
+                                      ...localConfig,
+                                      headers: newHeaders
+                                    })
+                                  }}
+                                  placeholder={defaultValue}
+                                  className="bg-background/50 border-border text-xs font-mono h-8"
+                                />
+                                <p className="text-[10px] text-text-muted">
+                                  {language === 'zh'
+                                    ? '使用 {{apiKey}} 作为 API Key 的占位符'
+                                    : 'Use {{apiKey}} as placeholder for API Key'}
+                                </p>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    })()}
+
+                    {/* 自定义请求头 */}
+                    {customHeaders.length > 0 && (
+                      <div className="space-y-2">
+                        {Object.keys(getProviderDefaultHeaders(localConfig.provider, getCurrentProtocol())).length > 0 && (
+                          <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
+                            {language === 'zh' ? '额外请求头' : 'Additional Headers'}
+                          </div>
+                        )}
+                        {customHeaders.map((header, index) => (
+                          <div key={index} className="space-y-1.5 p-2.5 bg-background/30 rounded-lg border border-border/50">
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1 space-y-1.5">
+                                <Select
+                                  value={header.key}
+                                  onChange={(value) => {
+                                    const newHeaders = [...customHeaders]
+                                    newHeaders[index].key = value
+                                    setCustomHeaders(newHeaders)
+                                    // 更新 localConfig - 合并默认请求头和自定义请求头
+                                    const protocol = getCurrentProtocol()
+                                    const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
+                                    const customHeadersObj: Record<string, string> = {}
+                                    newHeaders.forEach(h => {
+                                      if (h.key && h.key !== 'X-Custom-Header') {
+                                        customHeadersObj[h.key] = h.value || ''
+                                      }
+                                    })
+                                    // 合并：默认请求头 + 自定义请求头（自定义会覆盖默认）
+                                    const allHeaders = { ...defaultHeaders, ...customHeadersObj }
+                                    setLocalConfig({
+                                      ...localConfig,
+                                      headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
+                                    })
+                                  }}
+                                  options={[
+                                    { value: '', label: language === 'zh' ? '选择请求头' : 'Select header' },
+                                    { value: 'X-Request-ID', label: 'X-Request-ID' },
+                                    { value: 'X-Organization', label: 'X-Organization' },
+                                    { value: 'X-Project-ID', label: 'X-Project-ID' },
+                                    { value: 'User-Agent', label: 'User-Agent' },
+                                    { value: 'Content-Type', label: 'Content-Type' },
+                                    { value: 'Accept', label: 'Accept' },
+                                    { value: 'X-Custom-Header', label: language === 'zh' ? '自定义...' : 'Custom...' }
+                                  ]}
+                                  className="w-full bg-surface-active border-border text-xs h-8"
+                                />
+                                {header.key === 'X-Custom-Header' && (
+                                  <Input
+                                    type="text"
+                                    value=""
+                                    onChange={(e) => {
+                                      const newHeaders = [...customHeaders]
+                                      newHeaders[index].key = e.target.value
+                                      setCustomHeaders(newHeaders)
+                                    }}
+                                    placeholder={language === 'zh' ? '请求头名称' : 'Header name'}
+                                    className="bg-surface-active border-border text-xs font-mono h-8"
+                                  />
+                                )}
+                                <Input
+                                  type="text"
+                                  value={header.value}
+                                  onChange={(e) => {
+                                    const newHeaders = [...customHeaders]
+                                    newHeaders[index].value = e.target.value
+                                    setCustomHeaders(newHeaders)
+                                    // 更新 localConfig - 合并默认请求头和自定义请求头
+                                    const protocol = getCurrentProtocol()
+                                    const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
+                                    const customHeadersObj: Record<string, string> = {}
+                                    newHeaders.forEach(h => {
+                                      if (h.key && h.key !== 'X-Custom-Header') {
+                                        customHeadersObj[h.key] = h.value || ''
+                                      }
+                                    })
+                                    const allHeaders = { ...defaultHeaders, ...customHeadersObj }
+                                    setLocalConfig({
+                                      ...localConfig,
+                                      headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
+                                    })
+                                  }}
+                                  placeholder={language === 'zh' ? '值' : 'Value'}
+                                  className="bg-surface-active border-border text-xs font-mono h-8"
+                                />
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const newHeaders = customHeaders.filter((_, i) => i !== index)
+                                  setCustomHeaders(newHeaders)
+                                  // 更新 localConfig - 合并默认请求头和自定义请求头
+                                  const protocol = getCurrentProtocol()
+                                  const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
+                                  const customHeadersObj: Record<string, string> = {}
+                                  newHeaders.forEach(h => {
+                                    if (h.key && h.key !== 'X-Custom-Header') {
+                                      customHeadersObj[h.key] = h.value || ''
+                                    }
+                                  })
+                                  const allHeaders = { ...defaultHeaders, ...customHeadersObj }
+                                  setLocalConfig({
+                                    ...localConfig,
+                                    headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
+                                  })
+                                }}
+                                className="p-1 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded transition-colors flex-shrink-0 mt-0.5"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {customHeaders.length === 0 && Object.keys(getProviderDefaultHeaders(localConfig.provider, getCurrentProtocol())).length === 0 && (
+                      <div className="text-[10px] text-text-muted bg-background/50 px-3 py-2 rounded-lg border border-border text-center">
+                        {language === 'zh'
+                          ? '点击"添加"按钮添加自定义请求头'
+                          : 'Click "Add" to add custom headers'}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </ScrollShadow>
             </section>
@@ -1490,6 +1603,33 @@ export function ProviderSettings({
                 />
               </div>
             </div>
+
+            {/* OpenAI API 协议选择（仅内置 OpenAI provider 显示） */}
+            {localConfig.provider === 'openai' && (
+              <div className="mt-4 pt-4 border-t border-border/50">
+                <div className="space-y-2">
+                  <div className="space-y-0.5">
+                    <label className="text-xs font-medium text-text-secondary">
+                      {language === 'zh' ? 'API 协议' : 'API Protocol'}
+                    </label>
+                    <p className="text-[10px] text-text-muted">
+                      {language === 'zh'
+                        ? 'Chat Completions 适用于 GPT 系列，Responses API 适用于 o1/o3/o4 等推理模型'
+                        : 'Chat Completions for GPT series, Responses API for reasoning models like o1/o3/o4'}
+                    </p>
+                  </div>
+                  <Select
+                    value={localConfig.protocol || 'openai'}
+                    onChange={(value) => setLocalConfig({ ...localConfig, protocol: value as ApiProtocol })}
+                    options={[
+                      { value: 'openai', label: 'Chat Completions (/v1/chat/completions)' },
+                      { value: 'openai-responses', label: 'Responses API (/v1/responses)' },
+                    ]}
+                    className="w-full max-w-md bg-background/50 border-border"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* 操作按钮行 */}
             <div className="flex items-center justify-between">

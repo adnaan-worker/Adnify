@@ -24,7 +24,7 @@ export function createModel(config: LLMConfig, options: ModelOptions = {}): Lang
 
     // 内置 provider
     if (isBuiltinProvider(provider)) {
-        return createBuiltinModel(provider, model, apiKey, baseUrl, options)
+        return createBuiltinModel(config, options)
     }
 
     // 自定义 provider - 根据 protocol 选择
@@ -36,36 +36,28 @@ export function createModel(config: LLMConfig, options: ModelOptions = {}): Lang
  * 创建内置 provider 的 model
  */
 function createBuiltinModel(
-    providerId: string,
-    model: string,
-    apiKey: string,
-    baseUrl?: string,
+    config: LLMConfig,
     _options: ModelOptions = {}
 ): LanguageModel {
-    const providerDef = BUILTIN_PROVIDERS[providerId]
+    const { provider, model, apiKey, baseUrl } = config
+    const providerDef = BUILTIN_PROVIDERS[provider]
     if (!providerDef) {
-        throw new Error(`Unknown builtin provider: ${providerId}`)
+        throw new Error(`Unknown builtin provider: ${provider}`)
     }
 
-    switch (providerId) {
+    switch (provider) {
         case 'openai': {
             const openai = createOpenAI({
                 apiKey,
                 baseURL: baseUrl || providerDef.baseUrl,
             })
-            
-            // 检测是否为推理模型（需要使用 Responses API）
-            const isReasoningModel = model.toLowerCase().includes('o1') || 
-                                    model.toLowerCase().includes('o3') ||
-                                    model.toLowerCase().includes('o4') ||
-                                    model.toLowerCase().includes('codex') ||
-                                    model.toLowerCase().includes('reasoner')
-            
-            if (isReasoningModel) {
-                // 推理模型使用 Responses API (/v1/responses)
+
+            // 基于 protocol 选择 API 端点
+            if (config.protocol === 'openai-responses') {
+                // Responses API (/v1/responses)
                 return openai.responses(model)
             } else {
-                // 标准模型使用 Chat Completions API (/v1/chat/completions)
+                // Chat Completions API (/v1/chat/completions) - 默认
                 return openai.chat(model)
             }
         }
@@ -89,7 +81,7 @@ function createBuiltinModel(
         }
 
         default:
-            throw new Error(`Unsupported builtin provider: ${providerId}`)
+            throw new Error(`Unsupported builtin provider: ${provider}`)
     }
 }
 
@@ -115,6 +107,15 @@ function createCustomModel(
                 baseURL: baseUrl,
             })
             return provider(model)
+        }
+
+        case 'openai-responses': {
+            // Response API 需要使用 @ai-sdk/openai（非 compatible）
+            const openai = createOpenAI({
+                apiKey,
+                baseURL: baseUrl,
+            })
+            return openai.responses(model)
         }
 
         case 'anthropic': {

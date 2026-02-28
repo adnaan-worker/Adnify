@@ -85,6 +85,8 @@ const defaultLLMConfig: LLMConfig = {
   headers: LLM_DEFAULTS.headers,
   // 功能开关
   enableThinking: false,
+  thinkingBudget: 10000,
+  reasoningEffort: 'medium' as const,
 }
 
 const defaultAgentConfig: AgentConfig = {

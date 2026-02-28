@@ -32,7 +32,8 @@ const healthCache = new CacheService<HealthCheckResult>('HealthCheck', {
 export async function checkProviderHealth(
     provider: string,
     apiKey: string,
-    baseUrl?: string
+    baseUrl?: string,
+    protocol?: string
 ): Promise<HealthCheckResult> {
     try {
         const timeout = getEditorConfig().performance.healthCheckTimeoutMs
@@ -40,7 +41,8 @@ export async function checkProviderHealth(
             provider,
             apiKey,
             baseUrl,
-            timeout
+            timeout,
+            protocol
         )
 
         // 将 checkedAt 从字符串转换回 Date 对象

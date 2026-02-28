@@ -78,6 +78,7 @@ interface LLMConfig {
   model: string
   apiKey: string
   baseUrl?: string
+  protocol?: string
 }
 
 interface LLMSendMessageParams {
@@ -314,7 +315,7 @@ export interface ElectronAPI {
   httpSetGoogleSearch: (apiKey: string, cx: string) => Promise<{ success: boolean }>
 
   // Health Check
-  healthCheckProvider: (provider: string, apiKey: string, baseUrl?: string, timeout?: number) => Promise<{
+  healthCheckProvider: (provider: string, apiKey: string, baseUrl?: string, timeout?: number, protocol?: string) => Promise<{
     provider: string
     status: 'healthy' | 'unhealthy' | 'unknown'
     latency?: number
@@ -591,8 +592,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   httpSetGoogleSearch: (apiKey: string, cx: string) => ipcRenderer.invoke('http:setGoogleSearch', apiKey, cx),
 
   // Health Check API
-  healthCheckProvider: (provider: string, apiKey: string, baseUrl?: string, timeout?: number) =>
-    ipcRenderer.invoke('healthCheck:check', provider, apiKey, baseUrl, timeout),
+  healthCheckProvider: (provider: string, apiKey: string, baseUrl?: string, timeout?: number, protocol?: string) =>
+    ipcRenderer.invoke('healthCheck:check', provider, apiKey, baseUrl, timeout, protocol),
   testModel: (config: LLMConfig) =>
     ipcRenderer.invoke('healthCheck:testModel', config),
   fetchModels: (provider: string, apiKey: string, baseUrl?: string, protocol?: string) =>

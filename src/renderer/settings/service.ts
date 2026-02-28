@@ -138,7 +138,7 @@ function mergeLLMConfig(
     apiKey: providerConfig.apiKey ?? defaults.apiKey,
     baseUrl: providerConfig.baseUrl ?? builtinDef?.baseUrl ?? defaults.baseUrl,
     timeout: providerConfig.timeout ?? builtinDef?.defaults.timeout ?? defaults.timeout,
-    
+
     // 核心参数
     temperature: saved.temperature ?? defaults.temperature,
     maxTokens: saved.maxTokens ?? defaults.maxTokens,
@@ -149,16 +149,18 @@ function mergeLLMConfig(
     stopSequences: saved.stopSequences ?? defaults.stopSequences,
     seed: saved.seed ?? defaults.seed,
     logitBias: saved.logitBias ?? defaults.logitBias,
-    
+
     // AI SDK 高级参数
     maxRetries: saved.maxRetries ?? defaults.maxRetries,
     toolChoice: saved.toolChoice ?? defaults.toolChoice,
     parallelToolCalls: saved.parallelToolCalls ?? defaults.parallelToolCalls,
     headers: providerConfig.headers ?? defaults.headers,  // 从 providerConfig 加载 headers
-    
+
     // 功能开关
     enableThinking: saved.enableThinking ?? defaults.enableThinking,
-    
+    thinkingBudget: saved.thinkingBudget ?? defaults.thinkingBudget,
+    reasoningEffort: saved.reasoningEffort ?? defaults.reasoningEffort,
+
     // 协议
     protocol: providerConfig.protocol,
   }
@@ -227,7 +229,7 @@ class SettingsService {
         llmConfig: {
           provider: settings.llmConfig.provider,
           model: settings.llmConfig.model,
-          
+
           // 核心参数
           temperature: settings.llmConfig.temperature,
           maxTokens: settings.llmConfig.maxTokens,
@@ -238,15 +240,17 @@ class SettingsService {
           stopSequences: settings.llmConfig.stopSequences,
           seed: settings.llmConfig.seed,
           logitBias: settings.llmConfig.logitBias,
-          
+
           // AI SDK 高级参数
           maxRetries: settings.llmConfig.maxRetries,
           toolChoice: settings.llmConfig.toolChoice,
           parallelToolCalls: settings.llmConfig.parallelToolCalls,
           headers: settings.llmConfig.headers,
-          
+
           // 功能开关
           enableThinking: settings.llmConfig.enableThinking,
+          thinkingBudget: settings.llmConfig.thinkingBudget,
+          reasoningEffort: settings.llmConfig.reasoningEffort,
         },
         language: settings.language,
         autoApprove: settings.autoApprove,
@@ -362,7 +366,7 @@ class SettingsService {
         llmConfig: {
           provider: settings.llmConfig.provider,
           model: settings.llmConfig.model,
-          
+
           // 核心参数
           temperature: settings.llmConfig.temperature,
           maxTokens: settings.llmConfig.maxTokens,
@@ -373,15 +377,17 @@ class SettingsService {
           stopSequences: settings.llmConfig.stopSequences,
           seed: settings.llmConfig.seed,
           logitBias: settings.llmConfig.logitBias,
-          
+
           // AI SDK 高级参数
           maxRetries: settings.llmConfig.maxRetries,
           toolChoice: settings.llmConfig.toolChoice,
           parallelToolCalls: settings.llmConfig.parallelToolCalls,
           headers: settings.llmConfig.headers,
-          
+
           // 功能开关
           enableThinking: settings.llmConfig.enableThinking,
+          thinkingBudget: settings.llmConfig.thinkingBudget,
+          reasoningEffort: settings.llmConfig.reasoningEffort,
         },
         language: settings.language,
         autoApprove: settings.autoApprove,
