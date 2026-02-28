@@ -32,45 +32,71 @@ export function registerSettingsHandlers(
 
   // 获取设置
   ipcMain.handle('settings:get', (_, key: string) => {
-    return resolveStore(key).get(key)
+    try {
+      const store = resolveStore(key)
+      if (!store) {
+        logger.ipc.error('[Settings] resolveStore returned null for key:', key)
+        return undefined
+      }
+      return store.get(key)
+    } catch (e) {
+      logger.ipc.error('[Settings] settings:get failed', { key, error: e })
+      throw e
+    }
   })
 
   // 设置值（自动清理无效字段）
   ipcMain.handle('settings:set', (_event, key: string, value: unknown) => {
-    const store = resolveStore(key)
-    // 清理配置值，移除不存在的字段
-    const cleanedValue = cleanConfigValue(key, value)
-
-    // electron-store 不允许设置 undefined，需要使用 delete
-    if (cleanedValue === undefined) {
-      store.delete(key as any)
-    } else {
-      store.set(key, cleanedValue)
-    }
-
-    // 广播给所有窗口
-    BrowserWindow.getAllWindows().forEach(win => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('settings:changed', { key, value })
+    try {
+      const store = resolveStore(key)
+      if (!store) {
+        logger.ipc.error('[Settings] resolveStore returned null for key:', key)
+        throw new Error(`Config store not ready for key: ${key}`)
       }
-    })
+      // 清理配置值，移除不存在的字段
+      const cleanedValue = cleanConfigValue(key, value)
 
-    // 如果是安全设置，同步更新到 SecurityManager 和白名单
-    if (key === 'securitySettings' && securityRef) {
-      const securitySettings = value as any
-      securityRef.securityManager.updateConfig(securitySettings)
+      // electron-store 不允许设置 undefined，需要使用 delete
+      if (cleanedValue === undefined) {
+        store.delete(key as any)
+      } else {
+        store.set(key, cleanedValue)
+      }
 
-      // 更新白名单（使用默认值兜底）
-      const shellCommands = securitySettings.allowedShellCommands?.length > 0
-        ? securitySettings.allowedShellCommands
-        : SECURITY_DEFAULTS.SHELL_COMMANDS
-      const gitCommands = securitySettings.allowedGitSubcommands?.length > 0
-        ? securitySettings.allowedGitSubcommands
-        : SECURITY_DEFAULTS.GIT_SUBCOMMANDS
-      securityRef.updateWhitelist(shellCommands, gitCommands)
+      // 广播给所有窗口
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('settings:changed', { key, value })
+        }
+      })
+
+      // 如果是安全设置，同步更新到 SecurityManager 和白名单
+      if (key === 'securitySettings' && securityRef) {
+        const securitySettings = (cleanedValue ?? value) as any
+        const defaults = {
+          enablePermissionConfirm: true,
+          enableAuditLog: true,
+          strictWorkspaceMode: true,
+          allowedShellCommands: SECURITY_DEFAULTS.SHELL_COMMANDS,
+          allowedGitSubcommands: SECURITY_DEFAULTS.GIT_SUBCOMMANDS,
+        }
+        securityRef.securityManager.updateConfig(securitySettings ?? defaults)
+
+        // 更新白名单（删除/undefined 时用默认值）
+        const shellCommands = securitySettings?.allowedShellCommands?.length
+          ? securitySettings.allowedShellCommands
+          : SECURITY_DEFAULTS.SHELL_COMMANDS
+        const gitCommands = securitySettings?.allowedGitSubcommands?.length
+          ? securitySettings.allowedGitSubcommands
+          : SECURITY_DEFAULTS.GIT_SUBCOMMANDS
+        securityRef.updateWhitelist(shellCommands, gitCommands)
+      }
+
+      return true
+    } catch (e) {
+      logger.ipc.error('[Settings] settings:set failed', { key, error: e })
+      throw e
     }
-
-    return true
   })
 
   // 获取当前白名单
