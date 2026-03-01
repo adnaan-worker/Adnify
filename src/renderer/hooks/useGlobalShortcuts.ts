@@ -103,6 +103,13 @@ export function useGlobalShortcuts() {
       return
     }
 
+    // Reveal active file in sidebar: Alt+Shift+L
+    if (e.altKey && e.shiftKey && e.key.toLowerCase() === 'l') {
+      e.preventDefault()
+      window.dispatchEvent(new CustomEvent('explorer:reveal-active-file'))
+      return
+    }
+
     // Close active file: Ctrl+W
     if (e.ctrlKey && e.key.toLowerCase() === 'w') {
       e.preventDefault()

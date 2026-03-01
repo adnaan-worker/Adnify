@@ -455,3 +455,25 @@ textarea,
 .streaming-ink-effect>*:last-child {
   animation: ink-fade-in 0.3s ease-out;
 }
+
+/* Reveal in Explorer - File highlight flash */
+@keyframes reveal-highlight {
+  0% {
+    background-color: rgb(var(--accent) / 0.3);
+    box-shadow: 0 0 8px rgb(var(--accent) / 0.4);
+  }
+
+  50% {
+    background-color: rgb(var(--accent) / 0.15);
+    box-shadow: 0 0 4px rgb(var(--accent) / 0.2);
+  }
+
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.animate-reveal-highlight {
+  animation: reveal-highlight 2s ease-out forwards;
+}

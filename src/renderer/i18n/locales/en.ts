@@ -553,6 +553,7 @@ export const en = {
   'cmd.workbench.action.toggleDevTools': 'Toggle Developer Tools',
   'cmd.workbench.action.closePanel': 'Close Panel',
   'cmd.explorer.revealActiveFile': 'Reveal Active File in Explorer',
+  'cmd.explorer.revealInSidebar': 'Reveal in Sidebar',
   'cmd.explorer.rename': 'Rename File/Folder',
   'cmd.help.about': 'About',
 } as const

@@ -63,6 +63,10 @@ export function TabContextMenu({
       label: isZh ? '在资源管理器中显示' : 'Reveal in Explorer',
       action: () => api.file.showInFolder(filePath)
     },
+    {
+      label: isZh ? '在侧边栏中定位' : 'Reveal in Sidebar',
+      action: () => window.dispatchEvent(new CustomEvent('explorer:reveal-file', { detail: { filePath } }))
+    },
     { type: 'separator' as const },
     {
       label: isZh ? '在浏览器中打开' : 'Open in Browser',

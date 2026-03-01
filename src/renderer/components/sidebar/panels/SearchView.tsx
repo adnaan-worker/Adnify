@@ -4,7 +4,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useCallback, useMemo } from 'react'
-import { ChevronRight, ChevronDown, FileText, Edit2, Box, MoreHorizontal, Loader2, Search } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Edit2, Box, MoreHorizontal, Loader2, Search, Crosshair } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
@@ -38,7 +38,7 @@ export function SearchView() {
   })
   const [showHistory, setShowHistory] = useState(false)
 
-  const { workspacePath, workspace, openFile, setActiveFile, language, openFiles } = useStore()
+  const { workspacePath, workspace, openFile, setActiveFile, language, openFiles, setActiveSidePanel } = useStore()
 
   const addToHistory = useCallback((searchQuery: string) => {
     if (!searchQuery.trim()) return
@@ -142,7 +142,7 @@ export function SearchView() {
     if (content !== null) {
       openFile(filePath, content)
       setActiveFile(filePath)
-      
+
       // 增加延迟，确保编辑器完全准备好
       setTimeout(() => {
         window.dispatchEvent(
@@ -220,7 +220,7 @@ export function SearchView() {
     const confirmMessage = language === 'zh'
       ? `确定要在 ${fileCount} 个文件中替换 ${matchCount} 处匹配吗？`
       : `Replace ${matchCount} matches in ${fileCount} files?`
-    
+
     const { globalConfirm } = await import('@components/common/ConfirmDialog')
     const confirmed = await globalConfirm({
       title: language === 'zh' ? '替换确认' : 'Replace Confirmation',
@@ -433,7 +433,7 @@ export function SearchView() {
                 <div key={filePath} className="flex flex-col">
                   <div
                     onClick={() => toggleFileCollapse(filePath)}
-                    className="flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-surface-hover text-text-secondary sticky top-0 bg-background-secondary/95 backdrop-blur-sm z-0"
+                    className="group flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-surface-hover text-text-secondary sticky top-0 bg-background-secondary/95 backdrop-blur-sm z-0"
                   >
                     <ChevronDown
                       className={`w-3.5 h-3.5 text-text-muted transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
@@ -442,6 +442,27 @@ export function SearchView() {
                     <span className="text-xs font-medium truncate flex-1" title={filePath}>
                       {fileName}
                     </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        // 将相对路径转为绝对路径
+                        let absPath = filePath
+                        const isAbsolute = /^[a-zA-Z]:[\\/]|^\//.test(absPath)
+                        if (!isAbsolute && workspacePath) {
+                          absPath = joinPath(workspacePath, absPath)
+                        }
+                        // 先切换到资源管理器面板
+                        setActiveSidePanel('explorer')
+                        // 延迟一帧等面板渲染，再触发定位
+                        requestAnimationFrame(() => {
+                          window.dispatchEvent(new CustomEvent('explorer:reveal-file', { detail: { filePath: absPath } }))
+                        })
+                      }}
+                      className="p-0.5 rounded hover:bg-surface-active text-text-muted hover:text-accent transition-colors opacity-0 group-hover:opacity-100"
+                      title={language === 'zh' ? '在侧边栏中定位' : 'Reveal in Sidebar'}
+                    >
+                      <Crosshair className="w-3 h-3" />
+                    </button>
                     <span className="text-[10px] text-text-muted bg-surface-active px-1.5 rounded-full">
                       {results.length}
                     </span>
@@ -457,7 +478,7 @@ export function SearchView() {
                         >
                           {/* Hover Indicator */}
                           <div className="absolute left-0 top-1.5 bottom-1.5 w-[2px] bg-accent rounded-r-full opacity-0 group-hover:opacity-100 transition-opacity" />
-                          
+
                           <span className="w-8 text-right flex-shrink-0 opacity-50 select-none border-r border-border/50 pr-2 mr-1">{res.line}</span>
                           <span className="truncate opacity-80 group-hover:opacity-100 flex-1">{res.text}</span>
                         </div>

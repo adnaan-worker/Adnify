@@ -49,6 +49,7 @@ export const registerCoreCommands = () => {
 
         // Explorer
         { id: 'explorer.revealActiveFile', title: 'Reveal Active File in Explorer', category: 'File', defaultKey: 'Ctrl+Shift+E' },
+        { id: 'explorer.revealInSidebar', title: 'Reveal in Sidebar', category: 'Explorer', defaultKey: 'Alt+Shift+L' },
         { id: 'explorer.rename', title: 'Rename File/Folder', category: 'Explorer', defaultKey: 'F2' },
 
         { id: 'help.about', title: 'About', category: 'Help', defaultKey: '' },

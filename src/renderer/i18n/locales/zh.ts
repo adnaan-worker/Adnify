@@ -553,6 +553,7 @@ export const zh = {
   'cmd.workbench.action.toggleDevTools': '切换开发者工具',
   'cmd.workbench.action.closePanel': '关闭面板',
   'cmd.explorer.revealActiveFile': '在资源管理器中显示',
+  'cmd.explorer.revealInSidebar': '在侧边栏中定位',
   'cmd.explorer.rename': '重命名文件/文件夹',
   'cmd.help.about': '关于',
 } as const

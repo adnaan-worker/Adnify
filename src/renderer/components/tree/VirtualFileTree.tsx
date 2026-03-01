@@ -77,6 +77,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   // 焦点状态
   const [focusedPath, setFocusedPath] = useState<string | null>(null)
 
+  // 定位高亮状态（闪烁动画）
+  const [highlightPath, setHighlightPath] = useState<string | null>(null)
+
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -211,6 +214,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       }
     }
 
+    setFocusedPath(filePath)
     setScrollToFile(filePath)
   }, [workspacePath, items, expandedFolders, expandFolder, loadDirectoryChildren])
 
@@ -221,8 +225,19 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         revealFile(activeFilePath)
       }
     }
+    // 支持定位任意文件（通过 detail.filePath 传入）
+    const handleRevealFile = (e: Event) => {
+      const customEvent = e as CustomEvent<{ filePath: string }>
+      if (customEvent.detail?.filePath && workspacePath) {
+        revealFile(customEvent.detail.filePath)
+      }
+    }
     window.addEventListener('explorer:reveal-active-file', handleReveal)
-    return () => window.removeEventListener('explorer:reveal-active-file', handleReveal)
+    window.addEventListener('explorer:reveal-file', handleRevealFile)
+    return () => {
+      window.removeEventListener('explorer:reveal-active-file', handleReveal)
+      window.removeEventListener('explorer:reveal-file', handleRevealFile)
+    }
   }, [activeFilePath, workspacePath, revealFile])
 
   // 扁平化树结构（只包含可见节点）
@@ -286,6 +301,10 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         top: Math.max(0, top - containerHeight / 2),
         behavior: 'smooth'
       })
+
+      // 触发闪烁高亮动画
+      setHighlightPath(scrollToFile)
+      setTimeout(() => setHighlightPath(null), 2000)
     }
 
     setScrollToFile(null)
@@ -504,8 +523,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   // 渲染单个节点
   const renderNode = (node: FlattenedNode, index: number) => {
     const { item, depth, isExpanded } = node
-    const isActive = activeFilePath === item.path
-    const isFocused = focusedPath === item.path && !isActive
+    const isActive = pathEquals(activeFilePath || '', item.path)
+    const isFocused = focusedPath ? pathEquals(focusedPath, item.path) && !isActive : false
+    const isHighlighted = highlightPath ? pathEquals(highlightPath, item.path) : false
     const isRenaming = renamingPath === item.path
     const isLoading = loadingDirs.has(item.path)
     const isCreatingInput = item.name === '__creating__'
@@ -585,6 +605,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
               ? 'bg-surface-hover border border-accent/30 text-text-primary'
               : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
           }
+          ${isHighlighted ? 'animate-reveal-highlight' : ''}
         `}
         style={{
           height: ITEM_HEIGHT,
