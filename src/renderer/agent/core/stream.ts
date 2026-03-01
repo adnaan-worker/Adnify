@@ -376,10 +376,11 @@ export function createStreamProcessor(
     if (typeof err === 'string') {
       errorMsg = err
     } else {
-      // 如果有错误码，使用国际化消息
+      // 如果有错误码，使用国际化消息，并将具体错误贴在后面
       if (err.code && err.code in ErrorCode) {
         const language = useStore.getState().language
-        errorMsg = getErrorMessage(err.code as ErrorCode, language)
+        const baseMsg = getErrorMessage(err.code as ErrorCode, language)
+        errorMsg = err.message ? `${baseMsg}: ${err.message}` : baseMsg
       } else {
         errorMsg = err.message || 'Unknown error'
       }
