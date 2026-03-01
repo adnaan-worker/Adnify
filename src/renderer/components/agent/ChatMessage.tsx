@@ -378,6 +378,26 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingCo
 
   const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(cleanedContent, !!isStreaming)
 
+  const { workspacePath, openFile, setActiveFile } = useStore()
+
+  const handleOpenFile = React.useCallback(async (filePath: string) => {
+    if (!workspacePath) return
+    const { toFullPath } = await import('@shared/utils/pathUtils')
+    const { api } = await import('@/renderer/services/electronAPI')
+
+    const resolvedPath = toFullPath(filePath, workspacePath)
+
+    try {
+      const content = await api.file.read(resolvedPath)
+      if (content !== null) {
+        openFile(resolvedPath, content)
+        setActiveFile(resolvedPath)
+      }
+    } catch (err) {
+      console.warn('Failed to open file from markdown:', err)
+    }
+  }, [workspacePath, openFile, setActiveFile])
+
   // Notify parent when typing finishes
   useEffect(() => {
     if (!isTyping && onTypingComplete) {
@@ -399,6 +419,28 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingCo
       const codeContent = String(children)
       const isCodeBlock = match || node?.position?.start?.line !== node?.position?.end?.line
       const isInline = !isCodeBlock && !codeContent.includes('\n')
+
+      const looksLikePath = isInline && (
+        codeContent.includes('/') ||
+        codeContent.includes('\\') ||
+        codeContent.match(/\.(ts|tsx|js|jsx|vue|uvue|md|json|css|scss|less|html|go|rs|py|java|c|cpp|h|hpp)$/i)
+      ) && !codeContent.includes(' ') && codeContent.length > 2
+
+      if (isInline && looksLikePath) {
+        return (
+          <code
+            className="bg-surface-muted px-1.5 py-0.5 rounded-md text-accent font-mono text-[0.9em] border border-border break-all animate-fluid-text cursor-pointer hover:underline decoration-accent/50 underline-offset-2 transition-all"
+            onClick={(e) => {
+              e.preventDefault()
+              handleOpenFile(codeContent)
+            }}
+            title="Click to open file"
+            {...props}
+          >
+            {children}
+          </code>
+        )
+      }
 
       return isInline ? (
         <code className="bg-surface-muted px-1.5 py-0.5 rounded-md text-accent font-mono text-[0.9em] border border-border break-all animate-fluid-text" {...props}>
@@ -434,7 +476,7 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingCo
     tr: ({ children }: any) => <tr className="border-b border-border hover:bg-surface-hover transition-colors">{children}</tr>,
     th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{children}</th>,
     td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
-  }), [fontSize])
+  }), [fontSize, handleOpenFile])
 
   if (!cleanedContent) {
     // If content is empty but we're here, signaling complete immediately to avoid blocking
