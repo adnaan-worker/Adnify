@@ -5,7 +5,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { Layout, Type, Sparkles, Terminal, Check, Settings2, Zap } from 'lucide-react'
 import { useStore } from '@store'
-import { themes } from '@components/editor/ThemeManager'
+import { themeManager } from '@/renderer/config/themeConfig'
 import { Input, Select, Switch } from '@components/ui'
 import { EditorSettingsProps } from '../types'
 
@@ -27,7 +27,7 @@ const TRIGGER_CHAR_OPTIONS = [
 
 export function EditorSettings({ settings, setSettings, advancedConfig, setAdvancedConfig, language }: EditorSettingsProps) {
     const { currentTheme, setTheme } = useStore()
-    const allThemes = Object.keys(themes)
+    const allThemes = themeManager.getAllThemes().map(t => t.id)
 
     const handleThemeChange = (themeId: string) => {
         setTheme(themeId as any)
@@ -62,7 +62,8 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                     {allThemes.map(themeId => {
-                        const themeVars = themes[themeId as keyof typeof themes]
+                        const theme = themeManager.getThemeById(themeId)!
+                        const themeVars = theme.colors
                         return (
                             <button
                                 key={themeId}
@@ -73,8 +74,8 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                     }`}
                             >
                                 <div className="flex gap-2.5 mb-4">
-                                    <div className="w-8 h-8 rounded-full shadow-md ring-2 ring-white/10" style={{ backgroundColor: `rgb(${themeVars['--background']})` }} title="Background" />
-                                    <div className="w-8 h-8 rounded-full shadow-md ring-2 ring-white/10" style={{ backgroundColor: `rgb(${themeVars['--accent']})` }} title="Accent" />
+                                    <div className="w-8 h-8 rounded-full shadow-md ring-2 ring-white/10" style={{ backgroundColor: `rgb(${themeVars.background})` }} title="Background" />
+                                    <div className="w-8 h-8 rounded-full shadow-md ring-2 ring-white/10" style={{ backgroundColor: `rgb(${themeVars.accent})` }} title="Accent" />
                                 </div>
                                 <span className={`text-sm font-semibold capitalize block truncate transition-colors ${currentTheme === themeId ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}`}>
                                     {themeId.replace(/-/g, ' ')}
@@ -99,43 +100,43 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                             <Type className="w-4 h-4 text-accent" />
                             <h5 className="text-sm font-bold text-text-primary">{language === 'zh' ? '排版与布局' : 'Typography & Layout'}</h5>
                         </div>
-                        
+
                         <div className="grid grid-cols-2 gap-5">
                             <div>
                                 <label className={labelClass}>{language === 'zh' ? '字体大小' : 'Font Size'}</label>
-                                <Input 
-                                    type="number" 
-                                    value={settings.fontSize} 
-                                    onChange={(e) => setSettings({ ...settings, fontSize: parseInt(e.target.value) || 14 })} 
-                                    min={10} 
+                                <Input
+                                    type="number"
+                                    value={settings.fontSize}
+                                    onChange={(e) => setSettings({ ...settings, fontSize: parseInt(e.target.value) || 14 })}
+                                    min={10}
                                     max={32}
                                     className={inputClass}
                                 />
                             </div>
                             <div>
                                 <label className={labelClass}>{language === 'zh' ? 'Tab 大小' : 'Tab Size'}</label>
-                                <Select 
-                                    value={settings.tabSize.toString()} 
-                                    onChange={(value) => setSettings({ ...settings, tabSize: parseInt(value) })} 
-                                    options={[{ value: '2', label: '2 Spaces' }, { value: '4', label: '4 Spaces' }, { value: '8', label: '8 Spaces' }]} 
+                                <Select
+                                    value={settings.tabSize.toString()}
+                                    onChange={(value) => setSettings({ ...settings, tabSize: parseInt(value) })}
+                                    options={[{ value: '2', label: '2 Spaces' }, { value: '4', label: '4 Spaces' }, { value: '8', label: '8 Spaces' }]}
                                     className={`w-full ${inputClass}`}
                                 />
                             </div>
                             <div>
                                 <label className={labelClass}>{language === 'zh' ? '自动换行' : 'Word Wrap'}</label>
-                                <Select 
-                                    value={settings.wordWrap} 
-                                    onChange={(value) => setSettings({ ...settings, wordWrap: value as any })} 
-                                    options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }, { value: 'wordWrapColumn', label: 'Column' }]} 
+                                <Select
+                                    value={settings.wordWrap}
+                                    onChange={(value) => setSettings({ ...settings, wordWrap: value as any })}
+                                    options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }, { value: 'wordWrapColumn', label: 'Column' }]}
                                     className={`w-full ${inputClass}`}
                                 />
                             </div>
                             <div>
                                 <label className={labelClass}>{language === 'zh' ? '行号' : 'Line Numbers'}</label>
-                                <Select 
-                                    value={settings.lineNumbers} 
-                                    onChange={(value) => setSettings({ ...settings, lineNumbers: value as any })} 
-                                    options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }, { value: 'relative', label: 'Relative' }]} 
+                                <Select
+                                    value={settings.lineNumbers}
+                                    onChange={(value) => setSettings({ ...settings, lineNumbers: value as any })}
+                                    options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }, { value: 'relative', label: 'Relative' }]}
                                     className={`w-full ${inputClass}`}
                                 />
                             </div>
@@ -178,27 +179,27 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                             <Switch label={language === 'zh' ? '括号配对着色' : 'Bracket Pair Colorization'} checked={settings.bracketPairColorization} onChange={(e) => setSettings({ ...settings, bracketPairColorization: e.target.checked })} />
                             <Switch label={language === 'zh' ? '保存时格式化' : 'Format on Save'} checked={settings.formatOnSave} onChange={(e) => setSettings({ ...settings, formatOnSave: e.target.checked })} />
                         </div>
-                        
+
                         <div className="pt-4 border-t border-border/50">
                             <div className="flex items-center justify-between mb-4">
                                 <label className={labelClass.replace('mb-2', 'mb-0')}>{language === 'zh' ? '自动保存' : 'Auto Save'}</label>
-                                <Select 
-                                    value={settings.autoSave} 
-                                    onChange={(value) => setSettings({ ...settings, autoSave: value as any })} 
-                                    options={[{ value: 'off', label: 'Off' }, { value: 'afterDelay', label: language === 'zh' ? '延迟后' : 'After Delay' }, { value: 'onFocusChange', label: language === 'zh' ? '失去焦点时' : 'On Focus Change' }]} 
+                                <Select
+                                    value={settings.autoSave}
+                                    onChange={(value) => setSettings({ ...settings, autoSave: value as any })}
+                                    options={[{ value: 'off', label: 'Off' }, { value: 'afterDelay', label: language === 'zh' ? '延迟后' : 'After Delay' }, { value: 'onFocusChange', label: language === 'zh' ? '失去焦点时' : 'On Focus Change' }]}
                                     className={`w-40 ${inputClass}`}
                                 />
                             </div>
                             {settings.autoSave === 'afterDelay' && (
                                 <div className="flex items-center justify-between animate-scale-in pl-1">
                                     <label className="text-xs text-text-secondary">{language === 'zh' ? '延迟时间 (ms)' : 'Delay (ms)'}</label>
-                                    <Input 
-                                        type="number" 
-                                        value={settings.autoSaveDelay} 
-                                        onChange={(e) => setSettings({ ...settings, autoSaveDelay: parseInt(e.target.value) || 1000 })} 
-                                        min={500} 
-                                        max={10000} 
-                                        step={500} 
+                                    <Input
+                                        type="number"
+                                        value={settings.autoSaveDelay}
+                                        onChange={(e) => setSettings({ ...settings, autoSaveDelay: parseInt(e.target.value) || 1000 })}
+                                        min={500}
+                                        max={10000}
+                                        step={500}
                                         className={`w-28 h-8 ${inputClass}`}
                                     />
                                 </div>
@@ -224,25 +225,25 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 <div className="grid grid-cols-2 gap-5">
                                     <div>
                                         <label className={labelClass}>{language === 'zh' ? '触发延迟 (ms)' : 'Trigger Delay'}</label>
-                                        <Input 
-                                            type="number" 
-                                            value={settings.completionDebounceMs} 
-                                            onChange={(e) => setSettings({ ...settings, completionDebounceMs: parseInt(e.target.value) || 150 })} 
-                                            min={50} 
-                                            max={1000} 
-                                            step={50} 
+                                        <Input
+                                            type="number"
+                                            value={settings.completionDebounceMs}
+                                            onChange={(e) => setSettings({ ...settings, completionDebounceMs: parseInt(e.target.value) || 150 })}
+                                            min={50}
+                                            max={1000}
+                                            step={50}
                                             className={inputClass}
                                         />
                                     </div>
                                     <div>
                                         <label className={labelClass}>{language === 'zh' ? '最大 Token' : 'Max Tokens'}</label>
-                                        <Input 
-                                            type="number" 
-                                            value={settings.completionMaxTokens} 
-                                            onChange={(e) => setSettings({ ...settings, completionMaxTokens: parseInt(e.target.value) || 256 })} 
-                                            min={64} 
-                                            max={1024} 
-                                            step={64} 
+                                        <Input
+                                            type="number"
+                                            value={settings.completionMaxTokens}
+                                            onChange={(e) => setSettings({ ...settings, completionMaxTokens: parseInt(e.target.value) || 256 })}
+                                            min={64}
+                                            max={1024}
+                                            step={64}
                                             className={inputClass}
                                         />
                                     </div>
@@ -257,11 +258,10 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                                     key={char}
                                                     type="button"
                                                     onClick={() => toggleTriggerChar(char)}
-                                                    className={`w-8 h-8 rounded-lg text-sm font-mono flex items-center justify-center transition-all duration-200 ${
-                                                        isSelected
+                                                    className={`w-8 h-8 rounded-lg text-sm font-mono flex items-center justify-center transition-all duration-200 ${isSelected
                                                             ? 'bg-accent text-white shadow-md shadow-accent/20 scale-105'
                                                             : 'bg-surface hover:bg-surface-hover text-text-secondary hover:text-text-primary border border-border/50'
-                                                    }`}
+                                                        }`}
                                                     title={char === ' ' ? 'Space' : char}
                                                 >
                                                     {label}
@@ -284,14 +284,14 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                             <h5 className="text-sm font-bold text-text-primary">Git</h5>
                         </div>
                         <div className="space-y-4 px-1">
-                            <Switch 
-                                label={language === 'zh' ? '自动刷新 Git 状态' : 'Auto Refresh Git Status'} 
-                                checked={advancedConfig.git?.autoRefresh ?? true} 
-                                onChange={(e) => setAdvancedConfig({ ...advancedConfig, git: { ...advancedConfig.git, autoRefresh: e.target.checked } })} 
+                            <Switch
+                                label={language === 'zh' ? '自动刷新 Git 状态' : 'Auto Refresh Git Status'}
+                                checked={advancedConfig.git?.autoRefresh ?? true}
+                                onChange={(e) => setAdvancedConfig({ ...advancedConfig, git: { ...advancedConfig.git, autoRefresh: e.target.checked } })}
                             />
                             <p className="text-[10px] text-text-muted opacity-80 leading-relaxed">
-                                {language === 'zh' 
-                                    ? '检测到文件变化时自动更新侧边栏状态。' 
+                                {language === 'zh'
+                                    ? '检测到文件变化时自动更新侧边栏状态。'
                                     : 'Automatically refresh git indicators when file changes are detected.'}
                             </p>
                         </div>

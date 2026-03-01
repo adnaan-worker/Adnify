@@ -12,7 +12,7 @@ import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
 import { useAgentStore } from '@/renderer/agent'
-import { themes } from '../editor/ThemeManager'
+import { themeManager } from '@/renderer/config/themeConfig'
 import { Button } from '../ui'
 import { terminalManager, TerminalManagerState } from '@/renderer/services/TerminalManager'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
@@ -45,26 +45,27 @@ const XTERM_STYLE = `
 
 // 生成终端主题
 function getTerminalTheme(themeName: string) {
-    const themeVars = themes[themeName as keyof typeof themes] || themes['adnify-dark']
+    const theme = themeManager.getThemeById(themeName) || themeManager.getThemeById('adnify-dark')!
+    const themeVars = theme.colors
     const rgbToHex = (rgb: string) => {
         if (!rgb) return '#000000'
         const [r, g, b] = rgb.split(' ').map(Number)
         return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
     }
     return {
-        background: rgbToHex(themeVars['--background']),
-        foreground: rgbToHex(themeVars['--text-primary']),
-        cursor: rgbToHex(themeVars['--text-secondary']),
-        selectionBackground: rgbToHex(themeVars['--accent']),
-        selectionForeground: rgbToHex(themeVars['--text-inverted']),
-        black: rgbToHex(themeVars['--surface']),
-        red: rgbToHex(themeVars['--status-error']),
-        green: rgbToHex(themeVars['--status-success']),
-        yellow: rgbToHex(themeVars['--status-warning']),
-        blue: rgbToHex(themeVars['--status-info']),
-        magenta: rgbToHex(themeVars['--accent-subtle']),
-        cyan: rgbToHex(themeVars['--accent']),
-        white: rgbToHex(themeVars['--text-primary']),
+        background: rgbToHex(themeVars.background),
+        foreground: rgbToHex(themeVars.textPrimary),
+        cursor: rgbToHex(themeVars.textSecondary),
+        selectionBackground: rgbToHex(themeVars.accent),
+        selectionForeground: rgbToHex(themeVars.textInverted),
+        black: rgbToHex(themeVars.surface),
+        red: rgbToHex(themeVars.statusError),
+        green: rgbToHex(themeVars.statusSuccess),
+        yellow: rgbToHex(themeVars.statusWarning),
+        blue: rgbToHex(themeVars.statusInfo),
+        magenta: rgbToHex(themeVars.accentSubtle),
+        cyan: rgbToHex(themeVars.accent),
+        white: rgbToHex(themeVars.textPrimary),
     }
 }
 

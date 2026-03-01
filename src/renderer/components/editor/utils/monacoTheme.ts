@@ -1,9 +1,8 @@
 /**
  * Monaco 主题定义
  */
-
+import { themeManager } from '@/renderer/config/themeConfig'
 import type { ThemeName } from '@store/slices/themeSlice'
-import { themes } from '../ThemeManager'
 
 // RGB 字符串转 Hex
 const rgbToHex = (rgbStr: string) => {
@@ -23,26 +22,27 @@ export function defineMonacoTheme(
   monacoInstance: typeof import('monaco-editor') | typeof import('monaco-editor/esm/vs/editor/editor.api'),
   themeName: ThemeName
 ) {
-  const themeVars = themes[themeName] || themes['adnify-dark']
-  if (!themeVars) return
+  const theme = themeManager.getThemeById(themeName) || themeManager.getThemeById('adnify-dark')!
+  const colors = theme.colors
+  const isLight = theme.type === 'light'
 
-  const bg = rgbToHex(themeVars['--background'])
-  const surface = rgbToHex(themeVars['--surface'])
-  const text = rgbToHex(themeVars['--text-primary'])
-  const textMuted = rgbToHex(themeVars['--text-muted'])
-  const border = rgbToHex(themeVars['--border'])
-  const accent = rgbToHex(themeVars['--accent'])
+  const bg = rgbToHex(colors.background)
+  const surface = rgbToHex(colors.surface)
+  const text = rgbToHex(colors.textPrimary)
+  const textMuted = rgbToHex(colors.textMuted)
+  const border = rgbToHex(colors.border)
+  const accent = rgbToHex(colors.accent)
   const selection = accent + '40'
 
   monacoInstance.editor.defineTheme('adnify-dynamic', {
-    base: themeName === 'dawn' ? 'vs' : 'vs-dark',
+    base: isLight ? 'vs' : 'vs-dark',
     inherit: true,
     rules: [
       { token: 'comment', foreground: textMuted.slice(1), fontStyle: 'italic' },
       { token: 'keyword', foreground: accent.slice(1) },
-      { token: 'string', foreground: 'a5d6ff' },
-      { token: 'number', foreground: 'ffc600' },
-      { token: 'type', foreground: '4ec9b0' },
+      { token: 'string', foreground: isLight ? '036a07' : 'a5d6ff' },
+      { token: 'number', foreground: isLight ? '098658' : 'ffc600' },
+      { token: 'type', foreground: isLight ? '267f99' : '4ec9b0' },
     ],
     colors: {
       'editor.background': bg,
