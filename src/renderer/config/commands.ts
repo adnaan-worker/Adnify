@@ -36,6 +36,7 @@ export const registerCoreCommands = () => {
         // Editor
         { id: 'editor.save', title: 'Save File', category: 'File', defaultKey: 'Ctrl+S' }, // Duplicate of file.save, but for consistency
         { id: 'editor.cancel', title: 'Cancel Operation', category: 'Editor', defaultKey: 'Escape' },
+        { id: 'editor.closeFile', title: 'Close Active File', category: 'Editor', defaultKey: 'Ctrl+W' },
 
         // Workbench
         { id: 'workbench.action.showCommands', title: 'Show Command Palette', category: 'View', defaultKey: 'Ctrl+Shift+O' },
@@ -45,10 +46,11 @@ export const registerCoreCommands = () => {
         { id: 'workbench.action.toggleComposer', title: 'Toggle Composer', category: 'View', defaultKey: 'Ctrl+Shift+I' },
         { id: 'workbench.action.toggleDevTools', title: 'Toggle Developer Tools', category: 'Help', defaultKey: 'F12' },
         { id: 'workbench.action.closePanel', title: 'Close Panel', category: 'View', defaultKey: 'Escape' },
-        
+
         // Explorer
         { id: 'explorer.revealActiveFile', title: 'Reveal Active File in Explorer', category: 'File', defaultKey: 'Ctrl+Shift+E' },
-        
+        { id: 'explorer.rename', title: 'Rename File/Folder', category: 'Explorer', defaultKey: 'F2' },
+
         { id: 'help.about', title: 'About', category: 'Help', defaultKey: '' },
     ]
 
