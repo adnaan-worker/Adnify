@@ -13,8 +13,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@renderer/agent/types'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import InlineDiffPreview, { getDiffStats } from './InlineDiffPreview'
-import { getFileName } from '@shared/utils/pathUtils'
+import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { CodeSkeleton } from '../ui/Loading'
+import { useStore } from '@store'
+import { api } from '@/renderer/services/electronAPI'
+import { toast } from '@components/common/ToastProvider'
 
 interface FileChangeCardProps {
     toolCall: ToolCall
@@ -33,6 +36,7 @@ export default function FileChangeCard({
     onOpenInEditor,
 }: FileChangeCardProps) {
     const [isExpanded, setIsExpanded] = useState(false)
+    const { openFile, setActiveFile, workspacePath } = useStore()
 
     const args = toolCall.arguments as Record<string, unknown>
     const meta = args._meta as Record<string, unknown> | undefined
@@ -227,7 +231,33 @@ export default function FileChangeCard({
                 <div className="flex-1 min-w-0 flex items-center justify-between relative z-10">
                     <div className="flex items-center gap-2 truncate">
                         {filePath ? (
-                            <span className={`${isNewFile ? 'text-status-success' : 'text-text-primary'} ${isStreaming || isRunning ? 'text-shimmer text-sm font-medium' : 'font-medium text-sm'}`}>
+                            <span
+                                className={`${isNewFile ? 'text-status-success' : 'text-text-primary'} ${isStreaming || isRunning ? 'text-shimmer text-sm font-medium' : 'font-medium text-sm'} hover:underline hover:text-accent cursor-pointer transition-colors`}
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (onOpenInEditor && newContent) {
+                                        onOpenInEditor(filePath, oldContent, newContent)
+                                    } else {
+                                        let absPath = filePath
+                                        const isAbsolute = /^([a-zA-Z]:[\\/]|[/])/.test(absPath)
+                                        if (!isAbsolute && workspacePath) {
+                                            absPath = joinPath(workspacePath, absPath)
+                                        }
+
+                                        api.file.read(absPath).then(content => {
+                                            if (content !== null) {
+                                                openFile(absPath, content)
+                                                setActiveFile(absPath)
+                                            } else {
+                                                toast.error(`Failed to open file: ${getFileName(absPath)}`)
+                                            }
+                                        }).catch(() => {
+                                            toast.error(`Failed to open file: ${getFileName(absPath)}`)
+                                        })
+                                    }
+                                }}
+                                title={filePath}
+                            >
                                 {actionText}
                             </span>
                         ) : (isStreaming || isRunning) ? (

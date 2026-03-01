@@ -24,6 +24,7 @@ import { RichContentRenderer } from './RichContentRenderer'
 import InlineDiffPreview from './InlineDiffPreview'
 import { getFileName } from '@shared/utils/pathUtils'
 import { CodeSkeleton } from '../ui/Loading'
+import { TextWithFileLinks } from '../common/TextWithFileLinks'
 
 interface ToolCallCardProps {
     toolCall: ToolCall
@@ -116,10 +117,21 @@ const ToolCallCard = memo(function ToolCallCard({
 
         // 读取多文件
         if (name === 'read_multiple_files') {
-            const count = (args.paths as string[])?.length || 0
-            if (isRunning) return `Reading ${count} files...`
-            if (isSuccess) return `Read ${count} files`
-            if (isError) return `Failed to read files`
+            const paths = args.paths
+            if (Array.isArray(paths)) {
+                const count = paths.length
+                const preview = paths.slice(0, 3).map(p => `"${getFileName(p)}"`).join(', ') + (count > 3 ? '...' : '')
+                if (isRunning) return `Reading [${preview}]...`
+                if (isSuccess) return `Read [${preview}]`
+                if (isError) return `Failed to read files`
+                return `Reading [${preview}]`
+            }
+            if (typeof paths === 'string') {
+                if (isRunning) return `Reading ${paths}...`
+                if (isSuccess) return `Read ${paths}`
+                if (isError) return `Failed to read ${paths}`
+                return `Reading ${paths}`
+            }
             return `Reading files`
         }
 
@@ -327,7 +339,12 @@ const ToolCallCard = memo(function ToolCallCard({
                             <span className="text-text-muted flex items-center gap-2 text-xs">
                                 <FileCode className="w-3 h-3" />
                                 {filePath ? (
-                                    <span className="font-medium text-text-primary">{getFileName(filePath)}</span>
+                                    <span
+                                        className="font-medium text-text-primary transition-colors"
+                                        title={typeof filePath === 'string' ? filePath : JSON.stringify(filePath)}
+                                    >
+                                        <TextWithFileLinks text={typeof filePath === 'string' ? getFileName(filePath) : JSON.stringify(filePath)} />
+                                    </span>
                                 ) : (isStreaming || isRunning) ? (
                                     <span className="font-medium text-shimmer italic">editing...</span>
                                 ) : (
@@ -376,7 +393,7 @@ const ToolCallCard = memo(function ToolCallCard({
                     </div>
                     {toolCall.result && (
                         <div className="px-3 py-2 border-t border-border text-xs text-text-muted">
-                            {toolCall.result.slice(0, 200)}
+                            <TextWithFileLinks text={toolCall.result.slice(0, 200)} />
                         </div>
                     )}
                 </div>
@@ -393,11 +410,16 @@ const ToolCallCard = memo(function ToolCallCard({
                 <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
                     <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
                         <FileCode className="w-3 h-3" />
-                        <span className="text-text-primary font-medium" title={filePath}>{displayName}</span>
+                        <span
+                            className="font-medium text-text-primary transition-colors"
+                            title={typeof args.path === 'string' ? args.path : undefined}
+                        >
+                            <TextWithFileLinks text={displayName} />
+                        </span>
                     </div>
                     {toolCall.result && (
                         <div className="max-h-48 overflow-y-auto custom-scrollbar p-3 font-mono text-xs text-text-secondary whitespace-pre-wrap">
-                            {toolCall.result.slice(0, 2000)}
+                            <TextWithFileLinks text={toolCall.result.slice(0, 2000)} />
                             {toolCall.result.length > 2000 && <span className="opacity-50">... (truncated)</span>}
                         </div>
                     )}
@@ -434,12 +456,16 @@ const ToolCallCard = memo(function ToolCallCard({
         if (['get_lint_errors', 'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'].includes(name)) {
             const path = args.path as string | undefined
             const line = args.line as number | undefined
-            const displayName = path ? getFileName(path) : '<no path>'
             return (
                 <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
                     <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
                         <FileCode className="w-3 h-3" />
-                        <span className="text-text-primary font-medium">{displayName}</span>
+                        <span
+                            className="font-medium text-text-primary transition-colors"
+                            title={typeof path === 'string' ? path : JSON.stringify(path)}
+                        >
+                            <TextWithFileLinks text={typeof path === 'string' ? getFileName(path) : JSON.stringify(path)} />
+                        </span>
                         {line && <span className="text-text-muted/60">:{line}</span>}
                     </div>
                     {toolCall.result && (
@@ -542,7 +568,9 @@ const ToolCallCard = memo(function ToolCallCard({
                     {statusText ? (
                         <>
                             <span className="text-text-muted/30">|</span>
-                            <span className={`text-xs truncate ${isStreaming || isRunning ? 'text-shimmer' : 'text-text-muted'}`}>{statusText}</span>
+                            <span className={`text-xs truncate ${isStreaming || isRunning ? 'text-shimmer' : 'text-text-muted'}`}>
+                                <TextWithFileLinks text={statusText} />
+                            </span>
                         </>
                     ) : (isStreaming || isRunning) && (
                         <span className="text-xs text-shimmer italic ml-2">Processing...</span>
