@@ -38,10 +38,14 @@ export default function FileChangeCard({
     const [isExpanded, setIsExpanded] = useState(false)
     const { openFile, setActiveFile, workspacePath } = useStore()
 
-    const args = toolCall.arguments as Record<string, unknown>
+    // 合并 arguments 与 streamingState.partialArgs，实现流式参数实时展示
+    const args = useMemo(() => ({
+        ...(toolCall.arguments || {}),
+        ...(toolCall.streamingState?.partialArgs || {}),
+    }), [toolCall.arguments, toolCall.streamingState?.partialArgs]) as Record<string, unknown>
     const meta = args._meta as Record<string, unknown> | undefined
     const filePath = (args.path || meta?.filePath) as string || ''
-    const isStreaming = args._streaming === true
+    const isStreaming = !!toolCall.streamingState?.isStreaming || args._streaming === true
     const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
     const isSuccess = toolCall.status === 'success'
     const isError = toolCall.status === 'error'
@@ -82,17 +86,21 @@ export default function FileChangeCard({
             return meta.oldContent as string
         }
 
+        // 流式模式下 edit_file：用 old_string 作为旧内容，实现 patch 风格实时 diff
+        if ((isRunning || isStreaming) && args.old_string) {
+            return args.old_string as string
+        }
+
         // 在流式传输或运行阶段，如果工具是局部编辑类（非全量覆盖），
         // 且还没有 meta 结果（即工具未完成），暂时忽略旧内容，
         // 避免将 patch 片段与完整旧文件对比导致显示大面积删除。
-        // 这样预览会显示为纯新增（绿色），更符合 patch 的直观感受。
-        if ((isRunning || isStreaming) && !meta?.oldContent) {
+        if ((isRunning || isStreaming) && !meta?.oldContent && !args.old_string) {
             const isPartialEdit = ['edit_file', 'replace_file_content'].includes(toolCall.name)
             if (isPartialEdit) return ''
         }
 
         return ''
-    }, [meta, isRunning, isStreaming, toolCall.name])
+    }, [meta, args.old_string, isRunning, isStreaming, toolCall.name])
 
     const newContent = useMemo(() => {
         // 优先使用流式内容（实时更新）

@@ -81,8 +81,12 @@ const ToolCallCard = memo(function ToolCallCard({
     const [isExpanded, setIsExpanded] = useState(defaultExpanded)
     const { language, setTerminalVisible } = useStore()
 
-    const args = (toolCall.arguments || {}) as Record<string, unknown>
-    const isStreaming = args._streaming === true
+    // 合并 arguments 与 streamingState.partialArgs，实现流式参数实时展示
+    const args = useMemo(() => ({
+        ...(toolCall.arguments || {}),
+        ...(toolCall.streamingState?.partialArgs || {}),
+    }), [toolCall.arguments, toolCall.streamingState?.partialArgs]) as Record<string, unknown>
+    const isStreaming = !!toolCall.streamingState?.isStreaming || args._streaming === true
     const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
     const isSuccess = toolCall.status === 'success'
     const isError = toolCall.status === 'error'
@@ -629,18 +633,19 @@ const ToolCallCard = memo(function ToolCallCard({
             return false
         }
 
-        const prevArgs = prevProps.toolCall.arguments as Record<string, unknown>
-        const nextArgs = nextProps.toolCall.arguments as Record<string, unknown>
-        const prevStreaming = prevArgs?._streaming
-        const nextStreaming = nextArgs?._streaming
+        const prevStreaming = prevProps.toolCall.streamingState?.isStreaming || prevProps.toolCall.arguments?._streaming
+        const nextStreaming = nextProps.toolCall.streamingState?.isStreaming || nextProps.toolCall.arguments?._streaming
 
-        // 流式传输中，检查关键参数是否变化
+        // 流式传输中，检查 partialArgs 或关键参数是否变化
         if (prevStreaming || nextStreaming) {
-            // 检查 path 等关键字段是否变化
+            const prevArgs = { ...prevProps.toolCall.arguments, ...prevProps.toolCall.streamingState?.partialArgs }
+            const nextArgs = { ...nextProps.toolCall.arguments, ...nextProps.toolCall.streamingState?.partialArgs }
             if (prevArgs?.path !== nextArgs?.path) return false
             if (prevArgs?.command !== nextArgs?.command) return false
             if (prevArgs?.query !== nextArgs?.query) return false
             if (prevArgs?.pattern !== nextArgs?.pattern) return false
+            if (prevArgs?.new_string !== nextArgs?.new_string) return false
+            if (prevArgs?.content !== nextArgs?.content) return false
             return prevProps.toolCall.id === nextProps.toolCall.id && prevStreaming === nextStreaming
         }
 
