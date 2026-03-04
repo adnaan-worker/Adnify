@@ -48,8 +48,11 @@ export const en = {
   // Terminal
   'terminal': 'Terminal',
   'newTerminal': 'New Terminal',
+  'splitTerminal': 'Split Terminal',
   'clearTerminal': 'Clear',
   'closeTerminal': 'Close',
+  'killTerminal': 'Kill Terminal',
+  'selectAll': 'Select All',
 
   // Tools
   'toolResultFor': 'Tool result for',
