@@ -83,7 +83,12 @@ if (!app.requestSingleInstanceLock()) {
 // 窗口辅助函数
 // ==========================================
 
-function getMainWindow() {
+function getMainWindow(windowId?: number): BrowserWindow | null {
+  // 根据窗口 ID 获取窗口
+  if (windowId !== undefined) {
+    return windows.get(windowId) || null
+  }
+  // 如果没有指定窗口 ID，则返回最后一个活跃窗口
   return lastActiveWindow || Array.from(windows.values())[0] || null
 }
 

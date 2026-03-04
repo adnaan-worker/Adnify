@@ -7,17 +7,17 @@ import { logger } from '@shared/utils/Logger'
 import { BrowserWindow } from 'electron'
 import Store from 'electron-store'
 
-import { registerWindowHandlers } from './window'
-import { registerSettingsHandlers } from './settings'
-import { registerSearchHandlers } from './search'
-import { registerLLMHandlers, cleanupLLMService } from './llm'
-import { registerIndexingHandlers } from './indexing'
-import { registerLspHandlers } from './lsp'
-import { registerHttpHandlers } from './http'
-import { registerMcpHandlers, cleanupMcpHandlers } from './mcp'
-import { registerResourcesHandlers } from './resources'
-import { registerDebugHandlers } from './debug'
-import { registerHealthCheckHandlers } from './healthCheck'
+import { registerWindowHandlers } from './window' // 窗口控制
+import { registerSettingsHandlers } from './settings' // 设置
+import { registerSearchHandlers } from './search' // 搜索
+import { registerLLMHandlers, cleanupLLMService } from './llm' // LLM
+import { registerIndexingHandlers } from './indexing' // 索引
+import { registerLspHandlers } from './lsp' // LSP
+import { registerHttpHandlers } from './http' // HTTP
+import { registerMcpHandlers, cleanupMcpHandlers } from './mcp' // MCP
+import { registerResourcesHandlers } from './resources' // 资源
+import { registerDebugHandlers } from './debug' // 调试
+import { registerHealthCheckHandlers } from './healthCheck' // 健康检查
 
 // 安全模块
 import {
@@ -29,10 +29,12 @@ import {
   updateWhitelist,
   getWhitelist,
 } from '../security'
-
+// 上下文类型
 export interface IPCContext {
-  getMainWindow: () => BrowserWindow | null
-  createWindow: () => BrowserWindow
+  // 获取窗口，如果没有指定窗口 ID，则返回最后一个活跃窗口
+  getMainWindow: (windowId?: number) => BrowserWindow | null
+  // isEmpty: 是否是空窗口，用于创建新窗口
+  createWindow: (isEmpty?: boolean) => BrowserWindow
   /** 根据 key 路由到正确的 store */
   resolveStore: (key: string) => Store
   credentialsStore: Store
