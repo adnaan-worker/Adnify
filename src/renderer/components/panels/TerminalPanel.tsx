@@ -16,6 +16,7 @@ import { themeManager } from '@/renderer/config/themeConfig'
 import { Button } from '../ui'
 import { terminalManager, TerminalManagerState } from '@/renderer/services/TerminalManager'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
+import { t } from '@renderer/i18n'
 
 // xterm 样式
 const XTERM_STYLE = `
@@ -69,7 +70,7 @@ function getTerminalTheme(themeName: string) {
 }
 
 const TerminalPanel = memo(function TerminalPanel() {
-    const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout } = useStore()
+    const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout, language } = useStore()
     const { setMode } = useModeStore()
     // 从 AgentStore 获取 setInputPrompt
     const setInputPrompt = useAgentStore(state => state.setInputPrompt)
@@ -449,7 +450,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 setContextMenu(prev => ({ ...prev, visible: false }))
                             }}
                         >
-                            <span>New Terminal</span>
+                            <span>{t('newTerminal', language)}</span>
                             <span className="text-[10px] text-text-muted">Ctrl+Shift+`</span>
                         </button>
                         <button
@@ -460,7 +461,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 setContextMenu(prev => ({ ...prev, visible: false }))
                             }}
                         >
-                            <span>Split Terminal</span>
+                            <span>{t('splitTerminal', language)}</span>
                             <span className="text-[10px] text-text-muted">Ctrl+Shift+5</span>
                         </button>
 
@@ -481,7 +482,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 setContextMenu(prev => ({ ...prev, visible: false }))
                             }}
                         >
-                            <span>Copy</span>
+                            <span>{t('ctxCopy', language)}</span>
                             <span className="text-[10px] text-text-muted">Ctrl+Shift+C</span>
                         </button>
                         <button
@@ -498,7 +499,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 setContextMenu(prev => ({ ...prev, visible: false }))
                             }}
                         >
-                            <span>Paste</span>
+                            <span>{t('ctxPaste', language)}</span>
                             <span className="text-[10px] text-text-muted">Ctrl+Shift+V</span>
                         </button>
                         <button
@@ -509,7 +510,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 setContextMenu(prev => ({ ...prev, visible: false }))
                             }}
                         >
-                            <span>Select All</span>
+                            <span>{t('selectAll', language)}</span>
                         </button>
 
                         <div className="my-1 h-px bg-border/60" />
@@ -522,7 +523,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 setContextMenu(prev => ({ ...prev, visible: false }))
                             }}
                         >
-                            <span>Clear</span>
+                            <span>{t('clearTerminal', language)}</span>
                         </button>
                         <button
                             className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-red-500/10 text-status-error"
@@ -533,7 +534,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 setContextMenu(prev => ({ ...prev, visible: false }))
                             }}
                         >
-                            <span>Kill Terminal</span>
+                            <span>{t('killTerminal', language)}</span>
                         </button>
                     </div>
                 )}

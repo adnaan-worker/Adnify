@@ -48,8 +48,11 @@ export const zh = {
   // Terminal
   'terminal': '终端',
   'newTerminal': '新建终端',
+  'splitTerminal': '拆分终端',
   'clearTerminal': '清空',
   'closeTerminal': '关闭',
+  'killTerminal': '终止终端',
+  'selectAll': '全选',
 
   // Tools
   'toolResultFor': '工具结果：',
