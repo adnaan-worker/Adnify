@@ -7,7 +7,12 @@ import { t } from '@renderer/i18n'
 import type { editor } from 'monaco-editor'
 import { SafeDiffEditor } from './SafeDiffEditor'
 import { getLanguage } from './utils/languageMap'
-import type { DiffView } from '@store'
+
+export interface DiffView {
+  original: string
+  modified: string
+  filePath: string
+}
 
 interface DiffPreviewProps {
   diff: DiffView

@@ -31,7 +31,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
 
     const handleThemeChange = (themeId: string) => {
         setTheme(themeId as any)
-        api.settings.set('currentTheme', themeId)
+        api.settings.set('themeId', themeId)
     }
 
     const toggleTriggerChar = (char: string) => {
@@ -259,8 +259,8 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                                     type="button"
                                                     onClick={() => toggleTriggerChar(char)}
                                                     className={`w-8 h-8 rounded-lg text-sm font-mono flex items-center justify-center transition-all duration-200 ${isSelected
-                                                            ? 'bg-accent text-white shadow-md shadow-accent/20 scale-105'
-                                                            : 'bg-surface hover:bg-surface-hover text-text-secondary hover:text-text-primary border border-border/50'
+                                                        ? 'bg-accent text-white shadow-md shadow-accent/20 scale-105'
+                                                        : 'bg-surface hover:bg-surface-hover text-text-secondary hover:text-text-primary border border-border/50'
                                                         }`}
                                                     title={char === ' ' ? 'Space' : char}
                                                 >

@@ -12,7 +12,7 @@ export interface ThemeColors {
   background: string
   backgroundSecondary: string
   backgroundTertiary: string
-  
+
   // 表面色
   surface: string
   surfaceHover: string
@@ -71,7 +71,7 @@ export const builtinThemes: Theme[] = [
       background: '18 18 21',         // #121215
       backgroundSecondary: '25 25 29', // #19191D (侧边栏/面板)
       backgroundTertiary: '32 32 37',  // #202025 (输入框/卡片背景)
-      
+
       // 表面：提升层次感
       surface: '25 25 29',
       surfaceHover: '38 38 44',
@@ -112,7 +112,7 @@ export const builtinThemes: Theme[] = [
       background: '22 27 34',         // 主背景：深沉的蓝灰
       backgroundSecondary: '28 33 42', // 侧边栏：稍亮
       backgroundTertiary: '37 43 54',  // 输入框：明显区分
-      
+
       surface: '28 33 42',
       surfaceHover: '45 51 65',
       surfaceActive: '55 61 75',
@@ -150,7 +150,7 @@ export const builtinThemes: Theme[] = [
       background: '3 3 5',            // 几乎纯黑
       backgroundSecondary: '10 10 15', // 极深蓝黑
       backgroundTertiary: '20 20 30',
-      
+
       surface: '10 10 15',
       surfaceHover: '30 30 45',
       surfaceActive: '50 50 70',
@@ -188,7 +188,7 @@ export const builtinThemes: Theme[] = [
       background: '255 255 255',      // 纯白背景
       backgroundSecondary: '248 249 250', // 极淡的灰 (侧边栏)
       backgroundTertiary: '241 243 245',  // 输入框背景
-      
+
       surface: '255 255 255',
       surfaceHover: '241 243 245',    // Hover 显现
       surfaceActive: '233 236 239',
@@ -234,11 +234,11 @@ class ThemeManager {
     try {
       const savedThemeId = localStorage.getItem(LOCAL_STORAGE_THEME_KEY)
       const savedCustomThemes = localStorage.getItem(LOCAL_STORAGE_CUSTOM_THEMES_KEY)
-      
+
       if (savedCustomThemes) {
         this.customThemes = JSON.parse(savedCustomThemes)
       }
-      
+
       if (savedThemeId) {
         const theme = this.getThemeById(savedThemeId)
         if (theme) {
@@ -270,6 +270,10 @@ class ThemeManager {
         if (theme) {
           this.currentTheme = theme
           localStorage.setItem(LOCAL_STORAGE_THEME_KEY, savedThemeId)
+          localStorage.setItem('adnify-theme-bg', theme.colors.background)
+          localStorage.setItem('adnify-theme-type', theme.type)
+          // Migrate old configs so main.ts can access themeBg on next startup
+          try { api.settings.set('themeBg', theme.colors.background) } catch (e) { }
         }
       }
     } catch (e) {
@@ -281,6 +285,8 @@ class ThemeManager {
     // 同步写入 localStorage
     try {
       localStorage.setItem(LOCAL_STORAGE_THEME_KEY, this.currentTheme.id)
+      localStorage.setItem('adnify-theme-bg', this.currentTheme.colors.background)
+      localStorage.setItem('adnify-theme-type', this.currentTheme.type)
       localStorage.setItem(LOCAL_STORAGE_CUSTOM_THEMES_KEY, JSON.stringify(this.customThemes))
     } catch (e) {
       // 忽略 localStorage 错误
@@ -288,6 +294,7 @@ class ThemeManager {
     // 异步写入文件
     try {
       api.settings.set('themeId', this.currentTheme.id)
+      api.settings.set('themeBg', this.currentTheme.colors.background)
       api.settings.set('customThemes', this.customThemes)
     } catch (e) {
       logger.settings.error('Failed to save theme to config:', e)
@@ -340,27 +347,27 @@ class ThemeManager {
     root.style.setProperty('--background', colors.background)
     root.style.setProperty('--background-secondary', colors.backgroundSecondary)
     root.style.setProperty('--background-tertiary', colors.backgroundTertiary)
-    
+
     root.style.setProperty('--surface', colors.surface)
     root.style.setProperty('--surface-hover', colors.surfaceHover)
     root.style.setProperty('--surface-active', colors.surfaceActive)
     root.style.setProperty('--surface-muted', colors.surfaceMuted)
-    
+
     root.style.setProperty('--text-primary', colors.textPrimary)
     root.style.setProperty('--text-secondary', colors.textSecondary)
     root.style.setProperty('--text-muted', colors.textMuted)
     root.style.setProperty('--text-inverted', colors.textInverted)
-    
+
     root.style.setProperty('--border', colors.border)
     root.style.setProperty('--border-subtle', colors.borderSubtle)
     root.style.setProperty('--border-active', colors.borderActive)
-    
+
     root.style.setProperty('--accent', colors.accent)
     root.style.setProperty('--accent-hover', colors.accentHover)
     root.style.setProperty('--accent-active', colors.accentActive)
     root.style.setProperty('--accent-foreground', colors.accentForeground)
     root.style.setProperty('--accent-subtle', colors.accentSubtle)
-    
+
     root.style.setProperty('--status-success', colors.statusSuccess)
     root.style.setProperty('--status-warning', colors.statusWarning)
     root.style.setProperty('--status-error', colors.statusError)

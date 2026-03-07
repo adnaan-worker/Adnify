@@ -108,6 +108,35 @@ function findWindowByWorkspace(roots: string[]): BrowserWindow | null {
 // 窗口创建
 // ==========================================
 
+function getThemeBackgroundColor(): string {
+  try {
+    const themeBg = configStore?.get('themeBg') as string;
+    if (themeBg) {
+      // If the color format is RGB with spaces like "18 18 21"
+      if (themeBg.includes(' ')) {
+        const [r, g, b] = themeBg.split(' ').map(Number);
+        const toHex = (n: number) => n.toString(16).padStart(2, '0');
+        if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+          return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        }
+      }
+      return themeBg; // Assuming it's already a valid hex color
+    }
+
+    // Fallback dictionary for older configurations before migration
+    const themeId = configStore?.get('themeId') as string || 'adnify-dark';
+    const themes: Record<string, string> = {
+      'adnify-dark': '#121215',
+      'midnight': '#161b22',
+      'cyberpunk': '#030305',
+      'dawn': '#ffffff'
+    };
+    return themes[themeId] || WINDOW_CONFIG.BG_COLOR;
+  } catch {
+    return WINDOW_CONFIG.BG_COLOR;
+  }
+}
+
 function createWindow(isEmpty = false): BrowserWindow {
   // 根据平台选择正确的图标格式
   const getIconPath = () => {
@@ -134,7 +163,7 @@ function createWindow(isEmpty = false): BrowserWindow {
     titleBarStyle: 'hiddenInset',
     icon: iconPath,
     trafficLightPosition: { x: 15, y: 14 },
-    backgroundColor: WINDOW_CONFIG.BG_COLOR,
+    backgroundColor: getThemeBackgroundColor(),
     show: false, // 先隐藏，等 DOM 渲染完成后再显示
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),

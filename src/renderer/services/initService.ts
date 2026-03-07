@@ -41,10 +41,10 @@ function scheduleIdleTask(task: () => void | Promise<void>, timeout = 2000): voi
  */
 async function initCoreModules(): Promise<void> {
   startupMetrics.start('init-core')
-  
+
   // 同步注册命令（非常快）
   registerCoreCommands()
-  
+
   // 并行初始化核心模块
   await Promise.all([
     keybindingService.init(),
@@ -52,7 +52,7 @@ async function initCoreModules(): Promise<void> {
     themeManager.init(),
     snippetService.init(), // snippet 必须在编辑器可用前初始化
   ])
-  
+
   startupMetrics.end('init-core')
 }
 
@@ -64,7 +64,7 @@ async function loadUserSettings(_isEmptyWindow: boolean): Promise<string | null>
 
   const [, savedTheme] = await Promise.all([
     useStore.getState().load(),
-    api.settings.get('currentTheme'),
+    api.settings.get('themeId'),
   ])
 
   // 应用网络搜索配置到主进程
@@ -109,16 +109,16 @@ async function restoreWorkspace(): Promise<boolean> {
   ])
 
   setFiles(items)
-  
+
   // 初始化诊断监听器（同步，很快）
   initDiagnosticsListener()
-  
+
   // 恢复编辑器状态
   await restoreWorkspaceState()
-  
+
   // MCP 服务延迟初始化（不阻塞启动）
   scheduleIdleTask(() => mcpService.initialize(workspaceConfig.roots), 1000)
-  
+
   startupMetrics.end('restore-workspace')
   return true
 }
@@ -157,46 +157,46 @@ export async function initializeApp(
 ): Promise<InitResult> {
   try {
     startupMetrics.start('init-total')
-    
+
     // 第一阶段：核心模块
     updateStatus('Initializing...')
     await initCoreModules()
-    
+
     // 第二阶段：用户设置
     updateStatus('Loading settings...')
     const params = new URLSearchParams(window.location.search)
     const isEmptyWindow = params.get('empty') === '1'
     const savedTheme = await loadUserSettings(isEmptyWindow)
-    
+
     // 应用主题
     if (savedTheme && isThemeName(savedTheme)) {
       useStore.getState().setTheme(savedTheme)
     }
-    
+
     // 获取引导状态
     const { onboardingCompleted, hasExistingConfig } = useStore.getState()
-    
+
     // 第三阶段：恢复工作区
     if (!isEmptyWindow) {
       updateStatus('Restoring workspace...')
       await restoreWorkspace()
     }
-    
+
     // 第四阶段：后台初始化（非阻塞）
     scheduleBackgroundInit()
-    
+
     updateStatus('Ready!')
     startupMetrics.end('init-total')
-    
+
     // 打印启动性能报告（开发环境）
     if (process.env.NODE_ENV === 'development') {
       startupMetrics.mark('app-ready')
       startupMetrics.printReport()
     }
-    
+
     const shouldShowOnboarding = onboardingCompleted === false ||
       (onboardingCompleted === undefined && !hasExistingConfig)
-    
+
     return { success: true, shouldShowOnboarding }
   } catch (error) {
     logger.system.error('[Init] Failed to initialize app:', error)
@@ -239,7 +239,7 @@ export function registerSettingsSync(): () => void {
           store.set('promptTemplateId', value)
         }
         break
-      case 'currentTheme':
+      case 'themeId':
         if (isThemeName(value)) {
           store.setTheme(value)
         }

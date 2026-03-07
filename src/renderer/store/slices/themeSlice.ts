@@ -7,7 +7,14 @@ export interface ThemeSlice {
     setTheme: (theme: ThemeName) => void;
 }
 
-export const createThemeSlice: StateCreator<ThemeSlice, [], [], ThemeSlice> = (set) => ({
-    currentTheme: 'adnify-dark',
-    setTheme: (theme) => set({ currentTheme: theme }),
-})
+export const createThemeSlice: StateCreator<ThemeSlice, [], [], ThemeSlice> = (set) => {
+    // Attempt to read synchronous cache for immediate initialization, fallback to dark
+    const savedTheme = typeof localStorage !== 'undefined' ? localStorage.getItem('adnify-theme-id') as ThemeName : 'adnify-dark';
+    const validThemes = ['adnify-dark', 'midnight', 'dawn', 'cyberpunk'];
+    const initialTheme = validThemes.includes(savedTheme) ? savedTheme : 'adnify-dark';
+
+    return {
+        currentTheme: initialTheme,
+        setTheme: (theme) => set({ currentTheme: theme }),
+    }
+}

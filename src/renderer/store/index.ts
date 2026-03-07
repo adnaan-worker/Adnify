@@ -27,7 +27,7 @@ export type { ThemeName } from './slices'
 export type { ToolCallLogEntry } from './slices'
 export type { McpSlice } from './slices'
 export type { DebugSlice, Breakpoint } from './slices'
-export type { SidePanel, DiffView } from './slices'
+export type { SidePanel } from './slices'
 
 // 模式管理统一从 modeStore 导出
 export { useModeStore } from '@/renderer/modes/modeStore'

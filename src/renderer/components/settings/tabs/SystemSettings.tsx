@@ -186,7 +186,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
             await api.settings.set('app-settings', undefined)
             await api.settings.set('editorConfig', undefined)
             await api.settings.set('securitySettings', undefined)
-            await api.settings.set('currentTheme', undefined)
+            await api.settings.set('themeId', undefined)
             localStorage.clear()
             window.location.reload()
         }

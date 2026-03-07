@@ -122,7 +122,7 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
           language={language}
           PreTag="div"
           className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono"
-          customStyle={{ background: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
+          customStyle={{ backgroundColor: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
           wrapLines
           wrapLongLines
         >

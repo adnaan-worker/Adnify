@@ -6,26 +6,64 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/png" href="/icon.png" />
   <title>Adnify</title>
-  
+
   <!-- 立即设置背景色和主题，在任何渲染之前 -->
   <script>
-    (function() {
-      var bg = '#09090b';
+    (function () {
+      var bg = '#121215'; // Default adnify-dark background (updated from #09090b)
+      var loaderBg = '#121215';
+      var isLight = false;
       try {
-        var themes = {
-          'adnify-dark': '#09090b',
-          'adnify-light': '#ffffff',
-          'github-dark': '#0d1117',
-          'monokai': '#272822',
-          'one-dark': '#282c34'
-        };
-        var themeId = localStorage.getItem('adnify-theme-id');
-        if (themeId && themes[themeId]) bg = themes[themeId];
-      } catch(e) {}
+        var themeBg = localStorage.getItem('adnify-theme-bg');
+        var themeType = localStorage.getItem('adnify-theme-type');
+
+        if (themeBg) {
+          if (themeBg.indexOf(' ') !== -1) {
+            bg = 'rgb(' + themeBg.replace(/ /g, ', ') + ')';
+            document.documentElement.style.setProperty('--background', themeBg);
+          } else {
+            bg = themeBg;
+          }
+          loaderBg = bg;
+        } else {
+          // Fallback parsing for first launch or missing configs
+          var themes = {
+            'adnify-dark': { bg: '#121215', twBg: '18 18 21' },
+            'midnight': { bg: '#161B22', twBg: '22 27 34' },
+            'cyberpunk': { bg: '#030305', twBg: '3 3 5' },
+            'dawn': { bg: '#FFFFFF', twBg: '255 255 255' }
+          };
+          var themeId = localStorage.getItem('adnify-theme-id');
+          if (themeId && themes[themeId]) {
+            bg = themes[themeId].bg;
+            loaderBg = themes[themeId].bg;
+            document.documentElement.style.setProperty('--background', themes[themeId].twBg);
+            isLight = themeId === 'dawn';
+          }
+        }
+
+        if (themeType === 'light') {
+          isLight = true;
+        }
+      } catch (e) { }
+
       document.documentElement.style.background = bg;
+      document.documentElement.style.setProperty('--loader-bg', loaderBg);
+
+      if (isLight) {
+        document.documentElement.style.setProperty('--loader-text', '#333333');
+        document.documentElement.style.setProperty('--loader-text-dim', '#738087');
+        document.documentElement.style.setProperty('--loader-surface', '#f1f3f5');
+        // Define root variables preemptively for Tailwind before globals.css
+        if (!document.documentElement.style.getPropertyValue('--background')) {
+          document.documentElement.style.setProperty('--background', '255 255 255');
+        }
+        document.documentElement.style.setProperty('--surface', '241 243 245');
+        document.documentElement.style.setProperty('--border', '222 226 230');
+      }
     })();
   </script>
-  
+
   <!-- 关键 CSS 内联 -->
   <style>
     :root {
@@ -35,47 +73,179 @@
       --loader-text-dim: #71717a;
       --loader-surface: #18181b;
     }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; background: var(--loader-bg); overflow: hidden; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    #root { opacity: 0; pointer-events: none; }
-    #root.ready { opacity: 1; pointer-events: auto; transition: opacity 0.15s ease-out; }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: var(--loader-bg);
+      overflow: hidden;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    #root {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #root.ready {
+      opacity: 1;
+      pointer-events: auto;
+      transition: opacity 0.15s ease-out;
+    }
+
     #initial-loader {
-      position: fixed; inset: 0; background: var(--loader-bg);
-      display: flex; align-items: center; justify-content: center;
+      position: fixed;
+      inset: 0;
+      background: var(--loader-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
       z-index: 9999;
     }
-    #initial-loader.fade-out { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
-    .loader-content { display: flex; flex-direction: column; align-items: center; animation: reveal 0.5s ease-out; }
-    .loader-logo-container { position: relative; width: 80px; height: 80px; margin-bottom: 32px; }
+
+    #initial-loader.fade-out {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+
+    .loader-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      animation: reveal 0.5s ease-out;
+    }
+
+    .loader-logo-container {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      margin-bottom: 32px;
+    }
+
     .loader-logo-bg {
-      position: absolute; inset: 0;
+      position: absolute;
+      inset: 0;
       background: linear-gradient(145deg, var(--loader-surface), var(--loader-bg));
-      border-radius: 22px; display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.4); z-index: 2;
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      z-index: 2;
     }
-    .loader-logo-icon { width: 44px; height: 44px; filter: drop-shadow(0 0 12px var(--loader-accent)); }
+
+    .loader-logo-icon {
+      width: 44px;
+      height: 44px;
+      filter: drop-shadow(0 0 12px var(--loader-accent));
+    }
+
     .loader-glow {
-      position: absolute; inset: -20px;
+      position: absolute;
+      inset: -20px;
       background: radial-gradient(circle, var(--loader-accent) 0%, transparent 70%);
-      opacity: 0.15; filter: blur(20px); animation: pulse 3s ease-in-out infinite;
+      opacity: 0.15;
+      filter: blur(20px);
+      animation: pulse 3s ease-in-out infinite;
     }
+
     .loader-ring {
-      position: absolute; inset: -4px; border-radius: 26px; padding: 2px;
+      position: absolute;
+      inset: -4px;
+      border-radius: 26px;
+      padding: 2px;
       background: conic-gradient(from 0deg, transparent, var(--loader-accent), transparent);
       -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
       mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor; mask-composite: exclude;
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
       animation: spin 2s linear infinite;
     }
-    .loader-title { font-size: 24px; font-weight: 700; color: var(--loader-text); margin-bottom: 4px; }
-    .loader-subtitle { font-size: 13px; color: var(--loader-text-dim); margin-bottom: 40px; letter-spacing: 1px; text-transform: uppercase; }
-    .loader-progress { width: 160px; height: 2px; background: rgba(255,255,255,0.05); border-radius: 1px; overflow: hidden; }
-    .loader-bar { height: 100%; width: 30%; background: var(--loader-accent); box-shadow: 0 0 10px var(--loader-accent); animation: move 1.5s ease-in-out infinite; }
-    @keyframes reveal { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
-    @keyframes pulse { 0%,100% { opacity: 0.1; } 50% { opacity: 0.2; } }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes move { 0% { margin-left: -30%; } 50% { margin-left: 50%; } 100% { margin-left: 100%; } }
+
+    .loader-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--loader-text);
+      margin-bottom: 4px;
+    }
+
+    .loader-subtitle {
+      font-size: 13px;
+      color: var(--loader-text-dim);
+      margin-bottom: 40px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .loader-progress {
+      width: 160px;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 1px;
+      overflow: hidden;
+    }
+
+    .loader-bar {
+      height: 100%;
+      width: 30%;
+      background: var(--loader-accent);
+      box-shadow: 0 0 10px var(--loader-accent);
+      animation: move 1.5s ease-in-out infinite;
+    }
+
+    @keyframes reveal {
+      from {
+        opacity: 0;
+        transform: scale(0.96);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 0.1;
+      }
+
+      50% {
+        opacity: 0.2;
+      }
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes move {
+      0% {
+        margin-left: -30%;
+      }
+
+      50% {
+        margin-left: 50%;
+      }
+
+      100% {
+        margin-left: 100%;
+      }
+    }
   </style>
 </head>
 
