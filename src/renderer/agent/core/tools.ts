@@ -209,7 +209,7 @@ async function executeSingle(
 
   // 更新状态为运行中
   if (currentAssistantId) {
-    store.updateToolCall(currentAssistantId, toolCall.id, { 
+    store.updateToolCall(currentAssistantId, toolCall.id, {
       status: 'running',
       streamingState: undefined,  // 清除流式状态
     })
@@ -307,8 +307,8 @@ async function executeSingle(
     })
 
     if (currentAssistantId) {
-      store.updateToolCall(currentAssistantId, toolCall.id, { 
-        status: 'error', 
+      store.updateToolCall(currentAssistantId, toolCall.id, {
+        status: 'error',
         result: errorMsg,
         streamingState: undefined,  // 清除流式状态
       })
@@ -354,49 +354,60 @@ export async function executeTools(
   // 在执行前保存文件快照
   await saveFileSnapshots(toolCalls, context)
 
-  // 1. 先并行执行不需要审批的工具（使用动态并发限制）
+  // 1. 先并行执行不需要审批的工具（使用动态并发限制），但必须尊重依赖关系
   if (noApprovalRequired.length > 0) {
     store.setStreamState({ phase: 'tool_running' })
 
-    // 动态导入 p-limit
     const pLimit = (await import('p-limit')).default
-    // 动态并发限制
     const concurrency = getDynamicConcurrency()
     const limit = pLimit(concurrency)
 
-    // 使用 Promise.allSettled 确保每个工具独立执行
-    const noApprovalPromises = noApprovalRequired.map((tc) =>
-      limit(async () => {
-        try {
-          const result = await executeSingle(tc, context, store)
-          // 立即更新结果到数组（不等待其他工具）
-          results.push(result)
-          completed.add(result.toolCall.id)
-          pending.delete(result.toolCall.id)
-          return result
-        } catch (error) {
-          logger.agent.error(`[Tools] Unexpected error in ${tc.name}:`, error)
-          const errorMsg = error instanceof Error ? error.message : String(error)
+    // 用于记录无审批工具的执行 Promise，以支持依赖等待
+    const noApprovalPromiseMap = new Map<string, Promise<AgentToolExecutionResult>>()
 
-          // 立即更新错误状态
-          if (context.currentAssistantId) {
-            store.updateToolCall(context.currentAssistantId, tc.id, {
-              status: 'error',
-              result: errorMsg,
-              streamingState: undefined,  // 清除流式状态
-            })
-          }
+    for (const tc of noApprovalRequired) {
+      const promise = (async () => {
+        // 等待被依赖的无审批工具执行完毕
+        const tcDeps = deps.get(tc.id) || new Set()
+        const depPromises = Array.from(tcDeps)
+          .map(depId => noApprovalPromiseMap.get(depId))
+          .filter(Boolean) as Promise<AgentToolExecutionResult>[]
 
-          pending.delete(tc.id)
-          const errorResult = { toolCall: tc, result: { content: `Error: ${errorMsg}` } }
-          results.push(errorResult)
-          return errorResult
+        if (depPromises.length > 0) {
+          await Promise.allSettled(depPromises)
         }
-      })
-    )
 
-    // 等待所有工具完成
-    await Promise.allSettled(noApprovalPromises)
+        return limit(async () => {
+          try {
+            const result = await executeSingle(tc, context, store)
+            results.push(result)
+            completed.add(result.toolCall.id)
+            pending.delete(result.toolCall.id)
+            return result
+          } catch (error) {
+            logger.agent.error(`[Tools] Unexpected error in ${tc.name}:`, error)
+            const errorMsg = error instanceof Error ? error.message : String(error)
+
+            if (context.currentAssistantId) {
+              store.updateToolCall(context.currentAssistantId, tc.id, {
+                status: 'error',
+                result: errorMsg,
+                streamingState: undefined,
+              })
+            }
+
+            pending.delete(tc.id)
+            const errorResult = { toolCall: tc, result: { content: `Error: ${errorMsg}` } }
+            results.push(errorResult)
+            return errorResult
+          }
+        })
+      })()
+      noApprovalPromiseMap.set(tc.id, promise)
+    }
+
+    // 等待所有无审批工具完成
+    await Promise.allSettled(Array.from(noApprovalPromiseMap.values()))
   }
 
   // 2. 逐个处理需要审批的工具
@@ -436,7 +447,7 @@ export async function executeTools(
       userRejected = true
       rejected.add(tc.id)
       if (context.currentAssistantId) {
-        store.updateToolCall(context.currentAssistantId, tc.id, { 
+        store.updateToolCall(context.currentAssistantId, tc.id, {
           status: 'rejected',
           streamingState: undefined,  // 清除流式状态
         })

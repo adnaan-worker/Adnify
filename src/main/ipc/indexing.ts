@@ -245,4 +245,17 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
       return failFromError(e)
     }
   })
+
+  // AST 解析调用图
+  ipcMain.handle('index:parseCallGraph', async (_, filePath: string, content: string) => {
+    try {
+      const { ASTParser } = await import('../indexing/astParser')
+      const parser = new ASTParser()
+      await parser.init()
+      return await parser.parseCallGraph(filePath, content)
+    } catch (e) {
+      logger.ipc.error('[Index] Parse Call Graph failed:', e)
+      return []
+    }
+  })
 }

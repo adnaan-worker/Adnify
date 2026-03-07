@@ -38,7 +38,7 @@ import { CodeSkeleton } from '../ui/Loading'
 import { TaskBoard } from '../orchestrator/TaskBoard'
 
 // Hooks
-import { useEditorActions, useAICompletion, useEditorEvents } from './hooks'
+import { useEditorActions, useAICompletion, useEditorEvents, useComposerInlineDiff } from './hooks'
 import { getLanguage } from './utils/languageMap'
 import { defineMonacoTheme } from './utils/monacoTheme'
 
@@ -60,6 +60,8 @@ export default function Editor() {
   const { saveFile, closeFileWithConfirm, closeOtherFiles, closeAllFiles, closeFilesToRight, triggerAutoSave } = useFileSave()
   const { isLinting, runLintCheck, clearLintErrors, errorCount, warningCount } = useLintCheck()
   const { setupCursorTracking } = useEditorEvents(editorRef)
+
+  useComposerInlineDiff(activeFilePath, editorRef.current, monacoRef.current)
 
   // 状态
   const [streamingEdit, setStreamingEdit] = useState<StreamingEditState | null>(null)

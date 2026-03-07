@@ -477,3 +477,21 @@ textarea,
 .animate-reveal-highlight {
   animation: reveal-highlight 2s ease-out forwards;
 }
+
+/* --- Inline Diff Styles (Composer) --- */
+.inline-diff-add-line {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+}
+
+.inline-diff-add-margin {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+  border-left: 3px solid rgb(34, 197, 94) !important;
+}
+
+.inline-diff-remove-zone {
+  position: relative;
+  z-index: 10;
+  border-top: 1px dashed rgba(239, 68, 68, 0.3);
+  border-bottom: 1px dashed rgba(239, 68, 68, 0.3);
+  background-color: rgba(239, 68, 68, 0.05);
+}

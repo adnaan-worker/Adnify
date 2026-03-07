@@ -171,27 +171,47 @@ async function callLLMWithRetry(
     return await withRetry(
       async () => {
         if (abortSignal?.aborted) throw new Error('Aborted')
-        const result = await callLLM(config, messages, chatMode, assistantId, threadStore, reqId)
 
-        // 工具调用解析错误不应该导致重试，而是返回给 AI 让它反思
-        // 只有真正的 LLM 错误（网络、API 等）才需要重试
-        if (result.error) {
-          const errorMsg = result.error.toLowerCase()
-          const isToolParseError = errorMsg.includes('tool call parse') ||
-            errorMsg.includes('invalid input for tool') ||
-            errorMsg.includes('type validation failed')
-
-          if (isToolParseError) {
-            // 工具解析错误：不重试，返回结果让 loop 处理
-            logger.agent.warn('[Loop] Tool parse error, will be handled in loop:', result.error)
-            return result
+        // 记录重试前的消息状态快照，用于在失败时回滚幽灵工具调用
+        let snapshot = null
+        if (assistantId) {
+          const msg = threadStore.getMessages().find(m => m.id === assistantId)
+          if (msg && msg.role === 'assistant') {
+            snapshot = {
+              content: msg.content,
+              parts: [...(msg.parts || [])],
+              toolCalls: [...(msg.toolCalls || [])],
+            }
           }
-
-          // 其他错误：抛出以触发重试
-          throw new Error(result.error)
         }
 
-        return result
+        try {
+          const result = await callLLM(config, messages, chatMode, assistantId, threadStore, reqId)
+
+          // 工具调用解析错误不应该导致重试，而是返回给 AI 让它反思
+          if (result.error) {
+            const errorMsg = result.error.toLowerCase()
+            const isToolParseError = errorMsg.includes('tool call parse') ||
+              errorMsg.includes('invalid input for tool') ||
+              errorMsg.includes('type validation failed')
+
+            if (isToolParseError) {
+              logger.agent.warn('[Loop] Tool parse error, will be handled in loop:', result.error)
+              return result
+            }
+
+            // 其他错误：抛出以触发重试
+            throw new Error(result.error)
+          }
+
+          return result
+        } catch (err) {
+          // 发生错误准备重试时，恢复消息状态，清除残留的流式工具和文本
+          if (assistantId && snapshot) {
+            threadStore.updateMessage(assistantId, snapshot)
+          }
+          throw err
+        }
       },
       {
         maxRetries: retryConfig.maxRetries,

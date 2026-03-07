@@ -186,9 +186,14 @@ async function processCodebaseContext(
       // 使用 maxSemanticResults 限制结果数量
       const limitedResults = results.slice(0, config.maxSemanticResults)
       return `\n### Codebase Search Results for "${cleanQuery}":\n` +
-        limitedResults.map(r =>
-          `#### ${r.relativePath} (Score: ${r.score.toFixed(2)})\n\`\`\`${r.language}\n${r.content}\n\`\`\``
-        ).join('\n\n') + '\n'
+        limitedResults.map(r => {
+          let content = r.content
+          const MAX_CHUNK_CHARS = 1500
+          if (content.length > MAX_CHUNK_CHARS) {
+            content = content.slice(0, MAX_CHUNK_CHARS) + `\n... (content truncated, use read_file tool to read full file if needed)`
+          }
+          return `#### ${r.relativePath} (Score: ${r.score.toFixed(2)})\n\`\`\`${r.language}\n${content}\n\`\`\``
+        }).join('\n\n') + '\n'
     }
     return '\n[No relevant codebase results found]\n'
   } catch (e) {
@@ -247,9 +252,15 @@ async function processImplicitContext(
     if (!results || results.length === 0) return null
 
     // 格式化搜索结果
-    const contextContent = results.map(r =>
-      `\n--- File: ${r.relativePath} ---\n${r.content}\n`
-    ).join('\n')
+    const contextContent = results.map(r => {
+      let content = r.content
+      // 如果搜索到的 chunk 过大（例如 AST 匹配到了整个 React 组件），则截断内容
+      const MAX_CHUNK_CHARS = 1500
+      if (content.length > MAX_CHUNK_CHARS) {
+        content = content.slice(0, MAX_CHUNK_CHARS) + `\n... (content truncated, use read_file tool to read full file if needed)`
+      }
+      return `\n--- File: ${r.relativePath} (Lines ${r.startLine}-${r.endLine}) ---\n${content}\n`
+    }).join('\n')
 
     return contextContent
   } catch (err) {

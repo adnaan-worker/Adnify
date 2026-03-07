@@ -344,7 +344,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
     : `Thinking for ${elapsed}s...`
 
   return (
-    <div className="my-3 group/think rounded-xl overflow-hidden border border-text-primary/[0.05] bg-text-primary/[0.02]">
+    <div className="my-3 group/think overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex w-full items-center gap-2 px-3 py-2 text-text-muted/50 hover:text-text-muted hover:bg-surface-hover transition-colors select-none"

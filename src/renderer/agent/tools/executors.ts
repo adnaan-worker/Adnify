@@ -126,7 +126,21 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                         const content = await api.file.read(validPath)
                         if (content !== null) {
                             fileCacheService.markFileAsRead(validPath, content)
-                            return `\n--- File: ${p} ---\n${content}\n`
+                            let graphContent = ''
+                            try {
+                                const nodes = await api.index.parseCallGraph(validPath, content)
+                                if (nodes && nodes.length > 0) {
+                                    graphContent = '\n--- AST Call Graph Summary ---\n'
+                                    const defs: any[] = nodes.filter(n => n.type === 'definition')
+                                    const calls: any[] = nodes.filter(n => n.type === 'call')
+                                    for (const def of defs) {
+                                        const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
+                                        const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
+                                        graphContent += `- func ${def.name}() [Line ${def.startLine}-${def.endLine}]${callStr}\n`
+                                    }
+                                }
+                            } catch (e) { }
+                            return `\n--- File: ${p} ---\n${content}\n${graphContent}\n`
                         }
                         return `\n--- File: ${p} ---\n[File not found]\n`
                     } catch (e: unknown) {
@@ -145,6 +159,21 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
         fileCacheService.markFileAsRead(path, content)
 
+        let graphContent = ''
+        try {
+            const nodes = await api.index.parseCallGraph(path, content)
+            if (nodes && nodes.length > 0) {
+                graphContent = '\n\n--- AST Call Graph Summary ---\n'
+                const defs: any[] = nodes.filter(n => n.type === 'definition')
+                const calls: any[] = nodes.filter(n => n.type === 'call')
+                for (const def of defs) {
+                    const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
+                    const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
+                    graphContent += `- func ${def.name}() [Line ${def.startLine}-${def.endLine}]${callStr}\n`
+                }
+            }
+        } catch (e) { }
+
         const lines = content.split('\n')
         const startLine = typeof args.start_line === 'number' ? Math.max(1, args.start_line) : 1
         const endLine = typeof args.end_line === 'number' ? Math.min(lines.length, args.end_line) : lines.length
@@ -160,7 +189,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 `To read more: use search_files to find target location, then read_file with start_line/end_line`
         }
 
-        return { success: true, result: numberedContent, meta: { filePath: path } }
+        return { success: true, result: numberedContent + graphContent, meta: { filePath: path } }
     },
 
     async list_directory(args, ctx) {

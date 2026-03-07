@@ -252,6 +252,7 @@ export interface ElectronAPI {
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => Promise<{ success: boolean; error?: string }>
   indexTestConnection: (workspacePath: string) => Promise<{ success: boolean; error?: string; latency?: number }>
   indexGetProviders: () => Promise<EmbeddingProvider[]>
+  indexParseCallGraph: (filePath: string, content: string) => Promise<any[]>
   onIndexProgress: (callback: (status: IndexStatusData) => void) => () => void
 
   // LSP
@@ -533,6 +534,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => ipcRenderer.invoke('index:updateEmbeddingConfig', workspacePath, config),
   indexTestConnection: (workspacePath: string) => ipcRenderer.invoke('index:testConnection', workspacePath),
   indexGetProviders: () => ipcRenderer.invoke('index:getProviders'),
+  indexParseCallGraph: (filePath: string, content: string) => ipcRenderer.invoke('index:parseCallGraph', filePath, content),
   onIndexProgress: (callback: (status: IndexStatusData) => void) => {
     const handler = (_: IpcRendererEvent, status: IndexStatusData) => callback(status)
     ipcRenderer.on('index:progress', handler)

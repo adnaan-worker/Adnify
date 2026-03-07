@@ -458,6 +458,7 @@ export interface ElectronAPI {
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => Promise<{ success: boolean; error?: string }>
   indexTestConnection: (workspacePath: string) => Promise<{ success: boolean; error?: string; latency?: number }>
   indexGetProviders: () => Promise<EmbeddingProvider[]>
+  indexParseCallGraph: (filePath: string, content: string) => Promise<any[]>
   onIndexProgress: (callback: (status: IndexStatus) => void) => () => void
 
   // LSP

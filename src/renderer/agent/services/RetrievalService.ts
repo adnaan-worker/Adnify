@@ -10,6 +10,7 @@ export interface RetrievalResult {
     score: number
     content: string
     startLine: number
+    endLine: number
     language: string
 }
 
