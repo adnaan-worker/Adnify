@@ -249,12 +249,13 @@ export async function buildAgentSystemPrompt(
   const { openFiles = [], activeFile, customInstructions, promptTemplateId, orchestratorPhase, mentionedSkills } = options || {}
 
   // 获取模板
-  const template = promptTemplateId
+  let template = promptTemplateId
     ? getPromptTemplateById(promptTemplateId)
     : getDefaultPromptTemplate()
 
   if (!template) {
-    throw new Error(`Template not found: ${promptTemplateId}`)
+    logger.agent.warn(`[PromptBuilder] Template not found: ${promptTemplateId}, falling back to default.`)
+    template = getDefaultPromptTemplate()
   }
 
   // 并行加载动态内容（包括项目摘要和 Skills）

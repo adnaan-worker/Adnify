@@ -55,7 +55,7 @@ class ComposerServiceClass {
     sessions: [],
     isProcessing: false,
   }
-  
+
   private listeners: Set<(state: ComposerState) => void> = new Set()
 
   /**
@@ -82,7 +82,7 @@ class ComposerServiceClass {
    */
   startSession(title: string, description?: string): string {
     const id = `composer_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-    
+
     const session: ComposerSession = {
       id,
       title,
@@ -94,12 +94,21 @@ class ComposerServiceClass {
       totalLinesAdded: 0,
       totalLinesRemoved: 0,
     }
-    
+
     this.state.currentSession = session
     this.state.sessions.unshift(session)
     this.notify()
-    
+
     return id
+  }
+
+  /**
+   * Ensure a session exists, starting one if necessary
+   */
+  ensureSession(title = 'Agent Changes', description = 'Changes from AI Agent'): void {
+    if (!this.state.currentSession) {
+      this.startSession(title, description)
+    }
   }
 
   /**
@@ -110,17 +119,17 @@ class ComposerServiceClass {
       logger.agent.warn('[Composer] No active session')
       return
     }
-    
+
     const fullChange: FileChange = {
       ...change,
       status: 'pending',
     }
-    
+
     // Check if file already has a change
     const existingIndex = this.state.currentSession.changes.findIndex(
       c => c.filePath === change.filePath
     )
-    
+
     if (existingIndex >= 0) {
       // Update existing change
       this.state.currentSession.changes[existingIndex] = fullChange
@@ -128,7 +137,7 @@ class ComposerServiceClass {
       // Add new change
       this.state.currentSession.changes.push(fullChange)
     }
-    
+
     // Update stats
     this.updateSessionStats()
     this.notify()
@@ -139,10 +148,10 @@ class ComposerServiceClass {
    */
   async acceptChange(filePath: string): Promise<boolean> {
     if (!this.state.currentSession) return false
-    
+
     const change = this.state.currentSession.changes.find(c => c.filePath === filePath)
     if (!change || change.status !== 'pending') return false
-    
+
     try {
       if (change.changeType === 'delete') {
         await api.file.delete(filePath)
@@ -154,7 +163,7 @@ class ComposerServiceClass {
         }
         await api.file.write(filePath, change.newContent)
       }
-      
+
       change.status = 'accepted'
       this.notify()
       return true
@@ -169,10 +178,10 @@ class ComposerServiceClass {
    */
   async rejectChange(filePath: string): Promise<boolean> {
     if (!this.state.currentSession) return false
-    
+
     const change = this.state.currentSession.changes.find(c => c.filePath === filePath)
     if (!change || change.status !== 'pending') return false
-    
+
     // Restore original content if it was modified
     if (change.changeType === 'modify' && change.oldContent !== null) {
       try {
@@ -181,7 +190,7 @@ class ComposerServiceClass {
         logger.agent.error('[Composer] Failed to restore file:', error)
       }
     }
-    
+
     change.status = 'rejected'
     this.notify()
     return true
@@ -192,10 +201,10 @@ class ComposerServiceClass {
    */
   async acceptAll(): Promise<{ accepted: number; failed: number }> {
     if (!this.state.currentSession) return { accepted: 0, failed: 0 }
-    
+
     let accepted = 0
     let failed = 0
-    
+
     for (const change of this.state.currentSession.changes) {
       if (change.status === 'pending') {
         const success = await this.acceptChange(change.filePath)
@@ -206,10 +215,10 @@ class ComposerServiceClass {
         }
       }
     }
-    
+
     // Check if session is complete
     this.checkSessionComplete()
-    
+
     return { accepted, failed }
   }
 
@@ -218,10 +227,10 @@ class ComposerServiceClass {
    */
   async rejectAll(): Promise<{ rejected: number; failed: number }> {
     if (!this.state.currentSession) return { rejected: 0, failed: 0 }
-    
+
     let rejected = 0
     let failed = 0
-    
+
     for (const change of this.state.currentSession.changes) {
       if (change.status === 'pending') {
         const success = await this.rejectChange(change.filePath)
@@ -232,10 +241,10 @@ class ComposerServiceClass {
         }
       }
     }
-    
+
     // Check if session is complete
     this.checkSessionComplete()
-    
+
     return { rejected, failed }
   }
 
@@ -244,7 +253,7 @@ class ComposerServiceClass {
    */
   completeSession(): void {
     if (!this.state.currentSession) return
-    
+
     this.state.currentSession.status = 'completed'
     this.state.currentSession = null
     this.notify()
@@ -255,7 +264,7 @@ class ComposerServiceClass {
    */
   async cancelSession(): Promise<void> {
     if (!this.state.currentSession) return
-    
+
     await this.rejectAll()
     this.state.currentSession.status = 'cancelled'
     this.state.currentSession = null
@@ -267,18 +276,18 @@ class ComposerServiceClass {
    */
   getChangesGroupedByDirectory(): Map<string, FileChange[]> {
     if (!this.state.currentSession) return new Map()
-    
+
     const groups = new Map<string, FileChange[]>()
-    
+
     for (const change of this.state.currentSession.changes) {
       const dir = getDirname(change.relativePath) || '.'
-      
+
       if (!groups.has(dir)) {
         groups.set(dir, [])
       }
       groups.get(dir)!.push(change)
     }
-    
+
     return groups
   }
 
@@ -294,7 +303,7 @@ class ComposerServiceClass {
     if (!this.state.currentSession) {
       return { pending: 0, accepted: 0, rejected: 0, total: 0 }
     }
-    
+
     const changes = this.state.currentSession.changes
     return {
       pending: changes.filter(c => c.status === 'pending').length,
@@ -309,9 +318,9 @@ class ComposerServiceClass {
    */
   generateUnifiedDiff(): string {
     if (!this.state.currentSession) return ''
-    
+
     let diff = ''
-    
+
     for (const change of this.state.currentSession.changes) {
       diff += `\n${'='.repeat(60)}\n`
       diff += `File: ${change.relativePath}\n`
@@ -319,7 +328,7 @@ class ComposerServiceClass {
       diff += `Status: ${change.status}\n`
       diff += `Lines: +${change.linesAdded} -${change.linesRemoved}\n`
       diff += `${'='.repeat(60)}\n\n`
-      
+
       if (change.changeType === 'create') {
         diff += `+++ ${change.relativePath} (new file)\n`
         if (change.newContent) {
@@ -339,13 +348,13 @@ class ComposerServiceClass {
         if (change.oldContent && change.newContent) {
           const oldLines = change.oldContent.split('\n')
           const newLines = change.newContent.split('\n')
-          
+
           // Simple line-by-line comparison
           const maxLines = Math.max(oldLines.length, newLines.length)
           for (let i = 0; i < maxLines; i++) {
             const oldLine = oldLines[i]
             const newLine = newLines[i]
-            
+
             if (oldLine === newLine) {
               diff += `  ${oldLine || ''}\n`
             } else {
@@ -355,10 +364,10 @@ class ComposerServiceClass {
           }
         }
       }
-      
+
       diff += '\n'
     }
-    
+
     return diff
   }
 
@@ -366,7 +375,7 @@ class ComposerServiceClass {
 
   private updateSessionStats(): void {
     if (!this.state.currentSession) return
-    
+
     const changes = this.state.currentSession.changes
     this.state.currentSession.totalFiles = changes.length
     this.state.currentSession.totalLinesAdded = changes.reduce((sum, c) => sum + c.linesAdded, 0)
@@ -375,7 +384,7 @@ class ComposerServiceClass {
 
   private checkSessionComplete(): void {
     if (!this.state.currentSession) return
-    
+
     const hasPending = this.state.currentSession.changes.some(c => c.status === 'pending')
     if (!hasPending) {
       this.state.currentSession.status = 'completed'

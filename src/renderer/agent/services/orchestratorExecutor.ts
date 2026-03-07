@@ -392,10 +392,11 @@ async function runTaskWithAgent(
                 return { success: false, output: '', error: `Failed to get LLM config for ${task.provider}/${task.model}` }
             }
 
-            logger.agent.info(`[OrchestratorExecutor] Emitting subtask. Loop: ${currentLoop}, Role: ${currentRole}`)
+            const templateId = mapRoleToTemplateId(currentRole)
+            logger.agent.info(`[OrchestratorExecutor] Emitting subtask. Loop: ${currentLoop}, Role: ${currentRole} (Template: ${templateId})`)
 
             await Agent.send(feedbackMessage, llmConfig, workspacePath, 'agent', {
-                promptTemplateId: currentRole,
+                promptTemplateId: templateId,
                 orchestratorPhase: 'executing',
             })
 
@@ -498,4 +499,30 @@ function buildTaskMessage(task: OrchestratorTask, plan: TaskPlan): string {
     lines.push('- Be thorough and handle edge cases')
 
     return lines.join('\n')
+}
+
+/**
+ * 映射角色名到模板 ID
+ */
+function mapRoleToTemplateId(role: string): string {
+    const r = role.toLowerCase()
+    if (r.includes('frontend') || r.includes('backend') || r.includes('developer') || r.includes('coder') || r.includes('engineer')) {
+        return 'coder'
+    }
+    if (r.includes('architect') || r.includes('system design')) {
+        return 'architect'
+    }
+    if (r.includes('ui') || r.includes('ux') || r.includes('designer') || r.includes('visual')) {
+        return 'uiux-designer'
+    }
+    if (r.includes('analyst') || r.includes('research') || r.includes('gather') || r.includes('planning')) {
+        return 'analyst'
+    }
+    if (r.includes('review') || r.includes('audit') || r.includes('careful')) {
+        return 'reviewer'
+    }
+    if (r.includes('concise') || r.includes('efficient') || r.includes('minimal')) {
+        return 'concise'
+    }
+    return role // 如果已经是一个合法的 ID，直接返回
 }

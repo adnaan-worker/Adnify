@@ -846,7 +846,7 @@ const ChatMessage = React.memo(({
   return (
     <div className={`
       w-full group/msg transition-colors duration-300
-      ${isUser ? 'py-1 bg-transparent' : 'py-2 border-y border-border bg-surface hover:bg-surface-hover'}
+      ${isUser ? 'py-1 bg-transparent' : 'py-2 border-border bg-surface hover:bg-surface-hover'}
     `}>
       <div className="w-full px-4 flex flex-col gap-1">
 

@@ -80,6 +80,7 @@ export const EDITOR_DEFAULTS = {
   minimapScale: 1,
   lineNumbers: 'on' as const,
   bracketPairColorization: true,
+  enableInlineDiff: true,
   formatOnSave: false,
   autoSave: 'off' as const,
   autoSaveDelay: 1000,

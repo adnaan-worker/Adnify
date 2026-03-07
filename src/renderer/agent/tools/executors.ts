@@ -18,6 +18,8 @@ import { fileCacheService } from '../services/fileCacheService'
 import { lintService } from '../services/lintService'
 import { memoryService } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
+import { composerService } from '../services/composerService'
+import { toRelativePath } from '@shared/utils/pathUtils'
 
 // ===== 辅助函数 =====
 
@@ -413,6 +415,20 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
             fileCacheService.markFileAsRead(path, newContent)
+
+            // 🎯 集成行内预览：将变更记录到 composerService
+            composerService.ensureSession()
+            composerService.addChange({
+                filePath: path,
+                relativePath: toRelativePath(path, ctx.workspacePath || ''),
+                oldContent: originalContent,
+                newContent: newContent,
+                changeType: 'modify',
+                linesAdded,
+                linesRemoved,
+                toolCallId: (ctx as any).toolCallId
+            })
+
             await notifyLspAfterWrite(path)
 
             if (allWarnings.length > 0) {
@@ -491,9 +507,22 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
             fileCacheService.markFileAsRead(path, newContent)
-            await notifyLspAfterWrite(path)
 
+            // 🎯 集成行内预览
             const lineChanges = calculateLineChanges(originalContent, newContent)
+            composerService.ensureSession()
+            composerService.addChange({
+                filePath: path,
+                relativePath: toRelativePath(path, ctx.workspacePath || ''),
+                oldContent: originalContent,
+                newContent: newContent,
+                changeType: 'modify',
+                linesAdded: lineChanges.added,
+                linesRemoved: lineChanges.removed,
+                toolCallId: (ctx as any).toolCallId
+            })
+
+            await notifyLspAfterWrite(path)
 
             const result: any = {
                 success: true,
@@ -561,9 +590,22 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             if (!writeSuccess) return { success: false, result: '', error: 'Failed to write file' }
 
             fileCacheService.markFileAsRead(path, newContent)
-            await notifyLspAfterWrite(path)
 
+            // 🎯 集成行内预览
             const lineChanges = calculateLineChanges(originalContent, newContent)
+            composerService.ensureSession()
+            composerService.addChange({
+                filePath: path,
+                relativePath: toRelativePath(path, ctx.workspacePath || ''),
+                oldContent: originalContent,
+                newContent: newContent,
+                changeType: 'modify',
+                linesAdded: lineChanges.added,
+                linesRemoved: lineChanges.removed,
+                toolCallId: (ctx as any).toolCallId
+            })
+
+            await notifyLspAfterWrite(path)
 
             const strategyInfo = result.strategy !== 'exact' ? ` (matched via ${result.strategy} strategy)` : ''
 
@@ -593,6 +635,19 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         await notifyLspAfterWrite(path)
 
         const lineChanges = calculateLineChanges(originalContent, content)
+
+        // 🎯 集成行内预览
+        composerService.ensureSession()
+        composerService.addChange({
+            filePath: path,
+            relativePath: toRelativePath(path, ctx.workspacePath || ''),
+            oldContent: originalContent,
+            newContent: content,
+            changeType: originalContent ? 'modify' : 'create',
+            linesAdded: lineChanges.added,
+            linesRemoved: lineChanges.removed,
+            toolCallId: (ctx as any).toolCallId
+        })
         return { success: true, result: 'File written successfully', meta: { filePath: path, oldContent: originalContent, newContent: content, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
     },
 
@@ -611,6 +666,19 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         if (success) {
             // 通知 LSP 并等待诊断
             await notifyLspAfterWrite(path)
+
+            // 🎯 集成行内预览
+            composerService.ensureSession()
+            composerService.addChange({
+                filePath: path,
+                relativePath: toRelativePath(path, ctx.workspacePath || ''),
+                oldContent: null,
+                newContent: content,
+                changeType: 'create',
+                linesAdded: content.split('\n').length,
+                linesRemoved: 0,
+                toolCallId: (ctx as any).toolCallId
+            })
         }
 
         return { success, result: success ? 'File created' : 'Failed to create file', meta: { filePath: path, isNewFile: true, newContent: content, linesAdded: content.split('\n').length } }

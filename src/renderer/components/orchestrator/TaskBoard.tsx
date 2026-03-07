@@ -24,6 +24,9 @@ import { MarkdownPreview } from '@/renderer/components/editor/FilePreview'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
 import { BUILTIN_PROVIDERS } from '@/shared/config/providers'
+import {
+    getPromptTemplateSummary,
+} from '@/renderer/agent/prompts/promptTemplates'
 import type { OrchestratorTask, ExecutionMode } from '@/renderer/agent/store/slices/orchestratorSlice'
 
 interface TaskBoardProps {
@@ -143,6 +146,39 @@ const ModelSelector = memo(function ModelSelector({
     )
 })
 
+/** 角色选择器 */
+const RoleSelector = memo(function RoleSelector({
+    role,
+    onChange,
+    disabled,
+}: {
+    role: string
+    onChange: (role: string) => void
+    disabled?: boolean
+}) {
+    const templates = useMemo(() => getPromptTemplateSummary(), [])
+    const options = useMemo(() => {
+        return templates.map(t => ({
+            value: t.id,
+            label: t.nameZh || t.name
+        }))
+    }, [templates])
+
+    return (
+        <div className="flex gap-2 items-center">
+            <div className="w-48">
+                <Select
+                    options={options}
+                    value={role}
+                    onChange={onChange}
+                    disabled={disabled}
+                    className="text-xs"
+                />
+            </div>
+        </div>
+    )
+})
+
 /** 单个任务卡片 */
 const TaskCard = memo(function TaskCard({
     task,
@@ -221,6 +257,18 @@ const TaskCard = memo(function TaskCard({
                                     provider={task.provider}
                                     model={task.model}
                                     onChange={handleModelChange}
+                                    disabled={isExecuting}
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-2 mt-3">
+                                <Sparkles className="w-3 h-3 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">角色配置</span>
+                            </div>
+                            <div className="mt-2">
+                                <RoleSelector
+                                    role={task.role}
+                                    onChange={(newRole) => updateTask(planId, task.id, { role: newRole })}
                                     disabled={isExecuting}
                                 />
                             </div>

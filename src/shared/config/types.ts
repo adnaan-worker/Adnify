@@ -173,6 +173,7 @@ export interface EditorConfig {
   minimapScale: number
   lineNumbers: 'on' | 'off' | 'relative'
   bracketPairColorization: boolean
+  enableInlineDiff: boolean
   // 编辑器行为
   formatOnSave: boolean
   autoSave: 'off' | 'afterDelay' | 'onFocusChange'
