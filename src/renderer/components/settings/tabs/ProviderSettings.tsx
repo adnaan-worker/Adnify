@@ -1604,29 +1604,32 @@ export function ProviderSettings({
               </div>
             </div>
 
-            {/* OpenAI API 协议选择（仅内置 OpenAI provider 显示） */}
-            {localConfig.provider === 'openai' && (
+            {/* 协议选择器（不仅限内置 openai，自定义厂商也需要能够修改） */}
+            {(localConfig.provider === 'openai' || isCustomSelected) && (
               <div className="mt-4 pt-4 border-t border-border/50">
-                <div className="space-y-2">
-                  <div className="space-y-0.5">
-                    <label className="text-xs font-medium text-text-secondary">
-                      {language === 'zh' ? 'API 协议' : 'API Protocol'}
-                    </label>
-                    <p className="text-[10px] text-text-muted">
-                      {language === 'zh'
-                        ? 'Chat Completions 适用于 GPT 系列，Responses API 适用于 o1/o3/o4 等推理模型'
-                        : 'Chat Completions for GPT series, Responses API for reasoning models like o1/o3/o4'}
-                    </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <div className="space-y-0.5">
+                      <label className="text-xs font-medium text-text-secondary">
+                        {language === 'zh' ? 'API 协议' : 'API Protocol'}
+                      </label>
+                      <p className="text-[10px] text-text-muted">
+                        {localConfig.provider === 'openai'
+                          ? (language === 'zh'
+                            ? 'Chat Completions 适用于 GPT 系列，Responses API 适用于 o1/o3/o4 等推理模型'
+                            : 'Chat Completions for GPT series, Responses API for reasoning models like o1/o3/o4')
+                          : (language === 'zh'
+                            ? '对于兼容模型，通常建议使用 OpenAI Compatible'
+                            : 'For compatible models, OpenAI Compatible is usually recommended')}
+                      </p>
+                    </div>
+                    <Select
+                      value={localConfig.protocol || 'openai'}
+                      onChange={(value) => setLocalConfig({ ...localConfig, protocol: value as ApiProtocol })}
+                      options={PROTOCOL_OPTIONS}
+                      className="w-full bg-background/50 border-border"
+                    />
                   </div>
-                  <Select
-                    value={localConfig.protocol || 'openai'}
-                    onChange={(value) => setLocalConfig({ ...localConfig, protocol: value as ApiProtocol })}
-                    options={[
-                      { value: 'openai', label: 'Chat Completions (/v1/chat/completions)' },
-                      { value: 'openai-responses', label: 'Responses API (/v1/responses)' },
-                    ]}
-                    className="w-full max-w-md bg-background/50 border-border"
-                  />
                 </div>
               </div>
             )}

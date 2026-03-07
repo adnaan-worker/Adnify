@@ -216,8 +216,12 @@ function createWindow(isEmpty = false): BrowserWindow {
   })
 
   win.on('close', async (e) => {
-    if (windows.size === 1 && !isQuitting) {
+    logger.system.info(`[Main] Window closing: ${windowId}, current total: ${windows.size}`)
+
+    // 如果是最后一个窗口且不是正在退出过程中，则执行清理并退出
+    if (windows.size <= 1 && !isQuitting) {
       isQuitting = true
+      logger.system.info('[Main] Last window closing, starting app quit sequence')
       e.preventDefault()
       try {
         ipcModule?.cleanupAllHandlers()
@@ -225,11 +229,16 @@ function createWindow(isEmpty = false): BrowserWindow {
       } catch (err) {
         logger.system.error('[Main] Cleanup error:', err)
       }
+      windows.delete(windowId)
+      windowWorkspaces.delete(windowId)
       win.destroy()
       app.quit()
     } else {
+      // 还有其他窗口，只删除当前窗口记录
       windows.delete(windowId)
       windowWorkspaces.delete(windowId)
+      logger.system.info(`[Main] Window ${windowId} closed, remaining windows: ${windows.size}`)
+
       if (lastActiveWindow === win) {
         lastActiveWindow = Array.from(windows.values())[0] || null
       }

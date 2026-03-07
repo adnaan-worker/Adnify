@@ -624,6 +624,17 @@ If Adnify helps you, feel free to buy the author a coffee ☕️
 
 Your support is my motivation to keep developing ❤️
 
+### ☕️ Supporters Wall
+
+Thank you to the following supporters for the coffee/milk tea. Your support is vital to Adnify!
+
+| Supporter | Method | Date | Message |
+| :--- | :--- | :--- | :--- |
+| Example Supporter | ☕️ Coffee | 2026-03-07 | Hope the project gets better and better! |
+| (To be added) | | | |
+
+---
+
 ---
 
 ## 📄 License
