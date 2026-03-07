@@ -58,10 +58,15 @@ export const zh = {
   'toolResultFor': '工具结果：',
 
   // Diff viewer
+  'reviewChanges': '审核更改',
   'acceptChanges': '接受更改',
   'rejectChanges': '拒绝更改',
   'splitView': '分栏视图',
   'unifiedView': '统一视图',
+  'previousChange': '上一个更改',
+  'nextChange': '下一个更改',
+  'ignoreWhitespace': '忽略空白字符',
+  'pending': '等待中',
   'linesAdded': '行添加',
   'linesRemoved': '行删除',
 

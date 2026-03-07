@@ -2,7 +2,7 @@
  * 编辑器标签栏组件
  */
 import { memo } from 'react'
-import { X, AlertCircle, AlertTriangle, RefreshCw, FileX } from 'lucide-react'
+import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff } from 'lucide-react'
 import { getFileName } from '@shared/utils/pathUtils'
 import { useAgentStore } from '@renderer/agent'
 import type { OpenFile } from '@store'
@@ -57,6 +57,11 @@ export const EditorTabs = memo(function EditorTabs({
           }
         }
 
+        const isDiff = file.path.startsWith('diff://')
+        if (isDiff) {
+          fileName = `Diff: ${getFileName(file.path.slice(7))}`
+        }
+
         return (
           <div
             key={file.path}
@@ -83,6 +88,8 @@ export const EditorTabs = memo(function EditorTabs({
                 <FileX className="w-3.5 h-3.5 text-status-error flex-shrink-0" />
               </span>
             )}
+
+            {isDiff && <FileDiff className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
 
             <span className={`text-[13px] truncate flex-1 ${file.isDeleted ? 'line-through text-text-muted' : ''}`}>{fileName}</span>
 

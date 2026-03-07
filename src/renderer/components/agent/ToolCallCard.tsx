@@ -22,8 +22,22 @@ import { terminalManager } from '@/renderer/services/TerminalManager'
 import { RichContentRenderer } from './RichContentRenderer'
 import InlineDiffPreview from './InlineDiffPreview'
 import { getFileName } from '@shared/utils/pathUtils'
-import { CodeSkeleton } from '../ui/Loading'
 import { TextWithFileLinks } from '../common/TextWithFileLinks'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { themeManager } from '../../config/themeConfig'
+
+const guessLanguage = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase() || ''
+    const map: Record<string, string> = {
+        js: 'javascript', jsx: 'javascript',
+        ts: 'typescript', tsx: 'typescript',
+        json: 'json', css: 'css', html: 'html', md: 'markdown',
+        py: 'python', rs: 'rust', go: 'go', sh: 'bash',
+        yml: 'yaml', yaml: 'yaml', xml: 'xml'
+    }
+    return map[ext] || 'typescript'
+}
 
 interface ToolCallCardProps {
     toolCall: ToolCall
@@ -78,7 +92,7 @@ const ToolCallCard = memo(function ToolCallCard({
     defaultExpanded = false,
 }: ToolCallCardProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded)
-    const { language, setTerminalVisible } = useStore()
+    const { language, setTerminalVisible, currentTheme } = useStore()
 
     // 合并 arguments 与 streamingState.partialArgs，实现流式参数实时展示
     const args = useMemo(() => ({
@@ -229,17 +243,6 @@ const ToolCallCard = memo(function ToolCallCard({
     // 渲染预览内容
     const renderPreview = () => {
         const name = toolCall.name
-
-        // 运行中显示骨架屏
-        if (isRunning && !toolCall.result && Object.keys(args).filter(k => !k.startsWith('_')).length === 0) {
-            return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="min-h-[100px] opacity-60">
-                        <CodeSkeleton lines={3} />
-                    </div>
-                </div>
-            )
-        }
 
         // 终端命令
         if (name === 'run_command') {
@@ -403,8 +406,11 @@ const ToolCallCard = memo(function ToolCallCard({
             const displayName = name === 'read_file'
                 ? (filePath ? getFileName(filePath) : '<no path>')
                 : `${(args.paths as string[])?.length || 0} files`
+            const theme = themeManager.getThemeById(currentTheme)
+            const syntaxStyle = theme?.type === 'light' ? vs : vscDarkPlus
+
             return (
-                <div className="space-y-1">
+                <div className="space-y-1 mt-1">
                     <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
                         <FileCode className="w-3 h-3" />
                         <span className="font-medium text-text-primary transition-colors hover:underline cursor-pointer" title={typeof args.path === 'string' ? args.path : undefined}>
@@ -412,9 +418,21 @@ const ToolCallCard = memo(function ToolCallCard({
                         </span>
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1 text-[11px] text-text-secondary whitespace-pre-wrap">
-                            <TextWithFileLinks text={toolCall.result.slice(0, 2000)} />
-                            {toolCall.result.length > 2000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
+                        <div className="mt-1 relative rounded-lg border border-border/40 bg-background-tertiary overflow-hidden shadow-sm">
+                            <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                                <SyntaxHighlighter
+                                    style={syntaxStyle}
+                                    language={filePath ? guessLanguage(filePath) : 'typescript'}
+                                    PreTag="div"
+                                    className="!bg-transparent !p-3 !m-0 !text-[11px] leading-relaxed font-mono"
+                                    customStyle={{ background: 'transparent', margin: 0 }}
+                                    wrapLines
+                                    wrapLongLines
+                                >
+                                    {toolCall.result.slice(0, 3000)}
+                                </SyntaxHighlighter>
+                            </div>
+                            {toolCall.result.length > 3000 && <div className="px-3 py-1.5 border-t border-border/50 text-[10px] text-text-muted bg-surface/30 italic drop-shadow-sm truncate">... (Content truncated for preview length limits)</div>}
                         </div>
                     )}
                 </div>
@@ -516,7 +534,7 @@ const ToolCallCard = memo(function ToolCallCard({
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
     return (
-        <div className={`group my-0.5 relative ${cardStyle} animate-slide-in-right`}>
+        <div className={`group my-0.5 relative ${cardStyle}`}>
             {/* Sweeping Light Effect for running state */}
             {(isStreaming || isRunning) && (
                 <div className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden">
@@ -578,10 +596,10 @@ const ToolCallCard = memo(function ToolCallCard({
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                        transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
                         className="overflow-hidden"
                     >
-                        <div className="pl-[26px] pr-3 pb-3 pt-0 relative">
+                        <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">
                             {/* Visual Threading Line */}
                             <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
 

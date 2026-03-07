@@ -7,7 +7,8 @@ import {
   History,
   Plus,
   Trash2,
-  Upload
+  Upload,
+  ChevronDown
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
@@ -46,7 +47,6 @@ export default function ChatPanel() {
     setActiveFile,
     language,
     activeFilePath,
-    setActiveDiff,
     selectedCode,
   } = useStore()
 
@@ -300,12 +300,12 @@ export default function ChatPanel() {
       openFile(fullPath, currentContent)
       setActiveFile(fullPath)
     }
-    setActiveDiff({
-      original: oldContent,
-      modified: newContent,
-      filePath: fullPath,
-    })
-  }, [workspacePath, openFile, setActiveFile, setActiveDiff])
+
+    // 打开虚拟 Diff 标签页
+    const diffUri = `diff://${fullPath}`
+    openFile(diffUri, newContent, oldContent)
+    setActiveFile(diffUri)
+  }, [workspacePath, openFile, setActiveFile])
 
   // 图片处理
   const addImage = useCallback(async (file: File) => {
@@ -790,7 +790,6 @@ export default function ChatPanel() {
     const result = await restoreToCheckpoint(checkpoint.id)
     if (result.success) {
       toast.success(`Restored ${result.restoredFiles.length} file(s)`)
-      setActiveDiff(null)
 
       // 恢复用户消息文本到输入框
       if (userContent) {
@@ -830,7 +829,7 @@ export default function ChatPanel() {
     } else if (result.errors.length > 0) {
       toast.error(`Restore failed: ${result.errors[0]}`)
     }
-  }, [getCheckpointForMessage, restoreToCheckpoint, setActiveDiff, toast, language, messages, addContextItem])
+  }, [getCheckpointForMessage, restoreToCheckpoint, toast, language, messages, addContextItem])
 
   // 渲染消息
   const renderMessage = useCallback((msg: ChatMessageType) => {
@@ -915,6 +914,26 @@ export default function ChatPanel() {
           </div>
 
           <div className="flex items-center gap-1">
+            <AnimatePresence>
+              {showScrollButton && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => scrollToBottom('smooth')}
+                    title={language === 'zh' ? '触底滚动' : 'Scroll to bottom'}
+                    className="hover:bg-accent/10 text-accent transition-colors"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <Button
               variant="ghost"
               size="icon"
@@ -1010,25 +1029,6 @@ export default function ChatPanel() {
             components={virtuosoComponents}
           />
 
-          {/* Scroll to Bottom Button */}
-          <AnimatePresence>
-            {showScrollButton && (
-              <motion.button
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                transition={{ duration: 0.2 }}
-                onClick={() => scrollToBottom('smooth')}
-                className="absolute bottom-44 right-4 z-30 p-2.5 rounded-full bg-surface/95 border border-border shadow-xl hover:bg-surface hover:border-accent/30 hover:shadow-accent/10 transition-all"
-                title={language === 'zh' ? '滚动到底部' : 'Scroll to bottom'}
-              >
-                <svg className="w-4 h-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                </svg>
-              </motion.button>
-            )}
-          </AnimatePresence>
-
           {/* File Mention Popup */}
           {
             showFileMention && (
@@ -1071,13 +1071,9 @@ export default function ChatPanel() {
 
                   const currentContent = await api.file.read(filePath)
                   if (currentContent !== null) {
-                    openFile(filePath, currentContent)
-                    setActiveFile(filePath)
-                    setActiveDiff({
-                      original: change.snapshot.content || '',
-                      modified: currentContent,
-                      filePath,
-                    })
+                    const diffUri = `diff://${filePath}`
+                    openFile(diffUri, currentContent, change.snapshot.content || '')
+                    setActiveFile(diffUri)
                   }
                 }}
                 onAcceptFile={(filePath) => {

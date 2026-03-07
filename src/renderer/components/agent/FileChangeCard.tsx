@@ -247,8 +247,9 @@ export default function FileChangeCard({
 
                                             api.file.read(absPath).then(content => {
                                                 if (content !== null) {
-                                                    openFile(absPath, content)
-                                                    setActiveFile(absPath)
+                                                    const diffUri = `diff://${absPath}`
+                                                    openFile(diffUri, newContent, oldContent)
+                                                    setActiveFile(diffUri)
                                                 } else {
                                                     toast.error(`Failed to open file: ${getFileName(absPath)}`)
                                                 }

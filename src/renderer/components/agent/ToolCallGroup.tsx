@@ -16,6 +16,8 @@ import FileChangeCard from './FileChangeCard'
 import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
+import { api } from '@/renderer/services/electronAPI'
+import { joinPath } from '@shared/utils/pathUtils'
 
 interface ToolCallGroupProps {
     toolCalls: ToolCall[]
@@ -34,7 +36,7 @@ export default function ToolCallGroup({
     onOpenDiff,
     messageId,
 }: ToolCallGroupProps) {
-    const { language } = useStore()
+    const { language, openFile, setActiveFile, workspacePath } = useStore()
     const [isExpanded, setIsExpanded] = useState(true)
 
     // 简单分类：已完成 vs 正在执行
@@ -161,6 +163,38 @@ export default function ToolCallGroup({
         return name.replace(/_/g, ' ')
     }, [])
 
+    const handleToolClick = useCallback(async (tc: ToolCall) => {
+        let pathStr = ''
+        const argsStr = tc.arguments
+        let args: any = {}
+        try {
+            args = typeof argsStr === 'string' ? JSON.parse(argsStr) : argsStr
+        } catch { return }
+
+        if (['read_file', 'edit_file', 'write_file', 'create_file', 'create_file_or_folder', 'replace_file_content', 'get_lint_errors', 'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'].includes(tc.name)) {
+            pathStr = args.path
+        } else if (tc.name === 'read_multiple_files') {
+            pathStr = args.paths?.[0]
+        }
+
+        if (pathStr) {
+            let absPath = pathStr
+            const isAbsolute = /^([a-zA-Z]:[\\/]|[/])/.test(pathStr)
+            if (!isAbsolute && workspacePath) {
+                absPath = joinPath(workspacePath, absPath)
+            }
+            try {
+                const content = await api.file.read(absPath)
+                if (content !== null) {
+                    openFile(absPath, content)
+                    setActiveFile(absPath)
+                }
+            } catch (err) {
+                // Ignore missing file
+            }
+        }
+    }, [workspacePath, openFile, setActiveFile])
+
     return (
         <div className="my-2 animate-slide-in-right">
             {/* 1. 已完成的工具统一执行链路卡片 */}
@@ -198,8 +232,8 @@ export default function ToolCallGroup({
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.2, ease: "easeInOut" }}
-                                className="overflow-hidden"
+                                transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
+                                className="overflow-hidden border-t-0"
                             >
                                 <div className="p-2 space-y-1">
                                     {completedCalls.map((tc, index) => {
@@ -209,25 +243,29 @@ export default function ToolCallGroup({
                                         const statusText = getCompactStatusText(tc)
 
                                         return (
-                                            <div key={tc.id} className="flex items-center gap-2.5 px-2 py-1 relative">
+                                            <div
+                                                key={tc.id}
+                                                className="flex items-center gap-2.5 px-2 py-1.5 relative group/item cursor-pointer hover:bg-surface-hover/50 rounded-md transition-colors"
+                                                onClick={() => handleToolClick(tc)}
+                                            >
                                                 {/* Connection Line */}
                                                 {index !== completedCalls.length - 1 && (
-                                                    <div className="absolute left-[15px] top-[20px] bottom-[-8px] w-[1px] bg-border/40" />
+                                                    <div className="absolute left-[15px] top-[24px] bottom-[-8px] w-[1px] bg-border/40" />
                                                 )}
 
                                                 {/* Status Dot */}
-                                                <div className="shrink-0 relative z-10">
+                                                <div className="shrink-0 relative z-10 mt-0.5">
                                                     {isSuccess ? (
-                                                        <div className="w-3.5 h-3.5 rounded-full bg-green-500/20 flex items-center justify-center">
-                                                            <CheckCircle2 className="w-2.5 h-2.5 text-green-400" />
+                                                        <div className="w-3.5 h-3.5 rounded-full bg-green-500/10 flex items-center justify-center">
+                                                            <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />
                                                         </div>
                                                     ) : isError ? (
-                                                        <div className="w-3.5 h-3.5 rounded-full bg-red-500/20 flex items-center justify-center">
-                                                            <XCircle className="w-2.5 h-2.5 text-red-400" />
+                                                        <div className="w-3.5 h-3.5 rounded-full bg-red-500/10 flex items-center justify-center">
+                                                            <XCircle className="w-2.5 h-2.5 text-red-500" />
                                                         </div>
                                                     ) : isRejected ? (
-                                                        <div className="w-3.5 h-3.5 rounded-full bg-yellow-500/20 flex items-center justify-center">
-                                                            <XCircle className="w-2.5 h-2.5 text-yellow-400" />
+                                                        <div className="w-3.5 h-3.5 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                                                            <XCircle className="w-2.5 h-2.5 text-yellow-500" />
                                                         </div>
                                                     ) : (
                                                         <div className="w-3.5 h-3.5 rounded-full border border-text-muted/30 flex items-center justify-center" />
@@ -236,13 +274,13 @@ export default function ToolCallGroup({
 
                                                 {/* Text Info */}
                                                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
-                                                    <span className="text-[12px] font-medium text-text-secondary whitespace-nowrap">
+                                                    <span className="text-[12px] font-medium text-text-secondary whitespace-nowrap group-hover/item:text-text-primary transition-colors">
                                                         {tc.name}
                                                     </span>
                                                     {statusText && (
                                                         <>
                                                             <span className="text-border">|</span>
-                                                            <span className={`text-[11px] truncate ${isError ? 'text-red-400' : 'text-text-muted'} group-hover/item:text-text-primary transition-colors`}>
+                                                            <span className={`text-[11px] truncate ${isError ? 'text-red-400' : 'text-text-muted group-hover/item:text-text-primary'} transition-colors`}>
                                                                 {statusText}
                                                             </span>
                                                         </>
@@ -260,7 +298,20 @@ export default function ToolCallGroup({
 
             {/* 2. 正在运行的工具（保持独立的大卡片显示） */}
             <div className="space-y-2">
-                {activeCalls.map(tc => renderToolCard(tc))}
+                <AnimatePresence initial={false}>
+                    {activeCalls.map(tc => (
+                        <motion.div
+                            key={tc.id}
+                            initial={{ opacity: 0, height: 0, x: -10 }}
+                            animate={{ opacity: 1, height: 'auto', x: 0 }}
+                            exit={{ opacity: 0, height: 0, scale: 0.95 }}
+                            transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
+                            className="overflow-hidden"
+                        >
+                            {renderToolCard(tc)}
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
             </div>
         </div>
     )

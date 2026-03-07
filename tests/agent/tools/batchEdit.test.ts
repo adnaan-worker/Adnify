@@ -3,7 +3,7 @@
  * 
  * 注意：这是集成测试，需要模拟文件系统
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 describe('批量编辑功能测试', () => {
   describe('编辑排序', () => {
@@ -102,9 +102,9 @@ describe('批量编辑功能测试', () => {
       for (let i = 0; i < ranges.length - 1; i++) {
         const [, , , act1] = ranges[i]
         const [s2, e1, , act2] = ranges[i + 1]
-        
+
         if (act1 === 'insert' && act2 === 'insert') continue
-        
+
         if (s2 <= e1) {
           hasOverlap = true
           break

@@ -261,7 +261,6 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             }
 
             let lines = originalContent.split('\n')
-            const originalLineCount = lines.length
 
             // 🎯 关键优化：从后往前排序，避免行号偏移
             const sortedEdits = [...edits].sort((a, b) => {
@@ -293,9 +292,9 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             for (let i = 0; i < ranges.length - 1; i++) {
                 const [s1, e1, , act1] = ranges[i]
                 const [s2, e2, , act2] = ranges[i + 1]
-                
+
                 if (act1 === 'insert' && act2 === 'insert') continue
-                
+
                 if (s2 <= e1) {
                     return {
                         success: false,
@@ -313,7 +312,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             for (const edit of sortedEdits) {
                 if (edit.action === 'replace') {
                     const { start_line, end_line, content } = edit
-                    
+
                     if (start_line! < 1 || end_line! > lines.length || start_line! > end_line!) {
                         return {
                             success: false,
@@ -324,7 +323,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
                     const oldLines = lines.slice(start_line! - 1, end_line)
                     const newLines = content!.split('\n')
-                    
+
                     lines = [
                         ...lines.slice(0, start_line! - 1),
                         ...newLines,
@@ -341,7 +340,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
                 } else if (edit.action === 'insert') {
                     const { after_line, content } = edit
-                    
+
                     if (after_line! < 0 || after_line! > lines.length) {
                         return {
                             success: false,
@@ -361,7 +360,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
                 } else if (edit.action === 'delete') {
                     const { start_line, end_line } = edit
-                    
+
                     if (start_line! < 1 || end_line! > lines.length || start_line! > end_line!) {
                         return {
                             success: false,
@@ -446,7 +445,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             // 提取被替换的行（用于警告检测）
             const oldLines = lines.slice(startLine - 1, endLine)
             const newLines = content.split('\n')
-            
+
             // 执行替换
             lines.splice(startLine - 1, endLine - startLine + 1, ...newLines)
             const newContent = lines.join('\n')
@@ -454,7 +453,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             // 🎯 Fast-Edit 精华：智能警告检测
             const { checkLineReplaceWarnings } = await import('../../utils/smartReplace')
             const warnings = checkLineReplaceWarnings(oldLines, newLines, lines, startLine, endLine)
-            
+
             if (warnings.length > 0) {
                 logger.agent.warn(`[edit_file] ${path}: Detected ${warnings.length} potential issues`, warnings)
             }
@@ -466,25 +465,25 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             await notifyLspAfterWrite(path)
 
             const lineChanges = calculateLineChanges(originalContent, newContent)
-            
-            const result: any = { 
-                success: true, 
-                result: 'File updated successfully (line mode)', 
-                meta: { 
-                    filePath: path, 
-                    oldContent: originalContent, 
-                    newContent, 
-                    linesAdded: lineChanges.added, 
-                    linesRemoved: lineChanges.removed 
-                } 
+
+            const result: any = {
+                success: true,
+                result: 'File updated successfully (line mode)',
+                meta: {
+                    filePath: path,
+                    oldContent: originalContent,
+                    newContent,
+                    linesAdded: lineChanges.added,
+                    linesRemoved: lineChanges.removed
+                }
             }
-            
+
             // 如果有警告，添加到结果中
             if (warnings.length > 0) {
                 result.meta.warnings = warnings
                 result.result += ` (${warnings.length} warning${warnings.length > 1 ? 's' : ''} detected)`
             }
-            
+
             return result
         } else {
             // 字符串模式（原 edit_file）

@@ -58,10 +58,15 @@ export const en = {
   'toolResultFor': 'Tool result for',
 
   // Diff viewer
+  'reviewChanges': 'Review Changes',
   'acceptChanges': 'Accept Changes',
   'rejectChanges': 'Reject Changes',
   'splitView': 'Split View',
   'unifiedView': 'Unified View',
+  'previousChange': 'Previous Change',
+  'nextChange': 'Next Change',
+  'ignoreWhitespace': 'Ignore Whitespace',
+  'pending': 'Pending',
   'linesAdded': 'lines added',
   'linesRemoved': 'lines removed',
 

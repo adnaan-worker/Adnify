@@ -12,4 +12,4 @@ export { createDebugSlice, type DebugSlice, type Breakpoint } from './debugSlice
 export { createDialogSlice, type DialogSlice } from './dialogSlice'
 export { createLayoutSlice, type LayoutSlice, type SidePanel } from './layoutSlice'
 export { createGitSlice, type GitSlice } from './gitSlice'
-export { createEditorStateSlice, type EditorStateSlice, type DiffView } from './editorStateSlice'
+export { createEditorStateSlice, type EditorStateSlice } from './editorStateSlice'
