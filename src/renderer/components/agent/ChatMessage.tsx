@@ -159,25 +159,29 @@ const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isS
   const [isExpanded, setIsExpanded] = useState(true)
   const { language } = useStore()
   return (
-    <div className="overflow-hidden w-full">
-      <button
+    <div className="overflow-hidden w-full group rounded-lg hover:bg-text-primary/[0.02] transition-colors my-0.5">
+      <div
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center justify-between px-3 py-2 text-text-secondary hover:bg-surface-hover/50 transition-colors"
+        className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
       >
-        <div className="flex items-center gap-2">
-          {isStreaming ? (
-            <Search className="w-3.5 h-3.5 text-accent animate-pulse" />
-          ) : (
-            <Search className="w-3.5 h-3.5" />
-          )}
-          <span className={`text-[10px] font-bold uppercase tracking-wider ${isStreaming ? 'text-shimmer' : ''}`}>
-            {language === 'zh' ? '自动关联上下文' : 'Auto-Context'}
-          </span>
-        </div>
-        <motion.div animate={{ rotate: isExpanded ? 0 : -90 }}>
-          <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+        <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} className="shrink-0 text-text-muted/40 hover:text-text-muted transition-colors">
+          <ChevronDown className="w-3.5 h-3.5" />
         </motion.div>
-      </button>
+
+        <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
+          {isStreaming ? (
+            <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
+              <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            </div>
+          ) : (
+            <Search className="w-3 h-3 text-text-muted/70" />
+          )}
+        </div>
+
+        <span className={`text-[12px] truncate ${isStreaming ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
+          {language === 'zh' ? '自动关联上下文' : 'Auto-Context'}
+        </span>
+      </div>
 
       <AnimatePresence>
         {isExpanded && (
@@ -187,16 +191,19 @@ const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isS
             exit={{ height: 0 }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 pt-1">
-              {content ? (
-                <div className="text-[11px] text-text-muted/80 leading-relaxed font-sans whitespace-pre-wrap">
-                  {content}
-                </div>
-              ) : (
-                <div className="text-[11px] italic text-text-muted/40 py-1">
-                  {language === 'zh' ? '正在分析检索出的代码...' : 'Analyzing retrieved code...'}
-                </div>
-              )}
+            <div className="pl-[26px] pr-3 pb-3 pt-0 relative">
+              <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
+              <div className="relative z-10 ms-1 border-l-2 border-border/30 pl-2">
+                {content ? (
+                  <div className="max-h-64 overflow-auto custom-scrollbar text-[11px] text-text-muted/80 leading-relaxed font-sans whitespace-pre-wrap">
+                    {content}
+                  </div>
+                ) : (
+                  <div className="text-[11px] italic text-text-muted/40 py-1">
+                    {language === 'zh' ? '正在分析检索出的代码...' : 'Analyzing retrieved code...'}
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
@@ -224,24 +231,29 @@ const SkillBlock = React.memo(({ items }: { items: any[] }) => {
   }
 
   return (
-    <div className="flex w-full items-center gap-2 px-3 py-2 text-text-secondary hover:bg-surface-hover/50 transition-colors select-none">
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <Wrench className="w-3.5 h-3.5" />
-        <span className="text-[10px] font-bold uppercase tracking-wider">
+    <div className="overflow-hidden w-full group rounded-lg hover:bg-text-primary/[0.02] transition-colors my-0.5">
+      <div className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer text-text-secondary transition-colors select-none">
+        <div className="shrink-0 text-transparent w-3.5 h-3.5" /> {/* Spacer for alignment */}
+
+        <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
+          <Wrench className="w-3 h-3 text-text-muted/70" />
+        </div>
+
+        <span className="text-[12px] whitespace-nowrap group-hover:text-text-primary transition-colors">
           {language === 'zh' ? '应用技能' : 'Applied Skills'}:
         </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
-        {items.map((item, i) => (
-          <button
-            key={item.skillId || i}
-            onClick={() => handleOpenSkill(item.skillId)}
-            className="text-[11px] font-mono font-medium text-accent hover:underline underline-offset-2 transition-all focus:outline-none truncate shadow-sm"
-            title={item.description}
-          >
-            {item.skillId}
-          </button>
-        ))}
+        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0 ml-1">
+          {items.map((item, i) => (
+            <button
+              key={item.skillId || i}
+              onClick={() => handleOpenSkill(item.skillId)}
+              className="text-[11px] font-mono font-medium text-text-muted hover:text-accent hover:underline underline-offset-2 transition-all focus:outline-none truncate shadow-sm py-0.5 rounded"
+              title={item.description}
+            >
+              {item.skillId}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -262,9 +274,8 @@ const MessageMetaGroup = React.memo(({ skills, searchContent, isSearchStreaming 
   if (!hasSkills && !hasSearch) return null
 
   return (
-    <div className="my-3 w-full rounded-lg border border-border/60 bg-surface/40 shadow-sm overflow-hidden flex flex-col backdrop-blur-sm animate-fade-in mx-1">
+    <div className="my-1 w-full flex flex-col animate-fade-in relative z-10">
       {hasSkills && <SkillBlock items={skills} />}
-      {hasSkills && hasSearch && <div className="h-px w-full bg-border/40" />}
       {hasSearch && <SearchBlock content={searchContent || ''} isStreaming={isSearchStreaming} />}
     </div>
   )

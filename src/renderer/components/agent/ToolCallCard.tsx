@@ -8,13 +8,12 @@ import {
     Check,
     X,
     ChevronDown,
-    Terminal,
     Search,
     Copy,
     AlertTriangle,
     FileCode,
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import { ToolCall } from '@renderer/agent/types'
@@ -246,12 +245,12 @@ const ToolCallCard = memo(function ToolCallCard({
         if (name === 'run_command') {
             const cmd = args.command as string
             return (
-                <div className="bg-surface-active/30 rounded-md border border-border overflow-hidden font-mono text-xs">
-                    <div className="flex items-center justify-between px-3 py-1.5 bg-surface/50 border-b border-border">
-                        <span className="text-text-muted flex items-center gap-2">
-                            <Terminal className="w-3 h-3" />
-                            Terminal
-                        </span>
+                <div className="font-mono text-[11px] space-y-1">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-text-muted">
+                            <span className="text-accent/60 select-none">$</span>
+                            <span className="text-text-primary break-all">{cmd}</span>
+                        </div>
                         {isSuccess && (
                             <button
                                 onClick={async e => {
@@ -266,24 +265,18 @@ const ToolCallCard = memo(function ToolCallCard({
                                     terminalManager.writeToTerminal(terminalId, cmd)
                                     terminalManager.focusTerminal(terminalId)
                                 }}
-                                className="text-[10px] px-1.5 py-0.5 bg-accent/10 hover:bg-accent/20 rounded text-accent transition-colors"
+                                className="text-[10px] px-1.5 py-0.5 hover:bg-surface-hover rounded text-text-muted hover:text-text-primary transition-colors flex-shrink-0 ml-2"
                             >
                                 Open
                             </button>
                         )}
                     </div>
-                    <div className="p-3 text-text-secondary overflow-x-auto custom-scrollbar">
-                        <div className="flex gap-2">
-                            <span className="text-accent select-none">$</span>
-                            <span className="text-text-primary">{cmd}</span>
+                    {toolCall.result && (
+                        <div className="text-text-muted/80 whitespace-pre-wrap break-all border-l-2 border-border/30 pl-2 ml-1">
+                            {toolCall.result.slice(0, 500)}
+                            {toolCall.result.length > 500 && <span className="opacity-50 inline-block ml-1">... (truncated)</span>}
                         </div>
-                        {toolCall.result && (
-                            <div className="mt-2 text-text-muted opacity-80 whitespace-pre-wrap break-all border-t border-border/50 pt-2">
-                                {toolCall.result.slice(0, 500)}
-                                {toolCall.result.length > 500 && <span className="opacity-50">... (truncated)</span>}
-                            </div>
-                        )}
-                    </div>
+                    )}
                 </div>
             )
         }
@@ -296,15 +289,15 @@ const ToolCallCard = memo(function ToolCallCard({
                     : name === 'uiux_search' ? 'UI/UX'
                         : 'Files'
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                <div className="space-y-1 text-[11px]">
+                    <div className="flex items-center gap-1.5 text-text-muted">
                         <Search className="w-3 h-3" />
-                        <span className="text-text-muted/60">{searchType}:</span>
+                        <span>{searchType}:</span>
                         <span className="text-text-primary font-medium truncate">"{query}"</span>
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-1">
-                            <JsonHighlight data={toolCall.result} className="p-2" maxHeight="max-h-48" maxLength={3000} />
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
+                            <JsonHighlight data={toolCall.result} className="py-1" maxHeight="max-h-48" maxLength={3000} />
                         </div>
                     )}
                 </div>
@@ -316,15 +309,15 @@ const ToolCallCard = memo(function ToolCallCard({
             const path = args.path as string
             const displayName = getFileName(path) || path || '.'
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                <div className="space-y-1 text-[11px]">
+                    <div className="flex items-center gap-1.5 text-text-muted">
                         <FileCode className="w-3 h-3" />
                         <span className="text-text-primary font-medium" title={path}>{displayName}</span>
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-64 overflow-y-auto custom-scrollbar p-3 font-mono text-xs text-text-secondary whitespace-pre">
+                        <div className="max-h-64 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1 font-mono text-text-secondary whitespace-pre">
                             {toolCall.result.slice(0, 3000)}
-                            {toolCall.result.length > 3000 && <span className="opacity-50">... (truncated)</span>}
+                            {toolCall.result.length > 3000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
                     )}
                 </div>
@@ -343,32 +336,27 @@ const ToolCallCard = memo(function ToolCallCard({
 
             if (newContent || isStreaming) {
                 return (
-                    <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-1.5 bg-surface/30 border-b border-border">
-                            <span className="text-text-muted flex items-center gap-2 text-xs">
-                                <FileCode className="w-3 h-3" />
-                                {filePath ? (
-                                    <span
-                                        className="font-medium text-text-primary transition-colors"
-                                        title={typeof filePath === 'string' ? filePath : JSON.stringify(filePath)}
-                                    >
-                                        <TextWithFileLinks text={typeof filePath === 'string' ? getFileName(filePath) : JSON.stringify(filePath)} />
-                                    </span>
-                                ) : (isStreaming || isRunning) ? (
-                                    <span className="font-medium text-shimmer italic">editing...</span>
-                                ) : (
-                                    <span className="font-medium text-text-primary opacity-50">&lt;empty path&gt;</span>
-                                )}
-                                {isStreaming && (
-                                    <span className="text-accent text-[10px] flex items-center gap-1 ml-2">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                                        Writing...
-                                    </span>
-                                )}
-                                {isTruncated && !isStreaming && <span className="text-amber-500 text-[10px]">(truncated)</span>}
-                            </span>
+                    <div className="space-y-1">
+                        <div className="flex items-center flex-wrap gap-2 text-[11px] text-text-muted">
+                            <FileCode className="w-3 h-3 flex-shrink-0" />
+                            {filePath ? (
+                                <span className="font-medium text-text-primary transition-colors break-all" title={typeof filePath === 'string' ? filePath : JSON.stringify(filePath)}>
+                                    <TextWithFileLinks text={typeof filePath === 'string' ? getFileName(filePath) : JSON.stringify(filePath)} />
+                                </span>
+                            ) : (isStreaming || isRunning) ? (
+                                <span className="font-medium text-shimmer italic">editing...</span>
+                            ) : (
+                                <span className="font-medium text-text-primary opacity-50">&lt;empty path&gt;</span>
+                            )}
+                            {isStreaming && (
+                                <span className="text-accent flex items-center gap-1">
+                                    <span className="w-1 h-1 rounded-full bg-accent animate-pulse" />
+                                    Writing...
+                                </span>
+                            )}
+                            {isTruncated && !isStreaming && <span className="text-amber-500">(truncated)</span>}
                         </div>
-                        <div className="max-h-64 overflow-auto custom-scrollbar">
+                        <div className="max-h-64 overflow-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
                             <InlineDiffPreview
                                 oldContent={oldContent}
                                 newContent={newContent}
@@ -378,7 +366,7 @@ const ToolCallCard = memo(function ToolCallCard({
                             />
                         </div>
                         {toolCall.result && !isStreaming && (
-                            <div className="px-3 py-2 border-t border-border text-xs text-text-muted">{toolCall.result.slice(0, 200)}</div>
+                            <div className="text-[11px] text-text-muted border-l-2 border-border/30 pl-2 ml-1 mt-1">{toolCall.result.slice(0, 200)}</div>
                         )}
                     </div>
                 )
@@ -392,16 +380,16 @@ const ToolCallCard = memo(function ToolCallCard({
             const isFolder = path?.endsWith('/')
             const displayName = path ? (getFileName(path) || path) : '<no path>'
             return (
-                <div className={`bg-surface/50 rounded-md border overflow-hidden ${isDelete ? 'border-status-error/30' : 'border-border'}`}>
-                    <div className="px-3 py-2 flex items-center gap-2 text-xs">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px]">
                         <FileCode className={`w-3 h-3 ${isDelete ? 'text-status-error' : 'text-status-success'}`} />
                         <span className={`font-medium ${isDelete ? 'text-status-error' : 'text-status-success'}`}>
                             {isDelete ? 'Delete' : 'Create'} {isFolder ? 'folder' : 'file'}:
                         </span>
-                        <span className="text-text-primary font-mono truncate" title={path}>{displayName}</span>
+                        <span className="text-text-primary break-all" title={path}>{displayName}</span>
                     </div>
                     {toolCall.result && (
-                        <div className="px-3 py-2 border-t border-border text-xs text-text-muted">
+                        <div className="text-[11px] text-text-muted border-l-2 border-border/30 pl-2 ml-1">
                             <TextWithFileLinks text={toolCall.result.slice(0, 200)} />
                         </div>
                     )}
@@ -416,20 +404,17 @@ const ToolCallCard = memo(function ToolCallCard({
                 ? (filePath ? getFileName(filePath) : '<no path>')
                 : `${(args.paths as string[])?.length || 0} files`
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
                         <FileCode className="w-3 h-3" />
-                        <span
-                            className="font-medium text-text-primary transition-colors"
-                            title={typeof args.path === 'string' ? args.path : undefined}
-                        >
+                        <span className="font-medium text-text-primary transition-colors hover:underline cursor-pointer" title={typeof args.path === 'string' ? args.path : undefined}>
                             <TextWithFileLinks text={displayName} />
                         </span>
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-3 font-mono text-xs text-text-secondary whitespace-pre-wrap">
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1 text-[11px] text-text-secondary whitespace-pre-wrap">
                             <TextWithFileLinks text={toolCall.result.slice(0, 2000)} />
-                            {toolCall.result.length > 2000 && <span className="opacity-50">... (truncated)</span>}
+                            {toolCall.result.length > 2000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
                     )}
                 </div>
@@ -446,15 +431,15 @@ const ToolCallCard = memo(function ToolCallCard({
                 hostname = '<no url>'
             }
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
                         <Search className="w-3 h-3" />
-                        <span className="text-text-primary font-medium truncate">{hostname}</span>
+                        <a href={url} target="_blank" rel="noreferrer" className="text-text-primary font-medium hover:underline truncate hover:text-accent transition-colors">{hostname}</a>
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-3 text-xs text-text-secondary">
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1 text-[11px] text-text-secondary">
                             {toolCall.result.slice(0, 2000)}
-                            {toolCall.result.length > 2000 && <span className="opacity-50">... (truncated)</span>}
+                            {toolCall.result.length > 2000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
                     )}
                 </div>
@@ -466,20 +451,17 @@ const ToolCallCard = memo(function ToolCallCard({
             const path = args.path as string | undefined
             const line = args.line as number | undefined
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
                         <FileCode className="w-3 h-3" />
-                        <span
-                            className="font-medium text-text-primary transition-colors"
-                            title={typeof path === 'string' ? path : JSON.stringify(path)}
-                        >
+                        <span className="font-medium text-text-primary transition-colors hover:underline cursor-pointer" title={typeof path === 'string' ? path : JSON.stringify(path)}>
                             <TextWithFileLinks text={typeof path === 'string' ? getFileName(path) : JSON.stringify(path)} />
                         </span>
                         {line && <span className="text-text-muted/60">:{line}</span>}
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-2">
-                            <JsonHighlight data={toolCall.result} maxHeight="max-h-48" maxLength={2000} />
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
+                            <JsonHighlight data={toolCall.result} className="py-1" maxHeight="max-h-48" maxLength={2000} />
                         </div>
                     )}
                 </div>
@@ -489,9 +471,9 @@ const ToolCallCard = memo(function ToolCallCard({
         // 默认：显示参数和结果
         const hasArgs = Object.keys(args).filter(k => !k.startsWith('_')).length > 0
         return (
-            <div className="space-y-2">
+            <div className="space-y-2 border-l-2 border-border/30 pl-2 ml-1">
                 {hasArgs && (
-                    <div className="bg-surface/50 rounded-md border border-border p-2">
+                    <div className="rounded border border-border/50 p-1.5">
                         <JsonHighlight
                             data={Object.fromEntries(Object.entries(args).filter(([k]) => !k.startsWith('_')))}
                             maxHeight="max-h-32"
@@ -503,20 +485,20 @@ const ToolCallCard = memo(function ToolCallCard({
                     <RichContentRenderer content={toolCall.richContent} maxHeight="max-h-64" />
                 )}
                 {toolCall.result && (!toolCall.richContent || toolCall.richContent.length === 0) && (
-                    <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-1.5 bg-surface/30 border-b border-border">
-                            <span className="text-[10px] text-text-muted uppercase tracking-wider font-medium">Result</span>
+                    <div className="rounded border border-border/50 overflow-hidden relative group/result">
+                        <div className="absolute right-1 top-1 opacity-0 group-hover/result:opacity-100 transition-opacity">
                             <button
                                 onClick={e => {
                                     e.stopPropagation()
                                     handleCopyResult()
                                 }}
-                                className="p-1 hover:bg-surface-hover rounded text-text-muted hover:text-text-primary transition-colors"
+                                className="p-1 hover:bg-surface-hover rounded text-text-muted hover:text-text-primary transition-colors bg-surface backdrop-blur-sm shadow-sm"
+                                title="Copy Result"
                             >
                                 <Copy className="w-3 h-3" />
                             </button>
                         </div>
-                        <div className="max-h-48 overflow-auto custom-scrollbar p-2">
+                        <div className="max-h-48 overflow-auto custom-scrollbar p-1.5 pt-4">
                             <JsonHighlight data={toolCall.result} maxHeight="max-h-48" maxLength={3000} />
                         </div>
                     </div>
@@ -525,92 +507,101 @@ const ToolCallCard = memo(function ToolCallCard({
         )
     }
 
-    // 卡片样式
+    // 极简卡片样式
     const cardStyle = useMemo(() => {
-        if (isAwaitingApproval) return 'border-yellow-500/30 bg-yellow-500/5'
-        if (isError) return 'border-red-500/20 bg-red-500/5'
-        if (isStreaming || isRunning) return 'border-accent/50 bg-accent/5 shadow-[0_0_15px_-3px_rgba(var(--accent),0.15)] outline outline-1 outline-offset-1 outline-accent/20 animate-pulse-subtle'
-        return 'border-border bg-surface/30 hover:bg-surface/50 transition-colors'
+        if (isAwaitingApproval) return 'border-l-2 border-yellow-500 bg-yellow-500/5'
+        if (isError) return 'bg-red-500/5'
+        if (isStreaming || isRunning) return 'bg-accent/5'
+        return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
     return (
-        <div className={`group my-1 rounded-xl border overflow-hidden ${cardStyle} animate-slide-in-right relative`}>
+        <div className={`group my-0.5 relative ${cardStyle} animate-slide-in-right`}>
             {/* Sweeping Light Effect for running state */}
             {(isStreaming || isRunning) && (
-                <div className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden">
-                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/20 to-transparent animate-shimmer" />
+                <div className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden">
+                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/10 to-transparent animate-shimmer" />
                 </div>
             )}
 
-            {/* Header */}
-            <div className="flex items-center gap-3 px-3 py-2 cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
+            {/* Header - Flat Outline Style */}
+            <div className="flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
+                {/* Expand Toggle (Moved to far left) */}
+                <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 hover:text-text-muted">
+                    <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
+                </motion.div>
+
                 {/* Status Icon */}
-                <div className="shrink-0">
+                <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
                     {isStreaming || isRunning ? (
-                        <div className="w-4 h-4 rounded-full bg-accent/10 flex items-center justify-center border border-accent/20">
+                        <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
                             <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                         </div>
                     ) : isSuccess ? (
-                        <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                            <Check className="w-2.5 h-2.5 text-green-400" />
+                        <div className="w-3.5 h-3.5 rounded-full bg-green-500/10 flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 text-green-500" />
                         </div>
                     ) : isError ? (
-                        <div className="w-4 h-4 rounded-full bg-red-500/20 flex items-center justify-center">
-                            <X className="w-2.5 h-2.5 text-red-400" />
+                        <div className="w-3.5 h-3.5 rounded-full bg-red-500/10 flex items-center justify-center">
+                            <X className="w-2.5 h-2.5 text-red-500" />
                         </div>
                     ) : isRejected ? (
-                        <div className="w-4 h-4 rounded-full bg-yellow-500/20 flex items-center justify-center">
-                            <X className="w-2.5 h-2.5 text-yellow-400" />
+                        <div className="w-3.5 h-3.5 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                            <X className="w-2.5 h-2.5 text-yellow-500" />
                         </div>
                     ) : (
-                        <div className="w-4 h-4 rounded-full border border-text-muted/30" />
+                        <div className="w-3.5 h-3.5 rounded-full border border-text-muted/30" />
                     )}
                 </div>
 
-                {/* Title & Description */}
+                {/* Flat Action Text */}
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
-                    <span
-                        className={`text-sm font-medium whitespace-nowrap ${isStreaming || isRunning ? 'text-shimmer' : 'text-text-secondary'}`}
-                    >
-                        {TOOL_LABELS[toolCall.name] || toolCall.name}
-                    </span>
-                    {statusText ? (
-                        <>
-                            <span className="text-text-muted/30">|</span>
-                            <span className={`text-xs truncate ${isStreaming || isRunning ? 'text-shimmer' : 'text-text-muted'}`}>
-                                <TextWithFileLinks text={statusText} />
+                    <span className={`text-[12px] truncate ${isStreaming || isRunning ? 'text-text-primary text-shimmer' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
+                        {statusText ||
+                            <span className="opacity-50 inline-flex items-center gap-1.5">
+                                <span>
+                                    {TOOL_LABELS[toolCall.name] || toolCall.name}
+                                </span>
                             </span>
-                        </>
-                    ) : (isStreaming || isRunning) && (
-                        <span className="text-xs text-shimmer italic ml-2">Processing...</span>
+                        }
+                    </span>
+                    {(isStreaming || isRunning) && !statusText && (
+                        <span className="text-[11px] text-shimmer/80 italic">Processing...</span>
                     )}
                 </div>
-
-                {/* Expand Toggle */}
-                <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/50">
-                    <ChevronDown className="w-4 h-4" />
-                </motion.div>
             </div>
 
-            {/* Expanded Content (CSS Grid Transition) */}
-            <div
-                className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
-            >
-                <div className="overflow-hidden">
-                    <div className="px-3 pb-3">
-                        {renderPreview()}
-                        {toolCall.error && (
-                            <div className="mt-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-md">
-                                <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">
-                                    <AlertTriangle className="w-3 h-3" />
-                                    Error
-                                </div>
-                                <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
+            {/* Expanded Content (Framer Motion) */}
+            <AnimatePresence initial={false}>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                    >
+                        <div className="pl-[26px] pr-3 pb-3 pt-0 relative">
+                            {/* Visual Threading Line */}
+                            <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
+
+                            {/* Nested Content Wrapper */}
+                            <div className="relative z-10 space-y-2 mt-1">
+                                {renderPreview()}
+                                {toolCall.error && (
+                                    <div className="px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-md">
+                                        <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">
+                                            <AlertTriangle className="w-3 h-3" />
+                                            Error
+                                        </div>
+                                        <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Approval Actions */}
             {isAwaitingApproval && (
