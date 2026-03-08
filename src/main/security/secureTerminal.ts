@@ -4,10 +4,11 @@
 
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
-import { ipcMain, BrowserWindow } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import { spawn, execSync } from 'child_process'
 import { securityManager, OperationType } from './securityModule'
 import { SECURITY_DEFAULTS } from '@shared/constants'
+import { safeIpcHandle } from '../ipc/safeHandle'
 
 
 interface SecureShellRequest {
@@ -176,7 +177,7 @@ export function registerSecureTerminalHandlers(
    * 安全的命令执行（白名单 + 工作区边界）
    * 替代原来的 shell:execute
    */
-  ipcMain.handle('shell:executeSecure', async (
+  safeIpcHandle('shell:executeSecure', async (
     event,
     request: SecureShellRequest
   ): Promise<{
@@ -284,7 +285,7 @@ export function registerSecureTerminalHandlers(
    * 安全的 Git 命令执行
    * 替代原来的 git:exec（移除 exec 拼接）
    */
-  ipcMain.handle('git:execSecure', async (
+  safeIpcHandle('git:execSecure', async (
     event,
     args: string[],
     cwd: string
@@ -415,7 +416,7 @@ export function registerSecureTerminalHandlers(
   // Try to load node-pty
   try {
     pty = require('node-pty')
-    
+
     // 验证 node-pty 是否可用
     try {
       // 只验证模块加载，不实际创建进程
@@ -433,20 +434,20 @@ export function registerSecureTerminalHandlers(
     const errorMsg = toAppError(err).message || toAppError(err).message || 'Unknown error'
     logger.security.warn('[Terminal] node-pty not available, interactive terminal disabled')
     logger.security.warn('[Terminal] Error:', errorMsg)
-    
+
     // 检查是否是原生模块加载错误
     if (errorMsg.includes('Cannot find module') || errorMsg.includes('module') || errorMsg.includes('native')) {
       logger.security.error('[Terminal] node-pty native module may need to be rebuilt.')
       logger.security.error('[Terminal] Please run: npm run rebuild')
     }
-    
+
     pty = null
   }
 
   /**
    * 交互式终端创建（使用 node-pty，加强路径限制）
    */
-  ipcMain.handle('terminal:interactive', async (
+  safeIpcHandle('terminal:interactive', async (
     event,
     options: { id: string; cwd?: string; shell?: string }
   ) => {
@@ -478,11 +479,11 @@ export function registerSecureTerminalHandlers(
     try {
       const isWindows = process.platform === 'win32'
       const isMac = process.platform === 'darwin'
-      
+
       // macOS 特殊处理：使用登录 shell
       let shellPath: string
       let shellArgs: string[] = []
-      
+
       if (shell) {
         shellPath = shell
       } else if (isWindows) {
@@ -497,7 +498,7 @@ export function registerSecureTerminalHandlers(
           '/usr/bin/zsh',
           '/usr/bin/bash',
         ].filter(Boolean) as string[]
-        
+
         shellPath = possibleShells.find(s => {
           try {
             return fs.existsSync(s)
@@ -505,9 +506,9 @@ export function registerSecureTerminalHandlers(
             return false
           }
         }) || '/bin/bash'
-        
+
         logger.security.info(`[Terminal] Using shell: ${shellPath}`)
-        
+
         // 使用 login shell 确保环境变量正确加载
         shellArgs = ['-l']
       } else {
@@ -520,7 +521,7 @@ export function registerSecureTerminalHandlers(
       // 验证 shell 路径存在
       const fs = require('fs')
       const pathModule = require('path')
-      
+
       // 只验证绝对路径，系统命令（如 powershell.exe, cmd.exe）跳过验证
       if (pathModule.isAbsolute(shellPath) && !fs.existsSync(shellPath)) {
         const error = `Shell not found: ${shellPath}`
@@ -553,13 +554,13 @@ export function registerSecureTerminalHandlers(
                   COLORTERM: 'truecolor',
                 },
               })
-              
+
               // 验证 ptyProcess 是否有效
               if (!ptyProcess) {
                 reject(new Error('PTY process is null after spawn'))
                 return
               }
-              
+
               resolve()
             } catch (err) {
               reject(err)
@@ -570,15 +571,15 @@ export function registerSecureTerminalHandlers(
         // 捕获原生模块异常
         const errorMsg = toAppError(err).message || toAppError(err).message || 'Unknown spawn error'
         logger.security.error(`[Terminal] PTY spawn failed: ${errorMsg}`, err)
-        
+
         // 检查是否是原生模块问题
         if (errorMsg.includes('Napi::Error') || errorMsg.includes('native') || errorMsg.includes('module') || errorMsg.includes('libc++abi')) {
-          return { 
-            success: false, 
-            error: 'node-pty native module error. The module may need to be rebuilt for this Electron version. Please run: npm run rebuild' 
+          return {
+            success: false,
+            error: 'node-pty native module error. The module may need to be rebuilt for this Electron version. Please run: npm run rebuild'
           }
         }
-        
+
         return { success: false, error: `Failed to spawn terminal: ${errorMsg}` }
       }
 
@@ -625,7 +626,7 @@ export function registerSecureTerminalHandlers(
   /**
    * 获取可用 shell 列表（通过命令检测）
    */
-  ipcMain.handle('shell:getAvailableShells', async () => {
+  safeIpcHandle('shell:getAvailableShells', async () => {
     const shells: { label: string; path: string }[] = []
     const isWindows = process.platform === 'win32'
     const fs = require('fs')
@@ -634,9 +635,9 @@ export function registerSecureTerminalHandlers(
     // 检查命令是否可执行
     const canExecute = (cmd: string): boolean => {
       try {
-        execSync(`${cmd} --version`, { 
-          encoding: 'utf-8', 
-          stdio: ['pipe', 'pipe', 'ignore'], 
+        execSync(`${cmd} --version`, {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'ignore'],
           timeout: 3000,
           windowsHide: true,  // Windows 上隐藏控制台窗口
         })
@@ -655,8 +656,8 @@ export function registerSecureTerminalHandlers(
 
       // Git Bash - 通过 git --exec-path 动态获取
       try {
-        const gitExecPath = execSync('git --exec-path', { 
-          encoding: 'utf-8', 
+        const gitExecPath = execSync('git --exec-path', {
+          encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'ignore'],
           windowsHide: true,
         }).trim()
@@ -686,8 +687,8 @@ export function registerSecureTerminalHandlers(
       const unixShells = ['bash', 'zsh', 'fish']
       for (const sh of unixShells) {
         try {
-          const result = execSync(`which ${sh}`, { 
-            encoding: 'utf-8', 
+          const result = execSync(`which ${sh}`, {
+            encoding: 'utf-8',
             stdio: ['pipe', 'pipe', 'ignore'],
             windowsHide: true,
           })
@@ -705,7 +706,7 @@ export function registerSecureTerminalHandlers(
   /**
    * Write input to terminal
    */
-  ipcMain.handle('terminal:input', async (_, { id, data }: { id: string; data: string }) => {
+  safeIpcHandle('terminal:input', async (_, { id, data }: { id: string; data: string }) => {
     const ptyProcess = terminals.get(id)
     if (ptyProcess) {
       try {
@@ -721,43 +722,43 @@ export function registerSecureTerminalHandlers(
    * 使用 child_process.spawn，不依赖 PTY
    * 实时推送输出到前端，精确捕获 exit code
    */
-  ipcMain.handle('shell:executeBackground', async (
+  safeIpcHandle('shell:executeBackground', async (
     event,
-    { command, cwd, timeout = 30000, shell: customShell }: { 
+    { command, cwd, timeout = 30000, shell: customShell }: {
       command: string
       cwd?: string
       timeout?: number
-      shell?: string 
+      shell?: string
     }
   ): Promise<{ success: boolean; output: string; exitCode: number; error?: string }> => {
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
     const workingDir = cwd || workspace?.roots[0] || process.cwd()
-    
+
     // 验证工作目录
     if (workspace && !securityManager.validateWorkspacePath(workingDir, workspace.roots)) {
       return { success: false, output: '', exitCode: 1, error: 'Working directory outside workspace' }
     }
-    
+
     return new Promise((resolve) => {
       const isWindows = process.platform === 'win32'
       const shell = customShell || (isWindows ? 'powershell.exe' : '/bin/bash')
-      const shellArgs = isWindows 
+      const shellArgs = isWindows
         ? ['-NoProfile', '-NoLogo', '-Command', command]
         : ['-c', command]
-      
+
       logger.security.info(`[Shell] Executing: ${command} in ${workingDir}`)
-      
+
       const child = spawn(shell, shellArgs, {
         cwd: workingDir,
         env: { ...process.env, TERM: 'dumb' }, // 禁用颜色输出
         windowsHide: true,
       })
-      
+
       let stdout = ''
       let stderr = ''
       let timedOut = false
-      
+
       // 超时处理
       const timeoutId = setTimeout(() => {
         timedOut = true
@@ -769,45 +770,45 @@ export function registerSecureTerminalHandlers(
           }
         }, 1000)
       }, timeout)
-      
+
       // 实时推送输出
       child.stdout?.on('data', (data: Buffer) => {
         const text = data.toString()
         stdout += text
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('shell:output', { 
-            command, 
-            type: 'stdout', 
+          mainWindow.webContents.send('shell:output', {
+            command,
+            type: 'stdout',
             data: text,
             timestamp: Date.now()
           })
         }
       })
-      
+
       child.stderr?.on('data', (data: Buffer) => {
         const text = data.toString()
         stderr += text
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('shell:output', { 
-            command, 
-            type: 'stderr', 
+          mainWindow.webContents.send('shell:output', {
+            command,
+            type: 'stderr',
             data: text,
             timestamp: Date.now()
           })
         }
       })
-      
+
       child.on('close', (code, signal) => {
         clearTimeout(timeoutId)
-        
+
         // 清理输出（移除 ANSI 序列）
         const cleanOutput = (stdout + (stderr ? `\n${stderr}` : ''))
           .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
           .replace(/\r\n/g, '\n')
           .trim()
-        
+
         logger.security.info(`[Shell] Command finished: exit=${code}, signal=${signal}`)
-        
+
         if (timedOut) {
           resolve({
             success: false,
@@ -823,7 +824,7 @@ export function registerSecureTerminalHandlers(
           })
         }
       })
-      
+
       child.on('error', (err) => {
         clearTimeout(timeoutId)
         logger.security.error(`[Shell] Command error:`, err)
@@ -840,7 +841,7 @@ export function registerSecureTerminalHandlers(
   /**
    * Resize terminal
    */
-  ipcMain.handle('terminal:resize', async (_, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
+  safeIpcHandle('terminal:resize', async (_, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
     const ptyProcess = terminals.get(id)
     if (ptyProcess) {
       try {

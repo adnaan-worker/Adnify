@@ -4,7 +4,7 @@
  */
 
 import { logger } from '@shared/utils/Logger'
-import { ipcMain } from 'electron'
+import { safeIpcHandle } from './safeHandle'
 import * as https from 'https'
 import * as http from 'http'
 import { URL } from 'url'
@@ -529,19 +529,19 @@ function decodeHtmlEntities(text: string): string {
 
 export function registerHttpHandlers() {
     // 读取 URL 内容
-    ipcMain.handle('http:readUrl', async (_event, url: string, timeout?: number) => {
+    safeIpcHandle('http:readUrl', async (_event, url: string, timeout?: number) => {
         logger.ipc.info('[HTTP] Reading URL:', url)
         return fetchUrl(url, timeout)
     })
 
     // 网络搜索
-    ipcMain.handle('http:webSearch', async (_event, query: string, maxResults?: number) => {
+    safeIpcHandle('http:webSearch', async (_event, query: string, maxResults?: number) => {
         logger.ipc.info('[HTTP] Web search:', query)
         return webSearch(query, maxResults)
     })
 
     // 配置 Google PSE
-    ipcMain.handle('http:setGoogleSearch', async (_event, apiKey: string, cx: string) => {
+    safeIpcHandle('http:setGoogleSearch', async (_event, apiKey: string, cx: string) => {
         setGoogleSearchConfig(apiKey, cx)
         return { success: true }
     })

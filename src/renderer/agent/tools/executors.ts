@@ -97,7 +97,7 @@ function resolvePath(p: unknown, workspacePath: string | null, allowRead = false
 
 // ===== 工具执行器 =====
 
-export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
+const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
     async read_file(args, ctx) {
         // 支持单个文件或多个文件
         let pathArg = args.path
@@ -1729,6 +1729,32 @@ function formatRecommendation(
 
     return lines.join('\n')
 }
+
+export const toolExecutors = Object.fromEntries(
+    Object.entries(rawToolExecutors).map(([name, executor]) => [
+        name,
+        async (args: Record<string, unknown>, ctx: ToolExecutionContext): Promise<ToolExecutionResult> => {
+            // 设置超时时间，对于可能耗时的工具给更长的时间
+            const timeoutMs = ['generate_tests', 'run_command', 'edit_file', 'replace_file_content', 'web_search'].includes(name) ? 120000 : 60000
+
+            try {
+                return await Promise.race([
+                    executor(args, ctx),
+                    new Promise<ToolExecutionResult>((_, reject) => {
+                        setTimeout(() => reject(new Error(`Tool [${name}] execution timed out after ${timeoutMs / 1000}s`)), timeoutMs)
+                    })
+                ])
+            } catch (err) {
+                logger.agent.error(`[ToolExecutor] Error executing ${name}:`, err)
+                return {
+                    success: false,
+                    result: '',
+                    error: `Tool execution error: ${toAppError(err).message}`
+                }
+            }
+        }
+    ])
+) as Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>>
 
 /**
  * 初始化工具注册表
