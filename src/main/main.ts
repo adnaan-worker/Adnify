@@ -219,7 +219,7 @@ function createWindow(isEmpty = false): BrowserWindow {
     logger.system.info(`[Main] Window closing: ${windowId}, current total: ${windows.size}`)
 
     // 如果是最后一个窗口且不是正在退出过程中，则执行清理并退出
-    if (windows.size <= 1 && !isQuitting) {
+    if (BrowserWindow.getAllWindows().length <= 1 && !isQuitting) {
       isQuitting = true
       logger.system.info('[Main] Last window closing, starting app quit sequence')
       e.preventDefault()
@@ -441,6 +441,5 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('second-instance', () => createWindow())
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+app.on('second-instance', () => createWindow(false))
 app.on('activate', () => { if (windows.size === 0) createWindow() })
