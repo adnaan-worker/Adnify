@@ -63,7 +63,6 @@ async function initStores() {
 const windows = new Map<number, BrowserWindow>()
 const windowWorkspaces = new Map<number, string[]>()
 let lastActiveWindow: BrowserWindow | null = null
-let isQuitting = false
 
 
 // 延迟加载的模块
@@ -215,33 +214,17 @@ function createWindow(isEmpty = false): BrowserWindow {
     lastActiveWindow = win
   })
 
-  win.on('close', async (e) => {
-    logger.system.info(`[Main] Window closing: ${windowId}, current total: ${windows.size}`)
+  win.on('close', () => {
+    logger.system.info(`[Main] Window ${windowId} close event triggered`)
+  })
 
-    // 如果是最后一个窗口且不是正在退出过程中，则执行清理并退出
-    if (BrowserWindow.getAllWindows().length <= 1 && !isQuitting) {
-      isQuitting = true
-      logger.system.info('[Main] Last window closing, starting app quit sequence')
-      e.preventDefault()
-      try {
-        ipcModule?.cleanupAllHandlers()
-        await lspManager?.stopAllServers()
-      } catch (err) {
-        logger.system.error('[Main] Cleanup error:', err)
-      }
-      windows.delete(windowId)
-      windowWorkspaces.delete(windowId)
-      win.destroy()
-      app.quit()
-    } else {
-      // 还有其他窗口，只删除当前窗口记录
-      windows.delete(windowId)
-      windowWorkspaces.delete(windowId)
-      logger.system.info(`[Main] Window ${windowId} closed, remaining windows: ${windows.size}`)
+  win.on('closed', () => {
+    windows.delete(windowId)
+    windowWorkspaces.delete(windowId)
+    logger.system.info(`[Main] Window ${windowId} closed and removed from map. Remaining: ${windows.size}`)
 
-      if (lastActiveWindow === win) {
-        lastActiveWindow = Array.from(windows.values())[0] || null
-      }
+    if (lastActiveWindow === win) {
+      lastActiveWindow = Array.from(windows.values())[0] || null
     }
   })
 
@@ -282,6 +265,26 @@ function createWindow(isEmpty = false): BrowserWindow {
   }
 
   return win
+}
+
+/**
+ * 集中处理应用退出时的异步清理逻辑
+ */
+let cleanupStarted = false
+async function performGlobalCleanup() {
+  if (cleanupStarted) return
+  cleanupStarted = true
+
+  logger.system.info('[Main] Starting global terminal/LSP cleanup...')
+  try {
+    // 1. 清理 IPC 处理器（包括终端）
+    ipcModule?.cleanupAllHandlers()
+    // 2. 停止所有 LSP 服务器
+    await lspManager?.stopAllServers()
+    logger.system.info('[Main] Global cleanup completed successfully')
+  } catch (err) {
+    logger.system.error('[Main] Global cleanup error:', err)
+  }
 }
 
 
@@ -441,5 +444,41 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('second-instance', () => createWindow(false))
+app.on('second-instance', () => {
+  const win = getMainWindow()
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  } else {
+    createWindow(false)
+  }
+})
+
+app.on('window-all-closed', () => {
+  logger.system.info('[Main] All windows closed, platform:', process.platform)
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
+})
+
+/**
+ * 应用退出前的生命周期钩子
+ * 在该阶段拦截退出信号并执行异步清理
+ */
+let isCleanupDone = false
+app.on('before-quit', async (e) => {
+  if (!isCleanupDone) {
+    // 拦截退出，执行清理
+    e.preventDefault()
+    logger.system.info('[Main] Intercepting before-quit for cleanup')
+
+    await performGlobalCleanup()
+
+    isCleanupDone = true
+    // 清理完成后再次触发退出
+    logger.system.info('[Main] Cleanup done, re-triggering app.quit()')
+    app.quit()
+  }
+})
+
 app.on('activate', () => { if (windows.size === 0) createWindow() })
