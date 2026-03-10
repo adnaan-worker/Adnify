@@ -1100,6 +1100,9 @@ export default function ChatPanel() {
                   acceptAllChanges()
                   toast.success('All changes accepted')
                 }}
+                // 兜底工具审批：当卡片未显示或出错时，仍可通过状态栏批准/取消
+                onApproveTool={approveCurrentTool}
+                onRejectTool={rejectCurrentTool}
               />
 
               {/* Input Component */}
