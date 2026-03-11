@@ -74,6 +74,34 @@ export class AgentClass {
 
     // 第一次对话时可能还没有 threadId，需要在 addUserMessage 后获取
     let threadId = promptOptions?.targetThreadId || store.currentThreadId
+    let observedLoopEnd = false
+    let unsubscribeLoopEnd: (() => void) | null = null
+
+    const disposeLoopEndWatcher = () => {
+      const cleanupLoopEndWatch = unsubscribeLoopEnd
+      unsubscribeLoopEnd = null
+
+      if (cleanupLoopEndWatch) {
+        ;(cleanupLoopEndWatch as () => void)()
+      }
+    }
+
+    const watchLoopEnd = (nextThreadId: string | null | undefined) => {
+      disposeLoopEndWatcher()
+      observedLoopEnd = false
+
+      if (!nextThreadId) {
+        return
+      }
+
+      unsubscribeLoopEnd = EventBus.on('loop:end', (event) => {
+        if (event.threadId === nextThreadId) {
+          observedLoopEnd = true
+        }
+      })
+    }
+
+    watchLoopEnd(threadId)
 
     // 防止同一线程重复运行
     if (threadId && this.runningTasks.has(threadId)) {
@@ -83,7 +111,8 @@ export class AgentClass {
 
     // 验证 API Key
     if (!config.apiKey) {
-      this.showError('Please configure your API key in settings.')
+      this.showError('Please configure your API key in settings.', threadId)
+      this.emitLoopEnd(threadId, 'error')
       return
     }
 
@@ -97,8 +126,10 @@ export class AgentClass {
 
       // 重新获取 threadId（prepareExecution 可能创建了新线程）
       threadId = promptOptions?.targetThreadId || (useAgentStore.getState().currentThreadId as string)
+      watchLoopEnd(threadId)
       if (!threadId) {
         logger.agent.error('[Agent] No thread ID after prepareExecution')
+        this.emitLoopEnd(promptOptions?.targetThreadId || store.currentThreadId, 'error')
         return
       }
 
@@ -152,8 +183,14 @@ export class AgentClass {
       // 统一错误处理
       const appError = AppError.fromError(error)
       logger.agent.error('[Agent] Error:', appError.toJSON())
-      this.showError(formatErrorMessage(appError))
+      this.showError(formatErrorMessage(appError), threadId)
+
+      if (!observedLoopEnd) {
+        this.emitLoopEnd(threadId, 'error')
+      }
     } finally {
+      disposeLoopEndWatcher()
+
       // 确保清理资源（threadId 现在一定存在）
       this.cleanupTask(threadId)
     }
@@ -365,14 +402,27 @@ export class AgentClass {
     this.runningTasks.delete(threadId)
   }
 
+  private emitLoopEnd(threadId: string | null | undefined, reason: string): void {
+    if (!threadId) {
+      return
+    }
+
+    EventBus.emit({ type: 'loop:end', reason, threadId })
+  }
+
   /**
    * 显示错误消息给用户
    */
-  private showError(message: string): void {
+  private showError(message: string, targetThreadId?: string | null): void {
     const store = useAgentStore.getState()
-    const id = store.addAssistantMessage()
-    store.appendToAssistant(id, `❌ ${message}`)
-    store.finalizeAssistant(id)
+    const id = store.addAssistantMessage('', targetThreadId ?? undefined)
+
+    if (!id) {
+      return
+    }
+
+    store.appendToAssistant(id, `❌ ${message}`, targetThreadId ?? undefined)
+    store.finalizeAssistant(id, targetThreadId ?? undefined)
   }
 
   /**

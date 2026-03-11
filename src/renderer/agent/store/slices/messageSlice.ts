@@ -164,8 +164,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 添加助手消息
-    addAssistantMessage: (content = '') => {
-        const threadId = get().currentThreadId
+    addAssistantMessage: (content = '', targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return ''
 
         const message: AssistantMessage = {
