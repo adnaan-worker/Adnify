@@ -260,6 +260,7 @@ class SettingsService {
         aiInstructions: settings.aiInstructions,
         onboardingCompleted: settings.onboardingCompleted,
         webSearchConfig: settings.webSearchConfig,
+        taskTrustSettings: settings.taskTrustSettings,
         mcpConfig: settings.mcpConfig,
         enableFileLogging: settings.enableFileLogging,
       }
@@ -327,6 +328,35 @@ class SettingsService {
         ? deepMerge(defaults.securitySettings, saved.securitySettings as object)
         : defaults.securitySettings,
       webSearchConfig: { ...defaults.webSearchConfig, ...(saved.webSearchConfig as object || {}) },
+      taskTrustSettings: {
+        ...defaults.taskTrustSettings,
+        ...(saved.taskTrustSettings as object || {}),
+        global: {
+          ...defaults.taskTrustSettings.global,
+          ...(((saved.taskTrustSettings as Record<string, unknown> | undefined)?.global as object) || {}),
+        },
+        workspaceOverrides: (((saved.taskTrustSettings as Record<string, unknown> | undefined)?.workspaceOverrides as Record<string, typeof defaults.taskTrustSettings.global | undefined>) || defaults.taskTrustSettings.workspaceOverrides) as typeof defaults.taskTrustSettings.workspaceOverrides,
+        governanceDefaults: {
+          ...(defaults.taskTrustSettings.governanceDefaults || {}),
+          ...(((saved.taskTrustSettings as Record<string, unknown> | undefined)?.governanceDefaults as object) || {}),
+          budget: {
+            ...((defaults.taskTrustSettings.governanceDefaults?.budget) || {}),
+            ...((((saved.taskTrustSettings as Record<string, unknown> | undefined)?.governanceDefaults as Record<string, unknown> | undefined)?.budget as object) || {}),
+            limits: {
+              ...((defaults.taskTrustSettings.governanceDefaults?.budget?.limits) || {}),
+              ...(((((saved.taskTrustSettings as Record<string, unknown> | undefined)?.governanceDefaults as Record<string, unknown> | undefined)?.budget as Record<string, unknown> | undefined)?.limits as object) || {}),
+            },
+          },
+          rollback: {
+            ...((defaults.taskTrustSettings.governanceDefaults?.rollback) || {}),
+            ...((((saved.taskTrustSettings as Record<string, unknown> | undefined)?.governanceDefaults as Record<string, unknown> | undefined)?.rollback as object) || {}),
+          },
+        },
+        specialistProfiles: {
+          ...(defaults.taskTrustSettings.specialistProfiles || {}),
+          ...(((saved.taskTrustSettings as Record<string, unknown> | undefined)?.specialistProfiles as object) || {}),
+        },
+      },
       mcpConfig: { ...defaults.mcpConfig, ...(saved.mcpConfig as object || {}) },
       aiInstructions: (saved.aiInstructions as string) || defaults.aiInstructions,
       onboardingCompleted: typeof saved.onboardingCompleted === 'boolean'
@@ -399,6 +429,7 @@ class SettingsService {
         editorConfig: settings.editorConfig,
         securitySettings: settings.securitySettings,
         webSearchConfig: settings.webSearchConfig,
+        taskTrustSettings: settings.taskTrustSettings,
         mcpConfig: settings.mcpConfig,
         enableFileLogging: settings.enableFileLogging,
       }))

@@ -29,6 +29,7 @@ export {
   defaultAutoApprove,
   defaultWebSearchConfig,
   defaultMcpConfig,
+  defaultTaskTrustSettings,
 } from '@shared/config/settings'
 
 // 类型重新导出

@@ -14,7 +14,7 @@ import { Bot, FileText, Zap, BrainCircuit, AlertOctagon, Terminal, Search, Eye, 
 export function AgentSettings({
     autoApprove, setAutoApprove, aiInstructions, setAiInstructions,
     promptTemplateId, setPromptTemplateId, agentConfig, setAgentConfig,
-    webSearchConfig, setWebSearchConfig, language
+    webSearchConfig, setWebSearchConfig, taskTrustSettings, setTaskTrustSettings, language
 }: AgentSettingsProps) {
     const templates = getPromptTemplates()
     const [showPreview, setShowPreview] = useState(false)
@@ -45,6 +45,93 @@ export function AgentSettings({
     }
 
     const t = (zh: string, en: string) => language === 'zh' ? zh : en
+
+    const trustModeOptions = [
+        { value: 'safe', label: t('安全模式', 'Safe Mode') },
+        { value: 'balanced', label: t('平衡模式', 'Balanced Mode') },
+        { value: 'autonomous', label: t('自主模式', 'Autonomous Mode') },
+        { value: 'manual', label: t('完全手动', 'Manual Mode') },
+    ]
+
+    const executionTargetOptions = [
+        { value: 'auto', label: t('自动判定', 'Automatic') },
+        { value: 'current', label: t('当前工作区', 'Current Workspace') },
+        { value: 'isolated', label: t('隔离任务副本', 'Isolated Workspace') },
+    ]
+
+    const interruptModeOptions = [
+        { value: 'phase', label: t('阶段汇报', 'Per Phase') },
+        { value: 'high-risk', label: t('仅高风险中断', 'High Risk Only') },
+        { value: 'failure-only', label: t('仅失败中断', 'Failures Only') },
+    ]
+
+    const specialistRoles = ['frontend', 'logic', 'verifier', 'reviewer'] as const
+
+    const toolPermissionOptions = [
+        { value: 'read-mostly', label: t('偏只读', 'Read Mostly') },
+        { value: 'workspace-write', label: t('工作区可写', 'Workspace Write') },
+        { value: 'elevated', label: t('增强权限', 'Elevated') },
+    ]
+
+    const networkPermissionOptions = [
+        { value: 'blocked', label: t('禁止网络', 'Blocked') },
+        { value: 'workspace-only', label: t('工作区网络', 'Workspace Only') },
+        { value: 'allowed', label: t('允许网络', 'Allowed') },
+    ]
+
+    const gitPermissionOptions = [
+        { value: 'read-only', label: t('只读 Git', 'Read Only') },
+        { value: 'task-branch', label: t('任务分支', 'Task Branch') },
+        { value: 'workspace-write', label: t('工作区写入', 'Workspace Write') },
+    ]
+
+    const validationRoleOptions = [
+        { value: 'none', label: t('无', 'None') },
+        { value: 'secondary', label: t('辅助验证', 'Secondary') },
+        { value: 'primary', label: t('主验证者', 'Primary') },
+    ]
+
+    const updateBudgetLimit = (key: 'timeMs' | 'estimatedTokens' | 'llmCalls' | 'commands' | 'verifications', value: number) => {
+        setTaskTrustSettings({
+            ...taskTrustSettings,
+            governanceDefaults: {
+                ...taskTrustSettings.governanceDefaults,
+                budget: {
+                    ...taskTrustSettings.governanceDefaults.budget,
+                    limits: {
+                        ...taskTrustSettings.governanceDefaults.budget.limits,
+                        [key]: value,
+                    },
+                },
+            },
+        })
+    }
+
+    const updateRollbackSetting = (key: 'autoRollbackIsolated' | 'requireConfirmationForMainWorkspace' | 'warnOnExternalSideEffects', value: boolean) => {
+        setTaskTrustSettings({
+            ...taskTrustSettings,
+            governanceDefaults: {
+                ...taskTrustSettings.governanceDefaults,
+                rollback: {
+                    ...taskTrustSettings.governanceDefaults.rollback,
+                    [key]: value,
+                },
+            },
+        })
+    }
+
+    const updateSpecialistProfile = (role: typeof specialistRoles[number], updates: Partial<typeof taskTrustSettings.specialistProfiles.frontend>) => {
+        setTaskTrustSettings({
+            ...taskTrustSettings,
+            specialistProfiles: {
+                ...taskTrustSettings.specialistProfiles,
+                [role]: {
+                    ...taskTrustSettings.specialistProfiles[role],
+                    ...updates,
+                },
+            },
+        })
+    }
 
     return (
         <div className="space-y-8 animate-fade-in pb-10">
@@ -77,6 +164,171 @@ export function AgentSettings({
                         <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs">
                             <AlertOctagon className="w-4 h-4 shrink-0 mt-0.5" />
                             <p>{t('开启后，Agent 将无需确认直接执行相应操作。请谨慎使用。', 'When enabled, the Agent will execute operations without confirmation. Use with caution.')}</p>
+                        </div>
+                    </section>
+
+
+                    {/* 任务信任策略 */}
+                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <BrainCircuit className="w-4 h-4 text-accent" />
+                            <h5 className="text-sm font-medium text-text-primary">{t('任务信任策略', 'Task Trust Policy')}</h5>
+                        </div>
+                        <div className="space-y-3">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">{t('默认信任模式', 'Default Trust Mode')}</label>
+                                <Select
+                                    value={taskTrustSettings.global.mode}
+                                    onChange={(value) => setTaskTrustSettings({
+                                        ...taskTrustSettings,
+                                        global: { ...taskTrustSettings.global, mode: value as typeof taskTrustSettings.global.mode }
+                                    })}
+                                    options={trustModeOptions}
+                                    className="w-full bg-background/50 rounded-lg border-border text-xs"
+                                />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-text-secondary">{t('默认执行环境', 'Default Execution Target')}</label>
+                                    <Select
+                                        value={taskTrustSettings.global.defaultExecutionTarget}
+                                        onChange={(value) => setTaskTrustSettings({
+                                            ...taskTrustSettings,
+                                            global: { ...taskTrustSettings.global, defaultExecutionTarget: value as typeof taskTrustSettings.global.defaultExecutionTarget }
+                                        })}
+                                        options={executionTargetOptions}
+                                        className="w-full bg-background/50 rounded-lg border-border text-xs"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-text-secondary">{t('中断策略', 'Interrupt Mode')}</label>
+                                    <Select
+                                        value={taskTrustSettings.global.interruptMode}
+                                        onChange={(value) => setTaskTrustSettings({
+                                            ...taskTrustSettings,
+                                            global: { ...taskTrustSettings.global, interruptMode: value as typeof taskTrustSettings.global.interruptMode }
+                                        })}
+                                        options={interruptModeOptions}
+                                        className="w-full bg-background/50 rounded-lg border-border text-xs"
+                                    />
+                                </div>
+                            </div>
+                            <Switch
+                                label={t('默认启用安全护栏', 'Enable safety guards by default')}
+                                checked={taskTrustSettings.global.enableSafetyGuards}
+                                onChange={(e) => setTaskTrustSettings({
+                                    ...taskTrustSettings,
+                                    global: { ...taskTrustSettings.global, enableSafetyGuards: e.target.checked }
+                                })}
+                            />
+                            <Switch
+                                label={t('允许任务级临时覆盖', 'Allow per-task overrides')}
+                                checked={taskTrustSettings.allowTaskOverride}
+                                onChange={(e) => setTaskTrustSettings({
+                                    ...taskTrustSettings,
+                                    allowTaskOverride: e.target.checked,
+                                })}
+                            />
+                        </div>
+                    </section>
+
+                    {/* 任务治理默认值 */}
+                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <FileText className="w-4 h-4 text-accent" />
+                            <h5 className="text-sm font-medium text-text-primary">{t('任务治理默认值', 'Task Governance Defaults')}</h5>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">{t('时间预算（分钟）', 'Time Budget (Minutes)')}</label>
+                                <Input type="number" min={1} value={Math.round(taskTrustSettings.governanceDefaults.budget.limits.timeMs / 60000)} onChange={(e) => updateBudgetLimit('timeMs', Math.max(60000, (parseInt(e.target.value) || 0) * 60000))} className="bg-background/50 rounded-lg border-border text-xs" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">Estimated Tokens</label>
+                                <Input type="number" min={1000} value={taskTrustSettings.governanceDefaults.budget.limits.estimatedTokens} onChange={(e) => updateBudgetLimit('estimatedTokens', Math.max(1000, parseInt(e.target.value) || 0))} className="bg-background/50 rounded-lg border-border text-xs" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">LLM Calls</label>
+                                <Input type="number" min={1} value={taskTrustSettings.governanceDefaults.budget.limits.llmCalls} onChange={(e) => updateBudgetLimit('llmCalls', Math.max(1, parseInt(e.target.value) || 0))} className="bg-background/50 rounded-lg border-border text-xs" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">Commands</label>
+                                <Input type="number" min={1} value={taskTrustSettings.governanceDefaults.budget.limits.commands} onChange={(e) => updateBudgetLimit('commands', Math.max(1, parseInt(e.target.value) || 0))} className="bg-background/50 rounded-lg border-border text-xs" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">Verifications</label>
+                                <Input type="number" min={1} value={taskTrustSettings.governanceDefaults.budget.limits.verifications} onChange={(e) => updateBudgetLimit('verifications', Math.max(1, parseInt(e.target.value) || 0))} className="bg-background/50 rounded-lg border-border text-xs" />
+                            </div>
+                        </div>
+                        <div className="space-y-3">
+                            <Switch label={t('超限即熔断', 'Hard stop on budget trip')} checked={taskTrustSettings.governanceDefaults.budget.hardStop} onChange={(e) => setTaskTrustSettings({ ...taskTrustSettings, governanceDefaults: { ...taskTrustSettings.governanceDefaults, budget: { ...taskTrustSettings.governanceDefaults.budget, hardStop: e.target.checked } } })} />
+                            <Switch label={t('隔离副本失败时自动销毁', 'Auto-dispose isolated workspaces on failure')} checked={taskTrustSettings.governanceDefaults.rollback.autoRollbackIsolated} onChange={(e) => updateRollbackSetting('autoRollbackIsolated', e.target.checked)} />
+                            <Switch label={t('主工作区回滚需要确认', 'Require confirmation for main-workspace rollback')} checked={taskTrustSettings.governanceDefaults.rollback.requireConfirmationForMainWorkspace} onChange={(e) => updateRollbackSetting('requireConfirmationForMainWorkspace', e.target.checked)} />
+                            <Switch label={t('记录外部副作用告警', 'Warn on external side effects')} checked={taskTrustSettings.governanceDefaults.rollback.warnOnExternalSideEffects} onChange={(e) => updateRollbackSetting('warnOnExternalSideEffects', e.target.checked)} />
+                        </div>
+                    </section>
+
+                    {/* 专家配置 */}
+                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Bot className="w-4 h-4 text-accent" />
+                            <h5 className="text-sm font-medium text-text-primary">{t('专家 Agent 配置', 'Specialist Agent Profiles')}</h5>
+                        </div>
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                            {specialistRoles.map((role) => {
+                                const profile = taskTrustSettings.specialistProfiles[role]
+                                return (
+                                    <div key={role} className="rounded-xl border border-border bg-background/30 p-4 space-y-3">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <div className="text-sm font-medium text-text-primary capitalize">{role}</div>
+                                                <div className="text-xs text-text-muted">{profile.validationRole}</div>
+                                            </div>
+                                            <span className="px-2 py-1 rounded-full bg-accent/10 text-accent text-[11px]">{profile.toolPermission}</span>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-text-secondary">{t('模型', 'Model')}</label>
+                                            <Input value={profile.model || ''} onChange={(e) => updateSpecialistProfile(role, { model: e.target.value || null })} placeholder={t('沿用当前默认模型', 'Use current default model')} className="bg-background/50 rounded-lg border-border text-xs" />
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-text-secondary">{t('工具权限', 'Tool Permission')}</label>
+                                                <Select value={profile.toolPermission} onChange={(value) => updateSpecialistProfile(role, { toolPermission: value as typeof profile.toolPermission })} options={toolPermissionOptions} className="w-full bg-background/50 rounded-lg border-border text-xs" />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-text-secondary">{t('验证职责', 'Validation Role')}</label>
+                                                <Select value={profile.validationRole} onChange={(value) => updateSpecialistProfile(role, { validationRole: value as typeof profile.validationRole })} options={validationRoleOptions} className="w-full bg-background/50 rounded-lg border-border text-xs" />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-text-secondary">{t('网络权限', 'Network Permission')}</label>
+                                                <Select value={profile.networkPermission} onChange={(value) => updateSpecialistProfile(role, { networkPermission: value as typeof profile.networkPermission })} options={networkPermissionOptions} className="w-full bg-background/50 rounded-lg border-border text-xs" />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-text-secondary">Git</label>
+                                                <Select value={profile.gitPermission} onChange={(value) => updateSpecialistProfile(role, { gitPermission: value as typeof profile.gitPermission })} options={gitPermissionOptions} className="w-full bg-background/50 rounded-lg border-border text-xs" />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-text-secondary">LLM Cap</label>
+                                                <Input type="number" min={0} value={profile.budgetCap.llmCalls || 0} onChange={(e) => updateSpecialistProfile(role, { budgetCap: { ...profile.budgetCap, llmCalls: Math.max(0, parseInt(e.target.value) || 0) } })} className="bg-background/50 rounded-lg border-border text-xs" />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-text-secondary">Cmd Cap</label>
+                                                <Input type="number" min={0} value={profile.budgetCap.commands || 0} onChange={(e) => updateSpecialistProfile(role, { budgetCap: { ...profile.budgetCap, commands: Math.max(0, parseInt(e.target.value) || 0) } })} className="bg-background/50 rounded-lg border-border text-xs" />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-text-secondary">{t('风格提示', 'Style Hints')}</label>
+                                            <Input value={profile.styleHints} onChange={(e) => updateSpecialistProfile(role, { styleHints: e.target.value })} className="bg-background/50 rounded-lg border-border text-xs" />
+                                        </div>
+                                    </div>
+                                )
+                            })}
                         </div>
                     </section>
 

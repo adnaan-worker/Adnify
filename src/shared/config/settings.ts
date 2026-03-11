@@ -33,6 +33,7 @@ import type {
   WebSearchConfig,
   McpConfig,
   ProviderConfig,
+  TaskTrustSettings as TaskTrustSettingsConfigType,
 } from './types'
 import { BUILTIN_PROVIDERS } from './providers'
 import type { ApiProtocol } from './providers'
@@ -175,6 +176,85 @@ function generateDefaultProviderConfigs(): Record<string, ProviderModelConfig> {
 // 设置 Schema
 // ============================================
 
+const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
+  global: {
+    mode: 'balanced',
+    enableSafetyGuards: true,
+    defaultExecutionTarget: 'auto',
+    interruptMode: 'phase',
+  },
+  workspaceOverrides: {},
+  allowTaskOverride: true,
+  governanceDefaults: {
+    budget: {
+      limits: {
+        timeMs: 30 * 60 * 1000,
+        estimatedTokens: 120000,
+        llmCalls: 24,
+        commands: 40,
+        verifications: 12,
+      },
+      warningThresholdRatio: 0.8,
+      hardStop: true,
+    },
+    rollback: {
+      autoRollbackIsolated: true,
+      requireConfirmationForMainWorkspace: true,
+      warnOnExternalSideEffects: true,
+    },
+  },
+  specialistProfiles: {
+    frontend: {
+      role: 'frontend',
+      model: null,
+      toolPermission: 'workspace-write',
+      networkPermission: 'workspace-only',
+      gitPermission: 'task-branch',
+      writableScopes: [],
+      budgetCap: { llmCalls: 8, commands: 12 },
+      styleHints: 'Prefer polished UI, accessibility, and interaction details.',
+      validationRole: 'secondary',
+      trustMode: 'balanced',
+    },
+    logic: {
+      role: 'logic',
+      model: null,
+      toolPermission: 'workspace-write',
+      networkPermission: 'workspace-only',
+      gitPermission: 'task-branch',
+      writableScopes: [],
+      budgetCap: { llmCalls: 8, commands: 12 },
+      styleHints: 'Prefer correctness, state integrity, and edge-case handling.',
+      validationRole: 'secondary',
+      trustMode: 'balanced',
+    },
+    verifier: {
+      role: 'verifier',
+      model: null,
+      toolPermission: 'workspace-write',
+      networkPermission: 'workspace-only',
+      gitPermission: 'read-only',
+      writableScopes: [],
+      budgetCap: { llmCalls: 6, verifications: 6 },
+      styleHints: 'Prefer focused verification, reproduction, and concise findings.',
+      validationRole: 'primary',
+      trustMode: 'balanced',
+    },
+    reviewer: {
+      role: 'reviewer',
+      model: null,
+      toolPermission: 'read-mostly',
+      networkPermission: 'blocked',
+      gitPermission: 'read-only',
+      writableScopes: [],
+      budgetCap: { llmCalls: 4, verifications: 4 },
+      styleHints: 'Prefer risk review, scope control, and minimal-change guidance.',
+      validationRole: 'secondary',
+      trustMode: 'balanced',
+    },
+  },
+}
+
 export const SETTINGS = {
   llmConfig: {
     default: defaultLLMConfig,
@@ -206,6 +286,9 @@ export const SETTINGS = {
   webSearchConfig: {
     default: defaultWebSearchConfig,
     syncToMain: 'googleSearch',
+  },
+  taskTrustSettings: {
+    default: defaultTaskTrustSettings,
   },
   mcpConfig: {
     default: defaultMcpConfig,
@@ -243,6 +326,7 @@ export type SettingsState = {
   editorConfig: EditorConfig
   securitySettings: SecuritySettings
   webSearchConfig: WebSearchConfig
+  taskTrustSettings: TaskTrustSettingsConfigType
   mcpConfig: McpConfig
   aiInstructions: string
   onboardingCompleted: boolean
@@ -270,6 +354,7 @@ export function getAllDefaults(): SettingsState {
     editorConfig: SETTINGS.editorConfig.default,
     securitySettings: SETTINGS.securitySettings.default,
     webSearchConfig: SETTINGS.webSearchConfig.default,
+    taskTrustSettings: SETTINGS.taskTrustSettings.default,
     mcpConfig: SETTINGS.mcpConfig.default,
     aiInstructions: SETTINGS.aiInstructions.default,
     onboardingCompleted: SETTINGS.onboardingCompleted.default,
@@ -296,4 +381,5 @@ export {
   defaultAutoApprove,
   defaultWebSearchConfig,
   defaultMcpConfig,
+  defaultTaskTrustSettings,
 }

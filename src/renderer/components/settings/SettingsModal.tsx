@@ -10,7 +10,7 @@ import { PROVIDERS } from '@/shared/config/providers'
 import { getEditorConfig } from '@renderer/settings'
 import KeybindingPanel from '@components/panels/KeybindingPanel'
 import { Button, Modal, Select } from '@components/ui'
-import { SettingsTab, EditorSettingsState, LANGUAGES } from './types'
+import { SettingsTab, EditorSettingsState, LANGUAGES, normalizeTaskTrustSettings } from './types'
 import {
     ProviderSettings,
     EditorSettings,
@@ -28,7 +28,7 @@ import {
 export default function SettingsModal() {
     const {
         llmConfig, language, autoApprove, providerConfigs, promptTemplateId,
-        agentConfig, aiInstructions, webSearchConfig, mcpConfig, enableFileLogging,
+        agentConfig, aiInstructions, webSearchConfig, taskTrustSettings, mcpConfig, enableFileLogging,
         set, setProvider, setShowSettings, save
     } = useStore()
 
@@ -42,6 +42,7 @@ export default function SettingsModal() {
     const [localProviderConfigs, setLocalProviderConfigs] = useState(providerConfigs)
     const [localAiInstructions, setLocalAiInstructions] = useState(aiInstructions)
     const [localWebSearchConfig, setLocalWebSearchConfig] = useState(webSearchConfig)
+    const [localTaskTrustSettings, setLocalTaskTrustSettings] = useState(() => normalizeTaskTrustSettings(taskTrustSettings))
     const [localMcpConfig, setLocalMcpConfig] = useState(mcpConfig)
     const [localEnableFileLogging, setLocalEnableFileLogging] = useState(enableFileLogging)
     const [saved, setSaved] = useState(false)
@@ -89,9 +90,10 @@ export default function SettingsModal() {
         setLocalAgentConfig(agentConfig)
         setLocalAiInstructions(aiInstructions)
         setLocalWebSearchConfig(webSearchConfig)
+        setLocalTaskTrustSettings(normalizeTaskTrustSettings(taskTrustSettings))
         setLocalMcpConfig(mcpConfig)
         setLocalEnableFileLogging(enableFileLogging)
-    }, [llmConfig, providerConfigs, language, autoApprove, agentConfig, aiInstructions, webSearchConfig, mcpConfig, enableFileLogging])
+    }, [llmConfig, providerConfigs, language, autoApprove, agentConfig, aiInstructions, webSearchConfig, taskTrustSettings, mcpConfig, enableFileLogging])
 
     const handleSave = useCallback(async () => {
         // 合并当前 provider 的配置（仅当 provider 仍存在时，避免重建已删除的 provider）
@@ -122,6 +124,7 @@ export default function SettingsModal() {
         set('agentConfig', localAgentConfig)
         set('aiInstructions', localAiInstructions)
         set('webSearchConfig', localWebSearchConfig)
+        set('taskTrustSettings', localTaskTrustSettings)
         set('mcpConfig', localMcpConfig)
         set('enableFileLogging', localEnableFileLogging)
 
@@ -189,7 +192,7 @@ export default function SettingsModal() {
 
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
-    }, [localConfig, localLanguage, localAutoApprove, localPromptTemplateId, localAgentConfig, localAiInstructions, localWebSearchConfig, localMcpConfig, localEnableFileLogging, localProviderConfigs, editorSettings, advancedEditorConfig, set, setProvider, save])
+    }, [localConfig, localLanguage, localAutoApprove, localPromptTemplateId, localAgentConfig, localAiInstructions, localWebSearchConfig, localTaskTrustSettings, localMcpConfig, localEnableFileLogging, localProviderConfigs, editorSettings, advancedEditorConfig, set, setProvider, save])
 
     // 使用 useMemo 缓存计算结果
     const providers = useMemo(() =>
@@ -318,6 +321,8 @@ export default function SettingsModal() {
                                     setAgentConfig={setLocalAgentConfig}
                                     webSearchConfig={localWebSearchConfig}
                                     setWebSearchConfig={setLocalWebSearchConfig}
+                                    taskTrustSettings={localTaskTrustSettings}
+                                    setTaskTrustSettings={setLocalTaskTrustSettings}
                                     language={language}
                                 />
                             )}

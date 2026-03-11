@@ -208,6 +208,66 @@ export interface WebSearchConfig {
   googleCx?: string // Google Programmable Search Engine ID
 }
 
+
+export interface TaskTrustPolicy {
+  mode?: 'safe' | 'balanced' | 'autonomous' | 'manual'
+  enableSafetyGuards?: boolean
+  defaultExecutionTarget?: 'current' | 'isolated' | 'auto'
+  interruptMode?: 'phase' | 'high-risk' | 'failure-only'
+}
+
+export type TaskSpecialistRole = 'frontend' | 'logic' | 'verifier' | 'reviewer'
+
+export interface TaskBudgetSettings {
+  limits?: {
+    timeMs?: number
+    estimatedTokens?: number
+    llmCalls?: number
+    commands?: number
+    verifications?: number
+  }
+  warningThresholdRatio?: number
+  hardStop?: boolean
+}
+
+export interface TaskRollbackSettings {
+  autoRollbackIsolated?: boolean
+  requireConfirmationForMainWorkspace?: boolean
+  warnOnExternalSideEffects?: boolean
+}
+
+export interface TaskGovernanceDefaults {
+  budget?: TaskBudgetSettings
+  rollback?: TaskRollbackSettings
+}
+
+export interface SpecialistProfileSettings {
+  role?: TaskSpecialistRole
+  model?: string | null
+  toolPermission?: 'read-mostly' | 'workspace-write' | 'elevated'
+  networkPermission?: 'blocked' | 'workspace-only' | 'allowed'
+  gitPermission?: 'read-only' | 'task-branch' | 'workspace-write'
+  writableScopes?: string[]
+  budgetCap?: {
+    timeMs?: number
+    estimatedTokens?: number
+    llmCalls?: number
+    commands?: number
+    verifications?: number
+  }
+  styleHints?: string
+  validationRole?: 'none' | 'secondary' | 'primary'
+  trustMode?: 'safe' | 'balanced' | 'autonomous' | 'manual'
+}
+
+export interface TaskTrustSettings {
+  global?: TaskTrustPolicy
+  workspaceOverrides?: Record<string, TaskTrustPolicy>
+  allowTaskOverride?: boolean
+  governanceDefaults?: TaskGovernanceDefaults
+  specialistProfiles?: Partial<Record<TaskSpecialistRole, SpecialistProfileSettings>>
+}
+
 // ============================================
 // MCP 配置
 // ============================================
@@ -230,5 +290,6 @@ export interface AppSettings {
   aiInstructions: string
   onboardingCompleted: boolean
   webSearchConfig?: WebSearchConfig
+  taskTrustSettings?: TaskTrustSettings
   mcpConfig?: McpConfig
 }

@@ -73,7 +73,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   }
 
   const handleComplete = async () => {
-    const { settingsService, defaultAgentConfig, defaultAutoApprove, defaultEditorConfig, defaultSecuritySettings, defaultWebSearchConfig, defaultMcpConfig } = await import('@renderer/settings')
+    const { settingsService, defaultAgentConfig, defaultAutoApprove, defaultEditorConfig, defaultSecuritySettings, defaultWebSearchConfig, defaultTaskTrustSettings, defaultMcpConfig } = await import('@renderer/settings')
 
     set('language', selectedLanguage)
     set('llmConfig', providerConfig)
@@ -94,6 +94,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
         editorConfig: defaultEditorConfig,
         securitySettings: defaultSecuritySettings,
         webSearchConfig: defaultWebSearchConfig,
+        taskTrustSettings: defaultTaskTrustSettings,
         mcpConfig: defaultMcpConfig,
         promptTemplateId: 'default',
         enableFileLogging: false,

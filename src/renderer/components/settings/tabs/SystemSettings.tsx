@@ -9,6 +9,7 @@ import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink } fr
 import { toast } from '@components/common/ToastProvider'
 import { Button, Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
+import { normalizeTaskTrustSettings } from '../types'
 import { useStore } from '@store'
 import { downloadSettings, importSettings, settingsService } from '@renderer/settings'
 import { Agent } from '@/renderer/agent'
@@ -72,6 +73,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
             editorConfig: store.editorConfig,
             securitySettings: store.securitySettings,
             webSearchConfig: store.webSearchConfig,
+            taskTrustSettings: store.taskTrustSettings,
             mcpConfig: store.mcpConfig,
             aiInstructions: store.aiInstructions,
             onboardingCompleted: store.onboardingCompleted,
@@ -114,6 +116,13 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
             if (settings.promptTemplateId) store.set('promptTemplateId', settings.promptTemplateId)
             if (settings.agentConfig) store.set('agentConfig', settings.agentConfig)
             if (settings.aiInstructions !== undefined) store.set('aiInstructions', settings.aiInstructions)
+            if (settings.editorConfig) store.set('editorConfig', settings.editorConfig)
+            if (settings.securitySettings) store.set('securitySettings', settings.securitySettings)
+            if (settings.webSearchConfig) store.set('webSearchConfig', settings.webSearchConfig)
+            if (settings.taskTrustSettings) store.set('taskTrustSettings', normalizeTaskTrustSettings(settings.taskTrustSettings))
+            if (settings.mcpConfig) store.set('mcpConfig', settings.mcpConfig)
+            if (typeof settings.onboardingCompleted === 'boolean') store.set('onboardingCompleted', settings.onboardingCompleted)
+            if (typeof settings.enableFileLogging === 'boolean') store.set('enableFileLogging', settings.enableFileLogging)
 
             // 应用 provider 配置
             if (settings.providerConfigs) {

@@ -146,6 +146,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
         editorConfig: state.editorConfig,
         securitySettings: state.securitySettings,
         webSearchConfig: state.webSearchConfig,
+        taskTrustSettings: state.taskTrustSettings,
         mcpConfig: state.mcpConfig,
         aiInstructions: state.aiInstructions,
         onboardingCompleted: state.onboardingCompleted,

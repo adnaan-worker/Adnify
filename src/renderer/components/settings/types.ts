@@ -3,8 +3,22 @@
  */
 
 import { Language } from '@renderer/i18n'
-import type { LLMConfig, AutoApproveSettings, AgentConfig, WebSearchConfig } from '@shared/config/types'
+import type {
+    LLMConfig,
+    AutoApproveSettings,
+    AgentConfig,
+    WebSearchConfig,
+    TaskTrustSettings as PersistedTaskTrustSettings,
+} from '@shared/config/types'
 import type { ProviderModelConfig } from '@shared/config/settings'
+import { DEFAULT_TRUST_POLICY, type TrustPolicy } from '@renderer/agent/types/trustPolicy'
+import {
+    createDefaultSpecialistProfile,
+    createDefaultTaskBudget,
+    type SpecialistKind,
+    type SpecialistProfile,
+    type TaskBudgetLimits,
+} from '@renderer/agent/types/taskExecution'
 
 export type SettingsTab = 'provider' | 'editor' | 'snippets' | 'agent' | 'rules' | 'skills' | 'mcp' | 'lsp' | 'keybindings' | 'indexing' | 'security' | 'system'
 
@@ -22,7 +36,6 @@ export interface ProviderSettingsProps {
 }
 
 export interface EditorSettingsState {
-    // 编辑器外观
     fontSize: number
     tabSize: number
     wordWrap: 'on' | 'off' | 'wordWrapColumn'
@@ -33,22 +46,14 @@ export interface EditorSettingsState {
     autoSave: 'off' | 'afterDelay' | 'onFocusChange'
     autoSaveDelay: number
     theme: string
-
-    // AI 补全
     completionEnabled: boolean
     completionDebounceMs: number
     completionMaxTokens: number
     completionTriggerChars: string[]
-
-    // 终端
     terminalScrollback: number
     terminalMaxOutputLines: number
-
-    // LSP
     lspTimeoutMs: number
     lspCompletionTimeoutMs: number
-
-    // 性能
     largeFileWarningThresholdMB: number
     largeFileLineCount: number
     commandTimeoutMs: number
@@ -80,6 +85,8 @@ export interface AgentSettingsProps {
     setAgentConfig: React.Dispatch<React.SetStateAction<AgentConfig>>
     webSearchConfig: WebSearchConfig
     setWebSearchConfig: React.Dispatch<React.SetStateAction<WebSearchConfig>>
+    taskTrustSettings: TaskTrustSettings
+    setTaskTrustSettings: React.Dispatch<React.SetStateAction<TaskTrustSettings>>
     language: Language
 }
 
@@ -93,3 +100,106 @@ export const LANGUAGES: { id: Language; name: string }[] = [
     { id: 'en', name: 'English' },
     { id: 'zh', name: '中文' },
 ]
+
+export interface TaskBudgetSettings {
+    limits: TaskBudgetLimits
+    warningThresholdRatio: number
+    hardStop: boolean
+}
+
+export interface RollbackGovernanceSettings {
+    autoRollbackIsolated: boolean
+    requireConfirmationForMainWorkspace: boolean
+    warnOnExternalSideEffects: boolean
+}
+
+export interface TaskGovernanceDefaults {
+    budget: TaskBudgetSettings
+    rollback: RollbackGovernanceSettings
+}
+
+export interface TaskTrustSettings {
+    global: TrustPolicy
+    workspaceOverrides: Record<string, TrustPolicy>
+    allowTaskOverride: boolean
+    governanceDefaults: TaskGovernanceDefaults
+    specialistProfiles: Record<SpecialistKind, SpecialistProfile>
+}
+
+export function normalizeTaskTrustPolicy(input?: Partial<TrustPolicy>): TrustPolicy {
+    return {
+        ...DEFAULT_TRUST_POLICY,
+        ...(input || {}),
+    }
+}
+
+function normalizeTaskBudgetSettings(input?: PersistedTaskTrustSettings['governanceDefaults'] extends infer _T ? any : never): TaskBudgetSettings {
+    const defaults = createDefaultTaskBudget()
+    const limits = input?.budget?.limits || {}
+
+    return {
+        limits: {
+            timeMs: typeof limits.timeMs === 'number' ? limits.timeMs : defaults.limits.timeMs,
+            estimatedTokens: typeof limits.estimatedTokens === 'number' ? limits.estimatedTokens : defaults.limits.estimatedTokens,
+            llmCalls: typeof limits.llmCalls === 'number' ? limits.llmCalls : defaults.limits.llmCalls,
+            commands: typeof limits.commands === 'number' ? limits.commands : defaults.limits.commands,
+            verifications: typeof limits.verifications === 'number' ? limits.verifications : defaults.limits.verifications,
+        },
+        warningThresholdRatio: typeof input?.budget?.warningThresholdRatio === 'number'
+            ? input.budget.warningThresholdRatio
+            : defaults.warningThresholdRatio,
+        hardStop: typeof input?.budget?.hardStop === 'boolean' ? input.budget.hardStop : defaults.hardStop,
+    }
+}
+
+function normalizeRollbackGovernanceSettings(input?: PersistedTaskTrustSettings['governanceDefaults'] extends infer _T ? any : never): RollbackGovernanceSettings {
+    return {
+        autoRollbackIsolated: typeof input?.rollback?.autoRollbackIsolated === 'boolean' ? input.rollback.autoRollbackIsolated : true,
+        requireConfirmationForMainWorkspace: typeof input?.rollback?.requireConfirmationForMainWorkspace === 'boolean'
+            ? input.rollback.requireConfirmationForMainWorkspace
+            : true,
+        warnOnExternalSideEffects: typeof input?.rollback?.warnOnExternalSideEffects === 'boolean'
+            ? input.rollback.warnOnExternalSideEffects
+            : true,
+    }
+}
+
+function normalizeSpecialistProfiles(input?: PersistedTaskTrustSettings['specialistProfiles'] | Partial<Record<SpecialistKind, SpecialistProfile>>): Record<SpecialistKind, SpecialistProfile> {
+    const roles: SpecialistKind[] = ['frontend', 'logic', 'verifier', 'reviewer']
+
+    return roles.reduce<Record<SpecialistKind, SpecialistProfile>>((acc, role) => {
+        const defaults = createDefaultSpecialistProfile(role)
+        const override = input?.[role]
+        acc[role] = {
+            ...defaults,
+            ...(override || {}),
+            role,
+            writableScopes: [...(override?.writableScopes || defaults.writableScopes)],
+            budgetCap: { ...defaults.budgetCap, ...(override?.budgetCap || {}) },
+        }
+        return acc
+    }, {} as Record<SpecialistKind, SpecialistProfile>)
+}
+
+export function normalizeTaskTrustSettings(
+    input?: PersistedTaskTrustSettings | Partial<TaskTrustSettings>
+): TaskTrustSettings {
+    const workspaceOverrides = Object.entries(input?.workspaceOverrides || {}).reduce<Record<string, TrustPolicy>>(
+        (acc, [workspace, policy]) => {
+            acc[workspace] = normalizeTaskTrustPolicy(policy)
+            return acc
+        },
+        {}
+    )
+
+    return {
+        global: normalizeTaskTrustPolicy(input?.global),
+        workspaceOverrides,
+        allowTaskOverride: input?.allowTaskOverride ?? true,
+        governanceDefaults: {
+            budget: normalizeTaskBudgetSettings((input as PersistedTaskTrustSettings | undefined)?.governanceDefaults),
+            rollback: normalizeRollbackGovernanceSettings((input as PersistedTaskTrustSettings | undefined)?.governanceDefaults),
+        },
+        specialistProfiles: normalizeSpecialistProfiles((input as PersistedTaskTrustSettings | undefined)?.specialistProfiles || (input as Partial<TaskTrustSettings> | undefined)?.specialistProfiles),
+    }
+}

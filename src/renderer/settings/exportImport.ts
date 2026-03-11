@@ -4,7 +4,6 @@
 
 import { isBuiltinProvider } from '@shared/config/providers'
 import type { SettingsState, ProviderModelConfig } from '@shared/config/settings'
-import type { AppSettings } from '@shared/config/types'
 
 export interface ExportedSettings {
   version: string
@@ -25,6 +24,7 @@ export function exportSettings(settings: SettingsState, includeApiKeys = false):
     editorConfig: settings.editorConfig,
     securitySettings: settings.securitySettings,
     webSearchConfig: settings.webSearchConfig,
+    taskTrustSettings: settings.taskTrustSettings,
     mcpConfig: settings.mcpConfig,
     enableFileLogging: settings.enableFileLogging,
     onboardingCompleted: settings.onboardingCompleted,
@@ -66,18 +66,18 @@ export function exportSettings(settings: SettingsState, includeApiKeys = false):
 /**
  * 从 JSON 导入配置
  */
-export function importSettings(json: string): { success: boolean; settings?: Partial<AppSettings>; error?: string } {
+export function importSettings(json: string): { success: boolean; settings?: Partial<SettingsState>; error?: string } {
   try {
     const parsed = JSON.parse(json) as Record<string, unknown>
 
     // 判断是否是新的带 version 格式
     if (parsed.version && parsed.settings && typeof parsed.settings === 'object') {
-      return { success: true, settings: parsed.settings as Partial<AppSettings> }
+      return { success: true, settings: parsed.settings as Partial<SettingsState> }
     }
 
     // 尝试识别旧格式的 config.json (包含 llmConfig, providerConfigs 等)
     if (Reflect.has(parsed, 'llmConfig') || Reflect.has(parsed, 'providerConfigs') || Reflect.has(parsed, 'language')) {
-      return { success: true, settings: parsed as Partial<AppSettings> }
+      return { success: true, settings: parsed as Partial<SettingsState> }
     }
 
     return { success: false, error: 'Invalid settings file format' }

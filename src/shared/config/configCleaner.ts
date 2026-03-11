@@ -264,6 +264,57 @@ export interface AppSettingsSchema {
     googleApiKey?: string
     googleCx?: string
   }
+  taskTrustSettings?: {
+    global?: {
+      mode?: 'safe' | 'balanced' | 'autonomous' | 'manual'
+      enableSafetyGuards?: boolean
+      defaultExecutionTarget?: 'current' | 'isolated' | 'auto'
+      interruptMode?: 'phase' | 'high-risk' | 'failure-only'
+    }
+    workspaceOverrides?: Record<string, {
+      mode?: 'safe' | 'balanced' | 'autonomous' | 'manual'
+      enableSafetyGuards?: boolean
+      defaultExecutionTarget?: 'current' | 'isolated' | 'auto'
+      interruptMode?: 'phase' | 'high-risk' | 'failure-only'
+    }>
+    allowTaskOverride?: boolean
+    governanceDefaults?: {
+      budget?: {
+        limits?: {
+          timeMs?: number
+          estimatedTokens?: number
+          llmCalls?: number
+          commands?: number
+          verifications?: number
+        }
+        warningThresholdRatio?: number
+        hardStop?: boolean
+      }
+      rollback?: {
+        autoRollbackIsolated?: boolean
+        requireConfirmationForMainWorkspace?: boolean
+        warnOnExternalSideEffects?: boolean
+      }
+    }
+    specialistProfiles?: Record<string, {
+      role?: 'frontend' | 'logic' | 'verifier' | 'reviewer'
+      model?: string | null
+      toolPermission?: 'read-mostly' | 'workspace-write' | 'elevated'
+      networkPermission?: 'blocked' | 'workspace-only' | 'allowed'
+      gitPermission?: 'read-only' | 'task-branch' | 'workspace-write'
+      writableScopes?: string[]
+      budgetCap?: {
+        timeMs?: number
+        estimatedTokens?: number
+        llmCalls?: number
+        commands?: number
+        verifications?: number
+      }
+      styleHints?: string
+      validationRole?: 'none' | 'secondary' | 'primary'
+      trustMode?: 'safe' | 'balanced' | 'autonomous' | 'manual'
+    }>
+  }
   mcpConfig?: {
     autoConnect?: boolean
   }
@@ -373,6 +424,111 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
     if (typeof ws.googleCx === 'string') cleaned.webSearchConfig.googleCx = ws.googleCx
   }
 
+  // taskTrustSettings
+  if (config.taskTrustSettings && typeof config.taskTrustSettings === 'object') {
+    const tt = config.taskTrustSettings as Record<string, unknown>
+    cleaned.taskTrustSettings = {}
+
+    if (tt.global && typeof tt.global === 'object') {
+      const global = tt.global as Record<string, unknown>
+      cleaned.taskTrustSettings.global = {}
+      if (global.mode === 'safe' || global.mode === 'balanced' || global.mode === 'autonomous' || global.mode === 'manual') {
+        cleaned.taskTrustSettings.global.mode = global.mode
+      }
+      if (typeof global.enableSafetyGuards === 'boolean') cleaned.taskTrustSettings.global.enableSafetyGuards = global.enableSafetyGuards
+      if (global.defaultExecutionTarget === 'current' || global.defaultExecutionTarget === 'isolated' || global.defaultExecutionTarget === 'auto') {
+        cleaned.taskTrustSettings.global.defaultExecutionTarget = global.defaultExecutionTarget
+      }
+      if (global.interruptMode === 'phase' || global.interruptMode === 'high-risk' || global.interruptMode === 'failure-only') {
+        cleaned.taskTrustSettings.global.interruptMode = global.interruptMode
+      }
+    }
+
+    if (tt.workspaceOverrides && typeof tt.workspaceOverrides === 'object') {
+      const overrides = tt.workspaceOverrides as Record<string, unknown>
+      cleaned.taskTrustSettings.workspaceOverrides = {}
+      for (const [workspace, value] of Object.entries(overrides)) {
+        if (!value || typeof value !== 'object') continue
+        const override = value as Record<string, unknown>
+        const next: Record<string, unknown> = {}
+        if (override.mode === 'safe' || override.mode === 'balanced' || override.mode === 'autonomous' || override.mode === 'manual') {
+          next.mode = override.mode
+        }
+        if (typeof override.enableSafetyGuards === 'boolean') next.enableSafetyGuards = override.enableSafetyGuards
+        if (override.defaultExecutionTarget === 'current' || override.defaultExecutionTarget === 'isolated' || override.defaultExecutionTarget === 'auto') {
+          next.defaultExecutionTarget = override.defaultExecutionTarget
+        }
+        if (override.interruptMode === 'phase' || override.interruptMode === 'high-risk' || override.interruptMode === 'failure-only') {
+          next.interruptMode = override.interruptMode
+        }
+        if (Object.keys(next).length > 0) {
+          cleaned.taskTrustSettings.workspaceOverrides[workspace] = next as any
+        }
+      }
+    }
+
+    if (tt.governanceDefaults && typeof tt.governanceDefaults === 'object') {
+      const governance = tt.governanceDefaults as Record<string, unknown>
+      cleaned.taskTrustSettings.governanceDefaults = {}
+
+      if (governance.budget && typeof governance.budget === 'object') {
+        const budget = governance.budget as Record<string, unknown>
+        cleaned.taskTrustSettings.governanceDefaults.budget = {}
+        if (budget.limits && typeof budget.limits === 'object') {
+          const limits = budget.limits as Record<string, unknown>
+          cleaned.taskTrustSettings.governanceDefaults.budget.limits = {}
+          if (typeof limits.timeMs === 'number') cleaned.taskTrustSettings.governanceDefaults.budget.limits.timeMs = limits.timeMs
+          if (typeof limits.estimatedTokens === 'number') cleaned.taskTrustSettings.governanceDefaults.budget.limits.estimatedTokens = limits.estimatedTokens
+          if (typeof limits.llmCalls === 'number') cleaned.taskTrustSettings.governanceDefaults.budget.limits.llmCalls = limits.llmCalls
+          if (typeof limits.commands === 'number') cleaned.taskTrustSettings.governanceDefaults.budget.limits.commands = limits.commands
+          if (typeof limits.verifications === 'number') cleaned.taskTrustSettings.governanceDefaults.budget.limits.verifications = limits.verifications
+        }
+        if (typeof budget.warningThresholdRatio === 'number') cleaned.taskTrustSettings.governanceDefaults.budget.warningThresholdRatio = budget.warningThresholdRatio
+        if (typeof budget.hardStop === 'boolean') cleaned.taskTrustSettings.governanceDefaults.budget.hardStop = budget.hardStop
+      }
+
+      if (governance.rollback && typeof governance.rollback === 'object') {
+        const rollback = governance.rollback as Record<string, unknown>
+        cleaned.taskTrustSettings.governanceDefaults.rollback = {}
+        if (typeof rollback.autoRollbackIsolated === 'boolean') cleaned.taskTrustSettings.governanceDefaults.rollback.autoRollbackIsolated = rollback.autoRollbackIsolated
+        if (typeof rollback.requireConfirmationForMainWorkspace === 'boolean') cleaned.taskTrustSettings.governanceDefaults.rollback.requireConfirmationForMainWorkspace = rollback.requireConfirmationForMainWorkspace
+        if (typeof rollback.warnOnExternalSideEffects === 'boolean') cleaned.taskTrustSettings.governanceDefaults.rollback.warnOnExternalSideEffects = rollback.warnOnExternalSideEffects
+      }
+    }
+
+    if (tt.specialistProfiles && typeof tt.specialistProfiles === 'object') {
+      const profiles = tt.specialistProfiles as Record<string, unknown>
+      cleaned.taskTrustSettings.specialistProfiles = {}
+      for (const [role, value] of Object.entries(profiles)) {
+        if (!value || typeof value !== 'object') continue
+        const profile = value as Record<string, unknown>
+        const next: Record<string, unknown> = {}
+        if (role === 'frontend' || role === 'logic' || role === 'verifier' || role === 'reviewer') next.role = role
+        if (typeof profile.model === 'string' || profile.model === null) next.model = profile.model
+        if (profile.toolPermission === 'read-mostly' || profile.toolPermission === 'workspace-write' || profile.toolPermission === 'elevated') next.toolPermission = profile.toolPermission
+        if (profile.networkPermission === 'blocked' || profile.networkPermission === 'workspace-only' || profile.networkPermission === 'allowed') next.networkPermission = profile.networkPermission
+        if (profile.gitPermission === 'read-only' || profile.gitPermission === 'task-branch' || profile.gitPermission === 'workspace-write') next.gitPermission = profile.gitPermission
+        if (Array.isArray(profile.writableScopes)) next.writableScopes = profile.writableScopes.filter((item) => typeof item === 'string')
+        if (profile.budgetCap && typeof profile.budgetCap === 'object') {
+          const budgetCap = profile.budgetCap as Record<string, unknown>
+          const nextBudgetCap: Record<string, unknown> = {}
+          if (typeof budgetCap.timeMs === 'number') nextBudgetCap.timeMs = budgetCap.timeMs
+          if (typeof budgetCap.estimatedTokens === 'number') nextBudgetCap.estimatedTokens = budgetCap.estimatedTokens
+          if (typeof budgetCap.llmCalls === 'number') nextBudgetCap.llmCalls = budgetCap.llmCalls
+          if (typeof budgetCap.commands === 'number') nextBudgetCap.commands = budgetCap.commands
+          if (typeof budgetCap.verifications === 'number') nextBudgetCap.verifications = budgetCap.verifications
+          next.budgetCap = nextBudgetCap
+        }
+        if (typeof profile.styleHints === 'string') next.styleHints = profile.styleHints
+        if (profile.validationRole === 'none' || profile.validationRole === 'secondary' || profile.validationRole === 'primary') next.validationRole = profile.validationRole
+        if (profile.trustMode === 'safe' || profile.trustMode === 'balanced' || profile.trustMode === 'autonomous' || profile.trustMode === 'manual') next.trustMode = profile.trustMode
+        if (Object.keys(next).length > 0) cleaned.taskTrustSettings.specialistProfiles[role] = next as any
+      }
+    }
+
+    if (typeof tt.allowTaskOverride === 'boolean') cleaned.taskTrustSettings.allowTaskOverride = tt.allowTaskOverride
+  }
+
   // mcpConfig
   if (config.mcpConfig && typeof config.mcpConfig === 'object') {
     const mcp = config.mcpConfig as Record<string, unknown>
@@ -399,6 +555,9 @@ export function cleanConfigValue(key: string, value: unknown): unknown {
 
     case 'app-settings':
       return typeof value === 'object' ? cleanAppSettings(value as Record<string, unknown>) : value
+
+    case 'taskTrustSettings':
+      return typeof value === 'object' ? cleanAppSettings({ taskTrustSettings: value }).taskTrustSettings : value
 
     default:
       return value
