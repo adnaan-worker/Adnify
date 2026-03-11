@@ -41,21 +41,40 @@ export async function prepareTaskExecutionWorkspace(
   const workPackage = ownerId ? store.workPackages[ownerId] : null
 
   if (ownerId && workPackage?.workspaceId) {
-    return {
-      success: true,
-      workspacePath: workPackage.workspaceId,
-      target: workPackage.workspaceOwnerId ? 'isolated' : 'current',
-      mode: workPackage.workspaceOwnerId ? (task.isolationMode ?? undefined) : undefined,
+    const workspaceStillExists = await api.file.exists(workPackage.workspaceId)
+
+    if (workspaceStillExists) {
+      return {
+        success: true,
+        workspacePath: workPackage.workspaceId,
+        target: workPackage.workspaceOwnerId ? 'isolated' : 'current',
+        mode: workPackage.workspaceOwnerId ? (task.isolationMode ?? undefined) : undefined,
+      }
     }
+
+    store.updateWorkPackage(ownerId, {
+      workspaceId: null,
+      workspaceOwnerId: null,
+    })
   }
 
   if (!ownerId && task.resolvedWorkspacePath && task.isolationStatus === 'ready') {
-    return {
-      success: true,
-      workspacePath: task.resolvedWorkspacePath,
-      target: task.isolationMode ? 'isolated' : 'current',
-      mode: task.isolationMode ?? undefined,
+    const workspaceStillExists = await api.file.exists(task.resolvedWorkspacePath)
+
+    if (workspaceStillExists) {
+      return {
+        success: true,
+        workspacePath: task.resolvedWorkspacePath,
+        target: task.isolationMode ? 'isolated' : 'current',
+        mode: task.isolationMode ?? undefined,
+      }
     }
+
+    store.updateExecutionTask(taskId, {
+      resolvedWorkspacePath: null,
+      isolationStatus: 'pending',
+      isolationError: null,
+    })
   }
 
   const sourceWorkspacePath = task.sourceWorkspacePath || fallbackWorkspacePath

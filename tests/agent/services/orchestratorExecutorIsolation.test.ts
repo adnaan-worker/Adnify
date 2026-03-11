@@ -167,6 +167,43 @@ describe('execution workspace service', () => {
     })
   })
 
+
+  it('recreates a package workspace when persisted workspaceId no longer exists', async () => {
+    vi.mocked(api.file.exists).mockResolvedValue(false)
+    vi.mocked(api.workspace.createIsolated).mockResolvedValue({
+      success: true,
+      workspacePath: '/tmp/pkg-recreated',
+      mode: 'copy',
+    })
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Resume persisted package execution',
+      specialists: ['logic'],
+      executionTarget: 'isolated',
+      sourceWorkspacePath: '/workspace/adnify',
+      isolationMode: 'copy',
+      isolationStatus: 'ready',
+    })
+    const [packageId] = useAgentStore.getState().executionTasks[taskId].workPackages
+
+    useAgentStore.getState().updateWorkPackage(packageId, {
+      workspaceId: '/tmp/stale-pkg',
+      workspaceOwnerId: packageId,
+    })
+
+    const result = await prepareTaskExecutionWorkspace(taskId, '/workspace/adnify', packageId)
+
+    expect(api.file.exists).toHaveBeenCalledWith('/tmp/stale-pkg')
+    expect(api.workspace.createIsolated).toHaveBeenCalledWith({
+      taskId,
+      workspacePath: '/workspace/adnify',
+      ownerId: packageId,
+    })
+    expect(result.success).toBe(true)
+    expect(result.workspacePath).toBe('/tmp/pkg-recreated')
+    expect(useAgentStore.getState().workPackages[packageId].workspaceId).toBeNull()
+  })
+
   it('disposes package-scoped isolated workspaces independently', async () => {
     vi.mocked(api.workspace.disposeIsolated).mockResolvedValue({ success: true })
 
