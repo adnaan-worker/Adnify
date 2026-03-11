@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react'
+
 import type {
   AdjudicationActionType,
   AdjudicationCase,
@@ -9,6 +11,7 @@ import type {
   WorkPackage,
 } from '@renderer/agent/types/taskExecution'
 import { findMatchingTaskTemplate } from '@renderer/agent/services/taskTemplateService'
+import { useAgentStore } from '@renderer/agent/store/AgentStore'
 
 import { AdjudicationPanel } from './AdjudicationPanel'
 import { ChangeProposalPanel } from './ChangeProposalPanel'
@@ -16,6 +19,7 @@ import { HandoffDetailPanel } from './HandoffDetailPanel'
 import { RollbackProposalPanel } from './RollbackProposalPanel'
 import { TaskTemplatePicker } from './TaskTemplatePicker'
 import { WorkPackageColumn } from './WorkPackageColumn'
+import { buildWorkPackageRuntimeActivity } from './workPackageRuntime'
 
 interface ExecutionTaskPanelProps {
   task: ExecutionTask
@@ -46,6 +50,10 @@ export function ExecutionTaskPanel({
   onReviewProposal,
   onConfirmRollback,
 }: ExecutionTaskPanelProps) {
+  const [selectedWorkPackageId, setSelectedWorkPackageId] = useState<string | null>(null)
+  const threads = useAgentStore((state) => state.threads)
+  const runtimeThreads = Object.keys(threads).length > 0 ? threads : useAgentStore.getState().threads
+
   const handoffByPackage = new Map<string, TaskHandoff>()
   for (const handoff of handoffs) {
     if (!handoffByPackage.has(handoff.workPackageId)) {
@@ -66,6 +74,23 @@ export function ExecutionTaskPanel({
     || null
   const selectedHandoff = handoffs.find((handoff) => handoff.id === selectedHandoffId) || handoffs[0] || null
   const matchedTemplate = findMatchingTaskTemplate(task.specialists)
+  const workPackageActivities = useMemo(() => new Map(
+    workPackages.map((workPackage) => [workPackage.id, buildWorkPackageRuntimeActivity(workPackage, workPackage.threadId ? runtimeThreads[workPackage.threadId] : null)]),
+  ), [runtimeThreads, workPackages])
+
+  const fallbackSelectedWorkPackageId = selectedWorkPackageId
+    || selectedProposal?.workPackageId
+    || selectedHandoff?.workPackageId
+    || workPackages.find((workPackage) => ['executing', 'running', 'verifying', 'blocked', 'failed'].includes(workPackage.status))?.id
+    || workPackages[0]?.id
+    || null
+
+  const selectedWorkPackage = fallbackSelectedWorkPackageId
+    ? workPackages.find((workPackage) => workPackage.id === fallbackSelectedWorkPackageId) || null
+    : null
+  const selectedWorkPackageActivity = selectedWorkPackage
+    ? workPackageActivities.get(selectedWorkPackage.id) || null
+    : null
 
   return (
     <section className="rounded-2xl border border-border bg-surface/20 p-5 space-y-5">
@@ -157,9 +182,11 @@ export function ExecutionTaskPanel({
                 workPackage={workPackage}
                 handoff={handoff}
                 proposal={proposal}
-                selected={proposal?.id === selectedProposal?.id || handoff?.id === selectedHandoffId}
+                activity={workPackageActivities.get(workPackage.id) || null}
+                selected={proposal?.id === selectedProposal?.id || handoff?.id === selectedHandoffId || workPackage.id === fallbackSelectedWorkPackageId}
                 onSelectHandoff={onSelectHandoff}
                 onSelectProposal={onSelectProposal}
+                onSelectWorkPackage={setSelectedWorkPackageId}
               />
             )
           }) : (
@@ -172,7 +199,11 @@ export function ExecutionTaskPanel({
         {selectedProposal ? (
           <ChangeProposalPanel proposal={selectedProposal} onReview={onReviewProposal} />
         ) : (
-          <HandoffDetailPanel handoff={selectedHandoff} />
+          <HandoffDetailPanel
+            handoff={selectedHandoff}
+            workPackage={selectedWorkPackage}
+            activity={selectedWorkPackageActivity}
+          />
         )}
       </div>
     </section>

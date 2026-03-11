@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ExecutionTaskPanel } from '@renderer/components/orchestrator/ExecutionTaskPanel'
+import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import {
   createAdjudicationCase,
 } from '@renderer/agent/services/coordinatorService'
@@ -18,6 +19,13 @@ import {
 } from '@renderer/agent/services/rollbackOrchestratorService'
 
 describe('ExecutionTaskPanel', () => {
+  beforeEach(() => {
+    useAgentStore.setState({
+      threads: {},
+      currentThreadId: null,
+    })
+  })
+
   it('shows specialists, active profile details, adjudication actions, and rollback actions', () => {
     const budget = createDefaultTaskBudget()
     budget.usage.llmCalls = 2
@@ -194,6 +202,104 @@ describe('ExecutionTaskPanel', () => {
     expect(html).toContain('Queued 1')
     expect(html).toContain('Pending proposals 1')
     expect(html).toContain('Waiting for pkg-owner')
+  })
+
+  it('shows live execution preview when detached work package thread has output', () => {
+    const store = useAgentStore.getState()
+    const threadId = store.createThread()
+
+    useAgentStore.setState((state) => ({
+      threads: {
+        ...state.threads,
+        [threadId]: {
+          ...state.threads[threadId],
+          streamState: { phase: 'tool_running' },
+          messages: [
+            {
+              id: 'user-1',
+              role: 'user',
+              content: 'Audit Crehub project structure',
+              timestamp: 1,
+            },
+            {
+              id: 'assistant-1',
+              role: 'assistant',
+              content: 'Inspecting package.json and app entry points to map the stack.',
+              timestamp: 2,
+              isStreaming: true,
+              parts: [{ type: 'text', content: 'Inspecting package.json and app entry points to map the stack.' }],
+              toolCalls: [{
+                id: 'tool-1',
+                name: 'read_file',
+                arguments: { path: 'package.json' },
+                status: 'running',
+              }],
+            },
+          ],
+        },
+      },
+    }))
+
+    const html = renderToStaticMarkup(
+      <ExecutionTaskPanel
+        task={{
+          id: 'task-live',
+          objective: 'Crehub 项目盘点与审计',
+          specialists: ['logic'],
+          state: 'running',
+          governanceState: 'active',
+          risk: 'medium',
+          executionTarget: 'isolated',
+          trustMode: 'balanced',
+          executionStrategy: createDefaultExecutionStrategySnapshot(),
+          workPackages: ['pkg-live'],
+          sourceWorkspacePath: '/workspace/adnify',
+          resolvedWorkspacePath: '/tmp/adnify-task-live',
+          isolationMode: 'worktree',
+          isolationStatus: 'ready',
+          isolationError: null,
+          queueSummary: createEmptyExecutionQueueSummary(),
+          proposalSummary: createEmptyProposalSummary(),
+          latestHandoffId: null,
+          latestProposalId: null,
+          latestAdjudicationId: null,
+          budget: createDefaultTaskBudget(),
+          rollback: {
+            status: 'idle',
+            proposal: null,
+            lastUpdatedAt: null,
+          },
+          specialistProfilesSnapshot: createEmptySpecialistProfileSnapshot(['logic']),
+          createdAt: 1,
+          updatedAt: 1,
+        }}
+        workPackages={[
+          {
+            id: 'pkg-live',
+            taskId: 'task-live',
+            title: '盘点基础结构与技术栈',
+            objective: '盘点基础结构与技术栈',
+            specialist: 'logic',
+            status: 'executing',
+            targetDomain: 'logic',
+            writableScopes: ['.'],
+            readableScopes: ['.'],
+            dependsOn: [],
+            expectedArtifacts: ['audit-report'],
+            queueReason: null,
+            workspaceId: '/tmp/adnify-task-live',
+            threadId,
+            handoffId: null,
+            proposalId: null,
+          },
+        ]}
+        handoffs={[]}
+      />,
+    )
+
+    expect(html).toContain('执行过程')
+    expect(html).toContain('Inspecting package.json and app entry points to map the stack.')
+    expect(html).toContain('read_file')
   })
 
 })
