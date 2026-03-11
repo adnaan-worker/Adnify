@@ -16,6 +16,7 @@ import type {
     OrchestratorConfig,
 } from './types'
 import { DEFAULT_ORCHESTRATOR_CONFIG } from './types'
+import { validateHandoffForMerge, type MergeGateInput, type MergeGateResult } from '../services/coordinatorService'
 
 // ============================================
 // 执行调度器
@@ -241,5 +242,12 @@ export class ExecutionScheduler {
         const executable = this.getExecutableTasks(plan)
         // 限制并发数
         return executable.slice(0, this.config.maxConcurrency)
+    }
+
+    /**
+     * 校验任务产物是否可进入合并/移交流程
+     */
+    validateTaskMerge(input: MergeGateInput): MergeGateResult {
+        return validateHandoffForMerge(input)
     }
 }

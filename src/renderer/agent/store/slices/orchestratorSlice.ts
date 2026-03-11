@@ -1,7 +1,7 @@
 /**
  * Orchestrator State Management
  * 管理任务规划、执行状态
- * 
+ *
  * 重构：使用新的 orchestrator 模块类型
  */
 
@@ -15,6 +15,42 @@ import type {
     ExecutionMode,
     PlanStatus,
 } from '../../orchestrator/types'
+import {
+    createDefaultExecutionStrategySnapshot,
+    createDefaultTaskBudget,
+    createEmptyExecutionQueueSummary,
+    createEmptyProposalSummary,
+    createEmptySpecialistProfileSnapshot,
+    createInitialExecutionTaskGovernanceState,
+    createInitialRollbackState,
+} from '../../types/taskExecution'
+import type {
+    ChangeProposal,
+    CircuitBreakerState,
+    CreateChangeProposalInput,
+    CreateExecutionQueueItemInput,
+    CreateExecutionTaskInput,
+    CreateOwnershipLeaseInput,
+    CreateTaskHandoffInput,
+    ExecutionQueueItem,
+    ExecutionQueueSummary,
+    ExecutionTask,
+    ExecutionTaskState,
+    OwnershipLease,
+    ProposalSummary,
+    SpecialistKind,
+    SpecialistProfileSnapshot,
+    TaskBudgetState,
+    TaskHandoff,
+    AdjudicationCase,
+    WorkPackage,
+    WorkPackageStatus,
+} from '../../types/taskExecution'
+import { buildTaskWorkPackages } from '../../services/taskTemplateService'
+import { recordBudgetUsage } from '../../services/budgetLedgerService'
+import { createRollbackProposal, createRollbackStateFromProposal } from '../../services/rollbackOrchestratorService'
+import { shouldUseIsolatedWorkspace } from '../../types/trustPolicy'
+import { createAdjudicationCase as buildAdjudicationCase, resolveAdjudicationCase as applyAdjudicationResolution } from '../../services/coordinatorService'
 import { useStore } from '@store'
 
 // ============================================
@@ -28,6 +64,142 @@ export type OrchestratorTaskStatus = TaskStatus
 
 /** Orchestrator 阶段（简化为两阶段，内部使用完整状态机） */
 export type OrchestratorPhase = 'planning' | 'executing'
+
+function createExecutionEntityId(prefix: string): string {
+    return globalThis.crypto?.randomUUID?.() ?? `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+const TASK_BUDGET_DIMENSIONS: Array<keyof TaskBudgetState['limits']> = ['timeMs', 'estimatedTokens', 'llmCalls', 'commands', 'verifications']
+
+function resolveSpecialistProfileSnapshot(
+    specialists: SpecialistKind[],
+    inputSnapshot?: SpecialistProfileSnapshot,
+): SpecialistProfileSnapshot {
+    if (inputSnapshot) {
+        return inputSnapshot
+    }
+
+    return createEmptySpecialistProfileSnapshot(
+        specialists,
+        useStore.getState().taskTrustSettings.specialistProfiles as Partial<Record<SpecialistKind, any>> | undefined,
+    )
+}
+
+function resolveTaskWritableScopes(
+    specialists: SpecialistKind[],
+    specialistProfilesSnapshot: SpecialistProfileSnapshot,
+    inputWritableScopes?: string[],
+): string[] {
+    const explicitScopes = (inputWritableScopes || []).filter(Boolean)
+    if (explicitScopes.length > 0) {
+        return Array.from(new Set(explicitScopes))
+    }
+
+    return Array.from(new Set(
+        specialists.flatMap((role) => specialistProfilesSnapshot[role]?.writableScopes || []).filter(Boolean),
+    ))
+}
+
+function resolveTaskBudget(
+    specialists: SpecialistKind[],
+    specialistProfilesSnapshot: SpecialistProfileSnapshot,
+    inputBudget?: TaskBudgetState,
+): TaskBudgetState {
+    if (inputBudget) {
+        return inputBudget
+    }
+
+    const defaultBudget = createDefaultTaskBudget()
+    const governanceBudget = useStore.getState().taskTrustSettings.governanceDefaults?.budget
+    const resolvedBudget: TaskBudgetState = {
+        ...defaultBudget,
+        limits: {
+            ...defaultBudget.limits,
+            ...(governanceBudget?.limits || {}),
+        },
+        warningThresholdRatio: governanceBudget?.warningThresholdRatio ?? defaultBudget.warningThresholdRatio,
+        hardStop: governanceBudget?.hardStop ?? defaultBudget.hardStop,
+    }
+
+    for (const dimension of TASK_BUDGET_DIMENSIONS) {
+        const specialistCap = specialists.reduce((sum, role) => {
+            const value = specialistProfilesSnapshot[role]?.budgetCap?.[dimension]
+            return typeof value === 'number' && value > 0 ? sum + value : sum
+        }, 0)
+
+        if (specialistCap > 0) {
+            resolvedBudget.limits[dimension] = Math.min(resolvedBudget.limits[dimension], specialistCap)
+        }
+    }
+
+    return resolvedBudget
+}
+
+function summarizeExecutionQueue(
+    taskId: string,
+    ownershipLeases: Record<string, OwnershipLease>,
+    executionQueueItems: Record<string, ExecutionQueueItem>,
+): ExecutionQueueSummary {
+    const queuedItems = Object.values(executionQueueItems).filter((item) =>
+        item.taskId === taskId && item.status === 'queued',
+    )
+    const activeLeases = Object.values(ownershipLeases).filter((lease) =>
+        lease.taskId === taskId && lease.status !== 'released',
+    )
+
+    return {
+        queuedCount: queuedItems.length,
+        activeLeaseCount: activeLeases.length,
+        blockedScopes: Array.from(new Set(queuedItems.flatMap((item) => item.blockedScopes))),
+        updatedAt: queuedItems.length > 0 || activeLeases.length > 0 ? Date.now() : null,
+    }
+}
+
+function summarizeProposals(
+    taskId: string,
+    changeProposals: Record<string, ChangeProposal>,
+): ProposalSummary {
+    const proposals = Object.values(changeProposals).filter((proposal) => proposal.taskId === taskId)
+
+    return {
+        pendingCount: proposals.filter((proposal) => proposal.status === 'pending').length,
+        appliedCount: proposals.filter((proposal) => proposal.status === 'applied').length,
+        returnedForReworkCount: proposals.filter((proposal) => proposal.status === 'returned-for-rework').length,
+        reassignedCount: proposals.filter((proposal) => proposal.status === 'reassigned').length,
+        discardedCount: proposals.filter((proposal) => proposal.status === 'discarded').length,
+        updatedAt: proposals.length > 0
+            ? Math.max(...proposals.map((proposal) => proposal.resolvedAt ?? proposal.createdAt))
+            : null,
+    }
+}
+
+function findLatestProposalId(
+    taskId: string,
+    changeProposals: Record<string, ChangeProposal>,
+): string | null {
+    const proposals = Object.values(changeProposals).filter((proposal) => proposal.taskId === taskId)
+    if (proposals.length === 0) return null
+
+    proposals.sort((a, b) => (b.createdAt - a.createdAt) || b.id.localeCompare(a.id))
+    return proposals[0]?.id ?? null
+}
+
+function syncTaskDerivedOrchestrationState(
+    task: ExecutionTask,
+    ownershipLeases: Record<string, OwnershipLease>,
+    executionQueueItems: Record<string, ExecutionQueueItem>,
+    changeProposals: Record<string, ChangeProposal>,
+    overrides: Partial<ExecutionTask> = {},
+): ExecutionTask {
+    return {
+        ...task,
+        ...overrides,
+        queueSummary: summarizeExecutionQueue(task.id, ownershipLeases, executionQueueItems),
+        proposalSummary: summarizeProposals(task.id, changeProposals),
+        latestProposalId: overrides.latestProposalId ?? findLatestProposalId(task.id, changeProposals),
+        updatedAt: overrides.updatedAt ?? Date.now(),
+    }
+}
 
 /** Orchestrator Slice 状态 */
 export interface OrchestratorState {
@@ -43,6 +215,26 @@ export interface OrchestratorState {
     currentTaskId: string | null
     /** 控制器状态（完整状态机状态） */
     controllerState: ControllerState
+    /** 可视化执行任务 */
+    executionTasks: Record<string, ExecutionTask>
+    /** 可视化工作包 */
+    workPackages: Record<string, WorkPackage>
+    /** 结构化移交包 */
+    taskHandoffs: Record<string, TaskHandoff>
+    /** 作用域租约 */
+    ownershipLeases: Record<string, OwnershipLease>
+    /** 执行排队项 */
+    executionQueueItems: Record<string, ExecutionQueueItem>
+    /** 变更提案 */
+    changeProposals: Record<string, ChangeProposal>
+    /** 裁决案例 */
+    adjudicationCases: Record<string, AdjudicationCase>
+    /** 当前选中的执行任务 */
+    activeExecutionTaskId: string | null
+    /** 当前选中的移交包 */
+    selectedTaskHandoffId: string | null
+    /** 当前选中的变更提案 */
+    selectedChangeProposalId: string | null
 }
 
 /** Orchestrator Slice Actions */
@@ -71,6 +263,47 @@ export interface OrchestratorActions {
     /** 标记任务跳过 */
     markTaskSkipped: (planId: string, taskId: string, reason: string) => void
 
+    // ===== 执行任务建模 =====
+    /** 创建可视化执行任务 */
+    createExecutionTask: (input: CreateExecutionTaskInput) => string
+    /** 更新执行任务 */
+    updateExecutionTask: (taskId: string, updates: Partial<ExecutionTask>) => void
+    /** 设置执行任务状态 */
+    setExecutionTaskState: (taskId: string, state: ExecutionTaskState) => void
+    /** 选中执行任务 */
+    selectExecutionTask: (taskId: string | null) => void
+    /** 设置任务熔断状态 */
+    setExecutionTaskCircuitBreaker: (taskId: string, circuitBreaker: CircuitBreakerState | null) => void
+    recordExecutionTaskBudgetUsage: (taskId: string, delta: Partial<ExecutionTask['budget']['usage']>) => void
+    proposeExecutionTaskRollback: (taskId: string, input: { changedFiles?: string[]; externalSideEffects?: string[] }) => void
+    openExecutionTaskAdjudication: (taskId: string, input: { trigger: AdjudicationCase['trigger']; reason: string; changedFiles?: string[]; workPackageId?: string | null }) => string
+    resolveExecutionTaskAdjudication: (caseId: string, resolution: { action: AdjudicationCase['recommendedAction']; selectedFiles?: string[]; targetSpecialist?: SpecialistKind }) => void
+    completeExecutionTaskRollback: (taskId: string) => void
+    /** 更新工作包 */
+    updateWorkPackage: (workPackageId: string, updates: Partial<WorkPackage>) => void
+    /** 设置工作包状态 */
+    setWorkPackageStatus: (workPackageId: string, status: WorkPackageStatus) => void
+    /** 创建移交包 */
+    createTaskHandoff: (input: CreateTaskHandoffInput) => string
+    /** 选中移交包 */
+    selectTaskHandoff: (handoffId: string | null) => void
+    /** 创建写入作用域租约 */
+    createOwnershipLease: (input: CreateOwnershipLeaseInput) => string
+    /** 更新作用域租约 */
+    updateOwnershipLease: (leaseId: string, updates: Partial<OwnershipLease>) => void
+    /** 释放作用域租约 */
+    releaseOwnershipLease: (leaseId: string) => void
+    /** 创建排队项 */
+    createExecutionQueueItem: (input: CreateExecutionQueueItemInput) => string
+    /** 更新排队项 */
+    updateExecutionQueueItem: (queueItemId: string, updates: Partial<ExecutionQueueItem>) => void
+    /** 创建变更提案 */
+    createChangeProposal: (input: CreateChangeProposalInput) => string
+    /** 更新变更提案 */
+    updateChangeProposal: (proposalId: string, updates: Partial<ChangeProposal>) => void
+    /** 选中变更提案 */
+    selectChangeProposal: (proposalId: string | null) => void
+
     // ===== 执行控制 =====
     /** 设置阶段 */
     setPhase: (phase: OrchestratorPhase) => void
@@ -96,6 +329,10 @@ export interface OrchestratorActions {
     getNextPendingTask: (planId: string) => OrchestratorTask | null
     /** 获取所有可执行任务（依赖已满足） */
     getExecutableTasks: (planId: string) => OrchestratorTask[]
+    /** 获取任务下的工作包 */
+    getTaskWorkPackages: (taskId: string) => WorkPackage[]
+    /** 获取任务下的移交包 */
+    getTaskHandoffs: (taskId: string) => TaskHandoff[]
     /** 保存规划到磁盘 */
     savePlan: (planId: string) => Promise<void>
 }
@@ -119,6 +356,16 @@ export const createOrchestratorSlice: StateCreator<
     isExecuting: false,
     currentTaskId: null,
     controllerState: 'idle' as ControllerState,
+    executionTasks: {},
+    workPackages: {},
+    taskHandoffs: {},
+    ownershipLeases: {},
+    executionQueueItems: {},
+    changeProposals: {},
+    adjudicationCases: {},
+    activeExecutionTaskId: null,
+    selectedTaskHandoffId: null,
+    selectedChangeProposalId: null,
 
     // ===== 计划管理 =====
     addPlan: (plan) => {
@@ -266,6 +513,700 @@ export const createOrchestratorSlice: StateCreator<
         })
     },
 
+    createExecutionTask: (input) => {
+        const specialists: SpecialistKind[] = input.specialists.length > 0 ? [...input.specialists] : ['logic']
+        const taskId = createExecutionEntityId('task')
+        const risk = input.risk ?? (specialists.length > 1 ? 'medium' : 'low')
+        const specialistProfilesSnapshot = resolveSpecialistProfileSnapshot(specialists, input.specialistProfilesSnapshot)
+        const writableScopes = resolveTaskWritableScopes(specialists, specialistProfilesSnapshot, input.writableScopes)
+        const workPackages = buildTaskWorkPackages(taskId, {
+            objective: input.objective,
+            specialists,
+            writableScopes,
+        })
+        const executionTarget = input.executionTarget ?? (
+            shouldUseIsolatedWorkspace({ risk, fileCount: workPackages.length }) ? 'isolated' : 'current'
+        )
+        const now = Date.now()
+
+        const task: ExecutionTask = {
+            id: taskId,
+            sourcePlanId: input.sourcePlanId,
+            objective: input.objective,
+            specialists,
+            state: 'planning',
+            governanceState: input.governanceState ?? createInitialExecutionTaskGovernanceState(),
+            risk,
+            executionTarget,
+            trustMode: input.trustMode ?? 'balanced',
+            executionStrategy: input.executionStrategy ?? createDefaultExecutionStrategySnapshot(),
+            workPackages: workPackages.map((pkg) => pkg.id),
+            sourceWorkspacePath: input.sourceWorkspacePath ?? null,
+            resolvedWorkspacePath: input.resolvedWorkspacePath ?? null,
+            isolationMode: input.isolationMode ?? null,
+            isolationStatus: input.isolationStatus ?? 'pending',
+            isolationError: input.isolationError ?? null,
+            queueSummary: input.queueSummary ?? createEmptyExecutionQueueSummary(),
+            proposalSummary: input.proposalSummary ?? createEmptyProposalSummary(),
+            latestHandoffId: null,
+            latestProposalId: null,
+            latestAdjudicationId: null,
+            circuitBreaker: null,
+            budget: resolveTaskBudget(specialists, specialistProfilesSnapshot, input.budget),
+            rollback: input.rollback ?? createInitialRollbackState(),
+            specialistProfilesSnapshot,
+            createdAt: now,
+            updatedAt: now,
+        }
+
+        set((state) => ({
+            executionTasks: {
+                ...state.executionTasks,
+                [taskId]: task,
+            },
+            workPackages: {
+                ...state.workPackages,
+                ...Object.fromEntries(workPackages.map((pkg) => [pkg.id, pkg])),
+            },
+            activeExecutionTaskId: taskId,
+        }))
+
+        return taskId
+    },
+
+    updateExecutionTask: (taskId, updates) => {
+        set((state) => {
+            const current = state.executionTasks[taskId]
+            if (!current) return state
+
+            return {
+                executionTasks: {
+                    ...state.executionTasks,
+                    [taskId]: {
+                        ...current,
+                        ...updates,
+                        updatedAt: Date.now(),
+                    },
+                },
+            }
+        })
+    },
+
+    setExecutionTaskState: (taskId, stateValue) => {
+        get().updateExecutionTask(taskId, { state: stateValue })
+    },
+
+    selectExecutionTask: (taskId) => {
+        set({ activeExecutionTaskId: taskId })
+    },
+
+    setExecutionTaskCircuitBreaker: (taskId, circuitBreaker) => {
+        get().updateExecutionTask(taskId, { circuitBreaker })
+    },
+
+    recordExecutionTaskBudgetUsage: (taskId, delta) => {
+        set((state) => {
+            const task = state.executionTasks[taskId]
+            if (!task) return state
+
+            const nextBudget = recordBudgetUsage(task.budget, delta)
+            const tripReport = nextBudget.tripReport
+            const adjudicationCase = tripReport ? buildAdjudicationCase({
+                taskId,
+                trigger: 'budget-trip',
+                reason: tripReport.summary,
+                changedFiles: [],
+            }) : null
+
+            return {
+                executionTasks: {
+                    ...state.executionTasks,
+                    [taskId]: {
+                        ...task,
+                        budget: nextBudget,
+                        state: tripReport ? 'tripped' : task.state,
+                        governanceState: tripReport ? 'awaiting-adjudication' : task.governanceState,
+                        latestAdjudicationId: adjudicationCase?.id ?? task.latestAdjudicationId ?? null,
+                        updatedAt: Date.now(),
+                    },
+                },
+                adjudicationCases: adjudicationCase ? {
+                    ...state.adjudicationCases,
+                    [adjudicationCase.id]: adjudicationCase,
+                } : state.adjudicationCases,
+            }
+        })
+    },
+
+    proposeExecutionTaskRollback: (taskId, input) => {
+        set((state) => {
+            const task = state.executionTasks[taskId]
+            if (!task) return state
+
+            const rollbackSettings = useStore.getState().taskTrustSettings.governanceDefaults?.rollback
+            const proposal = createRollbackProposal({
+                executionTarget: task.executionTarget,
+                resolvedWorkspacePath: task.resolvedWorkspacePath,
+                changedFiles: input.changedFiles,
+                externalSideEffects: input.externalSideEffects,
+            }, rollbackSettings)
+            const rollback = createRollbackStateFromProposal(proposal)
+
+            return {
+                executionTasks: {
+                    ...state.executionTasks,
+                    [taskId]: {
+                        ...task,
+                        rollback,
+                        governanceState: 'rollback-ready',
+                        updatedAt: Date.now(),
+                    },
+                },
+            }
+        })
+    },
+
+    completeExecutionTaskRollback: (taskId) => {
+        set((state) => {
+            const task = state.executionTasks[taskId]
+            if (!task || !task.rollback.proposal) return state
+
+            return {
+                executionTasks: {
+                    ...state.executionTasks,
+                    [taskId]: {
+                        ...task,
+                        rollback: {
+                            ...task.rollback,
+                            status: 'rolled-back',
+                            lastUpdatedAt: Date.now(),
+                        },
+                        governanceState: 'rolled-back',
+                        updatedAt: Date.now(),
+                    },
+                },
+            }
+        })
+    },
+
+    openExecutionTaskAdjudication: (taskId, input) => {
+        const adjudicationCase = buildAdjudicationCase({
+            taskId,
+            trigger: input.trigger,
+            reason: input.reason,
+            changedFiles: input.changedFiles,
+            workPackageId: input.workPackageId,
+        })
+
+        set((state) => {
+            const task = state.executionTasks[taskId]
+            if (!task) return state
+
+            return {
+                executionTasks: {
+                    ...state.executionTasks,
+                    [taskId]: {
+                        ...task,
+                        governanceState: 'awaiting-adjudication',
+                        latestAdjudicationId: adjudicationCase.id,
+                        updatedAt: Date.now(),
+                    },
+                },
+                adjudicationCases: {
+                    ...state.adjudicationCases,
+                    [adjudicationCase.id]: adjudicationCase,
+                },
+            }
+        })
+
+        return adjudicationCase.id
+    },
+
+    resolveExecutionTaskAdjudication: (caseId, resolution) => {
+        set((state) => {
+            const currentCase = state.adjudicationCases[caseId]
+            if (!currentCase) return state
+
+            const task = state.executionTasks[currentCase.taskId]
+            if (!task) return state
+
+            const resolved = applyAdjudicationResolution(currentCase, resolution).caseItem
+            let nextTask: ExecutionTask = {
+                ...task,
+                governanceState: resolution.action === 'rollback' ? 'rollback-ready' : 'active',
+                updatedAt: Date.now(),
+            }
+            let nextWorkPackages = state.workPackages
+
+            if (resolution.action === 'require-verification') {
+                nextTask = { ...nextTask, state: 'verifying' }
+            }
+
+            if (resolution.action === 'rollback') {
+                const rollbackSettings = useStore.getState().taskTrustSettings.governanceDefaults?.rollback
+                const proposal = createRollbackProposal({
+                    executionTarget: task.executionTarget,
+                    resolvedWorkspacePath: task.resolvedWorkspacePath,
+                    changedFiles: currentCase.changedFiles,
+                }, rollbackSettings)
+                nextTask = {
+                    ...nextTask,
+                    rollback: createRollbackStateFromProposal(proposal),
+                }
+            }
+
+            if (resolution.action === 'return-for-rework' || resolution.action === 'reassign-specialist') {
+                const sourceWorkPackage = currentCase.workPackageId ? state.workPackages[currentCase.workPackageId] : task.workPackages.map((id) => state.workPackages[id]).find(Boolean)
+                if (sourceWorkPackage) {
+                    const followUpId = createExecutionEntityId('workpkg')
+                    const followUpSpecialist = resolution.action === 'reassign-specialist' && resolution.targetSpecialist
+                        ? resolution.targetSpecialist
+                        : sourceWorkPackage.specialist
+                    const followUp: WorkPackage = {
+                        ...sourceWorkPackage,
+                        id: followUpId,
+                        specialist: followUpSpecialist,
+                        title: resolution.action === 'return-for-rework'
+                            ? `${sourceWorkPackage.title} (rework)`
+                            : `${sourceWorkPackage.title} (${followUpSpecialist})`,
+                        status: 'queued',
+                    }
+                    nextWorkPackages = {
+                        ...state.workPackages,
+                        [followUpId]: followUp,
+                        [sourceWorkPackage.id]: {
+                            ...sourceWorkPackage,
+                            status: 'blocked',
+                        },
+                    }
+                    nextTask = {
+                        ...nextTask,
+                        workPackages: [...task.workPackages, followUpId],
+                    }
+                }
+            }
+
+            return {
+                executionTasks: {
+                    ...state.executionTasks,
+                    [task.id]: nextTask,
+                },
+                workPackages: nextWorkPackages,
+                adjudicationCases: {
+                    ...state.adjudicationCases,
+                    [caseId]: resolved,
+                },
+            }
+        })
+    },
+
+    updateWorkPackage: (workPackageId, updates) => {
+        set((state) => {
+            const current = state.workPackages[workPackageId]
+            if (!current) return state
+
+            const task = state.executionTasks[current.taskId]
+            return {
+                workPackages: {
+                    ...state.workPackages,
+                    [workPackageId]: {
+                        ...current,
+                        ...updates,
+                    },
+                },
+                executionTasks: task ? {
+                    ...state.executionTasks,
+                    [task.id]: {
+                        ...task,
+                        updatedAt: Date.now(),
+                    },
+                } : state.executionTasks,
+            }
+        })
+    },
+
+    setWorkPackageStatus: (workPackageId, status) => {
+        get().updateWorkPackage(workPackageId, { status })
+    },
+
+    createTaskHandoff: (input) => {
+        const state = get()
+        const task = state.executionTasks[input.taskId]
+        const workPackage = state.workPackages[input.workPackageId]
+
+        if (!task || !workPackage) {
+            throw new Error('Cannot create task handoff for missing task or work package')
+        }
+
+        const handoffId = createExecutionEntityId('handoff')
+        const createdAt = Date.now()
+        const handoff: TaskHandoff = {
+            id: handoffId,
+            taskId: input.taskId,
+            workPackageId: input.workPackageId,
+            summary: input.summary,
+            changedFiles: [...(input.changedFiles || [])],
+            unresolvedItems: [...(input.unresolvedItems || [])],
+            suggestedNextSpecialist: input.suggestedNextSpecialist,
+            createdAt,
+        }
+
+        set((current) => ({
+            taskHandoffs: {
+                ...current.taskHandoffs,
+                [handoffId]: handoff,
+            },
+            workPackages: {
+                ...current.workPackages,
+                [input.workPackageId]: {
+                    ...workPackage,
+                    status: 'handoff',
+                    handoffId,
+                },
+            },
+            executionTasks: {
+                ...current.executionTasks,
+                [input.taskId]: {
+                    ...task,
+                    state: 'verifying',
+                    latestHandoffId: handoffId,
+                    updatedAt: createdAt,
+                },
+            },
+            selectedTaskHandoffId: handoffId,
+        }))
+
+        return handoffId
+    },
+
+    selectTaskHandoff: (handoffId) => {
+        set({ selectedTaskHandoffId: handoffId })
+    },
+
+    createOwnershipLease: (input) => {
+        const state = get()
+        const task = state.executionTasks[input.taskId]
+        if (!task) {
+            throw new Error('Cannot create ownership lease for missing task')
+        }
+
+        const leaseId = createExecutionEntityId('lease')
+        const leasedAt = Date.now()
+        const lease: OwnershipLease = {
+            id: leaseId,
+            taskId: input.taskId,
+            workPackageId: input.workPackageId,
+            specialist: input.specialist,
+            scope: input.scope,
+            status: 'active',
+            queuedWorkPackageIds: [],
+            leasedAt,
+            releasedAt: null,
+        }
+
+        set((current) => {
+            const workPackage = current.workPackages[input.workPackageId]
+            const ownershipLeases = {
+                ...current.ownershipLeases,
+                [leaseId]: lease,
+            }
+
+            return {
+                ownershipLeases,
+                workPackages: workPackage ? {
+                    ...current.workPackages,
+                    [input.workPackageId]: {
+                        ...workPackage,
+                        status: 'leasing',
+                        queueReason: null,
+                    },
+                } : current.workPackages,
+                executionTasks: {
+                    ...current.executionTasks,
+                    [input.taskId]: syncTaskDerivedOrchestrationState(
+                        task,
+                        ownershipLeases,
+                        current.executionQueueItems,
+                        current.changeProposals,
+                    ),
+                },
+            }
+        })
+
+        return leaseId
+    },
+
+    updateOwnershipLease: (leaseId, updates) => {
+        set((state) => {
+            const currentLease = state.ownershipLeases[leaseId]
+            if (!currentLease) return state
+
+            const task = state.executionTasks[currentLease.taskId]
+            if (!task) return state
+
+            const ownershipLeases = {
+                ...state.ownershipLeases,
+                [leaseId]: {
+                    ...currentLease,
+                    ...updates,
+                },
+            }
+
+            return {
+                ownershipLeases,
+                executionTasks: {
+                    ...state.executionTasks,
+                    [task.id]: syncTaskDerivedOrchestrationState(
+                        task,
+                        ownershipLeases,
+                        state.executionQueueItems,
+                        state.changeProposals,
+                    ),
+                },
+            }
+        })
+    },
+
+    releaseOwnershipLease: (leaseId) => {
+        set((state) => {
+            const currentLease = state.ownershipLeases[leaseId]
+            if (!currentLease) return state
+
+            const task = state.executionTasks[currentLease.taskId]
+            if (!task) return state
+
+            const releasedLease: OwnershipLease = {
+                ...currentLease,
+                status: 'released',
+                releasedAt: Date.now(),
+            }
+            const ownershipLeases: Record<string, OwnershipLease> = {
+                ...state.ownershipLeases,
+                [leaseId]: releasedLease,
+            }
+
+            return {
+                ownershipLeases,
+                executionTasks: {
+                    ...state.executionTasks,
+                    [task.id]: syncTaskDerivedOrchestrationState(
+                        task,
+                        ownershipLeases,
+                        state.executionQueueItems,
+                        state.changeProposals,
+                    ),
+                },
+            }
+        })
+    },
+
+    createExecutionQueueItem: (input) => {
+        const state = get()
+        const task = state.executionTasks[input.taskId]
+        if (!task) {
+            throw new Error('Cannot create execution queue item for missing task')
+        }
+
+        const queueItemId = createExecutionEntityId('queue')
+        const queueItem: ExecutionQueueItem = {
+            id: queueItemId,
+            taskId: input.taskId,
+            workPackageId: input.workPackageId,
+            blockedScopes: [...input.blockedScopes],
+            blockedByWorkPackageId: input.blockedByWorkPackageId ?? null,
+            status: 'queued',
+            queuedAt: Date.now(),
+            resolvedAt: null,
+        }
+
+        set((current) => {
+            const workPackage = current.workPackages[input.workPackageId]
+            const executionQueueItems = {
+                ...current.executionQueueItems,
+                [queueItemId]: queueItem,
+            }
+            const queueReason = input.blockedByWorkPackageId
+                ? `Waiting for ${input.blockedByWorkPackageId}`
+                : input.blockedScopes.join(', ') || null
+
+            return {
+                executionQueueItems,
+                workPackages: workPackage ? {
+                    ...current.workPackages,
+                    [input.workPackageId]: {
+                        ...workPackage,
+                        status: 'queued',
+                        queueReason,
+                    },
+                } : current.workPackages,
+                executionTasks: {
+                    ...current.executionTasks,
+                    [input.taskId]: syncTaskDerivedOrchestrationState(
+                        task,
+                        current.ownershipLeases,
+                        executionQueueItems,
+                        current.changeProposals,
+                    ),
+                },
+            }
+        })
+
+        return queueItemId
+    },
+
+    updateExecutionQueueItem: (queueItemId, updates) => {
+        set((state) => {
+            const currentItem = state.executionQueueItems[queueItemId]
+            if (!currentItem) return state
+
+            const task = state.executionTasks[currentItem.taskId]
+            if (!task) return state
+
+            const nextItem: ExecutionQueueItem = {
+                ...currentItem,
+                ...updates,
+                resolvedAt: updates.status && updates.status !== 'queued'
+                    ? updates.resolvedAt ?? Date.now()
+                    : currentItem.resolvedAt,
+            }
+            const executionQueueItems = {
+                ...state.executionQueueItems,
+                [queueItemId]: nextItem,
+            }
+            const workPackage = state.workPackages[currentItem.workPackageId]
+
+            return {
+                executionQueueItems,
+                workPackages: workPackage && nextItem.status !== 'queued' ? {
+                    ...state.workPackages,
+                    [currentItem.workPackageId]: {
+                        ...workPackage,
+                        queueReason: null,
+                    },
+                } : state.workPackages,
+                executionTasks: {
+                    ...state.executionTasks,
+                    [task.id]: syncTaskDerivedOrchestrationState(
+                        task,
+                        state.ownershipLeases,
+                        executionQueueItems,
+                        state.changeProposals,
+                    ),
+                },
+            }
+        })
+    },
+
+    createChangeProposal: (input) => {
+        const state = get()
+        const task = state.executionTasks[input.taskId]
+        if (!task) {
+            throw new Error('Cannot create change proposal for missing task')
+        }
+
+        const proposalId = createExecutionEntityId('proposal')
+        const createdAt = Date.now()
+        const proposal: ChangeProposal = {
+            id: proposalId,
+            taskId: input.taskId,
+            workPackageId: input.workPackageId,
+            summary: input.summary,
+            changedFiles: [...(input.changedFiles || [])],
+            verificationStatus: input.verificationStatus ?? 'pending',
+            riskLevel: input.riskLevel ?? 'medium',
+            recommendedAction: input.recommendedAction ?? 'apply',
+            status: 'pending',
+            createdAt,
+            resolvedAt: null,
+        }
+
+        set((current) => {
+            const workPackage = current.workPackages[input.workPackageId]
+            const changeProposals = {
+                ...current.changeProposals,
+                [proposalId]: proposal,
+            }
+
+            return {
+                changeProposals,
+                workPackages: workPackage ? {
+                    ...current.workPackages,
+                    [input.workPackageId]: {
+                        ...workPackage,
+                        status: 'proposal-ready',
+                        proposalId,
+                    },
+                } : current.workPackages,
+                executionTasks: {
+                    ...current.executionTasks,
+                    [input.taskId]: syncTaskDerivedOrchestrationState(
+                        task,
+                        current.ownershipLeases,
+                        current.executionQueueItems,
+                        changeProposals,
+                    ),
+                },
+                selectedChangeProposalId: proposalId,
+            }
+        })
+
+        return proposalId
+    },
+
+    updateChangeProposal: (proposalId, updates) => {
+        set((state) => {
+            const currentProposal = state.changeProposals[proposalId]
+            if (!currentProposal) return state
+
+            const task = state.executionTasks[currentProposal.taskId]
+            if (!task) return state
+
+            const nextProposal: ChangeProposal = {
+                ...currentProposal,
+                ...updates,
+                resolvedAt: updates.status && updates.status !== 'pending'
+                    ? updates.resolvedAt ?? Date.now()
+                    : currentProposal.resolvedAt,
+            }
+            const changeProposals = {
+                ...state.changeProposals,
+                [proposalId]: nextProposal,
+            }
+            const workPackage = state.workPackages[currentProposal.workPackageId]
+            const nextWorkPackageStatus = nextProposal.status === 'applied'
+                ? 'applied'
+                : nextProposal.status === 'reassigned'
+                    ? 'reassigned'
+                    : nextProposal.status === 'discarded'
+                        ? 'failed'
+                        : workPackage?.status
+
+            return {
+                changeProposals,
+                workPackages: workPackage && nextWorkPackageStatus ? {
+                    ...state.workPackages,
+                    [currentProposal.workPackageId]: {
+                        ...workPackage,
+                        status: nextWorkPackageStatus,
+                    },
+                } : state.workPackages,
+                executionTasks: {
+                    ...state.executionTasks,
+                    [task.id]: syncTaskDerivedOrchestrationState(
+                        task,
+                        state.ownershipLeases,
+                        state.executionQueueItems,
+                        changeProposals,
+                    ),
+                },
+            }
+        })
+    },
+
+    selectChangeProposal: (proposalId) => {
+        set({ selectedChangeProposalId: proposalId })
+    },
+
     // ===== 执行控制 =====
     setPhase: (phase) => {
         set({ phase })
@@ -399,5 +1340,22 @@ export const createOrchestratorSlice: StateCreator<
         }
 
         return executable
+    },
+
+    getTaskWorkPackages: (taskId) => {
+        const state = get()
+        const task = state.executionTasks[taskId]
+        if (!task) return []
+
+        return task.workPackages
+            .map((id) => state.workPackages[id])
+            .filter((pkg): pkg is WorkPackage => Boolean(pkg))
+    },
+
+    getTaskHandoffs: (taskId) => {
+        const state = get()
+        return Object.values(state.taskHandoffs)
+            .filter((handoff) => handoff.taskId === taskId)
+            .sort((a, b) => b.createdAt - a.createdAt)
     },
 })

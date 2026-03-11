@@ -13,3 +13,6 @@ export type { CheckpointSlice, CheckpointState, CheckpointActions } from './chec
 
 export { createBranchSlice } from './branchSlice'
 export type { BranchSlice, BranchState, BranchActions, Branch } from './branchSlice'
+
+export { createOrchestratorSlice } from './orchestratorSlice'
+export type { OrchestratorSlice, OrchestratorState, OrchestratorActions, OrchestratorPhase } from './orchestratorSlice'

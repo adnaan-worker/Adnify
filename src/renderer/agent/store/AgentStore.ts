@@ -329,6 +329,17 @@ export const useAgentStore = create<AgentStore>()(
                 branches: state.branches,
                 activeBranchId: state.activeBranchId,
                 messageCheckpoints: state.messageCheckpoints,
+                plans: state.plans,
+                activePlanId: state.activePlanId,
+                phase: state.phase,
+                isExecuting: state.isExecuting,
+                currentTaskId: state.currentTaskId,
+                controllerState: state.controllerState,
+                executionTasks: state.executionTasks,
+                workPackages: state.workPackages,
+                taskHandoffs: state.taskHandoffs,
+                activeExecutionTaskId: state.activeExecutionTaskId,
+                selectedTaskHandoffId: state.selectedTaskHandoffId,
             }),
         }
     )

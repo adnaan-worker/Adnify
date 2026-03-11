@@ -1,3 +1,16 @@
+import type {
+  ExecutionQueueSummary,
+  ExecutionStrategySnapshot,
+  ExecutionTarget,
+  ExecutionTaskState,
+  InterruptMode,
+  ProposalSummary,
+  SpecialistKind,
+  TaskRiskLevel,
+  TrustMode,
+  WorkPackageStatus,
+} from '../types/taskExecution'
+
 /**
  * Orchestrator 类型定义
  * 
@@ -160,4 +173,36 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
     taskTimeout: 300_000, // 5 分钟
     autoSkipOnDependencyFailure: true,
     maxConcurrency: 3,
+}
+
+
+// ============================================
+// Solo Agent IDE 扩展类型
+// ============================================
+
+export interface ExecutionTaskSummary {
+    id: string
+    objective: string
+    state: ExecutionTaskState
+    risk: TaskRiskLevel
+    specialists: SpecialistKind[]
+    executionTarget: ExecutionTarget
+    executionStrategy: ExecutionStrategySnapshot
+    queueSummary: ExecutionQueueSummary
+    proposalSummary: ProposalSummary
+}
+
+export interface WorkPackageSummary {
+    id: string
+    taskId: string
+    title: string
+    specialist: SpecialistKind
+    status: WorkPackageStatus
+    queueReason?: string | null
+    proposalId?: string | null
+}
+
+export interface TrustPolicySummary {
+    mode: TrustMode
+    interruptMode: InterruptMode
 }
