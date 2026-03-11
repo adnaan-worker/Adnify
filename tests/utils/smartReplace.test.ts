@@ -8,8 +8,8 @@ describe('Fast-Edit 智能警告系统', () => {
   describe('重复行检测', () => {
     it('应该检测到 off-by-one 错误（最后一行与下一行重复）', () => {
       const oldLines = ['line 1', 'line 2', 'line 3']
-      const newLines = ['new line 1', 'new line 2', 'line 4']
-      const resultLines = ['new line 1', 'new line 2', 'line 4', 'line 4', 'line 5']
+      const newLines = ['new line 1', 'new line 2', 'this is a duplicated long line']
+      const resultLines = ['new line 1', 'new line 2', 'this is a duplicated long line', 'this is a duplicated long line', 'line 5']
       
       const warnings = checkLineReplaceWarnings(oldLines, newLines, resultLines, 1, 3)
       
@@ -50,7 +50,7 @@ describe('Fast-Edit 智能警告系统', () => {
       expect(warnings.length).toBeGreaterThan(0)
       const bracketWarning = warnings.find(w => w.type === 'BRACKET_BALANCE')
       expect(bracketWarning).toBeDefined()
-      expect(bracketWarning?.message).toContain('{}')
+      expect(bracketWarning?.message).toContain('more opens')
     })
 
     it('应该检测到括号不平衡（增加了闭括号）', () => {

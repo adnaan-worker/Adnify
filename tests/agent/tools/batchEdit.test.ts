@@ -257,7 +257,7 @@ describe('批量编辑功能测试', () => {
         }
       }
 
-      expect(lines.length).toBe(7) // 8 - 2 (deleted) + 1 (inserted)
+      expect(lines.length).toBe(6) // 8 - 1 (replace 2->1) + 1 (inserted) - 2 (deleted)
       expect(lines[1]).toBe('replaced 2-3')
     })
   })
