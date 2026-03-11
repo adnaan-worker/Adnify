@@ -709,9 +709,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 const { terminalManager } = await import('@/renderer/services/TerminalManager')
 
                 // 确保我们在主进程上下文中
+                const fallbackCwd = cwd
+                    || ctx.workspacePath
+                    || (typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '.')
+
                 const termId = await terminalManager.createTerminal({
                     name: command.split(' ')[0] || 'Task',
-                    cwd: cwd || ctx.workspacePath || process.cwd(),
+                    cwd: fallbackCwd,
                     backend: getInteractiveTerminalBackend()
                 })
 

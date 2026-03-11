@@ -61,6 +61,9 @@ const CORE_TOOLS: string[] = [
   'delete_file_or_folder',
   // 终端
   'run_command',
+  'read_terminal_output',
+  'send_terminal_input',
+  'stop_terminal',
   'get_lint_errors',
   // 代码智能
   'find_references',
