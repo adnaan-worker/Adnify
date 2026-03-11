@@ -357,7 +357,6 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     const selectedChangeProposalId = useAgentStore((s) => s.selectedChangeProposalId)
     const selectTaskHandoff = useAgentStore((s) => s.selectTaskHandoff)
     const selectChangeProposal = useAgentStore((s) => s.selectChangeProposal)
-    const updateChangeProposal = useAgentStore((s) => s.updateChangeProposal)
     const resolveExecutionTaskAdjudication = useAgentStore((s) => s.resolveExecutionTaskAdjudication)
     const completeExecutionTaskRollback = useAgentStore((s) => s.completeExecutionTaskRollback)
     const workspacePath = useStore((s) => s.workspacePath)
@@ -496,18 +495,11 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
         completeExecutionTaskRollback(activeExecutionTask.id)
     }, [activeExecutionTask, completeExecutionTaskRollback])
 
-    const handleReviewProposal = useCallback((proposalId: string, action: 'apply' | 'return-for-rework' | 'reassign' | 'discard') => {
-        updateChangeProposal(proposalId, {
-            status: action === 'apply'
-                ? 'applied'
-                : action === 'return-for-rework'
-                    ? 'returned-for-rework'
-                    : action === 'reassign'
-                        ? 'reassigned'
-                        : 'discarded',
-        })
+    const handleReviewProposal = useCallback(async (proposalId: string, action: 'apply' | 'return-for-rework' | 'reassign' | 'discard') => {
+        const { reviewChangeProposal } = await import('@/renderer/agent/services/orchestratorExecutor')
+        await reviewChangeProposal(proposalId, action)
         selectChangeProposal(proposalId)
-    }, [selectChangeProposal, updateChangeProposal])
+    }, [selectChangeProposal])
 
     if (!plan) {
         return (

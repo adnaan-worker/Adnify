@@ -1,11 +1,14 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { getTaskTemplates } from '@renderer/agent/services/taskTemplateService'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import {
   ExecutionTaskComposer,
+  applyTaskTemplateToDraft,
   buildExecutionTaskDraftFromPlan,
   buildExecutionTaskInputFromDraft,
+  getExecutionTaskTemplateOptions,
 } from '@renderer/components/orchestrator/ExecutionTaskComposer'
 
 describe('ExecutionTaskComposer', () => {
@@ -38,6 +41,7 @@ describe('ExecutionTaskComposer', () => {
     expect(draft.sourceWorkspacePath).toBe('/workspace/adnify')
     expect(draft.trustMode).toBe('balanced')
     expect(draft.executionTarget).toBe('isolated')
+    expect(draft.modelRoutingPolicy).toBe('balanced')
     expect(draft.executionStrategy.orchestrationMode).toBe('mixed')
     expect(draft.executionStrategy.ownershipPolicy).toBe('exclusive')
     expect(draft.executionStrategy.conflictPolicy).toBe('queue')
@@ -71,13 +75,43 @@ describe('ExecutionTaskComposer', () => {
     const task = useAgentStore.getState().executionTasks[taskId]
     expect(task.trustMode).toBe('safe')
     expect(task.executionTarget).toBe('current')
+    expect(task.modelRoutingPolicy).toBe('balanced')
     expect(task.sourceWorkspacePath).toBe('/workspace/adnify')
     expect(task.specialists).toEqual(['frontend', 'verifier'])
     expect(task.executionStrategy.orchestrationMode).toBe('mixed')
     expect(task.executionStrategy.ownershipPolicy).toBe('exclusive')
   })
 
-  it('renders objective and orchestration default controls', () => {
+  it('derives composer template options from the shared template registry', () => {
+    const templateOptions = getExecutionTaskTemplateOptions()
+    expect(templateOptions[0]).toMatchObject({ id: 'auto', label: 'Auto' })
+    expect(templateOptions.slice(1).map((item) => item.id)).toEqual(getTaskTemplates().map((item) => item.id))
+  })
+
+  it('applies template metadata into the draft when a rich template is selected', () => {
+    const draft = buildExecutionTaskDraftFromPlan(
+      {
+        id: 'plan-1',
+        name: 'Harden full-stack flow',
+        userRequest: 'Harden full-stack flow',
+        tasks: [],
+      },
+      '/workspace/adnify',
+      {
+        mode: 'balanced',
+        defaultExecutionTarget: 'auto',
+        modelRoutingPolicy: 'balanced',
+      },
+    )
+
+    const nextDraft = applyTaskTemplateToDraft(draft, 'full-stack-safe')
+    expect(nextDraft.specialists).toEqual(['frontend', 'logic', 'verifier', 'reviewer'])
+    expect(nextDraft.trustMode).toBe('safe')
+    expect(nextDraft.executionTarget).toBe('isolated')
+    expect(nextDraft.modelRoutingPolicy).toBe('balanced')
+  })
+
+  it('renders objective and template controls from the shared registry', () => {
     const html = renderToStaticMarkup(
       <ExecutionTaskComposer
         draft={{
@@ -85,6 +119,7 @@ describe('ExecutionTaskComposer', () => {
           specialists: ['frontend', 'logic'],
           trustMode: 'balanced',
           executionTarget: 'isolated',
+          modelRoutingPolicy: 'balanced',
           executionStrategy: {
             orchestrationMode: 'mixed',
             ownershipPolicy: 'exclusive',
@@ -104,6 +139,8 @@ describe('ExecutionTaskComposer', () => {
     expect(html).toContain('Trust Mode')
     expect(html).toContain('Execution Target')
     expect(html).toContain('Execution Strategy')
+    expect(html).toContain('UI Polish + Browser Verify')
+    expect(html).toContain('balanced')
     expect(html).toContain('mixed')
     expect(html).toContain('exclusive')
     expect(html).toContain('queue')

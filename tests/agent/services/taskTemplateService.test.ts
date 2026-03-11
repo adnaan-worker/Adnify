@@ -13,6 +13,37 @@ describe('task template service', () => {
     expect(template?.workPackages.length).toBeGreaterThan(1)
   })
 
+  it('exposes richer phase-two templates with execution metadata', () => {
+    const templates = getTaskTemplates()
+    expect(templates.map((template) => template.id)).toEqual(expect.arrayContaining([
+      'frontend-logic-reviewer',
+      'logic-verifier',
+      'full-stack-safe',
+      'bugfix-fast',
+      'ui-polish-browser-verify',
+    ]))
+
+    const fullStackSafe = templates.find((template) => template.id === 'full-stack-safe')
+    expect(fullStackSafe).toMatchObject({
+      description: expect.any(String),
+      trustMode: 'safe',
+      executionTarget: 'isolated',
+      modelRoutingPolicy: 'balanced',
+    })
+  })
+
+  it('marks browser-verification packages explicitly for ui polish template', () => {
+    const template = getTaskTemplates().find((item) => item.id === 'ui-polish-browser-verify')
+    expect(template?.workPackages.map((item) => ({
+      specialist: item.specialist,
+      verificationMode: item.verificationMode,
+    }))).toEqual([
+      { specialist: 'frontend', verificationMode: null },
+      { specialist: 'verifier', verificationMode: 'browser' },
+      { specialist: 'reviewer', verificationMode: 'browser' },
+    ])
+  })
+
   it('builds execution task input from plan tasks and trust settings', () => {
     const input = buildExecutionTaskInputFromPlan(
       {
@@ -53,7 +84,7 @@ describe('task template service', () => {
     expect(input.executionTarget).toBeUndefined()
   })
 
-  it('emits ordered work packages with explicit dependencies and writable scopes', () => {
+  it('emits parallel-ready work packages with verifier gated on upstream packages', () => {
     const workPackages = buildTaskWorkPackages('task-1', {
       objective: 'Ship onboarding flow',
       specialists: ['frontend', 'logic', 'verifier'],
@@ -62,8 +93,23 @@ describe('task template service', () => {
 
     expect(workPackages).toHaveLength(3)
     expect(workPackages[0].dependsOn).toEqual([])
+    expect(workPackages[1].dependsOn).toEqual([])
+    expect(workPackages[2].dependsOn).toEqual([workPackages[0].id, workPackages[1].id])
+    expect(workPackages[0].writableScopes).toEqual(['src/renderer'])
+  })
+
+  it('propagates browser verification metadata into generated work packages', () => {
+    const workPackages = buildTaskWorkPackages('task-ui', {
+      objective: 'Polish account settings surface',
+      specialists: ['frontend', 'verifier', 'reviewer'],
+      writableScopes: ['src/renderer'],
+    })
+
+    expect(workPackages).toHaveLength(3)
+    expect(workPackages[0].verificationMode ?? null).toBeNull()
+    expect(workPackages[1].verificationMode).toBe('browser')
+    expect(workPackages[2].verificationMode).toBe('browser')
     expect(workPackages[1].dependsOn).toEqual([workPackages[0].id])
     expect(workPackages[2].dependsOn).toEqual([workPackages[1].id])
-    expect(workPackages[0].writableScopes).toEqual(['src/renderer'])
   })
 })

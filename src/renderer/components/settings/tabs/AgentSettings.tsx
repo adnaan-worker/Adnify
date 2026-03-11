@@ -65,6 +65,18 @@ export function AgentSettings({
         { value: 'failure-only', label: t('仅失败中断', 'Failures Only') },
     ]
 
+    const modelRoutingOptions = [
+        { value: 'manual', label: t('手动', 'Manual') },
+        { value: 'balanced', label: t('平衡路由', 'Balanced Routing') },
+        { value: 'budget-aware', label: t('预算感知', 'Budget Aware') },
+    ]
+
+    const verificationModeOptions = [
+        { value: 'static', label: t('静态检查', 'Static Review') },
+        { value: 'regression', label: t('回归验证', 'Regression') },
+        { value: 'browser', label: t('浏览器验证', 'Browser Verification') },
+    ]
+
     const specialistRoles = ['frontend', 'logic', 'verifier', 'reviewer'] as const
 
     const toolPermissionOptions = [
@@ -90,6 +102,33 @@ export function AgentSettings({
         { value: 'secondary', label: t('辅助验证', 'Secondary') },
         { value: 'primary', label: t('主验证者', 'Primary') },
     ]
+
+    const getOptionLabel = (options: Array<{ value: string, label: string }>, value?: string | null) => {
+        if (!value) {
+            return t('未设置', 'Not set')
+        }
+
+        return options.find((option) => option.value === value)?.label || value
+    }
+
+    const specialistRoleMeta: Record<typeof specialistRoles[number], { title: string; description: string }> = {
+        frontend: {
+            title: 'Frontend',
+            description: t('界面实现与交互细节', 'UI implementation and interaction details'),
+        },
+        logic: {
+            title: 'Logic',
+            description: t('状态管理、数据流与边界条件', 'State management, data flow, and edge cases'),
+        },
+        verifier: {
+            title: 'Verifier',
+            description: t('回归验证、复现确认与验收', 'Regression checks, reproduction, and acceptance'),
+        },
+        reviewer: {
+            title: 'Reviewer',
+            description: t('风险评审、范围控制与变更把关', 'Risk review, scope control, and change governance'),
+        },
+    }
 
     const updateBudgetLimit = (key: 'timeMs' | 'estimatedTokens' | 'llmCalls' | 'commands' | 'verifications', value: number) => {
         setTaskTrustSettings({
@@ -134,7 +173,7 @@ export function AgentSettings({
     }
 
     return (
-        <div className="space-y-8 animate-fade-in pb-10">
+        <div className="space-y-8 animate-fade-in pb-24">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Left Column */}
                 <div className="space-y-6">
@@ -187,7 +226,7 @@ export function AgentSettings({
                                     className="w-full bg-background/50 rounded-lg border-border text-xs"
                                 />
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-medium text-text-secondary">{t('默认执行环境', 'Default Execution Target')}</label>
                                     <Select
@@ -211,6 +250,21 @@ export function AgentSettings({
                                         options={interruptModeOptions}
                                         className="w-full bg-background/50 rounded-lg border-border text-xs"
                                     />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-text-secondary">{t('模型路由策略', 'Model Routing Policy')}</label>
+                                    <Select
+                                        value={taskTrustSettings.global.modelRoutingPolicy}
+                                        onChange={(value) => setTaskTrustSettings({
+                                            ...taskTrustSettings,
+                                            global: { ...taskTrustSettings.global, modelRoutingPolicy: value as typeof taskTrustSettings.global.modelRoutingPolicy }
+                                        })}
+                                        options={modelRoutingOptions}
+                                        className="w-full bg-background/50 rounded-lg border-border text-xs"
+                                    />
+                                    <p className="text-[11px] leading-5 text-text-muted">
+                                        {t('手动 / 平衡路由 / 预算感知：在成本压力升高时自动切换到更保守的模型。', 'Manual / Balanced / Budget Aware: degrade to safer-cost models when budget pressure rises.')}
+                                    </p>
                                 </div>
                             </div>
                             <Switch
@@ -268,191 +322,6 @@ export function AgentSettings({
                         </div>
                     </section>
 
-                    {/* 专家配置 */}
-                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
-                        <div className="flex items-center gap-2 mb-1">
-                            <Bot className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-medium text-text-primary">{t('专家 Agent 配置', 'Specialist Agent Profiles')}</h5>
-                        </div>
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                            {specialistRoles.map((role) => {
-                                const profile = taskTrustSettings.specialistProfiles[role]
-                                return (
-                                    <div key={role} className="rounded-xl border border-border bg-background/30 p-4 space-y-3">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div>
-                                                <div className="text-sm font-medium text-text-primary capitalize">{role}</div>
-                                                <div className="text-xs text-text-muted">{profile.validationRole}</div>
-                                            </div>
-                                            <span className="px-2 py-1 rounded-full bg-accent/10 text-accent text-[11px]">{profile.toolPermission}</span>
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                            <label className="text-xs font-medium text-text-secondary">{t('模型', 'Model')}</label>
-                                            <Input value={profile.model || ''} onChange={(e) => updateSpecialistProfile(role, { model: e.target.value || null })} placeholder={t('沿用当前默认模型', 'Use current default model')} className="bg-background/50 rounded-lg border-border text-xs" />
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div className="space-y-1.5">
-                                                <label className="text-xs font-medium text-text-secondary">{t('工具权限', 'Tool Permission')}</label>
-                                                <Select value={profile.toolPermission} onChange={(value) => updateSpecialistProfile(role, { toolPermission: value as typeof profile.toolPermission })} options={toolPermissionOptions} className="w-full bg-background/50 rounded-lg border-border text-xs" />
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-xs font-medium text-text-secondary">{t('验证职责', 'Validation Role')}</label>
-                                                <Select value={profile.validationRole} onChange={(value) => updateSpecialistProfile(role, { validationRole: value as typeof profile.validationRole })} options={validationRoleOptions} className="w-full bg-background/50 rounded-lg border-border text-xs" />
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-xs font-medium text-text-secondary">{t('网络权限', 'Network Permission')}</label>
-                                                <Select value={profile.networkPermission} onChange={(value) => updateSpecialistProfile(role, { networkPermission: value as typeof profile.networkPermission })} options={networkPermissionOptions} className="w-full bg-background/50 rounded-lg border-border text-xs" />
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-xs font-medium text-text-secondary">Git</label>
-                                                <Select value={profile.gitPermission} onChange={(value) => updateSpecialistProfile(role, { gitPermission: value as typeof profile.gitPermission })} options={gitPermissionOptions} className="w-full bg-background/50 rounded-lg border-border text-xs" />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div className="space-y-1.5">
-                                                <label className="text-xs font-medium text-text-secondary">LLM Cap</label>
-                                                <Input type="number" min={0} value={profile.budgetCap.llmCalls || 0} onChange={(e) => updateSpecialistProfile(role, { budgetCap: { ...profile.budgetCap, llmCalls: Math.max(0, parseInt(e.target.value) || 0) } })} className="bg-background/50 rounded-lg border-border text-xs" />
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-xs font-medium text-text-secondary">Cmd Cap</label>
-                                                <Input type="number" min={0} value={profile.budgetCap.commands || 0} onChange={(e) => updateSpecialistProfile(role, { budgetCap: { ...profile.budgetCap, commands: Math.max(0, parseInt(e.target.value) || 0) } })} className="bg-background/50 rounded-lg border-border text-xs" />
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                            <label className="text-xs font-medium text-text-secondary">{t('风格提示', 'Style Hints')}</label>
-                                            <Input value={profile.styleHints} onChange={(e) => updateSpecialistProfile(role, { styleHints: e.target.value })} className="bg-background/50 rounded-lg border-border text-xs" />
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    </section>
-
-                    {/* Prompt 模板 */}
-                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
-                        <div className="flex items-center gap-2 mb-1">
-                            <Bot className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-medium text-text-primary">{t('Prompt 模板', 'Prompt Template')}</h5>
-                        </div>
-                        <div className="space-y-3">
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('选择模板', 'Select Template')}</label>
-                                <Select
-                                    value={promptTemplateId}
-                                    onChange={(value) => setPromptTemplateId(value)}
-                                    options={templates.map(t => ({
-                                        value: t.id,
-                                        label: `${t.name} ${t.isDefault ? '(Default)' : ''}`
-                                    }))}
-                                    className="w-full bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
-                                />
-                            </div>
-
-                            <div className="bg-surface/50 p-3 rounded-lg border border-border space-y-2">
-                                <div className="flex items-start gap-2 flex-wrap">
-                                    <span className="text-xs font-medium text-text-primary">
-                                        {templates.find(t => t.id === promptTemplateId)?.name}
-                                    </span>
-                                    <span className="text-[10px] text-text-muted px-1.5 py-0.5 bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg rounded border border-border">
-                                        P{templates.find(t => t.id === promptTemplateId)?.priority}
-                                    </span>
-                                    {templates.find(t => t.id === promptTemplateId)?.tags?.map(tag => (
-                                        <span key={tag} className="text-[10px] text-accent px-1.5 py-0.5 bg-accent/10 rounded">
-                                            {tag}
-                                        </span>
-                                    ))}
-                                </div>
-                                <p className="text-xs text-text-secondary line-clamp-2">
-                                    {language === 'zh'
-                                        ? templates.find(t => t.id === promptTemplateId)?.descriptionZh
-                                        : templates.find(t => t.id === promptTemplateId)?.description}
-                                </p>
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => handlePreviewTemplate(promptTemplateId)}
-                                    className="w-full text-xs h-7 mt-2"
-                                >
-                                    {t('预览完整提示词', 'Preview Full Prompt')}
-                                </Button>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* 自定义系统指令 */}
-                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
-                        <div className="flex items-center gap-2 mb-1">
-                            <Terminal className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-medium text-text-primary">{t('自定义系统指令', 'Custom Instructions')}</h5>
-                        </div>
-                        <textarea
-                            value={aiInstructions}
-                            onChange={(e) => setAiInstructions(e.target.value)}
-                            placeholder={t(
-                                '在此输入全局系统指令，例如："总是使用中文回答"、"代码风格偏好..."',
-                                'Enter global system instructions here...'
-                            )}
-                            className="w-full h-32 p-3 bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg rounded-lg border border-border focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none transition-all resize-none text-xs font-mono custom-scrollbar text-text-primary placeholder-text-muted/50"
-                        />
-                    </section>
-
-                    {/* 网络搜索配置 */}
-                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
-                        <div className="flex items-center gap-2 mb-1">
-                            <Search className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-medium text-text-primary">{t('网络搜索', 'Web Search')}</h5>
-                        </div>
-                        <p className="text-xs text-text-muted">
-                            {t(
-                                '配置 Google Programmable Search Engine 以获得更好的搜索结果。未配置时将使用 DuckDuckGo 作为备选。',
-                                'Configure Google Programmable Search Engine for better search results. Falls back to DuckDuckGo when not configured.'
-                            )}
-                        </p>
-                        <div className="space-y-3">
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">Google API Key</label>
-                                <div className="relative">
-                                    <Input
-                                        type={showGoogleApiKey ? 'text' : 'password'}
-                                        value={webSearchConfig.googleApiKey || ''}
-                                        onChange={(e) => setWebSearchConfig({ ...webSearchConfig, googleApiKey: e.target.value })}
-                                        placeholder={t('输入 Google API Key', 'Enter Google API Key')}
-                                        className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs pr-10"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowGoogleApiKey(!showGoogleApiKey)}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
-                                    >
-                                        {showGoogleApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('搜索引擎 ID (CX)', 'Search Engine ID (CX)')}</label>
-                                <Input
-                                    type="text"
-                                    value={webSearchConfig.googleCx || ''}
-                                    onChange={(e) => setWebSearchConfig({ ...webSearchConfig, googleCx: e.target.value })}
-                                    placeholder={t('输入搜索引擎 ID', 'Enter Search Engine ID')}
-                                    className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
-                                />
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs">
-                            <Search className="w-4 h-4 shrink-0 mt-0.5" />
-                            <p>
-                                {t(
-                                    '免费额度：每天 100 次搜索。获取密钥：console.cloud.google.com',
-                                    'Free tier: 100 searches/day. Get keys at: console.cloud.google.com'
-                                )}
-                            </p>
-                        </div>
-                    </section>
                 </div>
 
                 {/* Right Column */}
@@ -766,6 +635,296 @@ export function AgentSettings({
                             </div>
                         )}
                     </div>
+                </div>
+
+
+                    {/* 专家配置 */}
+                <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4 lg:col-span-2">
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 mb-1">
+                                <Bot className="w-4 h-4 text-accent" />
+                                <h5 className="text-sm font-medium text-text-primary">{t('专家 Agent 配置', 'Specialist Agent Profiles')}</h5>
+                            </div>
+                            <p className="text-xs leading-5 text-text-muted">
+                                {t(
+                                    '为不同专家设置默认模型、权限和预算上限，避免执行时看不清配置职责。',
+                                    'Set default models, permissions, and budget caps for each specialist so responsibilities stay readable at a glance.'
+                                )}
+                            </p>
+                        </div>
+                        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+                            {specialistRoles.map((role) => {
+                                const profile = taskTrustSettings.specialistProfiles[role]
+                                const roleMeta = specialistRoleMeta[role]
+                                const summaryBadges = [
+                                    `${t('工具：', 'Tools: ')}${getOptionLabel(toolPermissionOptions, profile.toolPermission)}`,
+                                    `${t('网络：', 'Network: ')}${getOptionLabel(networkPermissionOptions, profile.networkPermission)}`,
+                                    `${t('Git：', 'Git: ')}${getOptionLabel(gitPermissionOptions, profile.gitPermission)}`,
+                                    `${t('验证：', 'Verification: ')}${getOptionLabel(verificationModeOptions, profile.verificationMode)}`,
+                                ]
+
+                                return (
+                                    <div key={role} className="min-w-0 overflow-hidden rounded-xl border border-border bg-background/30 p-4 md:p-5 space-y-4">
+                                        <div className="space-y-3 min-w-0">
+                                            <div className="space-y-1 min-w-0">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <div className="text-base font-semibold text-text-primary">{roleMeta.title}</div>
+                                                    <span className="px-2 py-1 rounded-full bg-accent/10 text-accent text-[11px] leading-4 break-words">
+                                                        {getOptionLabel(validationRoleOptions, profile.validationRole)}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs leading-5 text-text-muted break-words">{roleMeta.description}</p>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {summaryBadges.map((badge) => (
+                                                    <span key={badge} className="max-w-full break-words rounded-full border border-border bg-background/70 px-2.5 py-1 text-[11px] leading-4 text-text-secondary">
+                                                        {badge}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div className="space-y-3">
+                                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                                                    {t('基础设置', 'Basics')}
+                                                </div>
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-xs font-medium text-text-secondary">{t('模型', 'Model')}</label>
+                                                    <Input
+                                                        value={profile.model || ''}
+                                                        onChange={(e) => updateSpecialistProfile(role, { model: e.target.value || null })}
+                                                        placeholder={t('沿用当前默认模型', 'Use current default model')}
+                                                        className="min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-xs font-medium text-text-secondary">{t('验证模式', 'Verification Mode')}</label>
+                                                    <Select
+                                                        value={profile.verificationMode}
+                                                        onChange={(value) => updateSpecialistProfile(role, { verificationMode: value as typeof profile.verificationMode })}
+                                                        options={verificationModeOptions}
+                                                        className="w-full min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-3 border-t border-border/60 pt-4">
+                                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                                                    {t('权限设置', 'Permissions')}
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-3">
+                                                    <div className="space-y-1.5 min-w-0">
+                                                        <label className="text-xs font-medium text-text-secondary">{t('工具权限', 'Tool Permission')}</label>
+                                                        <Select
+                                                            value={profile.toolPermission}
+                                                            onChange={(value) => updateSpecialistProfile(role, { toolPermission: value as typeof profile.toolPermission })}
+                                                            options={toolPermissionOptions}
+                                                            className="w-full min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5 min-w-0">
+                                                        <label className="text-xs font-medium text-text-secondary">{t('验证职责', 'Validation Role')}</label>
+                                                        <Select
+                                                            value={profile.validationRole}
+                                                            onChange={(value) => updateSpecialistProfile(role, { validationRole: value as typeof profile.validationRole })}
+                                                            options={validationRoleOptions}
+                                                            className="w-full min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5 min-w-0">
+                                                        <label className="text-xs font-medium text-text-secondary">{t('网络权限', 'Network Permission')}</label>
+                                                        <Select
+                                                            value={profile.networkPermission}
+                                                            onChange={(value) => updateSpecialistProfile(role, { networkPermission: value as typeof profile.networkPermission })}
+                                                            options={networkPermissionOptions}
+                                                            className="w-full min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5 min-w-0">
+                                                        <label className="text-xs font-medium text-text-secondary">Git</label>
+                                                        <Select
+                                                            value={profile.gitPermission}
+                                                            onChange={(value) => updateSpecialistProfile(role, { gitPermission: value as typeof profile.gitPermission })}
+                                                            options={gitPermissionOptions}
+                                                            className="w-full min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-3 border-t border-border/60 pt-4">
+                                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                                                    {t('预算上限', 'Budget Caps')}
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <div className="space-y-1.5 min-w-0">
+                                                        <label className="text-xs font-medium text-text-secondary">LLM Cap</label>
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            value={profile.budgetCap.llmCalls || 0}
+                                                            onChange={(e) => updateSpecialistProfile(role, { budgetCap: { ...profile.budgetCap, llmCalls: Math.max(0, parseInt(e.target.value) || 0) } })}
+                                                            className="min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5 min-w-0">
+                                                        <label className="text-xs font-medium text-text-secondary">Cmd Cap</label>
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            value={profile.budgetCap.commands || 0}
+                                                            onChange={(e) => updateSpecialistProfile(role, { budgetCap: { ...profile.budgetCap, commands: Math.max(0, parseInt(e.target.value) || 0) } })}
+                                                            className="min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-3 border-t border-border/60 pt-4">
+                                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                                                    {t('风格提示', 'Style Hints')}
+                                                </div>
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-xs font-medium text-text-secondary">{t('给该专家的额外偏好', 'Extra guidance for this specialist')}</label>
+                                                    <textarea
+                                                        value={profile.styleHints}
+                                                        onChange={(e) => updateSpecialistProfile(role, { styleHints: e.target.value })}
+                                                        rows={3}
+                                                        className="w-full min-w-0 min-h-[88px] resize-y rounded-lg border border-border bg-background/50 p-3 text-sm leading-5 text-text-primary outline-none transition-all placeholder-text-muted/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/20"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </section>
+
+
+                <div className="space-y-6 lg:col-span-2">
+                    {/* Prompt 模板 */}
+                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Bot className="w-4 h-4 text-accent" />
+                            <h5 className="text-sm font-medium text-text-primary">{t('Prompt 模板', 'Prompt Template')}</h5>
+                        </div>
+                        <div className="space-y-3">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">{t('选择模板', 'Select Template')}</label>
+                                <Select
+                                    value={promptTemplateId}
+                                    onChange={(value) => setPromptTemplateId(value)}
+                                    options={templates.map(t => ({
+                                        value: t.id,
+                                        label: `${t.name} ${t.isDefault ? '(Default)' : ''}`
+                                    }))}
+                                    className="w-full bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
+                                />
+                            </div>
+
+                            <div className="bg-surface/50 p-3 rounded-lg border border-border space-y-2">
+                                <div className="flex items-start gap-2 flex-wrap">
+                                    <span className="text-xs font-medium text-text-primary">
+                                        {templates.find(t => t.id === promptTemplateId)?.name}
+                                    </span>
+                                    <span className="text-[10px] text-text-muted px-1.5 py-0.5 bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg rounded border border-border">
+                                        P{templates.find(t => t.id === promptTemplateId)?.priority}
+                                    </span>
+                                    {templates.find(t => t.id === promptTemplateId)?.tags?.map(tag => (
+                                        <span key={tag} className="text-[10px] text-accent px-1.5 py-0.5 bg-accent/10 rounded">
+                                            {tag}
+                                        </span>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-text-secondary line-clamp-2">
+                                    {language === 'zh'
+                                        ? templates.find(t => t.id === promptTemplateId)?.descriptionZh
+                                        : templates.find(t => t.id === promptTemplateId)?.description}
+                                </p>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => handlePreviewTemplate(promptTemplateId)}
+                                    className="w-full text-xs h-7 mt-2"
+                                >
+                                    {t('预览完整提示词', 'Preview Full Prompt')}
+                                </Button>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 自定义系统指令 */}
+                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Terminal className="w-4 h-4 text-accent" />
+                            <h5 className="text-sm font-medium text-text-primary">{t('自定义系统指令', 'Custom Instructions')}</h5>
+                        </div>
+                        <textarea
+                            value={aiInstructions}
+                            onChange={(e) => setAiInstructions(e.target.value)}
+                            placeholder={t(
+                                '在此输入全局系统指令，例如："总是使用中文回答"、"代码风格偏好..."',
+                                'Enter global system instructions here...'
+                            )}
+                            className="w-full h-32 p-3 bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg rounded-lg border border-border focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none transition-all resize-none text-xs font-mono custom-scrollbar text-text-primary placeholder-text-muted/50"
+                        />
+                    </section>
+
+                    {/* 网络搜索配置 */}
+                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Search className="w-4 h-4 text-accent" />
+                            <h5 className="text-sm font-medium text-text-primary">{t('网络搜索', 'Web Search')}</h5>
+                        </div>
+                        <p className="text-xs text-text-muted">
+                            {t(
+                                '配置 Google Programmable Search Engine 以获得更好的搜索结果。未配置时将使用 DuckDuckGo 作为备选。',
+                                'Configure Google Programmable Search Engine for better search results. Falls back to DuckDuckGo when not configured.'
+                            )}
+                        </p>
+                        <div className="space-y-3">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">Google API Key</label>
+                                <div className="relative">
+                                    <Input
+                                        type={showGoogleApiKey ? 'text' : 'password'}
+                                        value={webSearchConfig.googleApiKey || ''}
+                                        onChange={(e) => setWebSearchConfig({ ...webSearchConfig, googleApiKey: e.target.value })}
+                                        placeholder={t('输入 Google API Key', 'Enter Google API Key')}
+                                        className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs pr-10"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowGoogleApiKey(!showGoogleApiKey)}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+                                    >
+                                        {showGoogleApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">{t('搜索引擎 ID (CX)', 'Search Engine ID (CX)')}</label>
+                                <Input
+                                    type="text"
+                                    value={webSearchConfig.googleCx || ''}
+                                    onChange={(e) => setWebSearchConfig({ ...webSearchConfig, googleCx: e.target.value })}
+                                    placeholder={t('输入搜索引擎 ID', 'Enter Search Engine ID')}
+                                    className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs">
+                            <Search className="w-4 h-4 shrink-0 mt-0.5" />
+                            <p>
+                                {t(
+                                    '免费额度：每天 100 次搜索。获取密钥：console.cloud.google.com',
+                                    'Free tier: 100 searches/day. Get keys at: console.cloud.google.com'
+                                )}
+                            </p>
+                        </div>
+                    </section>
                 </div>
             </div>
 

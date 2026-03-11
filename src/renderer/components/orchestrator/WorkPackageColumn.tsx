@@ -31,6 +31,11 @@ export function WorkPackageColumn({
         <span className="px-2 py-1 rounded-full bg-background/60 text-[11px] text-text-secondary">
           {workPackage.targetDomain}
         </span>
+        {workPackage.verificationMode ? (
+          <span className="px-2 py-1 rounded-full bg-amber-500/10 text-[11px] text-amber-200">
+            {workPackage.verificationMode}
+          </span>
+        ) : null}
         {workPackage.writableScopes.map((scope) => (
           <span key={scope} className="px-2 py-1 rounded-full bg-accent/10 text-[11px] text-accent">
             {scope}

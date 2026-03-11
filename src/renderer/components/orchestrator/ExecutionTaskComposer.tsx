@@ -1,10 +1,16 @@
 import type { TaskPlan } from '@renderer/agent/orchestrator/types'
-import { buildExecutionTaskInputFromPlan } from '@renderer/agent/services/taskTemplateService'
+import {
+  buildExecutionTaskInputFromPlan,
+  findTaskTemplateById,
+  getTaskTemplates,
+} from '@renderer/agent/services/taskTemplateService'
+import type { TaskTemplateDefinition } from '@renderer/agent/services/taskTemplateService'
 import { createDefaultExecutionStrategySnapshot } from '@renderer/agent/types/taskExecution'
 import type {
   CreateExecutionTaskInput,
   ExecutionStrategySnapshot,
   ExecutionTarget,
+  ModelRoutingPolicy,
   SpecialistKind,
   TrustMode,
 } from '@renderer/agent/types/taskExecution'
@@ -14,6 +20,7 @@ export interface ExecutionTaskDraft {
   specialists: SpecialistKind[]
   trustMode: TrustMode
   executionTarget: ExecutionTarget
+  modelRoutingPolicy: ModelRoutingPolicy
   executionStrategy: ExecutionStrategySnapshot
   sourceWorkspacePath: string | null
 }
@@ -25,16 +32,20 @@ interface ExecutionTaskComposerProps {
   disabled?: boolean
 }
 
+type ExecutionTaskTemplateOption = Pick<
+  TaskTemplateDefinition,
+  'id' | 'label' | 'description' | 'specialists' | 'trustMode' | 'executionTarget' | 'modelRoutingPolicy'
+>
+
 const TRUST_MODE_OPTIONS: TrustMode[] = ['safe', 'balanced', 'autonomous', 'manual']
 const EXECUTION_TARGET_OPTIONS: ExecutionTarget[] = ['current', 'isolated', 'auto']
 const SPECIALIST_OPTIONS: SpecialistKind[] = ['frontend', 'logic', 'verifier', 'reviewer']
-
-const TEMPLATE_OPTIONS: Array<{ id: string; label: string; specialists: SpecialistKind[] }> = [
-  { id: 'auto', label: 'Auto', specialists: [] },
-  { id: 'frontend-logic-verifier', label: 'Frontend + Logic + Verifier', specialists: ['frontend', 'logic', 'verifier'] },
-  { id: 'frontend-logic', label: 'Frontend + Logic', specialists: ['frontend', 'logic'] },
-  { id: 'logic-verifier', label: 'Logic + Verifier', specialists: ['logic', 'verifier'] },
-]
+const AUTO_TEMPLATE_OPTION: ExecutionTaskTemplateOption = {
+  id: 'auto',
+  label: 'Auto',
+  description: 'Keep current inferred specialists and manual overrides.',
+  specialists: [],
+}
 
 function toggleSpecialist(list: SpecialistKind[], specialist: SpecialistKind): SpecialistKind[] {
   const next = list.includes(specialist)
@@ -50,10 +61,29 @@ function matchesTemplate(draft: ExecutionTaskDraft, template: { specialists: Spe
     && template.specialists.every((specialist, index) => draft.specialists[index] === specialist)
 }
 
+export function getExecutionTaskTemplateOptions(): ExecutionTaskTemplateOption[] {
+  return [AUTO_TEMPLATE_OPTION, ...getTaskTemplates()]
+}
+
+export function applyTaskTemplateToDraft(draft: ExecutionTaskDraft, templateId: string): ExecutionTaskDraft {
+  if (templateId === AUTO_TEMPLATE_OPTION.id) return draft
+
+  const template = findTaskTemplateById(templateId)
+  if (!template) return draft
+
+  return {
+    ...draft,
+    specialists: [...template.specialists],
+    trustMode: template.trustMode ?? draft.trustMode,
+    executionTarget: template.executionTarget ?? draft.executionTarget,
+    modelRoutingPolicy: template.modelRoutingPolicy ?? draft.modelRoutingPolicy,
+  }
+}
+
 export function buildExecutionTaskDraftFromPlan(
   plan: Pick<TaskPlan, 'id' | 'name' | 'userRequest' | 'tasks'>,
   workspacePath: string | null,
-  trustPolicy: { mode?: TrustMode; defaultExecutionTarget?: ExecutionTarget },
+  trustPolicy: { mode?: TrustMode; defaultExecutionTarget?: ExecutionTarget; modelRoutingPolicy?: ModelRoutingPolicy },
 ): ExecutionTaskDraft {
   const input = buildExecutionTaskInputFromPlan(plan, trustPolicy)
 
@@ -62,6 +92,7 @@ export function buildExecutionTaskDraftFromPlan(
     specialists: input.specialists,
     trustMode: input.trustMode ?? trustPolicy.mode ?? 'balanced',
     executionTarget: input.executionTarget ?? (trustPolicy.defaultExecutionTarget === 'auto' ? 'isolated' : trustPolicy.defaultExecutionTarget ?? 'isolated'),
+    modelRoutingPolicy: input.modelRoutingPolicy ?? (trustPolicy.modelRoutingPolicy ?? 'balanced'),
     executionStrategy: input.executionStrategy ?? createDefaultExecutionStrategySnapshot(),
     sourceWorkspacePath: workspacePath,
   }
@@ -73,13 +104,15 @@ export function buildExecutionTaskInputFromDraft(draft: ExecutionTaskDraft): Cre
     specialists: [...draft.specialists],
     trustMode: draft.trustMode,
     executionTarget: draft.executionTarget,
+    modelRoutingPolicy: draft.modelRoutingPolicy,
     executionStrategy: { ...draft.executionStrategy },
     sourceWorkspacePath: draft.sourceWorkspacePath,
   }
 }
 
 export function ExecutionTaskComposer({ draft, onDraftChange, onCreate, disabled = false }: ExecutionTaskComposerProps) {
-  const activeTemplate = TEMPLATE_OPTIONS.find((template) => matchesTemplate(draft, template))?.id ?? 'custom'
+  const templateOptions = getExecutionTaskTemplateOptions()
+  const activeTemplate = templateOptions.find((template) => matchesTemplate(draft, template))?.id ?? 'custom'
 
   return (
     <section className="rounded-2xl border border-border bg-surface/20 p-4 space-y-4">
@@ -111,15 +144,13 @@ export function ExecutionTaskComposer({ draft, onDraftChange, onCreate, disabled
       <div className="space-y-2">
         <div className="text-sm text-text-secondary">Template</div>
         <div className="flex flex-wrap gap-2">
-          {TEMPLATE_OPTIONS.map((template) => (
+          {templateOptions.map((template) => (
             <button
               key={template.id}
               type="button"
+              title={template.description}
               disabled={disabled}
-              onClick={() => {
-                if (template.id === 'auto') return
-                onDraftChange({ ...draft, specialists: [...template.specialists] })
-              }}
+              onClick={() => onDraftChange(applyTaskTemplateToDraft(draft, template.id))}
               className={`rounded-full border px-3 py-1.5 text-xs ${activeTemplate === template.id ? 'border-accent text-accent' : 'border-border text-text-secondary'}`}
             >
               {template.label}
@@ -188,6 +219,7 @@ export function ExecutionTaskComposer({ draft, onDraftChange, onCreate, disabled
           <span className="rounded-full border border-border px-3 py-1.5">{draft.executionStrategy.orchestrationMode}</span>
           <span className="rounded-full border border-border px-3 py-1.5">{draft.executionStrategy.ownershipPolicy}</span>
           <span className="rounded-full border border-border px-3 py-1.5">{draft.executionStrategy.conflictPolicy}</span>
+          <span className="rounded-full border border-border px-3 py-1.5">{draft.modelRoutingPolicy}</span>
           <span className="rounded-full border border-border px-3 py-1.5">{draft.executionStrategy.proposalReviewPolicy}</span>
         </div>
       </div>

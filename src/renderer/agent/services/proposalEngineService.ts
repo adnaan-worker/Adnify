@@ -2,6 +2,7 @@ import type {
   ChangeProposal,
   ProposalVerificationStatus,
   TaskRiskLevel,
+  VerificationMode,
 } from '../types/taskExecution'
 import { validateChangeProposalForMerge } from './coordinatorService'
 
@@ -13,6 +14,10 @@ export interface BuildChangeProposalInput {
   changedFiles?: string[]
   writableScopes?: string[]
   verificationStatus?: ProposalVerificationStatus
+  verificationMode?: VerificationMode | null
+  verificationSummary?: string | null
+  verificationBlockedReason?: string | null
+  verificationProvider?: 'playwright' | 'puppeteer' | null
   riskLevel?: TaskRiskLevel
   createdAt?: number
 }
@@ -47,6 +52,10 @@ export function buildChangeProposal(input: BuildChangeProposalInput): BuildChang
       summary: input.summary,
       changedFiles,
       verificationStatus,
+      verificationMode: input.verificationMode ?? null,
+      verificationSummary: input.verificationSummary ?? null,
+      verificationBlockedReason: input.verificationBlockedReason ?? null,
+      verificationProvider: input.verificationProvider ?? null,
       riskLevel,
       recommendedAction: gate.recommendedAction,
       status: 'pending',
