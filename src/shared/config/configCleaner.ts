@@ -298,6 +298,10 @@ export interface AppSettingsSchema {
         warnOnExternalSideEffects?: boolean
       }
     }
+    runtimeModels?: Record<string, {
+      provider?: string | null
+      model?: string | null
+    }>
     specialistProfiles?: Record<string, {
       role?: 'frontend' | 'logic' | 'verifier' | 'reviewer'
       model?: string | null
@@ -502,6 +506,20 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
         if (typeof rollback.autoRollbackIsolated === 'boolean') cleaned.taskTrustSettings.governanceDefaults.rollback.autoRollbackIsolated = rollback.autoRollbackIsolated
         if (typeof rollback.requireConfirmationForMainWorkspace === 'boolean') cleaned.taskTrustSettings.governanceDefaults.rollback.requireConfirmationForMainWorkspace = rollback.requireConfirmationForMainWorkspace
         if (typeof rollback.warnOnExternalSideEffects === 'boolean') cleaned.taskTrustSettings.governanceDefaults.rollback.warnOnExternalSideEffects = rollback.warnOnExternalSideEffects
+      }
+    }
+
+    if (tt.runtimeModels && typeof tt.runtimeModels === 'object') {
+      const runtimeModels = tt.runtimeModels as Record<string, unknown>
+      cleaned.taskTrustSettings.runtimeModels = {}
+      for (const [role, value] of Object.entries(runtimeModels)) {
+        if (!value || typeof value !== 'object') continue
+        if (role !== 'coordinator' && role !== 'reviewer' && role !== 'patrol') continue
+        const runtimeModel = value as Record<string, unknown>
+        const next: Record<string, unknown> = {}
+        if (typeof runtimeModel.provider === 'string' || runtimeModel.provider === null) next.provider = runtimeModel.provider
+        if (typeof runtimeModel.model === 'string' || runtimeModel.model === null) next.model = runtimeModel.model
+        cleaned.taskTrustSettings.runtimeModels[role] = next as any
       }
     }
 

@@ -44,6 +44,23 @@ export interface SpecialistRouteDecision extends ModelRouteDecision {
   providerReason: 'specialist-explicit' | 'global-default'
 }
 
+export type RuntimeAgentRole = 'coordinator' | 'reviewer' | 'patrol'
+
+export interface ResolveRuntimeAgentRouteInput {
+  policy: ModelRoutingPolicy
+  runtimeRole: RuntimeAgentRole
+  roleProvider?: string | null
+  roleModel?: string | null
+  defaultProvider: string
+  resolveProviderContext: (providerId: string) => ResolvedProviderContext
+  budget?: ModelRoutingBudgetSnapshot | null
+}
+
+export interface RuntimeAgentRouteDecision extends ModelRouteDecision {
+  providerId: string
+  providerReason: 'role-explicit' | 'global-default'
+}
+
 const SPECIALIST_MODEL_PREFERENCES: Record<SpecialistKind, RegExp[]> = {
   frontend: [/sonnet/i, /gpt-4o/i, /gpt-4\.1/i, /o1/i, /o3/i, /pro/i],
   logic: [/o3/i, /o1/i, /sonnet/i, /gpt-4\.1/i, /gpt-4o/i, /pro/i],
@@ -52,6 +69,12 @@ const SPECIALIST_MODEL_PREFERENCES: Record<SpecialistKind, RegExp[]> = {
 }
 
 const ECONOMY_MODEL_PREFERENCES: RegExp[] = [/mini/i, /haiku/i, /flash/i]
+
+const RUNTIME_ROLE_SPECIALIST_MAP: Record<RuntimeAgentRole, SpecialistKind> = {
+  coordinator: 'logic',
+  reviewer: 'reviewer',
+  patrol: 'verifier',
+}
 
 function normalizeModels(defaultModel: string, availableModels: string[]): string[] {
   const models = [defaultModel, ...availableModels].filter(Boolean)
@@ -155,5 +178,25 @@ export function resolveSpecialistRoute(input: ResolveSpecialistRouteInput): Spec
     ...modelDecision,
     providerId,
     providerReason: input.specialistProvider?.trim() ? 'specialist-explicit' : 'global-default',
+  }
+}
+
+
+export function resolveRuntimeAgentRoute(input: ResolveRuntimeAgentRouteInput): RuntimeAgentRouteDecision {
+  const providerId = input.roleProvider?.trim() || input.defaultProvider
+  const providerContext = input.resolveProviderContext(providerId)
+  const modelDecision = resolveModelRoute({
+    policy: input.policy,
+    specialist: RUNTIME_ROLE_SPECIALIST_MAP[input.runtimeRole],
+    specialistModel: input.roleModel,
+    defaultModel: providerContext.defaultModel,
+    availableModels: providerContext.availableModels,
+    budget: input.budget,
+  })
+
+  return {
+    ...modelDecision,
+    providerId,
+    providerReason: input.roleProvider?.trim() ? 'role-explicit' : 'global-default',
   }
 }

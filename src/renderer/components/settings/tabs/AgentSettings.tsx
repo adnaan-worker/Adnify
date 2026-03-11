@@ -9,7 +9,7 @@ import { DEFAULT_AGENT_CONFIG } from '@shared/config/agentConfig'
 import { Button, Input, Select, Switch } from '@components/ui'
 import { AgentSettingsProps } from '../types'
 import { PromptPreviewModal } from './PromptPreviewModal'
-import { resolveSpecialistRoute } from '@renderer/agent/services/modelRoutingService'
+import { resolveRuntimeAgentRoute, resolveSpecialistRoute } from '@renderer/agent/services/modelRoutingService'
 import { Bot, FileText, Zap, BrainCircuit, AlertOctagon, Terminal, Search, Eye, EyeOff, RefreshCw } from 'lucide-react'
 
 export function AgentSettings({
@@ -80,6 +80,7 @@ export function AgentSettings({
     ]
 
     const specialistRoles = ['frontend', 'logic', 'verifier', 'reviewer'] as const
+    const runtimeRoles = ['coordinator', 'reviewer', 'patrol'] as const
 
     const toolPermissionOptions = [
         { value: 'read-mostly', label: t('偏只读', 'Read Mostly') },
@@ -155,10 +156,43 @@ export function AgentSettings({
         [specialistRoles, taskTrustSettings.specialistProfiles, taskTrustSettings.global.modelRoutingPolicy, currentLLMConfig.provider, currentLLMConfig.model, availableProviders, providerConfigs]
     )
 
+    const resolvedRuntimeRoutes = useMemo(
+        () => runtimeRoles.map((role) => {
+            const runtimeModel = taskTrustSettings.runtimeModels[role]
+            return {
+                role,
+                ...resolveRuntimeAgentRoute({
+                    policy: taskTrustSettings.global.modelRoutingPolicy,
+                    runtimeRole: role,
+                    roleProvider: runtimeModel.provider,
+                    roleModel: runtimeModel.model,
+                    defaultProvider: currentLLMConfig.provider,
+                    resolveProviderContext,
+                }),
+            }
+        }),
+        [runtimeRoles, taskTrustSettings.runtimeModels, taskTrustSettings.global.modelRoutingPolicy, currentLLMConfig.provider, currentLLMConfig.model, availableProviders, providerConfigs]
+    )
+
     const collapsedSpecialistRoutes = useMemo(
         () => new Set(resolvedSpecialistRoutes.map((route) => `${route.providerId}:${route.model}`)).size <= 1,
         [resolvedSpecialistRoutes]
     )
+
+    const runtimeRoleMeta: Record<typeof runtimeRoles[number], { title: string; description: string }> = {
+        coordinator: {
+            title: t('协调器', 'Coordinator'),
+            description: t('长任务拆解、调度与熔断决策', 'Long-task decomposition, scheduling, and circuit-break decisions'),
+        },
+        reviewer: {
+            title: t('自治评审', 'Autonomy Reviewer'),
+            description: t('自治结果验收、风险评审与收口', 'Autonomous result review, risk checks, and sign-off'),
+        },
+        patrol: {
+            title: t('巡查器', 'Patrol'),
+            description: t('心跳巡查、卡住检测与恢复建议', 'Heartbeat patrol, stuck detection, and recovery guidance'),
+        },
+    }
 
     const specialistRoleMeta: Record<typeof specialistRoles[number], { title: string; description: string }> = {
         frontend: {
@@ -215,6 +249,19 @@ export function AgentSettings({
                 ...taskTrustSettings.specialistProfiles,
                 [role]: {
                     ...taskTrustSettings.specialistProfiles[role],
+                    ...updates,
+                },
+            },
+        })
+    }
+
+    const updateRuntimeModel = (role: typeof runtimeRoles[number], updates: Partial<typeof taskTrustSettings.runtimeModels.coordinator>) => {
+        setTaskTrustSettings({
+            ...taskTrustSettings,
+            runtimeModels: {
+                ...taskTrustSettings.runtimeModels,
+                [role]: {
+                    ...taskTrustSettings.runtimeModels[role],
                     ...updates,
                 },
             },
@@ -686,6 +733,75 @@ export function AgentSettings({
                     </div>
                 </div>
 
+
+                    {/* 自治/编排模型 */}
+                <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4 lg:col-span-2">
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 mb-1">
+                                <BrainCircuit className="w-4 h-4 text-accent" />
+                                <h5 className="text-sm font-medium text-text-primary">{t('自治/编排模型', 'Autonomy / Orchestration Models')}</h5>
+                            </div>
+                            <p className="text-xs leading-5 text-text-muted">
+                                {t(
+                                    '为协调器、自治评审与巡查器单独设置 provider/model，避免所有自治角色都挤在当前聊天模型上。',
+                                    'Configure dedicated provider/model pairs for coordinator, autonomy reviewer, and patrol so autonomous roles do not all collapse onto the current chat model.'
+                                )}
+                            </p>
+                        </div>
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                            {runtimeRoles.map((role) => {
+                                const runtimeModel = taskTrustSettings.runtimeModels[role]
+                                const runtimeRoute = resolvedRuntimeRoutes.find((item) => item.role === role)
+                                const roleMeta = runtimeRoleMeta[role]
+                                const selectedProviderId = runtimeModel.provider || currentLLMConfig.provider
+                                const providerContext = resolveProviderContext(selectedProviderId)
+                                const modelOptions = Array.from(new Set([
+                                    runtimeModel.model || '',
+                                    ...providerContext.availableModels,
+                                ].filter(Boolean)))
+
+                                return (
+                                    <div key={role} className="min-w-0 overflow-hidden rounded-xl border border-border bg-background/30 p-4 md:p-5 space-y-4">
+                                        <div className="space-y-1.5 min-w-0">
+                                            <div className="text-base font-semibold text-text-primary">{roleMeta.title}</div>
+                                            <p className="text-xs leading-5 text-text-muted break-words">{roleMeta.description}</p>
+                                            <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-[11px] leading-5 text-text-secondary">
+                                                {runtimeRoute
+                                                    ? `${t('最终执行：', 'Runtime: ')}${providerNameMap[runtimeRoute.providerId] || runtimeRoute.providerId} / ${runtimeRoute.model}`
+                                                    : `${t('最终执行：', 'Runtime: ')}-`}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-3">
+                                            <div className="space-y-1.5 min-w-0">
+                                                <label className="text-xs font-medium text-text-secondary">{t('提供商', 'Provider')}</label>
+                                                <Select
+                                                    value={runtimeModel.provider || ''}
+                                                    onChange={(value) => updateRuntimeModel(role, { provider: value || null, model: runtimeModel.provider && value !== runtimeModel.provider ? null : runtimeModel.model })}
+                                                    options={[
+                                                        { value: '', label: t('沿用当前 Provider', 'Use current provider') },
+                                                        ...availableProviders.map((provider) => ({ value: provider.id, label: provider.name })),
+                                                    ]}
+                                                    className="w-full min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5 min-w-0">
+                                                <label className="text-xs font-medium text-text-secondary">{t('模型', 'Model')}</label>
+                                                <Select
+                                                    value={runtimeModel.model || ''}
+                                                    onChange={(value) => updateRuntimeModel(role, { model: value || null })}
+                                                    options={[
+                                                        { value: '', label: t('沿用当前路由/默认模型', 'Use routed/default model') },
+                                                        ...modelOptions.map((model) => ({ value: model, label: model })),
+                                                    ]}
+                                                    className="w-full min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                </section>
 
                     {/* 专家配置 */}
                 <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4 lg:col-span-2">

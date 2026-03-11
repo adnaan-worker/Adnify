@@ -219,6 +219,14 @@ export interface TaskTrustPolicy {
 
 export type TaskSpecialistRole = 'frontend' | 'logic' | 'verifier' | 'reviewer'
 
+
+export type TaskRuntimeModelRole = 'coordinator' | 'reviewer' | 'patrol'
+
+export interface RuntimeModelOverride {
+  provider?: string | null
+  model?: string | null
+}
+
 export interface TaskBudgetSettings {
   limits?: {
     timeMs?: number
@@ -269,6 +277,7 @@ export interface TaskTrustSettings {
   allowTaskOverride?: boolean
   governanceDefaults?: TaskGovernanceDefaults
   specialistProfiles?: Partial<Record<TaskSpecialistRole, SpecialistProfileSettings>>
+  runtimeModels?: Partial<Record<TaskRuntimeModelRole, RuntimeModelOverride>>
 }
 
 // ============================================

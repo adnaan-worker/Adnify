@@ -9,6 +9,7 @@ import type {
     AgentConfig,
     WebSearchConfig,
     TaskTrustSettings as PersistedTaskTrustSettings,
+    TaskRuntimeModelRole,
 } from '@shared/config/types'
 import type { ProviderModelConfig } from '@shared/config/settings'
 import { DEFAULT_TRUST_POLICY, type TrustPolicy } from '@renderer/agent/types/trustPolicy'
@@ -121,11 +122,17 @@ export interface TaskGovernanceDefaults {
     rollback: RollbackGovernanceSettings
 }
 
+export interface RuntimeModelSettings {
+    provider: string | null
+    model: string | null
+}
+
 export interface TaskTrustSettings {
     global: TrustPolicy
     workspaceOverrides: Record<string, TrustPolicy>
     allowTaskOverride: boolean
     governanceDefaults: TaskGovernanceDefaults
+    runtimeModels: Record<TaskRuntimeModelRole, RuntimeModelSettings>
     specialistProfiles: Record<SpecialistKind, SpecialistProfile>
 }
 
@@ -167,6 +174,19 @@ function normalizeRollbackGovernanceSettings(input?: PersistedTaskTrustSettings[
     }
 }
 
+function normalizeRuntimeModels(input?: PersistedTaskTrustSettings['runtimeModels']): Record<TaskRuntimeModelRole, RuntimeModelSettings> {
+    const roles: TaskRuntimeModelRole[] = ['coordinator', 'reviewer', 'patrol']
+
+    return roles.reduce<Record<TaskRuntimeModelRole, RuntimeModelSettings>>((acc, role) => {
+        const override = input?.[role]
+        acc[role] = {
+            provider: typeof override?.provider === 'string' ? override.provider : null,
+            model: typeof override?.model === 'string' ? override.model : null,
+        }
+        return acc
+    }, {} as Record<TaskRuntimeModelRole, RuntimeModelSettings>)
+}
+
 function normalizeSpecialistProfiles(input?: PersistedTaskTrustSettings['specialistProfiles'] | Partial<Record<SpecialistKind, SpecialistProfile>>): Record<SpecialistKind, SpecialistProfile> {
     const roles: SpecialistKind[] = ['frontend', 'logic', 'verifier', 'reviewer']
 
@@ -203,6 +223,7 @@ export function normalizeTaskTrustSettings(
             budget: normalizeTaskBudgetSettings((input as PersistedTaskTrustSettings | undefined)?.governanceDefaults),
             rollback: normalizeRollbackGovernanceSettings((input as PersistedTaskTrustSettings | undefined)?.governanceDefaults),
         },
+        runtimeModels: normalizeRuntimeModels((input as PersistedTaskTrustSettings | undefined)?.runtimeModels),
         specialistProfiles: normalizeSpecialistProfiles((input as PersistedTaskTrustSettings | undefined)?.specialistProfiles || (input as Partial<TaskTrustSettings> | undefined)?.specialistProfiles),
     }
 }

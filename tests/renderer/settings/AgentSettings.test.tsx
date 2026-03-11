@@ -111,23 +111,27 @@ describe('AgentSettings specialist profiles UI', () => {
     expect(html).toContain('静态检查')
   })
 
-  it('renders resolved runtime provider/model summaries and warns when every specialist collapses to one model', () => {
+  it('renders dedicated coordinator reviewer and patrol model settings', () => {
     const html = renderToStaticMarkup(
       <AgentSettings
         {...createProps({
           taskTrustSettings: normalizeTaskTrustSettings({
             ...SETTINGS.taskTrustSettings.default,
-            global: {
-              ...SETTINGS.taskTrustSettings.default.global,
-              modelRoutingPolicy: 'manual',
+            runtimeModels: {
+              coordinator: { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+              reviewer: { provider: 'openai', model: 'gpt-4o-mini' },
+              patrol: { provider: null, model: null },
             },
           }),
         })}
       />,
     )
 
-    expect(html).toContain('最终执行')
-    expect(html).toContain('OpenAI / gpt-4o')
-    expect(html).toContain('当前所有专家最终都会使用同一模型')
+    expect(html).toContain('自治/编排模型')
+    expect(html).toContain('协调器')
+    expect(html).toContain('自治评审')
+    expect(html).toContain('巡查器')
+    expect(html).toContain('Anthropic / claude-sonnet-4-20250514')
+    expect(html).toContain('OpenAI / gpt-4o-mini')
   })
 })

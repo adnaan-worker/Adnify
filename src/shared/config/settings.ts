@@ -204,6 +204,11 @@ const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
       warnOnExternalSideEffects: true,
     },
   },
+  runtimeModels: {
+    coordinator: { provider: null, model: null },
+    reviewer: { provider: null, model: null },
+    patrol: { provider: null, model: null },
+  },
   specialistProfiles: {
     frontend: {
       role: 'frontend',
