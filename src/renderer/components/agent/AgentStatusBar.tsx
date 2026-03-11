@@ -37,6 +37,9 @@ interface AgentStatusBarProps {
   onRejectFile?: (filePath: string) => void
   onUndoAll?: () => void
   onKeepAll?: () => void
+  // 新增：兜底的工具审批按钮（当工具审批卡片未显示时，仍可在状态栏中批准/取消）
+  onApproveTool?: () => void
+  onRejectTool?: () => void
 }
 
 export default function AgentStatusBar({
@@ -50,6 +53,8 @@ export default function AgentStatusBar({
   onRejectFile,
   onUndoAll,
   onKeepAll,
+  onApproveTool,
+  onRejectTool,
 }: AgentStatusBarProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
@@ -130,7 +135,7 @@ export default function AgentStatusBar({
         {/* 流式状态 / 等待审批 */}
         {(isStreaming || isAwaitingApproval) && (
           <div className={`flex items-center justify-between px-4 py-2 ${hasChanges ? 'border-b border-border/50' : ''}`}>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3">
               {isStreaming ? (
                 <>
                   <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
@@ -148,16 +153,40 @@ export default function AgentStatusBar({
               )}
             </div>
 
-            {/* Stop 按钮 - 仅流式时显示 */}
-            {isStreaming && (
-              <button
-                onClick={onStop}
-                className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium text-text-muted/60 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all border border-transparent hover:border-red-500/20"
-              >
-                <Square className="w-2 h-2 fill-current" />
-                <span>Stop</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {/* Stop 按钮 - 仅流式时显示 */}
+              {isStreaming && (
+                <button
+                  onClick={onStop}
+                  className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium text-text-muted/60 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all border border-transparent hover:border-red-500/20"
+                >
+                  <Square className="w-2 h-2 fill-current" />
+                  <span>Stop</span>
+                </button>
+              )}
+
+              {/* 兜底的审批操作：当审批卡片因异常未显示时，用户仍可在此批准/取消 */}
+              {!isStreaming && isAwaitingApproval && (onApproveTool || onRejectTool) && (
+                <div className="flex items-center gap-1">
+                  {onRejectTool && (
+                    <button
+                      onClick={onRejectTool}
+                      className="px-2 py-1 text-[10px] font-medium text-text-muted/70 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  {onApproveTool && (
+                    <button
+                      onClick={onApproveTool}
+                      className="px-2.5 py-1 text-[10px] font-medium bg-accent text-white hover:bg-accent-hover rounded-md transition-all"
+                    >
+                      Approve
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
