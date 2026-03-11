@@ -127,6 +127,21 @@ interface EmbeddingProvider {
   free: boolean
 }
 
+type IsolationMode = 'worktree' | 'copy'
+
+interface IsolationPreviewResult {
+  mode: IsolationMode
+  hasGit: boolean
+  hasUncommittedChanges: boolean
+}
+
+interface IsolatedWorkspaceResult {
+  success: boolean
+  mode?: IsolationMode
+  workspacePath?: string
+  error?: string
+}
+
 export interface ElectronAPI {
   // App lifecycle
   appReady: () => void
@@ -152,6 +167,9 @@ export interface ElectronAPI {
   getRecentWorkspaces: () => Promise<string[]>
   clearRecentWorkspaces: () => Promise<boolean>
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
+  previewIsolationChoice: (workspacePath: string) => Promise<IsolationPreviewResult>
+  createIsolatedWorkspace: (request: { taskId: string; workspacePath: string; preferredMode?: IsolationMode }) => Promise<IsolatedWorkspaceResult>
+  disposeIsolatedWorkspace: (taskId: string) => Promise<IsolatedWorkspaceResult>
   readDir: (path: string) => Promise<{ name: string; path: string; isDirectory: boolean }[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
   readFile: (path: string) => Promise<string | null>
@@ -413,6 +431,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentWorkspaces: () => ipcRenderer.invoke('workspace:getRecent'),
   clearRecentWorkspaces: () => ipcRenderer.invoke('workspace:clearRecent'),
   removeFromRecentWorkspaces: (path: string) => ipcRenderer.invoke('workspace:removeFromRecent', path),
+  previewIsolationChoice: (workspacePath: string) => ipcRenderer.invoke('workspace:previewIsolation', workspacePath),
+  createIsolatedWorkspace: (request: { taskId: string; workspacePath: string; preferredMode?: IsolationMode }) =>
+    ipcRenderer.invoke('workspace:createIsolated', request),
+  disposeIsolatedWorkspace: (taskId: string) => ipcRenderer.invoke('workspace:disposeIsolated', taskId),
   readDir: (path: string) => ipcRenderer.invoke('file:readDir', path),
   getFileTree: (path: string, maxDepth?: number) => ipcRenderer.invoke('file:getTree', path, maxDepth),
   readFile: (path: string) => ipcRenderer.invoke('file:read', path),

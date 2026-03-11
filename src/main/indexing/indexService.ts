@@ -55,6 +55,9 @@ export class CodebaseIndexService {
   private embedder: EmbeddingService | null = null
   private vectorStore: VectorStoreService | null = null
   private worker: Worker | null = null
+  private workerLastActivityAt = 0
+  private workerIdleTimer: NodeJS.Timeout | null = null
+  private static readonly WORKER_IDLE_TIMEOUT_MS = 3 * 60 * 1000
 
   private status: IndexStatus = {
     mode: 'structural',
@@ -232,6 +235,45 @@ export class CodebaseIndexService {
     }
 
     logger.index.info(`[IndexService] Switched to ${mode} mode`)
+  }
+
+
+  markWorkerActivity(now = Date.now()): void {
+    this.workerLastActivityAt = now
+    this.scheduleWorkerIdleCleanup()
+  }
+
+  reclaimIdleWorker(now = Date.now(), idleTimeoutMs = CodebaseIndexService.WORKER_IDLE_TIMEOUT_MS): boolean {
+    if (!this.worker || this.status.isIndexing || this.workerLastActivityAt === 0) {
+      return false
+    }
+
+    if (now - this.workerLastActivityAt < idleTimeoutMs) {
+      return false
+    }
+
+    this.worker.terminate()
+    this.worker = null
+    this.clearWorkerIdleTimer()
+    logger.index.info(`[IndexService] Reclaimed idle worker for: ${this.workspacePath}`)
+    return true
+  }
+
+  private scheduleWorkerIdleCleanup(idleTimeoutMs = CodebaseIndexService.WORKER_IDLE_TIMEOUT_MS): void {
+    this.clearWorkerIdleTimer()
+    if (!this.worker) return
+
+    this.workerIdleTimer = setTimeout(() => {
+      this.reclaimIdleWorker(Date.now(), idleTimeoutMs)
+    }, idleTimeoutMs)
+    this.workerIdleTimer.unref?.()
+  }
+
+  private clearWorkerIdleTimer(): void {
+    if (this.workerIdleTimer) {
+      clearTimeout(this.workerIdleTimer)
+      this.workerIdleTimer = null
+    }
   }
 
   /** 检查是否有索引 */
@@ -440,6 +482,7 @@ export class CodebaseIndexService {
 
     // 语义模式：通过 worker 处理
     if (this.vectorStore?.isInitialized() && this.worker) {
+      this.markWorkerActivity()
       this.worker.postMessage({
         type: 'batch_update',
         workspacePath: this.workspacePath,
@@ -497,6 +540,7 @@ export class CodebaseIndexService {
   }
 
   destroy(): void {
+    this.clearWorkerIdleTimer()
     this.worker?.terminate()
     this.worker = null
   }
@@ -607,6 +651,7 @@ export class CodebaseIndexService {
     const existingHashesMap = await this.vectorStore!.getFileHashes()
     const existingHashes: Record<string, string> = Object.fromEntries(existingHashesMap)
 
+    this.markWorkerActivity()
     this.worker?.postMessage({
       type: 'index',
       workspacePath: this.workspacePath,
@@ -619,8 +664,10 @@ export class CodebaseIndexService {
     try {
       const workerPath = path.join(__dirname, 'indexer.worker.js')
       this.worker = new Worker(workerPath)
+      this.markWorkerActivity()
 
       this.worker.on('message', async (message: WorkerMessage) => {
+        this.markWorkerActivity()
         switch (message.type) {
           case 'progress':
             this.status.indexedFiles = message.processed
@@ -688,6 +735,7 @@ export class CodebaseIndexService {
       })
 
       this.worker.on('error', (err) => {
+        this.markWorkerActivity()
         logger.index.error('[IndexService] Worker thread error:', err.message)
         this.status.error = err.message
         this.status.isIndexing = false

@@ -11,6 +11,7 @@ import { securityManager, OperationType } from './securityModule'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import { safeIpcHandle } from '../ipc/safeHandle'
 import { normalizePipeTerminalInput } from './terminalInput'
+import { resolveInteractiveTerminalBackend, type InteractiveTerminalBackend } from '@shared/utils/terminalBackend'
 
 
 interface SecureShellRequest {
@@ -53,6 +54,52 @@ export function getWhitelist() {
 // Terminal instances storage (模块级别，便于清理)
 const terminals = new Map<string, any>() // IPty instances
 
+function isTerminalAlive(terminalProcess: any): boolean {
+  if (!terminalProcess) return false
+  if (typeof terminalProcess.isAlive === 'function') {
+    return Boolean(terminalProcess.isAlive())
+  }
+  if (terminalProcess.killed === true) return false
+  if (terminalProcess.exitCode !== undefined && terminalProcess.exitCode !== null) return false
+  return true
+}
+
+function bindTrackedTerminal(id: string, terminalProcess: any, mainWindow: BrowserWindow | null) {
+  terminals.set(id, terminalProcess)
+
+  terminalProcess.onData?.((data: string) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('terminal:data', { id, data })
+    }
+  })
+
+  terminalProcess.on?.('error', (err: any) => {
+    logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('terminal:error', { id, error: toAppError(err).message })
+    }
+  })
+
+  terminalProcess.onExit?.(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+    logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
+    terminals.delete(id)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('terminal:exit', { id, exitCode, signal })
+    }
+  })
+}
+
+export function pruneExitedTerminals(): number {
+  let removed = 0
+  for (const [id, terminalProcess] of terminals) {
+    if (!isTerminalAlive(terminalProcess)) {
+      terminals.delete(id)
+      removed += 1
+    }
+  }
+  return removed
+}
+
 /**
  * 清理所有终端进程
  */
@@ -64,6 +111,19 @@ export function cleanupTerminals(): void {
     terminals.delete(id)
   }
   logger.security.info(`[Terminal] All terminals cleaned up`)
+}
+
+export const __testing = {
+  bindTrackedTerminal,
+  resolveInteractiveBackend(platform: NodeJS.Platform, requestedBackend?: InteractiveTerminalBackend) {
+    return resolveInteractiveTerminalBackend(platform, requestedBackend)
+  },
+  getTrackedTerminalCount() {
+    return terminals.size
+  },
+  clearTrackedTerminals() {
+    terminals.clear()
+  },
 }
 
 // 危险命令模式列表
@@ -446,7 +506,7 @@ export function registerSecureTerminalHandlers(
     pty = null
   }
 
-  type TerminalBackend = 'pty' | 'pipe'
+  type TerminalBackend = InteractiveTerminalBackend
 
   class PipeShellSession extends EventEmitter {
     constructor(private readonly child: ChildProcessWithoutNullStreams) {
@@ -512,31 +572,6 @@ export function registerSecureTerminalHandlers(
     }
   }
 
-  const bindTerminalProcess = (id: string, terminalProcess: any, mainWindow: BrowserWindow | null) => {
-    terminals.set(id, terminalProcess)
-
-    terminalProcess.onData((data: string) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:data', { id, data })
-      }
-    })
-
-    terminalProcess.on('error', (err: any) => {
-      logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:error', { id, error: toAppError(err).message })
-      }
-    })
-
-    terminalProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
-      logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
-      terminals.delete(id)
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:exit', { id, exitCode, signal })
-      }
-    })
-  }
-
   /**
    * 交互式终端创建（默认使用 node-pty；Agent 在 macOS 上可切换为 pipe 会话）
    */
@@ -546,11 +581,14 @@ export function registerSecureTerminalHandlers(
   ) => {
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
-    const { id, cwd, shell, backend = 'pty' } = options
+    const { id, cwd, shell, backend } = options
+    const effectiveBackend = resolveInteractiveTerminalBackend(process.platform, backend)
 
-    if (backend === 'pty' && !pty) {
+    if (effectiveBackend === 'pty' && !pty) {
       return { success: false, error: 'node-pty not available' }
     }
+
+    pruneExitedTerminals()
 
     if (terminals.size >= MAX_TERMINALS && !terminals.has(id)) {
       return { success: false, error: `Maximum number of terminals (${MAX_TERMINALS}) reached` }
@@ -596,12 +634,16 @@ export function registerSecureTerminalHandlers(
         }) || '/bin/bash'
 
         logger.security.info(`[Terminal] Using shell: ${shellPath}`)
-        shellArgs = backend === 'pipe' ? ['-il'] : ['-l']
+        shellArgs = effectiveBackend === 'pipe' ? ['-il'] : ['-l']
       } else {
         shellPath = process.env.SHELL || '/bin/bash'
       }
 
-      logger.security.info(`[Terminal] Spawning ${backend.toUpperCase()} terminal: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
+      if (backend && backend !== effectiveBackend) {
+        logger.security.warn(`[Terminal] Downgrading requested backend ${backend} to ${effectiveBackend} on ${process.platform}`)
+      }
+
+      logger.security.info(`[Terminal] Spawning ${effectiveBackend.toUpperCase()} terminal: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
 
       const fs = require('fs')
       const pathModule = require('path')
@@ -620,7 +662,7 @@ export function registerSecureTerminalHandlers(
 
       let terminalProcess: any
 
-      if (backend === 'pipe') {
+      if (effectiveBackend === 'pipe') {
         const child = spawn(shellPath, shellArgs, {
           cwd: targetCwd,
           env: {
@@ -677,16 +719,16 @@ export function registerSecureTerminalHandlers(
         }
       }
 
-      bindTerminalProcess(id, terminalProcess, mainWindow)
+      bindTrackedTerminal(id, terminalProcess, mainWindow)
 
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', true, {
         id,
         cwd: targetCwd,
         shell: shellPath,
-        backend,
+        backend: effectiveBackend,
       })
 
-      logger.security.info(`[Terminal] Created ${backend} terminal ${id} with shell ${shellPath}`)
+      logger.security.info(`[Terminal] Created ${effectiveBackend} terminal ${id} with shell ${shellPath}`)
       return { success: true }
     } catch (err) {
       logger.security.error('[Terminal] Failed to create terminal:', err)

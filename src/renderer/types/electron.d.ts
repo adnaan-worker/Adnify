@@ -180,6 +180,21 @@ export interface WorkspaceConfig {
   roots: string[]
 }
 
+export type IsolationMode = 'worktree' | 'copy'
+
+export interface IsolationPreviewResult {
+  mode: IsolationMode
+  hasGit: boolean
+  hasUncommittedChanges: boolean
+}
+
+export interface IsolatedWorkspaceResult {
+  success: boolean
+  mode?: IsolationMode
+  workspacePath?: string
+  error?: string
+}
+
 export interface EmbeddingConfigInput {
   provider?: 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama' | 'custom'
   apiKey?: string
@@ -314,6 +329,9 @@ export interface ElectronAPI {
   getRecentWorkspaces: () => Promise<string[]>
   clearRecentWorkspaces: () => Promise<boolean>
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
+  previewIsolationChoice: (workspacePath: string) => Promise<IsolationPreviewResult>
+  createIsolatedWorkspace: (request: { taskId: string; workspacePath: string; preferredMode?: IsolationMode }) => Promise<IsolatedWorkspaceResult>
+  disposeIsolatedWorkspace: (taskId: string) => Promise<IsolatedWorkspaceResult>
   readDir: (path: string) => Promise<FileItem[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
   readFile: (path: string) => Promise<string | null>

@@ -17,6 +17,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { getEditorConfig } from "@renderer/settings";
 import { logger } from "@utils/Logger";
 import { toAppError } from "@shared/utils/errorHandler";
+import { resolveInteractiveTerminalBackend } from '@shared/utils/terminalBackend';
 
 // ===== 类型定义 =====
 
@@ -268,14 +269,15 @@ class TerminalManagerClass {
     id: string,
     cwd: string,
     shell?: string,
-    backend: TerminalBackend = 'pty',
+    backend?: TerminalBackend,
   ): Promise<boolean> {
     try {
-      const result = await api.terminal.create({ id, cwd, shell, backend });
+      const effectiveBackend = resolveInteractiveTerminalBackend(process.platform, backend);
+      const result = await api.terminal.create({ id, cwd, shell, backend: effectiveBackend });
       if (!result?.success) {
         const errorMsg = result?.error || "Unknown error";
         logger.system.error(
-          `[TerminalManager] Failed to create PTY for ${id}:`,
+          `[TerminalManager] Failed to create terminal backend ${effectiveBackend} for ${id}:`,
           errorMsg,
         );
 
@@ -295,7 +297,7 @@ class TerminalManagerClass {
     } catch (err) {
       const error = toAppError(err);
       logger.system.error(
-        `[TerminalManager] Exception creating PTY for ${id}: ${error.code}`,
+        `[TerminalManager] Exception creating terminal backend for ${id}: ${error.code}`,
         error,
       );
 

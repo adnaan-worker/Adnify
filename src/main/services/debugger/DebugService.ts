@@ -38,7 +38,7 @@ interface DebugSession {
   capabilities: DebugCapabilities
 }
 
-class DebugServiceClass extends EventEmitter {
+export class DebugServiceClass extends EventEmitter {
   private sessions = new Map<string, DebugSession>()
   private activeSessionId: string | null = null
   private sessionCounter = 0
@@ -181,6 +181,15 @@ class DebugServiceClass extends EventEmitter {
 
     this.notifyStateChange(sessionId)
     logger.system.info('[DebugService] Session stopped:', sessionId)
+  }
+
+
+  async cleanupAllSessions(): Promise<void> {
+    const sessionIds = Array.from(this.sessions.keys())
+    for (const sessionId of sessionIds) {
+      await this.stop(sessionId)
+    }
+    this.activeSessionId = null
   }
 
   /**

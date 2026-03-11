@@ -24,6 +24,7 @@ import {
   securityManager,
   registerSecureTerminalHandlers,
   registerSecureFileHandlers,
+  registerIsolatedWorkspaceHandlers,
   cleanupSecureFileWatcher,
   cleanupTerminals,
   updateWhitelist,
@@ -72,6 +73,8 @@ export function registerAllHandlers(context: IPCContext) {
     findWindowByWorkspace: context.findWindowByWorkspace,
     setWindowWorkspace: context.setWindowWorkspace,
   })
+
+  registerIsolatedWorkspaceHandlers()
 
   // 设置（传入 resolveStore 和各 store 引用）
   registerSettingsHandlers(resolveStore, preferencesStore, bootstrapStore, {

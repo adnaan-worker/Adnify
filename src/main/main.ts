@@ -11,6 +11,7 @@ import * as path from 'path'
 import { logger } from '@shared/utils/Logger'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import type Store from 'electron-store'
+import { buildRuntimeCleanupTasks, type RuntimeCleanupReason } from './lifecycle/runtimeCleanup'
 
 // ==========================================
 // 常量定义
@@ -268,23 +269,40 @@ function createWindow(isEmpty = false): BrowserWindow {
 }
 
 /**
- * 集中处理应用退出时的异步清理逻辑
+ * 集中处理运行期/退出时的异步清理逻辑
  */
-let cleanupStarted = false
-async function performGlobalCleanup() {
-  if (cleanupStarted) return
-  cleanupStarted = true
+async function performRuntimeCleanup(reason: RuntimeCleanupReason): Promise<void> {
+  logger.system.info(`[Main] Starting runtime cleanup (${reason})...`)
 
-  logger.system.info('[Main] Starting global terminal/LSP cleanup...')
-  try {
-    // 1. 清理 IPC 处理器（包括终端）
-    ipcModule?.cleanupAllHandlers()
-    // 2. 停止所有 LSP 服务器
-    await lspManager?.stopAllServers()
-    logger.system.info('[Main] Global cleanup completed successfully')
-  } catch (err) {
-    logger.system.error('[Main] Global cleanup error:', err)
+  const [securityModule, indexingModule, debugModule] = await Promise.all([
+    import('./security'),
+    import('./indexing'),
+    import('./services/debugger/DebugService'),
+  ])
+
+  const cleanupTasks = buildRuntimeCleanupTasks(reason, {
+    cleanupAllHandlers: () => ipcModule?.cleanupAllHandlers(),
+    stopAllLspServers: () => lspManager?.stopAllServers(),
+    destroyAllIndexServices: () => indexingModule.destroyIndexService(),
+    cleanupAllIsolatedWorkspaces: () => securityModule.cleanupAllIsolatedWorkspaces(),
+    cleanupAllDebugSessions: () => debugModule.debugService.cleanupAllSessions(),
+    pruneExitedTerminals: () => securityModule.pruneExitedTerminals(),
+  })
+
+  const results = await Promise.allSettled(cleanupTasks.map((task) => Promise.resolve().then(task)))
+  const failures = results.filter((result) => result.status === 'rejected')
+
+  if (failures.length > 0) {
+    logger.system.warn(`[Main] Runtime cleanup completed with ${failures.length} failure(s)`)
+    for (const failure of failures) {
+      if (failure.status === 'rejected') {
+        logger.system.warn('[Main] Cleanup task failed:', failure.reason)
+      }
+    }
+    return
   }
+
+  logger.system.info(`[Main] Runtime cleanup completed successfully (${reason})`)
 }
 
 
@@ -456,9 +474,15 @@ app.on('second-instance', () => {
 
 app.on('window-all-closed', () => {
   logger.system.info('[Main] All windows closed, platform:', process.platform)
-  if (process.platform !== 'darwin') {
-    app.quit()
+
+  if (process.platform === 'darwin') {
+    performRuntimeCleanup('window-all-closed').catch((err) => {
+      logger.system.warn('[Main] Runtime cleanup after window-all-closed failed:', err)
+    })
+    return
   }
+
+  app.quit()
 })
 
 /**
@@ -472,7 +496,7 @@ app.on('before-quit', async (e) => {
     e.preventDefault()
     logger.system.info('[Main] Intercepting before-quit for cleanup')
 
-    await performGlobalCleanup()
+    await performRuntimeCleanup('before-quit')
 
     isCleanupDone = true
     // 清理完成后再次触发退出
