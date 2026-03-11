@@ -25,6 +25,10 @@ describe('isolated workspace', () => {
     expect(chooseIsolationMode({ hasGit: true, hasUncommittedChanges: false })).toBe('worktree')
   })
 
+  it('falls back to copy mode when git workspace has uncommitted changes', () => {
+    expect(chooseIsolationMode({ hasGit: true, hasUncommittedChanges: true })).toBe('copy')
+  })
+
   it('falls back to temp copy outside git', () => {
     expect(chooseIsolationMode({ hasGit: false, hasUncommittedChanges: false })).toBe('copy')
   })

@@ -52,7 +52,11 @@ interface IsolatedWorkspaceRecord {
 const isolatedWorkspaceRegistry = new Map<string, IsolatedWorkspaceRecord>()
 
 export function chooseIsolationMode(input: IsolationChoiceInput): IsolationMode {
-  return input.hasGit ? 'worktree' : 'copy'
+  if (!input.hasGit) {
+    return 'copy'
+  }
+
+  return input.hasUncommittedChanges ? 'copy' : 'worktree'
 }
 
 function formatError(error: unknown): string {
