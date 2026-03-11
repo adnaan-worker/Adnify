@@ -3,6 +3,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { useAgentStore } from '../store/AgentStore'
 import { shouldUseIsolatedWorkspace } from '../types/trustPolicy'
 import type { ExecutionTask } from '../types/taskExecution'
+import { syncTaskRecoveryCheckpoint } from './executionRecoveryService'
 
 export interface PreparedExecutionWorkspace {
   success: boolean
@@ -56,6 +57,9 @@ export async function prepareTaskExecutionWorkspace(
       workspaceId: null,
       workspaceOwnerId: null,
     })
+    syncTaskRecoveryCheckpoint(taskId, {
+      status: task.recoveryCheckpoint?.status === 'recovering' ? 'recovering' : 'ready',
+    })
   }
 
   if (!ownerId && task.resolvedWorkspacePath && task.isolationStatus === 'ready') {
@@ -74,6 +78,9 @@ export async function prepareTaskExecutionWorkspace(
       resolvedWorkspacePath: null,
       isolationStatus: 'pending',
       isolationError: null,
+    })
+    syncTaskRecoveryCheckpoint(taskId, {
+      status: task.recoveryCheckpoint?.status === 'recovering' ? 'recovering' : 'ready',
     })
   }
 

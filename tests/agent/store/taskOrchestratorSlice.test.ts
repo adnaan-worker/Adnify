@@ -225,6 +225,25 @@ describe('task orchestrator slice', () => {
     expect(state.adjudicationCases[adjudicationId].status).toBe('resolved')
   })
 
+  it('creates a task with autonomy and patrol defaults', () => {
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Autonomously inspect a long-running task',
+      specialists: ['logic'],
+    })
+
+    const state = useAgentStore.getState()
+    const task = state.executionTasks[taskId]
+    const workPackage = state.workPackages[task.workPackages[0]]
+
+    expect(task.autonomyMode).toBe('manual')
+    expect(task.patrol?.status).toBe('idle')
+    expect(task.heartbeat?.status).toBe('idle')
+    expect(task.recoveryCheckpoint?.status).toBe('idle')
+    expect(task.recoveryCheckpoint?.resumeCandidateWorkPackageIds).toEqual([])
+    expect(workPackage.heartbeat?.status).toBe('idle')
+    expect(workPackage.recoveryCheckpoint?.status).toBe('idle')
+  })
+
   it('creates a task with orchestration strategy snapshot and empty queue/proposal summaries', () => {
     const taskId = useAgentStore.getState().createExecutionTask({
       objective: 'Coordinate frontend and logic work',

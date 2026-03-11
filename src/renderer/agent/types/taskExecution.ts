@@ -46,6 +46,12 @@ export type VerificationMode = 'static' | 'regression' | 'browser'
 
 export type ModelRoutingPolicy = 'manual' | 'balanced' | 'budget-aware'
 
+export type AutonomyMode = 'manual' | 'autonomous'
+
+export type PatrolStatus = 'idle' | 'active' | 'silent-but-healthy' | 'suspected-stuck' | 'abandoned'
+
+export type ExecutionHeartbeatStatus = 'idle' | 'active' | 'silent' | 'suspected-stuck' | 'abandoned'
+
 export type OrchestrationMode = 'mixed' | 'manual' | 'automatic'
 
 export type OwnershipPolicy = 'exclusive'
@@ -199,6 +205,32 @@ export interface ProposalSummary {
   returnedForReworkCount: number
   reassignedCount: number
   discardedCount: number
+  updatedAt: number | null
+}
+
+export interface ExecutionHeartbeatSnapshot {
+  status: ExecutionHeartbeatStatus
+  lastHeartbeatAt: number | null
+  lastAssistantOutputAt: number | null
+  lastToolActivityAt: number | null
+  lastProgressAt: number | null
+  lastFileMutationAt: number | null
+  stuckReason: string | null
+}
+
+export interface PatrolState {
+  status: PatrolStatus
+  lastCheckedAt: number | null
+  lastTransitionAt: number | null
+  reason: string | null
+}
+
+export interface RecoveryCheckpoint {
+  status: 'idle' | 'ready' | 'recovering'
+  lastSafeWorkPackageId: string | null
+  lastProposalId: string | null
+  lastHandoffId: string | null
+  resumeCandidateWorkPackageIds: string[]
   updatedAt: number | null
 }
 
@@ -380,6 +412,38 @@ export function createEmptyProposalSummary(): ProposalSummary {
   }
 }
 
+export function createEmptyExecutionHeartbeatSnapshot(): ExecutionHeartbeatSnapshot {
+  return {
+    status: 'idle',
+    lastHeartbeatAt: null,
+    lastAssistantOutputAt: null,
+    lastToolActivityAt: null,
+    lastProgressAt: null,
+    lastFileMutationAt: null,
+    stuckReason: null,
+  }
+}
+
+export function createInitialPatrolState(): PatrolState {
+  return {
+    status: 'idle',
+    lastCheckedAt: null,
+    lastTransitionAt: null,
+    reason: null,
+  }
+}
+
+export function createInitialRecoveryCheckpoint(): RecoveryCheckpoint {
+  return {
+    status: 'idle',
+    lastSafeWorkPackageId: null,
+    lastProposalId: null,
+    lastHandoffId: null,
+    resumeCandidateWorkPackageIds: [],
+    updatedAt: null,
+  }
+}
+
 export function createDefaultSpecialistProfile(role: SpecialistKind): SpecialistProfile {
   return {
     role,
@@ -413,8 +477,12 @@ export interface ExecutionTask {
   sourcePlanId?: string
   objective: string
   specialists: SpecialistKind[]
+  autonomyMode?: AutonomyMode
   state: ExecutionTaskState
   governanceState: ExecutionTaskGovernanceState
+  patrol?: PatrolState
+  heartbeat?: ExecutionHeartbeatSnapshot
+  recoveryCheckpoint?: RecoveryCheckpoint
   risk: TaskRiskLevel
   executionTarget: ExecutionTarget
   trustMode: TrustMode
@@ -446,6 +514,8 @@ export interface WorkPackage {
   objective: string
   specialist: SpecialistKind
   status: WorkPackageStatus
+  heartbeat?: ExecutionHeartbeatSnapshot
+  recoveryCheckpoint?: RecoveryCheckpoint
   targetDomain: WorkPackageDomain
   verificationMode?: VerificationMode | null
   writableScopes: string[]
@@ -476,6 +546,7 @@ export interface CreateExecutionTaskInput {
   objective: string
   sourcePlanId?: string
   specialists: SpecialistKind[]
+  autonomyMode?: AutonomyMode
   risk?: TaskRiskLevel
   executionTarget?: ExecutionTarget
   trustMode?: TrustMode
@@ -491,6 +562,9 @@ export interface CreateExecutionTaskInput {
   proposalSummary?: ProposalSummary
   budget?: TaskBudgetState
   governanceState?: ExecutionTaskGovernanceState
+  patrol?: PatrolState
+  heartbeat?: ExecutionHeartbeatSnapshot
+  recoveryCheckpoint?: RecoveryCheckpoint
   rollback?: TaskRollbackState
   specialistProfilesSnapshot?: SpecialistProfileSnapshot
 }

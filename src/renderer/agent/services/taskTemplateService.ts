@@ -1,3 +1,7 @@
+import {
+  createEmptyExecutionHeartbeatSnapshot,
+  createInitialRecoveryCheckpoint,
+} from '../types/taskExecution'
 import type {
   CreateExecutionTaskInput,
   ExecutionTarget,
@@ -336,6 +340,7 @@ export function buildExecutionTaskInputFromPlan(
     sourcePlanId: plan.id,
     objective: plan.userRequest || plan.name,
     specialists: specialists.length > 0 ? specialists : ['logic'],
+    autonomyMode: trustPolicy.mode === 'autonomous' ? 'autonomous' : 'manual',
     risk: plan.tasks.length >= 4 ? 'high' : plan.tasks.length > 1 ? 'medium' : 'low',
     trustMode: trustPolicy.mode ?? 'balanced',
     executionTarget: defaultExecutionTarget,
@@ -359,6 +364,8 @@ export function buildTaskWorkPackages(
       objective: template.title,
       specialist: template.specialist,
       status: 'queued' as const,
+      heartbeat: createEmptyExecutionHeartbeatSnapshot(),
+      recoveryCheckpoint: createInitialRecoveryCheckpoint(),
       targetDomain: template.targetDomain,
       verificationMode: template.verificationMode ?? getFallbackVerificationMode(template.specialist),
       writableScopes: [...writableScopes],
@@ -388,6 +395,8 @@ export function buildTaskWorkPackages(
       objective: title,
       specialist,
       status: 'queued' as const,
+      heartbeat: createEmptyExecutionHeartbeatSnapshot(),
+      recoveryCheckpoint: createInitialRecoveryCheckpoint(),
       targetDomain: template.targetDomain,
       verificationMode: getFallbackVerificationMode(specialist),
       writableScopes: [...writableScopes],

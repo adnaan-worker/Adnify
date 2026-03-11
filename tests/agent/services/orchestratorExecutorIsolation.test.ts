@@ -23,6 +23,7 @@ vi.mock('@renderer/services/electronAPI', () => ({
 }))
 
 import { api } from '@renderer/services/electronAPI'
+import { restoreExecutionTaskFromRecovery, syncTaskRecoveryCheckpoint } from '@renderer/agent/services/executionRecoveryService'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import {
   cleanupTaskExecutionWorkspace,
@@ -398,6 +399,46 @@ describe('execution workspace service', () => {
     expect(state.executionTasks[executionTaskId].queueSummary.activeLeaseCount).toBe(0)
     expect(state.executionTasks[executionTaskId].queueSummary.queuedCount).toBe(0)
     expect(api.workspace.disposeIsolated).toHaveBeenCalledWith(firstPackageId)
+  })
+
+  it('rebuilds a stale task workspace and resumes only unresolved packages from recovery', async () => {
+    vi.mocked(api.file.exists).mockResolvedValue(false)
+    vi.mocked(api.workspace.createIsolated).mockResolvedValue({
+      success: true,
+      workspacePath: '/tmp/recovered-task-workspace',
+      mode: 'copy',
+    })
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Recover stale isolated execution',
+      specialists: ['frontend', 'logic'],
+      executionTarget: 'isolated',
+      sourceWorkspacePath: '/workspace/adnify',
+      resolvedWorkspacePath: '/tmp/stale-task-workspace',
+      isolationMode: 'copy',
+      isolationStatus: 'ready',
+    })
+    const [appliedPackageId, executingPackageId] = useAgentStore.getState().executionTasks[taskId].workPackages
+
+    useAgentStore.getState().updateWorkPackage(appliedPackageId, { status: 'applied' })
+    useAgentStore.getState().updateWorkPackage(executingPackageId, { status: 'executing' })
+
+    syncTaskRecoveryCheckpoint(taskId, { status: 'ready' })
+    const restored = restoreExecutionTaskFromRecovery(taskId)
+    const prepared = await prepareTaskExecutionWorkspace(taskId, '/workspace/adnify')
+
+    expect(restored?.resumedWorkPackageIds).toEqual([executingPackageId])
+    expect(useAgentStore.getState().workPackages[appliedPackageId].status).toBe('applied')
+    expect(useAgentStore.getState().workPackages[executingPackageId].status).toBe('queued')
+    expect(api.file.exists).toHaveBeenCalledWith('/tmp/stale-task-workspace')
+    expect(api.workspace.createIsolated).toHaveBeenCalledWith({
+      taskId,
+      workspacePath: '/workspace/adnify',
+      ownerId: undefined,
+    })
+    expect(prepared.success).toBe(true)
+    expect(prepared.workspacePath).toBe('/tmp/recovered-task-workspace')
+    expect(useAgentStore.getState().executionTasks[taskId].recoveryCheckpoint?.status).toBe('recovering')
   })
 
   it('applies an approved proposal, then releases queued work and cleans the package workspace', async () => {

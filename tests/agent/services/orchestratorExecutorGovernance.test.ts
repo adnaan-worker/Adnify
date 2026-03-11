@@ -50,7 +50,7 @@ import { Agent } from '@renderer/agent/core/Agent'
 import type { TaskPlan } from '@renderer/agent/orchestrator/types'
 import { __testing } from '@renderer/agent/services/orchestratorExecutor'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
-import { createEmptySpecialistProfileSnapshot } from '@renderer/agent/types/taskExecution'
+import { createEmptyExecutionHeartbeatSnapshot, createEmptySpecialistProfileSnapshot, createInitialPatrolState } from '@renderer/agent/types/taskExecution'
 
 describe('orchestrator executor governance', () => {
   beforeEach(() => {
@@ -270,36 +270,59 @@ describe('orchestrator executor governance', () => {
     expect(result.verification.verificationStatus).toBe('failed')
   })
 
-  it('blocks apply when proposal verification is incomplete and opens adjudication', async () => {
+  it('pauses execution and opens adjudication when patrol detects a stuck package', () => {
     const taskId = useAgentStore.getState().createExecutionTask({
-      objective: 'Validate settings surface',
-      specialists: ['frontend', 'verifier', 'reviewer'],
+      objective: 'Recover a long-running task',
+      specialists: ['logic'],
       executionTarget: 'current',
       sourceWorkspacePath: '/workspace/adnify',
     })
-    const executionTask = useAgentStore.getState().executionTasks[taskId]
-    const verifierPackage = executionTask.workPackages
-      .map((workPackageId) => useAgentStore.getState().workPackages[workPackageId])
-      .find((workPackage) => workPackage.specialist === 'verifier')!
-    const proposalId = useAgentStore.getState().createChangeProposal({
-      taskId,
-      workPackageId: verifierPackage.id,
-      summary: 'Browser verification blocked',
-      changedFiles: ['src/renderer/components/settings/tabs/AgentSettings.tsx'],
-      verificationStatus: 'pending',
-      verificationMode: 'browser',
-      verificationSummary: 'Browser verification blocked before execution.',
-      verificationBlockedReason: 'Playwright MCP server is not connected.',
-      riskLevel: 'medium',
-      recommendedAction: 'discard',
+
+    const state = useAgentStore.getState()
+    const workPackageId = state.executionTasks[taskId].workPackages[0]
+    const staleHeartbeat = {
+      ...createEmptyExecutionHeartbeatSnapshot(),
+      status: 'active' as const,
+      lastHeartbeatAt: 1_000,
+      lastProgressAt: 1_000,
+    }
+
+    state.selectExecutionTask(taskId)
+    state.setControllerState('executing')
+    state.updateExecutionTask(taskId, {
+      state: 'running',
+      patrol: {
+        ...createInitialPatrolState(),
+        status: 'active',
+      },
+      heartbeat: staleHeartbeat,
+    })
+    state.updateWorkPackage(workPackageId, {
+      status: 'executing',
+      heartbeat: staleHeartbeat,
     })
 
-    await __testing.reviewChangeProposal(proposalId, 'apply')
+    const result = __testing.syncTaskPatrol(taskId, {
+      now: 20_000,
+      thresholds: {
+        silentMs: 5_000,
+        suspectedStuckMs: 10_000,
+        abandonedMs: 30_000,
+      },
+    })
 
-    const proposal = useAgentStore.getState().changeProposals[proposalId]
-    const task = useAgentStore.getState().executionTasks[taskId]
-    expect(proposal.status).toBe('pending')
-    expect(proposal.applyError).toContain('not connected')
+    const nextState = useAgentStore.getState()
+    const task = nextState.executionTasks[taskId]
+    const workPackage = nextState.workPackages[workPackageId]
+
+    expect(result?.escalated).toBe(true)
+    expect(task.patrol?.status).toBe('suspected-stuck')
+    expect(task.state).toBe('blocked')
     expect(task.latestAdjudicationId).toBeTruthy()
+    expect(workPackage.status).toBe('blocked')
+    expect(workPackage.heartbeat?.status).toBe('suspected-stuck')
+    expect(nextState.controllerState).toBe('paused')
+    expect(Agent.abortAll).toHaveBeenCalledTimes(1)
   })
+
 })

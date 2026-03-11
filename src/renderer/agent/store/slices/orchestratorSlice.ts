@@ -18,10 +18,13 @@ import type {
 import {
     createDefaultExecutionStrategySnapshot,
     createDefaultTaskBudget,
+    createEmptyExecutionHeartbeatSnapshot,
     createEmptyExecutionQueueSummary,
     createEmptyProposalSummary,
     createEmptySpecialistProfileSnapshot,
     createInitialExecutionTaskGovernanceState,
+    createInitialPatrolState,
+    createInitialRecoveryCheckpoint,
     createInitialRollbackState,
 } from '../../types/taskExecution'
 import type {
@@ -567,16 +570,22 @@ export const createOrchestratorSlice: StateCreator<
         )
         const now = Date.now()
 
+        const resolvedTrustMode = input.trustMode ?? 'balanced'
+
         const task: ExecutionTask = {
             id: taskId,
             sourcePlanId: input.sourcePlanId,
             objective: input.objective,
             specialists,
+            autonomyMode: input.autonomyMode ?? (resolvedTrustMode === 'autonomous' ? 'autonomous' : 'manual'),
             state: 'planning',
             governanceState: input.governanceState ?? createInitialExecutionTaskGovernanceState(),
+            patrol: input.patrol ?? createInitialPatrolState(),
+            heartbeat: input.heartbeat ?? createEmptyExecutionHeartbeatSnapshot(),
+            recoveryCheckpoint: input.recoveryCheckpoint ?? createInitialRecoveryCheckpoint(),
             risk,
             executionTarget,
-            trustMode: input.trustMode ?? 'balanced',
+            trustMode: resolvedTrustMode,
             modelRoutingPolicy: input.modelRoutingPolicy ?? 'balanced',
             executionStrategy: input.executionStrategy ?? createDefaultExecutionStrategySnapshot(),
             workPackages: workPackages.map((pkg) => pkg.id),
@@ -809,6 +818,8 @@ export const createOrchestratorSlice: StateCreator<
                             ? `${sourceWorkPackage.title} (rework)`
                             : `${sourceWorkPackage.title} (${followUpSpecialist})`,
                         status: 'queued',
+                        heartbeat: createEmptyExecutionHeartbeatSnapshot(),
+                        recoveryCheckpoint: createInitialRecoveryCheckpoint(),
                     }
                     nextWorkPackages = {
                         ...state.workPackages,

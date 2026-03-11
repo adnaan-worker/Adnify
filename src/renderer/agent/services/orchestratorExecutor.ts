@@ -25,15 +25,25 @@ import { ExecutionScheduler } from '../orchestrator/ExecutionScheduler'
 import { getLLMConfigForTask, getProviderModelContext } from './llmConfigService'
 import type { TaskPlan, OrchestratorTask, ExecutionStats } from '../orchestrator/types'
 import type { ExecutionTask, ProposalAction, ProposalVerificationStatus, SpecialistKind, SpecialistProfile, TaskRiskLevel, VerificationMode, WorkPackage } from '../types/taskExecution'
-import { shouldTripCircuitBreaker } from './circuitBreakerService'
+import { createEmptyExecutionHeartbeatSnapshot, createInitialPatrolState } from '../types/taskExecution'
+import { shouldEscalatePatrolState, shouldTripCircuitBreaker } from './circuitBreakerService'
 import { buildExecutionTaskInputFromPlan } from './taskTemplateService'
 import { cleanupTaskExecutionWorkspace, prepareTaskExecutionWorkspace } from './executionWorkspaceService'
+import { restoreExecutionTaskFromRecovery, syncTaskRecoveryCheckpoint } from './executionRecoveryService'
 import { buildWorkPackageHandoff } from './handoffBrokerService'
 import { createOwnershipRegistrySnapshot, acquireOwnership, releaseOwnership } from './ownershipRegistryService'
 import { buildChangeProposal } from './proposalEngineService'
 import { applyChangeProposal, captureBaselineForScopes } from './proposalApplyService'
 import { resolveSpecialistRoute } from './modelRoutingService'
 import { buildBrowserVerificationPrompt, getBrowserVerificationCapability } from './browserVerificationService'
+import { DEFAULT_PATROL_THRESHOLDS, evaluateExecutionPatrol, type PatrolThresholds } from './patrolService'
+import {
+    markExecutionHeartbeatStarted,
+    recordHeartbeatAssistantOutput,
+    recordHeartbeatFileMutation,
+    recordHeartbeatToolActivity,
+    stopExecutionHeartbeat,
+} from './executionHeartbeatService'
 
 // ============================================
 // 模块状态
@@ -42,6 +52,21 @@ import { buildBrowserVerificationPrompt, getBrowserVerificationCapability } from
 let scheduler: ExecutionScheduler | null = null
 let executionStartedAt = 0
 let isRunning = false
+let activeExecutionRunId = 0
+let stopInFlightPromise: Promise<void> | null = null
+
+function beginExecutionRun(): number {
+    activeExecutionRunId += 1
+    return activeExecutionRunId
+}
+
+function invalidateExecutionRun(): void {
+    activeExecutionRunId += 1
+}
+
+function isExecutionRunCurrent(executionRunId?: number | null): boolean {
+    return executionRunId == null || executionRunId === activeExecutionRunId
+}
 
 interface TaskExecutionMetrics {
     llmCalls: number
@@ -228,6 +253,7 @@ interface PrepareWorkPackageExecutionInput {
     taskId: string
     workPackageId: string
     fallbackWorkspacePath: string
+    executionRunId?: number
 }
 
 interface PrepareWorkPackageExecutionResult {
@@ -327,6 +353,17 @@ function getTaskWorkPackageOrThrow(taskId: string, workPackageId: string): { exe
 async function prepareWorkPackageExecution(input: PrepareWorkPackageExecutionInput): Promise<PrepareWorkPackageExecutionResult> {
     const store = useAgentStore.getState()
     const { executionTask, workPackage } = getTaskWorkPackageOrThrow(input.taskId, input.workPackageId)
+
+    if (!isExecutionRunCurrent(input.executionRunId)) {
+        return {
+            ready: false,
+            workspacePath: null,
+            leaseIds: [],
+            queueItemId: null,
+            error: 'Execution run superseded',
+        }
+    }
+
     const snapshot = createOwnershipRegistrySnapshot({
         leases: store.ownershipLeases,
         queueItems: store.executionQueueItems,
@@ -339,6 +376,16 @@ async function prepareWorkPackageExecution(input: PrepareWorkPackageExecutionInp
     })
 
     if (ownership.status === 'queued') {
+        if (!isExecutionRunCurrent(input.executionRunId)) {
+            return {
+                ready: false,
+                workspacePath: null,
+                leaseIds: [],
+                queueItemId: null,
+                error: 'Execution run superseded',
+            }
+        }
+
         const existingQueueItem = Object.values(store.executionQueueItems)
             .find((item) => item.workPackageId === input.workPackageId && item.status === 'queued')
         const queueItemId = existingQueueItem?.id ?? store.createExecutionQueueItem({
@@ -365,6 +412,11 @@ async function prepareWorkPackageExecution(input: PrepareWorkPackageExecutionInp
         }),
     )
 
+    const releasePreparedResources = async () => {
+        leaseIds.forEach((leaseId) => store.releaseOwnershipLease(leaseId))
+        await cleanupTaskExecutionWorkspace(input.taskId, input.workPackageId)
+    }
+
     const preparedWorkspace = await prepareTaskExecutionWorkspace(executionTask.id, input.fallbackWorkspacePath, input.workPackageId)
     if (!preparedWorkspace.success) {
         leaseIds.forEach((leaseId) => store.releaseOwnershipLease(leaseId))
@@ -382,11 +434,34 @@ async function prepareWorkPackageExecution(input: PrepareWorkPackageExecutionInp
         }
     }
 
+    if (!isExecutionRunCurrent(input.executionRunId)) {
+        await releasePreparedResources()
+        return {
+            ready: false,
+            workspacePath: null,
+            leaseIds,
+            queueItemId: null,
+            error: 'Execution run superseded',
+        }
+    }
+
     const baselineFiles = await captureBaselineForScopes(
         executionTask.sourceWorkspacePath || input.fallbackWorkspacePath,
         workPackage.writableScopes,
     )
 
+    if (!isExecutionRunCurrent(input.executionRunId)) {
+        await releasePreparedResources()
+        return {
+            ready: false,
+            workspacePath: null,
+            leaseIds,
+            queueItemId: null,
+            error: 'Execution run superseded',
+        }
+    }
+
+    const startedAt = Date.now()
     store.updateWorkPackage(input.workPackageId, {
         status: 'executing',
         workspaceId: preparedWorkspace.workspacePath,
@@ -394,6 +469,8 @@ async function prepareWorkPackageExecution(input: PrepareWorkPackageExecutionInp
         baselineFiles,
         queueReason: null,
     })
+    markExecutionHeartbeatActive(input.taskId, input.workPackageId, startedAt)
+    syncTaskRecoveryCheckpoint(input.taskId, { status: 'recovering', updatedAt: startedAt })
 
     return {
         ready: true,
@@ -450,6 +527,8 @@ async function completeWorkPackageExecution(input: CompleteWorkPackageExecutionI
         recommendedAction: proposal.proposal.recommendedAction,
     })
 
+    syncTaskRecoveryCheckpoint(input.taskId, { status: 'ready' })
+
     return {
         handoffId,
         proposalId,
@@ -477,8 +556,14 @@ async function releaseWorkPackageResources(taskId: string, workPackageId: string
 
 async function failWorkPackageExecution(taskId: string, workPackageId: string): Promise<void> {
     const store = useAgentStore.getState()
-    store.updateWorkPackage(workPackageId, { status: 'failed' })
+    const failedAt = Date.now()
+    const workPackage = store.workPackages[workPackageId]
+    store.updateWorkPackage(workPackageId, {
+        status: 'failed',
+        heartbeat: stopExecutionHeartbeat(workPackage?.heartbeat, failedAt),
+    })
     await releaseWorkPackageResources(taskId, workPackageId)
+    syncTaskRecoveryCheckpoint(taskId, { status: 'ready', updatedAt: failedAt })
 }
 
 
@@ -555,6 +640,7 @@ export async function reviewChangeProposal(proposalId: string, action: ProposalA
     }
 
     await releaseWorkPackageResources(executionTask.id, workPackage.id)
+    syncTaskRecoveryCheckpoint(executionTask.id, { status: 'ready' })
 }
 
 export const __testing = {
@@ -567,6 +653,7 @@ export const __testing = {
     getRunnableWorkPackageBatch,
     getWorkPackageBatchLimit,
     runWorkPackageWithAgent,
+    syncTaskPatrol,
 }
 
 function ensureExecutionTaskForPlan(plan: TaskPlan): string {
@@ -621,6 +708,246 @@ function getLatestPlanSnapshot(plan: TaskPlan): TaskPlan {
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function markExecutionHeartbeatActive(taskId: string, workPackageId: string, timestamp = Date.now()): void {
+    const store = useAgentStore.getState()
+    const task = store.executionTasks[taskId]
+    const workPackage = store.workPackages[workPackageId]
+
+    if (task) {
+        store.updateExecutionTask(taskId, {
+            heartbeat: markExecutionHeartbeatStarted(task.heartbeat, timestamp),
+        })
+    }
+
+    if (workPackage) {
+        store.updateWorkPackage(workPackageId, {
+            heartbeat: markExecutionHeartbeatStarted(workPackage.heartbeat, timestamp),
+        })
+    }
+}
+
+function recordExecutionHeartbeatToolActivity(taskId: string, workPackageId: string, timestamp = Date.now()): void {
+    const store = useAgentStore.getState()
+    const task = store.executionTasks[taskId]
+    const workPackage = store.workPackages[workPackageId]
+
+    if (task) {
+        store.updateExecutionTask(taskId, {
+            heartbeat: recordHeartbeatToolActivity(task.heartbeat, timestamp),
+        })
+    }
+
+    if (workPackage) {
+        store.updateWorkPackage(workPackageId, {
+            heartbeat: recordHeartbeatToolActivity(workPackage.heartbeat, timestamp),
+        })
+    }
+}
+
+function recordExecutionHeartbeatAssistantOutput(taskId: string, workPackageId: string, timestamp = Date.now()): void {
+    const store = useAgentStore.getState()
+    const task = store.executionTasks[taskId]
+    const workPackage = store.workPackages[workPackageId]
+
+    if (task) {
+        store.updateExecutionTask(taskId, {
+            heartbeat: recordHeartbeatAssistantOutput(task.heartbeat, timestamp),
+        })
+    }
+
+    if (workPackage) {
+        store.updateWorkPackage(workPackageId, {
+            heartbeat: recordHeartbeatAssistantOutput(workPackage.heartbeat, timestamp),
+        })
+    }
+}
+
+function recordExecutionHeartbeatFileMutation(taskId: string, workPackageId: string, timestamp = Date.now()): void {
+    const store = useAgentStore.getState()
+    const task = store.executionTasks[taskId]
+    const workPackage = store.workPackages[workPackageId]
+
+    if (task) {
+        store.updateExecutionTask(taskId, {
+            heartbeat: recordHeartbeatFileMutation(task.heartbeat, timestamp),
+        })
+    }
+
+    if (workPackage) {
+        store.updateWorkPackage(workPackageId, {
+            heartbeat: recordHeartbeatFileMutation(workPackage.heartbeat, timestamp),
+        })
+    }
+}
+
+function stopExecutionHeartbeats(taskId: string, timestamp = Date.now()): void {
+    const store = useAgentStore.getState()
+    const task = store.executionTasks[taskId]
+    if (!task) return
+
+    store.updateExecutionTask(taskId, {
+        heartbeat: stopExecutionHeartbeat(task.heartbeat, timestamp),
+    })
+
+    task.workPackages.forEach((workPackageId) => {
+        const workPackage = useAgentStore.getState().workPackages[workPackageId]
+        if (!workPackage) return
+
+        store.updateWorkPackage(workPackageId, {
+            heartbeat: stopExecutionHeartbeat(workPackage.heartbeat, timestamp),
+        })
+    })
+}
+
+function getPatrolSeverity(status: 'idle' | 'active' | 'silent-but-healthy' | 'suspected-stuck' | 'abandoned'): number {
+    switch (status) {
+        case 'abandoned':
+            return 4
+        case 'suspected-stuck':
+            return 3
+        case 'silent-but-healthy':
+            return 2
+        case 'active':
+            return 1
+        default:
+            return 0
+    }
+}
+
+function pauseExecutionForPatrolEscalation(): void {
+    isRunning = false
+    scheduler?.pause()
+    Agent.abortAll()
+
+    const store = useAgentStore.getState()
+    if (store.activePlanId) {
+        store.pauseExecution()
+    }
+    store.setControllerState('paused')
+}
+
+function syncTaskPatrol(taskId: string, input?: {
+    now?: number
+    thresholds?: Partial<PatrolThresholds>
+}): {
+    escalated: boolean
+    status: 'idle' | 'active' | 'silent-but-healthy' | 'suspected-stuck' | 'abandoned'
+    reason: string | null
+    workPackageId: string | null
+} | null {
+    const store = useAgentStore.getState()
+    const task = store.executionTasks[taskId]
+    if (!task) return null
+
+    const now = input?.now ?? Date.now()
+    const thresholds = {
+        ...DEFAULT_PATROL_THRESHOLDS,
+        ...(input?.thresholds || {}),
+    }
+
+    const taskEvaluation = evaluateExecutionPatrol({
+        heartbeat: task.heartbeat,
+        patrol: task.patrol,
+        now,
+        thresholds,
+    })
+
+    let dominantStatus = taskEvaluation.patrol.status
+    let dominantReason = taskEvaluation.patrol.reason
+    let dominantWorkPackageId: string | null = null
+
+    const executingWorkPackages = task.workPackages
+        .map((workPackageId) => store.workPackages[workPackageId])
+        .filter((workPackage): workPackage is WorkPackage => Boolean(workPackage) && ['executing', 'running', 'verifying'].includes(workPackage.status))
+
+    executingWorkPackages.forEach((workPackage) => {
+        const workPackageEvaluation = evaluateExecutionPatrol({
+            heartbeat: workPackage.heartbeat,
+            patrol: {
+                ...createInitialPatrolState(),
+                status: workPackage.heartbeat?.status === 'abandoned'
+                    ? 'abandoned'
+                    : workPackage.heartbeat?.status === 'suspected-stuck'
+                        ? 'suspected-stuck'
+                        : workPackage.heartbeat?.status === 'silent'
+                            ? 'silent-but-healthy'
+                            : workPackage.heartbeat?.status === 'active'
+                                ? 'active'
+                                : 'idle',
+            },
+            now,
+            thresholds,
+        })
+
+        store.updateWorkPackage(workPackage.id, {
+            heartbeat: workPackageEvaluation.heartbeat,
+        })
+
+        if (getPatrolSeverity(workPackageEvaluation.patrol.status) > getPatrolSeverity(dominantStatus)) {
+            dominantStatus = workPackageEvaluation.patrol.status
+            dominantReason = workPackageEvaluation.patrol.reason
+            dominantWorkPackageId = workPackage.id
+        }
+    })
+
+    const taskEscalation = shouldEscalatePatrolState({
+        previousStatus: task.patrol?.status,
+        nextStatus: dominantStatus,
+        reason: dominantReason,
+    })
+
+    const nextTaskPatrol = getPatrolSeverity(dominantStatus) >= getPatrolSeverity(taskEvaluation.patrol.status)
+        ? {
+            ...(task.patrol || createInitialPatrolState()),
+            status: dominantStatus,
+            lastCheckedAt: now,
+            lastTransitionAt: task.patrol?.status === dominantStatus ? task.patrol.lastTransitionAt : now,
+            reason: dominantReason,
+        }
+        : taskEvaluation.patrol
+
+    const nextTaskHeartbeat = getPatrolSeverity(dominantStatus) >= getPatrolSeverity(taskEvaluation.patrol.status)
+        ? {
+            ...(task.heartbeat || createEmptyExecutionHeartbeatSnapshot()),
+            status: (dominantStatus === 'silent-but-healthy'
+                ? 'silent'
+                : dominantStatus) as 'idle' | 'active' | 'silent' | 'suspected-stuck' | 'abandoned',
+            stuckReason: dominantStatus === 'suspected-stuck' || dominantStatus === 'abandoned'
+                ? dominantReason
+                : null,
+        }
+        : taskEvaluation.heartbeat
+
+    store.updateExecutionTask(taskId, {
+        patrol: nextTaskPatrol,
+        heartbeat: nextTaskHeartbeat,
+    })
+
+    if (taskEscalation.trip) {
+        executingWorkPackages.forEach((workPackage) => {
+            store.updateWorkPackage(workPackage.id, {
+                status: 'blocked',
+            })
+        })
+
+        store.setExecutionTaskState(taskId, 'blocked')
+        store.openExecutionTaskAdjudication(taskId, {
+            trigger: 'circuit-breaker',
+            reason: taskEscalation.reason || dominantReason || 'Execution appears stuck without progress.',
+            changedFiles: [],
+            workPackageId: dominantWorkPackageId,
+        })
+        pauseExecutionForPatrolEscalation()
+    }
+
+    return {
+        escalated: taskEscalation.trip,
+        status: dominantStatus,
+        reason: dominantReason,
+        workPackageId: dominantWorkPackageId,
+    }
 }
 
 function ensureDetachedThreadForWorkPackage(workPackageId: string): string {
@@ -789,7 +1116,10 @@ async function executeWorkPackage(
     workPackage: WorkPackage,
     plan: TaskPlan,
     workspacePath: string,
+    executionRunId: number,
 ): Promise<void> {
+    if (!isExecutionRunCurrent(executionRunId)) return
+
     const store = useAgentStore.getState()
     const executionTask = store.executionTasks[taskId]
     if (!executionTask) return
@@ -798,14 +1128,21 @@ async function executeWorkPackage(
         taskId,
         workPackageId: workPackage.id,
         fallbackWorkspacePath: workspacePath,
+        executionRunId,
     })
 
-    if (!preparedWorkPackage.ready || !preparedWorkPackage.workspacePath) {
+    if (!preparedWorkPackage.ready || !preparedWorkPackage.workspacePath || !isExecutionRunCurrent(executionRunId)) {
         return
     }
 
     const durationStartedAt = Date.now()
+    recordExecutionHeartbeatToolActivity(taskId, workPackage.id, durationStartedAt)
     store.setExecutionTaskState(taskId, 'running')
+
+    const patrolTimer = setInterval(() => {
+        if (!isExecutionRunCurrent(executionRunId)) return
+        syncTaskPatrol(taskId)
+    }, 1_000)
 
     try {
         const result = await runWorkPackageWithAgent(
@@ -814,8 +1151,28 @@ async function executeWorkPackage(
             plan,
             preparedWorkPackage.workspacePath,
         )
+
+        const latestTaskAfterRun = useAgentStore.getState().executionTasks[taskId]
+        const latestWorkPackageAfterRun = useAgentStore.getState().workPackages[workPackage.id]
+        if (latestTaskAfterRun?.patrol && ['suspected-stuck', 'abandoned'].includes(latestTaskAfterRun.patrol.status)) {
+            return
+        }
+        if (latestWorkPackageAfterRun?.status === 'blocked' && ['suspected-stuck', 'abandoned'].includes(latestWorkPackageAfterRun.heartbeat?.status || '')) {
+            return
+        }
+
         const changedFiles = await collectChangedFiles(preparedWorkPackage.workspacePath)
         const durationMs = Date.now() - durationStartedAt
+        const completedAt = Date.now()
+
+        recordExecutionHeartbeatAssistantOutput(taskId, workPackage.id, completedAt)
+        if (changedFiles.length > 0) {
+            recordExecutionHeartbeatFileMutation(taskId, workPackage.id, completedAt)
+        }
+
+        if (!isExecutionRunCurrent(executionRunId)) {
+            return
+        }
 
         if (!result.success) {
             applyTaskGovernanceForAttempt({
@@ -868,6 +1225,10 @@ async function executeWorkPackage(
             return
         }
 
+        if (!isExecutionRunCurrent(executionRunId)) {
+            return
+        }
+
         await completeWorkPackageExecution({
             taskId,
             workPackageId: workPackage.id,
@@ -881,8 +1242,17 @@ async function executeWorkPackage(
             verificationProvider: result.verification.provider,
             riskLevel: executionTask.risk,
         })
+
+        if (!isExecutionRunCurrent(executionRunId)) {
+            return
+        }
+
         store.setExecutionTaskState(taskId, verificationBlocked ? 'blocked' : 'verifying')
     } catch (error) {
+        if (!isExecutionRunCurrent(executionRunId)) {
+            return
+        }
+
         const failureReason = error instanceof Error ? error.message : String(error)
         applyTaskGovernanceForAttempt({
             taskId,
@@ -894,6 +1264,11 @@ async function executeWorkPackage(
             verifications: 0,
         })
         await failWorkPackageExecution(taskId, workPackage.id)
+    } finally {
+        clearInterval(patrolTimer)
+        if (isExecutionRunCurrent(executionRunId)) {
+            store.setCurrentTask(null)
+        }
     }
 }
 
@@ -912,21 +1287,21 @@ function areAllWorkPackagesResolved(taskId: string): boolean {
         .every((workPackage) => workPackage && ['applied', 'failed', 'reassigned'].includes(workPackage.status))
 }
 
-async function runWorkPackageExecutionLoop(plan: TaskPlan, taskId: string, workspacePath: string): Promise<void> {
-    while (isRunning && scheduler && !scheduler.isAborted) {
+async function runWorkPackageExecutionLoop(plan: TaskPlan, taskId: string, workspacePath: string, executionRunId: number): Promise<void> {
+    while (isExecutionRunCurrent(executionRunId) && isRunning && scheduler && !scheduler.isAborted) {
         const latestPlan = getLatestPlanSnapshot(plan)
         const batchLimit = getWorkPackageBatchLimit(latestPlan)
         const batch = getRunnableWorkPackageBatch(taskId, batchLimit)
         const store = useAgentStore.getState()
         const executionTask = store.executionTasks[taskId]
         if (!executionTask) {
-            await completeExecution(latestPlan)
+            await completeExecution(latestPlan, executionRunId)
             return
         }
 
         if (batch.length === 0) {
             if (areAllWorkPackagesResolved(taskId)) {
-                await completeExecution(latestPlan)
+                await completeExecution(latestPlan, executionRunId)
                 return
             }
 
@@ -943,7 +1318,7 @@ async function runWorkPackageExecutionLoop(plan: TaskPlan, taskId: string, works
             continue
         }
 
-        await Promise.all(batch.map((workPackage) => executeWorkPackage(taskId, workPackage, latestPlan, workspacePath)))
+        await Promise.all(batch.map((workPackage) => executeWorkPackage(taskId, workPackage, latestPlan, workspacePath, executionRunId)))
     }
 }
 
@@ -981,6 +1356,10 @@ function syncCircuitBreakerState(input: { retryCount: number; repeatedCommands: 
 export async function startPlanExecution(
     planId?: string
 ): Promise<{ success: boolean; message: string }> {
+    if (stopInFlightPromise) {
+        await stopInFlightPromise
+    }
+
     const store = useAgentStore.getState()
 
     // 获取计划
@@ -1020,6 +1399,8 @@ export async function startPlanExecution(
         isolationError: null,
     })
 
+    const executionRunId = beginExecutionRun()
+
     // 初始化调度器
     scheduler = new ExecutionScheduler({ maxConcurrency: DEFAULT_WORK_PACKAGE_MAX_CONCURRENCY })
     scheduler.start()
@@ -1035,9 +1416,13 @@ export async function startPlanExecution(
     EventBus.emit({ type: 'plan:start', planId: plan.id } as any)
 
     // 异步执行（不阻塞返回）
-    runWorkPackageExecutionLoop(plan, executionTaskId, workspacePath).catch(async error => {
+    runWorkPackageExecutionLoop(plan, executionTaskId, workspacePath, executionRunId).catch(async error => {
+        if (!isExecutionRunCurrent(executionRunId)) {
+            return
+        }
+
         logger.agent.error('[OrchestratorExecutor] Execution loop failed:', error)
-        await handleExecutionError(plan, error)
+        await handleExecutionError(plan, error, executionRunId)
     })
 
     return {
@@ -1050,6 +1435,17 @@ export async function startPlanExecution(
  * 停止执行
  */
 export async function stopPlanExecution(): Promise<void> {
+    if (stopInFlightPromise) {
+        await stopInFlightPromise
+        return
+    }
+
+    const store = useAgentStore.getState()
+    const executionTaskId = store.activeExecutionTaskId
+    const activePlanId = store.activePlanId
+    store.setControllerState('stopping')
+
+    invalidateExecutionRun()
     isRunning = false
     scheduler?.stop()
     scheduler = null
@@ -1057,20 +1453,33 @@ export async function stopPlanExecution(): Promise<void> {
     // 中止当前正在运行的 Agent
     Agent.abortAll()
 
-    const store = useAgentStore.getState()
-    const executionTaskId = store.activeExecutionTaskId
-    const activePlanId = store.activePlanId
-    store.stopExecution()
+    const stopPromise = (async () => {
+        try {
+            if (executionTaskId) {
+                await cleanupTaskExecutionWorkspace(executionTaskId)
+                stopExecutionHeartbeats(executionTaskId, Date.now())
+            }
+        } finally {
+            const latestStore = useAgentStore.getState()
+            latestStore.cleanupManualStopState(activePlanId, executionTaskId)
+            if (executionTaskId) {
+                syncTaskRecoveryCheckpoint(executionTaskId, { status: 'ready' })
+            }
+            latestStore.stopExecution()
+        }
+
+        logger.agent.info('[OrchestratorExecutor] Execution stopped')
+    })()
+
+    stopInFlightPromise = stopPromise
 
     try {
-        if (executionTaskId) {
-            await cleanupTaskExecutionWorkspace(executionTaskId)
-        }
+        await stopPromise
     } finally {
-        useAgentStore.getState().cleanupManualStopState(activePlanId, executionTaskId)
+        if (stopInFlightPromise === stopPromise) {
+            stopInFlightPromise = null
+        }
     }
-
-    logger.agent.info('[OrchestratorExecutor] Execution stopped')
 }
 
 /**
@@ -1102,6 +1511,8 @@ export async function resumePlanExecution(): Promise<void> {
     if (!plan || !workspacePath) return
 
     const executionTaskId = store.activeExecutionTaskId ?? ensureExecutionTaskForPlan(plan)
+    restoreExecutionTaskFromRecovery(executionTaskId)
+    const executionRunId = beginExecutionRun()
 
     isRunning = true
     scheduler?.resume()
@@ -1110,9 +1521,13 @@ export async function resumePlanExecution(): Promise<void> {
     EventBus.emit({ type: 'plan:resumed', planId: plan.id } as any)
 
     // 继续执行循环
-    runWorkPackageExecutionLoop(plan, executionTaskId, workspacePath).catch(async error => {
+    runWorkPackageExecutionLoop(plan, executionTaskId, workspacePath, executionRunId).catch(async error => {
+        if (!isExecutionRunCurrent(executionRunId)) {
+            return
+        }
+
         logger.agent.error('[OrchestratorExecutor] Resume failed:', error)
-        await handleExecutionError(plan, error)
+        await handleExecutionError(plan, error, executionRunId)
     })
 }
 
@@ -1415,8 +1830,8 @@ async function executeTask(
 /**
  * 完成执行
  */
-async function completeExecution(plan: TaskPlan): Promise<void> {
-    if (!scheduler) return
+async function completeExecution(plan: TaskPlan, executionRunId?: number): Promise<void> {
+    if (!scheduler || !isExecutionRunCurrent(executionRunId)) return
 
     const stats = scheduler.calculateStats(plan, executionStartedAt)
     const hasFailures = stats.failedTasks > 0
@@ -1431,7 +1846,14 @@ async function completeExecution(plan: TaskPlan): Promise<void> {
     scheduler = null
 
     if (executionTaskId) {
+        const completedAt = Date.now()
         await cleanupTaskExecutionWorkspace(executionTaskId)
+        stopExecutionHeartbeats(executionTaskId, completedAt)
+        syncTaskRecoveryCheckpoint(executionTaskId, { status: 'idle', updatedAt: completedAt })
+    }
+
+    if (!isExecutionRunCurrent(executionRunId)) {
+        return
     }
 
     EventBus.emit({ type: 'plan:complete', planId: plan.id, stats } as any)
@@ -1442,7 +1864,11 @@ async function completeExecution(plan: TaskPlan): Promise<void> {
 /**
  * 处理执行错误
  */
-async function handleExecutionError(plan: TaskPlan, error: unknown): Promise<void> {
+async function handleExecutionError(plan: TaskPlan, error: unknown, executionRunId?: number): Promise<void> {
+    if (!isExecutionRunCurrent(executionRunId)) {
+        return
+    }
+
     const errorMsg = error instanceof Error ? error.message : String(error)
 
     const store = useAgentStore.getState()
@@ -1455,7 +1881,14 @@ async function handleExecutionError(plan: TaskPlan, error: unknown): Promise<voi
     scheduler = null
 
     if (executionTaskId) {
+        const failedAt = Date.now()
         await cleanupTaskExecutionWorkspace(executionTaskId)
+        stopExecutionHeartbeats(executionTaskId, failedAt)
+        syncTaskRecoveryCheckpoint(executionTaskId, { status: 'ready', updatedAt: failedAt })
+    }
+
+    if (!isExecutionRunCurrent(executionRunId)) {
+        return
     }
 
     EventBus.emit({ type: 'plan:failed', planId: plan.id, error: errorMsg } as any)

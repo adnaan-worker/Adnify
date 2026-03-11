@@ -1,9 +1,11 @@
 import type {
+  AutonomyMode,
   ExecutionQueueSummary,
   ExecutionStrategySnapshot,
   ExecutionTarget,
   ExecutionTaskState,
   InterruptMode,
+  PatrolStatus,
   ProposalSummary,
   SpecialistKind,
   TaskRiskLevel,
@@ -32,6 +34,7 @@ export type OrchestratorState =
     | 'ready'       // 计划已批准，待执行
     | 'executing'   // 执行中
     | 'paused'      // 已暂停
+    | 'stopping'    // 停止中，等待运行态清理
     | 'completed'   // 已完成
     | 'failed'      // 失败
 
@@ -184,6 +187,8 @@ export interface ExecutionTaskSummary {
     id: string
     objective: string
     state: ExecutionTaskState
+    autonomyMode?: AutonomyMode
+    patrolStatus?: PatrolStatus
     risk: TaskRiskLevel
     specialists: SpecialistKind[]
     executionTarget: ExecutionTarget

@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_TRUST_POLICY, shouldUseIsolatedWorkspace } from '@renderer/agent/types/trustPolicy'
 import {
   createDefaultExecutionStrategySnapshot,
+  createEmptyExecutionHeartbeatSnapshot,
   createEmptyExecutionQueueSummary,
   createEmptyProposalSummary,
+  createInitialRecoveryCheckpoint,
   type WorkPackageStatus,
 } from '@renderer/agent/types/taskExecution'
 
@@ -36,6 +38,18 @@ describe('task execution types', () => {
 
     expect(lifecycle).toContain('proposal-ready')
     expect(lifecycle).toContain('waiting-approval')
+  })
+
+  it('creates empty autonomy heartbeat and recovery defaults', () => {
+    const heartbeat = createEmptyExecutionHeartbeatSnapshot()
+    const checkpoint = createInitialRecoveryCheckpoint()
+
+    expect(heartbeat.status).toBe('idle')
+    expect(heartbeat.lastProgressAt).toBeNull()
+    expect(heartbeat.stuckReason).toBeNull()
+    expect(checkpoint.status).toBe('idle')
+    expect(checkpoint.lastSafeWorkPackageId).toBeNull()
+    expect(checkpoint.resumeCandidateWorkPackageIds).toEqual([])
   })
 
   it('creates conservative orchestration defaults for queueing and proposal review', () => {
