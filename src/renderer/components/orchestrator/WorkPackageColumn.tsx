@@ -58,11 +58,27 @@ export function WorkPackageColumn({
             {scope}
           </span>
         ))}
+        {workPackage.workspaceId ? (
+          <span className="px-2 py-1 rounded-full bg-background/60 text-[11px] text-text-secondary break-all">
+            {workPackage.workspaceId}
+          </span>
+        ) : null}
+        {workPackage.heartbeat?.status && workPackage.heartbeat.status !== 'idle' ? (
+          <span className="px-2 py-1 rounded-full bg-amber-500/10 text-[11px] text-amber-200">
+            {workPackage.heartbeat.status}
+          </span>
+        ) : null}
       </div>
 
       {workPackage.queueReason ? (
         <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
           {workPackage.queueReason}
+        </div>
+      ) : null}
+
+      {workPackage.heartbeat?.stuckReason ? (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+          {workPackage.heartbeat.stuckReason}
         </div>
       ) : null}
 

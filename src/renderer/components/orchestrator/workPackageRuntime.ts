@@ -10,6 +10,8 @@ export interface WorkPackageRuntimeActivity {
   toolPreview: string | null
   messageCount: number
   hasLiveOutput: boolean
+  lastProgressAt: number | null
+  stuckReason: string | null
 }
 
 const ACTIVE_TOOL_STATUSES = new Set(['pending', 'awaiting', 'running'])
@@ -98,6 +100,8 @@ export function buildWorkPackageRuntimeActivity(
       toolPreview: null,
       messageCount: 0,
       hasLiveOutput: false,
+      lastProgressAt: workPackage.heartbeat?.lastProgressAt ?? null,
+      stuckReason: workPackage.heartbeat?.stuckReason ?? null,
     }
   }
 
@@ -117,5 +121,7 @@ export function buildWorkPackageRuntimeActivity(
     toolPreview,
     messageCount: messages.length,
     hasLiveOutput: Boolean(assistantPreview || userPreview || toolPreview),
+    lastProgressAt: workPackage.heartbeat?.lastProgressAt ?? null,
+    stuckReason: workPackage.heartbeat?.stuckReason ?? null,
   }
 }

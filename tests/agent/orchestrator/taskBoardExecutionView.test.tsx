@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { AutonomyTaskList } from '@renderer/components/orchestrator/AutonomyTaskList'
 import { ExecutionTaskPanel } from '@renderer/components/orchestrator/ExecutionTaskPanel'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import {
@@ -204,57 +205,46 @@ describe('ExecutionTaskPanel', () => {
     expect(html).toContain('Waiting for pkg-owner')
   })
 
-  it('shows live execution preview when detached work package thread has output', () => {
-    const store = useAgentStore.getState()
-    const threadId = store.createThread()
-
-    useAgentStore.setState((state) => ({
-      threads: {
-        ...state.threads,
-        [threadId]: {
-          ...state.threads[threadId],
-          streamState: { phase: 'tool_running' },
-          messages: [
-            {
-              id: 'user-1',
-              role: 'user',
-              content: 'Audit Crehub project structure',
-              timestamp: 1,
-            },
-            {
-              id: 'assistant-1',
-              role: 'assistant',
-              content: 'Inspecting package.json and app entry points to map the stack.',
-              timestamp: 2,
-              isStreaming: true,
-              parts: [{ type: 'text', content: 'Inspecting package.json and app entry points to map the stack.' }],
-              toolCalls: [{
-                id: 'tool-1',
-                name: 'read_file',
-                arguments: { path: 'package.json' },
-                status: 'running',
-              }],
-            },
-          ],
-        },
-      },
-    }))
-
+  it('shows autonomy mode, patrol status, workspace diagnostics, and stuck reason', () => {
     const html = renderToStaticMarkup(
       <ExecutionTaskPanel
         task={{
-          id: 'task-live',
-          objective: 'Crehub 项目盘点与审计',
+          id: 'task-diagnostic',
+          objective: '自主推进长任务',
           specialists: ['logic'],
-          state: 'running',
-          governanceState: 'active',
+          autonomyMode: 'autonomous',
+          state: 'blocked',
+          governanceState: 'awaiting-adjudication',
+          patrol: {
+            status: 'suspected-stuck',
+            lastCheckedAt: 20,
+            lastTransitionAt: 20,
+            reason: 'No task progress for 20s.',
+          },
+          heartbeat: {
+            status: 'suspected-stuck',
+            lastHeartbeatAt: 10,
+            lastAssistantOutputAt: 5,
+            lastToolActivityAt: 10,
+            lastProgressAt: 0,
+            lastFileMutationAt: null,
+            stuckReason: 'No task progress for 20s.',
+          },
+          recoveryCheckpoint: {
+            status: 'ready',
+            lastSafeWorkPackageId: 'pkg-safe',
+            lastProposalId: 'proposal-1',
+            lastHandoffId: 'handoff-1',
+            resumeCandidateWorkPackageIds: ['pkg-diagnostic'],
+            updatedAt: 20,
+          },
           risk: 'medium',
           executionTarget: 'isolated',
           trustMode: 'balanced',
           executionStrategy: createDefaultExecutionStrategySnapshot(),
-          workPackages: ['pkg-live'],
+          workPackages: ['pkg-diagnostic'],
           sourceWorkspacePath: '/workspace/adnify',
-          resolvedWorkspacePath: '/tmp/adnify-task-live',
+          resolvedWorkspacePath: '/tmp/adnify-task-diagnostic',
           isolationMode: 'worktree',
           isolationStatus: 'ready',
           isolationError: null,
@@ -262,7 +252,7 @@ describe('ExecutionTaskPanel', () => {
           proposalSummary: createEmptyProposalSummary(),
           latestHandoffId: null,
           latestProposalId: null,
-          latestAdjudicationId: null,
+          latestAdjudicationId: 'adj-diagnostic',
           budget: createDefaultTaskBudget(),
           rollback: {
             status: 'idle',
@@ -275,20 +265,28 @@ describe('ExecutionTaskPanel', () => {
         }}
         workPackages={[
           {
-            id: 'pkg-live',
-            taskId: 'task-live',
-            title: '盘点基础结构与技术栈',
-            objective: '盘点基础结构与技术栈',
+            id: 'pkg-diagnostic',
+            taskId: 'task-diagnostic',
+            title: '诊断卡住原因',
+            objective: '诊断卡住原因',
             specialist: 'logic',
-            status: 'executing',
+            status: 'blocked',
+            heartbeat: {
+              status: 'suspected-stuck',
+              lastHeartbeatAt: 10,
+              lastAssistantOutputAt: 5,
+              lastToolActivityAt: 10,
+              lastProgressAt: 0,
+              lastFileMutationAt: null,
+              stuckReason: 'No task progress for 20s.',
+            },
             targetDomain: 'logic',
-            writableScopes: ['.'],
-            readableScopes: ['.'],
+            writableScopes: ['src'],
+            readableScopes: ['src'],
             dependsOn: [],
-            expectedArtifacts: ['audit-report'],
+            expectedArtifacts: ['diagnosis'],
             queueReason: null,
-            workspaceId: '/tmp/adnify-task-live',
-            threadId,
+            workspaceId: '/tmp/adnify-task-diagnostic',
             handoffId: null,
             proposalId: null,
           },
@@ -297,9 +295,84 @@ describe('ExecutionTaskPanel', () => {
       />,
     )
 
-    expect(html).toContain('执行过程')
-    expect(html).toContain('Inspecting package.json and app entry points to map the stack.')
-    expect(html).toContain('read_file')
+    expect(html).toContain('autonomous')
+    expect(html).toContain('suspected-stuck')
+    expect(html).toContain('/tmp/adnify-task-diagnostic')
+    expect(html).toContain('worktree')
+    expect(html).toContain('No task progress for 20s.')
+  })
+
+  it('renders a background autonomy task list without changing the current active task', () => {
+    const html = renderToStaticMarkup(
+      <AutonomyTaskList
+        tasks={[
+          {
+            id: 'task-active',
+            objective: '前台正在执行的任务',
+            specialists: ['logic'],
+            autonomyMode: 'manual',
+            state: 'running',
+            governanceState: 'active',
+            risk: 'medium',
+            executionTarget: 'isolated',
+            trustMode: 'balanced',
+            executionStrategy: createDefaultExecutionStrategySnapshot(),
+            workPackages: [],
+            sourceWorkspacePath: '/workspace/adnify',
+            resolvedWorkspacePath: '/tmp/task-active',
+            isolationMode: 'worktree',
+            isolationStatus: 'ready',
+            isolationError: null,
+            queueSummary: createEmptyExecutionQueueSummary(),
+            proposalSummary: createEmptyProposalSummary(),
+            latestHandoffId: null,
+            latestProposalId: null,
+            latestAdjudicationId: null,
+            budget: createDefaultTaskBudget(),
+            rollback: { status: 'idle', proposal: null, lastUpdatedAt: null },
+            specialistProfilesSnapshot: createEmptySpecialistProfileSnapshot(['logic']),
+            createdAt: 1,
+            updatedAt: 1,
+          },
+          {
+            id: 'task-bg',
+            objective: '后台自治巡查任务',
+            specialists: ['logic', 'reviewer'],
+            autonomyMode: 'autonomous',
+            state: 'running',
+            governanceState: 'active',
+            patrol: { status: 'active', lastCheckedAt: 10, lastTransitionAt: 10, reason: null },
+            risk: 'medium',
+            executionTarget: 'isolated',
+            trustMode: 'balanced',
+            executionStrategy: createDefaultExecutionStrategySnapshot(),
+            workPackages: [],
+            sourceWorkspacePath: '/workspace/adnify',
+            resolvedWorkspacePath: '/tmp/task-bg',
+            isolationMode: 'worktree',
+            isolationStatus: 'ready',
+            isolationError: null,
+            queueSummary: createEmptyExecutionQueueSummary(),
+            proposalSummary: createEmptyProposalSummary(),
+            latestHandoffId: null,
+            latestProposalId: null,
+            latestAdjudicationId: null,
+            budget: createDefaultTaskBudget(),
+            rollback: { status: 'idle', proposal: null, lastUpdatedAt: null },
+            specialistProfilesSnapshot: createEmptySpecialistProfileSnapshot(['logic', 'reviewer']),
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ]}
+        activeTaskId="task-active"
+      />,
+    )
+
+    expect(html).toContain('Autonomy Tasks')
+    expect(html).toContain('后台自治巡查任务')
+    expect(html).toContain('autonomous')
+    expect(html).toContain('/tmp/task-bg')
+    expect(html).not.toContain('前台正在执行的任务')
   })
 
 })

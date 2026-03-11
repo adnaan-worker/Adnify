@@ -153,22 +153,46 @@ describe('work package proposal review', () => {
   })
 
 
-  it('renders browser verification blocking details and disables apply for incomplete verification', () => {
+  it('keeps autonomy diagnostics visible while reviewing a blocked proposal', () => {
     const html = renderToStaticMarkup(
       <ExecutionTaskPanel
         task={{
-          id: 'task-2',
-          objective: 'Validate settings readability',
-          specialists: ['frontend', 'verifier', 'reviewer'],
+          id: 'task-3',
+          objective: 'Review blocked proposal with autonomy context',
+          specialists: ['verifier', 'reviewer'],
+          autonomyMode: 'autonomous',
           state: 'blocked',
           governanceState: 'awaiting-adjudication',
+          patrol: {
+            status: 'abandoned',
+            lastCheckedAt: 50,
+            lastTransitionAt: 50,
+            reason: 'Execution heartbeat missing for 30s.',
+          },
+          heartbeat: {
+            status: 'abandoned',
+            lastHeartbeatAt: 10,
+            lastAssistantOutputAt: 5,
+            lastToolActivityAt: 10,
+            lastProgressAt: 0,
+            lastFileMutationAt: null,
+            stuckReason: 'Execution heartbeat missing for 30s.',
+          },
+          recoveryCheckpoint: {
+            status: 'ready',
+            lastSafeWorkPackageId: null,
+            lastProposalId: 'proposal-autonomy',
+            lastHandoffId: null,
+            resumeCandidateWorkPackageIds: ['pkg-autonomy'],
+            updatedAt: 50,
+          },
           risk: 'medium',
           executionTarget: 'isolated',
           trustMode: 'balanced',
           executionStrategy: createDefaultExecutionStrategySnapshot(),
-          workPackages: ['pkg-browser'],
+          workPackages: ['pkg-autonomy'],
           sourceWorkspacePath: '/workspace/adnify',
-          resolvedWorkspacePath: '/tmp/adnify-task-2',
+          resolvedWorkspacePath: '/tmp/adnify-task-3',
           isolationMode: 'worktree',
           isolationStatus: 'ready',
           isolationError: null,
@@ -178,7 +202,7 @@ describe('work package proposal review', () => {
             pendingCount: 1,
           },
           latestHandoffId: null,
-          latestProposalId: 'proposal-browser',
+          latestProposalId: 'proposal-autonomy',
           latestAdjudicationId: null,
           budget: createDefaultTaskBudget(),
           rollback: {
@@ -186,59 +210,64 @@ describe('work package proposal review', () => {
             proposal: null,
             lastUpdatedAt: null,
           },
-          specialistProfilesSnapshot: createEmptySpecialistProfileSnapshot(['frontend', 'verifier', 'reviewer']),
+          specialistProfilesSnapshot: createEmptySpecialistProfileSnapshot(['verifier', 'reviewer']),
           createdAt: 1,
           updatedAt: 1,
         }}
         workPackages={[
           {
-            id: 'pkg-browser',
-            taskId: 'task-2',
-            title: 'Validate settings page in browser mode',
-            objective: 'Validate settings page in browser mode',
-            specialist: 'verifier',
+            id: 'pkg-autonomy',
+            taskId: 'task-3',
+            title: 'Recover blocked proposal',
+            objective: 'Recover blocked proposal',
+            specialist: 'reviewer',
             status: 'proposal-ready',
-            targetDomain: 'verification',
-            verificationMode: 'browser',
-            writableScopes: ['src/renderer/components/settings'],
-            readableScopes: ['src/renderer/components/settings'],
+            heartbeat: {
+              status: 'abandoned',
+              lastHeartbeatAt: 10,
+              lastAssistantOutputAt: 5,
+              lastToolActivityAt: 10,
+              lastProgressAt: 0,
+              lastFileMutationAt: null,
+              stuckReason: 'Execution heartbeat missing for 30s.',
+            },
+            targetDomain: 'review',
+            writableScopes: ['src/renderer/components'],
+            readableScopes: ['src/renderer/components'],
             dependsOn: [],
-            expectedArtifacts: ['browser-checks'],
+            expectedArtifacts: ['review'],
             queueReason: null,
-            workspaceId: null,
+            workspaceId: '/tmp/adnify-task-3',
             handoffId: null,
-            proposalId: 'proposal-browser',
+            proposalId: 'proposal-autonomy',
           },
         ]}
         handoffs={[]}
         changeProposals={[
           {
-            id: 'proposal-browser',
-            taskId: 'task-2',
-            workPackageId: 'pkg-browser',
-            summary: 'Browser verification blocked before execution',
-            changedFiles: ['src/renderer/components/settings/tabs/AgentSettings.tsx'],
+            id: 'proposal-autonomy',
+            taskId: 'task-3',
+            workPackageId: 'pkg-autonomy',
+            summary: 'Autonomy proposal blocked for review',
+            changedFiles: ['src/renderer/components/orchestrator/TaskBoard.tsx'],
             verificationStatus: 'pending',
-            verificationMode: 'browser',
-            verificationSummary: 'Browser verification blocked before execution.',
-            verificationBlockedReason: 'Playwright MCP server is not connected.',
             riskLevel: 'medium',
-            recommendedAction: 'discard',
+            recommendedAction: 'return-for-rework',
             status: 'pending',
             createdAt: 1,
             resolvedAt: null,
           },
         ]}
-        selectedProposalId="proposal-browser"
+        selectedProposalId="proposal-autonomy"
         onSelectProposal={vi.fn()}
         onReviewProposal={vi.fn()}
       />,
     )
 
-    expect(html).toContain('browser')
-    expect(html).toContain('Browser verification blocked before execution')
-    expect(html).toContain('Playwright MCP server is not connected.')
-    expect(html).toContain('Manual review required before apply can continue.')
-    expect(html).toContain('disabled')
+    expect(html).toContain('autonomous')
+    expect(html).toContain('abandoned')
+    expect(html).toContain('/tmp/adnify-task-3')
+    expect(html).toContain('worktree')
+    expect(html).toContain('Execution heartbeat missing for 30s.')
   })
 })

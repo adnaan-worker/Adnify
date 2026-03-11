@@ -24,6 +24,7 @@ import { Button, Select } from '@/renderer/components/ui'
 import { MarkdownPreview } from '@/renderer/components/editor/FilePreview'
 import { ExecutionTaskPanel } from './ExecutionTaskPanel'
 import { CircuitBreakerBanner } from './CircuitBreakerBanner'
+import { AutonomyTaskList } from './AutonomyTaskList'
 import { ExecutionTaskComposer, buildExecutionTaskDraftFromPlan, buildExecutionTaskInputFromDraft, type ExecutionTaskDraft } from './ExecutionTaskComposer'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
@@ -345,6 +346,7 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     const [requirementsContent, setRequirementsContent] = useState<string>('')
     const plan = useAgentStore((s) => s.plans.find((p) => p.id === planId))
     const isExecuting = useAgentStore((s) => s.isExecuting)
+    const controllerState = useAgentStore((s) => s.controllerState)
     const updatePlan = useAgentStore((s) => s.updatePlan)
     const createExecutionTask = useAgentStore((s) => s.createExecutionTask)
     const executionTasks = useAgentStore((s) => s.executionTasks)
@@ -353,6 +355,7 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     const changeProposals = useAgentStore((s) => s.changeProposals)
     const adjudicationCases = useAgentStore((s) => s.adjudicationCases)
     const activeExecutionTaskId = useAgentStore((s) => s.activeExecutionTaskId)
+    const selectExecutionTask = useAgentStore((s) => s.selectExecutionTask)
     const selectedTaskHandoffId = useAgentStore((s) => s.selectedTaskHandoffId)
     const selectedChangeProposalId = useAgentStore((s) => s.selectedChangeProposalId)
     const selectTaskHandoff = useAgentStore((s) => s.selectTaskHandoff)
@@ -361,6 +364,8 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     const completeExecutionTaskRollback = useAgentStore((s) => s.completeExecutionTaskRollback)
     const workspacePath = useStore((s) => s.workspacePath)
     const taskTrustSettings = useStore((s) => s.taskTrustSettings)
+    const isStopping = controllerState === 'stopping'
+    const isExecutionBusy = isExecuting || isStopping
 
     // 加载需求文档内容
     useEffect(() => {
@@ -460,6 +465,12 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
             .filter(Boolean)
     }, [activeExecutionTask, workPackages])
 
+    const backgroundAutonomyTasks = useMemo(() => (
+        Object.values(executionTasks)
+            .filter((task) => task.autonomyMode === 'autonomous' && task.id !== activeExecutionTask?.id)
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+    ), [activeExecutionTask, executionTasks])
+
     const activeExecutionTaskHandoffs = useMemo(() => {
         if (!activeExecutionTask) return []
         return Object.values(taskHandoffs)
@@ -526,23 +537,23 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
                         <ExecutionModeToggle
                             mode={plan.executionMode}
                             onChange={handleExecutionModeChange}
-                            disabled={isExecuting}
+                            disabled={isExecutionBusy}
                         />
                         {!isExecuting && (
-                            <Button variant="secondary" size="sm" onClick={() => setShowComposer((value) => !value)}>
+                            <Button variant="secondary" size="sm" onClick={() => setShowComposer((value) => !value)} disabled={isStopping}>
                                 <Plus className="w-4 h-4 mr-1" />
                                 准备执行
                             </Button>
                         )}
                         {isExecuting ? (
-                            <Button variant="danger" size="sm" onClick={handleStop}>
+                            <Button variant="danger" size="sm" onClick={handleStop} disabled={isStopping}>
                                 <Pause className="w-4 h-4 mr-1" />
-                                停止
+                                {isStopping ? '停止中...' : '停止'}
                             </Button>
                         ) : (
-                            <Button variant="primary" size="sm" onClick={handleStart}>
+                            <Button variant="primary" size="sm" onClick={handleStart} disabled={isStopping}>
                                 <Play className="w-4 h-4 mr-1" />
-                                开始执行
+                                {isStopping ? '停止中...' : '开始执行'}
                             </Button>
                         )}
                     </div>
@@ -591,6 +602,11 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
                     {activeExecutionTask?.circuitBreaker?.tripped && (
                         <CircuitBreakerBanner circuitBreaker={activeExecutionTask.circuitBreaker} />
                     )}
+                    <AutonomyTaskList
+                        tasks={backgroundAutonomyTasks}
+                        activeTaskId={activeExecutionTask?.id ?? null}
+                        onSelectTask={selectExecutionTask}
+                    />
                     {activeExecutionTask && (
                         <ExecutionTaskPanel
                             task={activeExecutionTask}

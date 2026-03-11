@@ -81,6 +81,33 @@ describe('ExecutionTaskComposer', () => {
     expect(task.executionStrategy.orchestrationMode).toBe('mixed')
     expect(task.executionStrategy.ownershipPolicy).toBe('exclusive')
   })
+  it('supports autonomous execution mode in the composer draft and created task', () => {
+    const draft = buildExecutionTaskDraftFromPlan(
+      {
+        id: 'plan-1',
+        name: 'Ship profile flow',
+        userRequest: 'Implement profile editing',
+        tasks: [],
+      },
+      '/workspace/adnify',
+      {
+        mode: 'autonomous',
+        defaultExecutionTarget: 'auto',
+      },
+    )
+
+    const taskId = useAgentStore.getState().createExecutionTask(
+      buildExecutionTaskInputFromDraft({
+        ...draft,
+        autonomyMode: 'autonomous',
+      }),
+    )
+
+    const task = useAgentStore.getState().executionTasks[taskId]
+    expect(draft.autonomyMode).toBe('autonomous')
+    expect(task.autonomyMode).toBe('autonomous')
+  })
+
 
   it('derives composer template options from the shared template registry', () => {
     const templateOptions = getExecutionTaskTemplateOptions()
@@ -139,12 +166,15 @@ describe('ExecutionTaskComposer', () => {
     expect(html).toContain('Trust Mode')
     expect(html).toContain('Execution Target')
     expect(html).toContain('Execution Strategy')
+    expect(html).toContain('Execution Mode')
     expect(html).toContain('UI Polish + Browser Verify')
     expect(html).toContain('balanced')
     expect(html).toContain('mixed')
     expect(html).toContain('exclusive')
     expect(html).toContain('queue')
     expect(html).toContain('per-work-package')
+    expect(html).toContain('manual')
+    expect(html).toContain('autonomous')
     expect(html).toContain('Implement profile editing')
   })
 })

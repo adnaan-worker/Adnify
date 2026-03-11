@@ -15,6 +15,7 @@ import { useAgentStore } from '@renderer/agent/store/AgentStore'
 
 import { AdjudicationPanel } from './AdjudicationPanel'
 import { ChangeProposalPanel } from './ChangeProposalPanel'
+import { ExecutionDiagnosticsPanel } from './ExecutionDiagnosticsPanel'
 import { HandoffDetailPanel } from './HandoffDetailPanel'
 import { RollbackProposalPanel } from './RollbackProposalPanel'
 import { TaskTemplatePicker } from './TaskTemplatePicker'
@@ -102,6 +103,8 @@ export function ExecutionTaskPanel({
             <span className="px-2 py-1 rounded-full bg-accent/10 text-accent">{task.state}</span>
             <span className="px-2 py-1 rounded-full bg-background/60 text-text-secondary">{task.governanceState}</span>
             <span className="px-2 py-1 rounded-full bg-background/60 text-text-secondary">{task.trustMode}</span>
+            {task.autonomyMode ? <span className="px-2 py-1 rounded-full bg-background/60 text-text-secondary">{task.autonomyMode}</span> : null}
+            {task.patrol?.status ? <span className="px-2 py-1 rounded-full bg-background/60 text-text-secondary">{task.patrol.status}</span> : null}
             <span className="px-2 py-1 rounded-full bg-background/60 text-text-secondary">{task.executionTarget}</span>
             <span className="px-2 py-1 rounded-full bg-background/60 text-text-secondary">{task.risk}</span>
             <span className="px-2 py-1 rounded-full bg-background/60 text-text-secondary">Queued {task.queueSummary.queuedCount}</span>
@@ -161,6 +164,12 @@ export function ExecutionTaskPanel({
           ) : null}
         </div>
       </div>
+
+      <ExecutionDiagnosticsPanel
+        task={task}
+        workPackage={selectedWorkPackage}
+        activity={selectedWorkPackageActivity}
+      />
 
       {adjudicationCase ? (
         <AdjudicationPanel

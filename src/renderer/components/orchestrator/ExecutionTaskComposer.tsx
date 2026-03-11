@@ -22,6 +22,7 @@ export interface ExecutionTaskDraft {
   executionTarget: ExecutionTarget
   modelRoutingPolicy: ModelRoutingPolicy
   executionStrategy: ExecutionStrategySnapshot
+  autonomyMode: 'manual' | 'autonomous'
   sourceWorkspacePath: string | null
 }
 
@@ -94,6 +95,7 @@ export function buildExecutionTaskDraftFromPlan(
     executionTarget: input.executionTarget ?? (trustPolicy.defaultExecutionTarget === 'auto' ? 'isolated' : trustPolicy.defaultExecutionTarget ?? 'isolated'),
     modelRoutingPolicy: input.modelRoutingPolicy ?? (trustPolicy.modelRoutingPolicy ?? 'balanced'),
     executionStrategy: input.executionStrategy ?? createDefaultExecutionStrategySnapshot(),
+    autonomyMode: input.autonomyMode ?? (trustPolicy.mode === 'autonomous' ? 'autonomous' : 'manual'),
     sourceWorkspacePath: workspacePath,
   }
 }
@@ -106,6 +108,7 @@ export function buildExecutionTaskInputFromDraft(draft: ExecutionTaskDraft): Cre
     executionTarget: draft.executionTarget,
     modelRoutingPolicy: draft.modelRoutingPolicy,
     executionStrategy: { ...draft.executionStrategy },
+    autonomyMode: draft.autonomyMode,
     sourceWorkspacePath: draft.sourceWorkspacePath,
   }
 }
@@ -176,6 +179,23 @@ export function ExecutionTaskComposer({ draft, onDraftChange, onCreate, disabled
               </button>
             )
           })}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-sm text-text-secondary">Execution Mode</div>
+        <div className="flex flex-wrap gap-2">
+          {(['manual', 'autonomous'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              disabled={disabled}
+              onClick={() => onDraftChange({ ...draft, autonomyMode: mode })}
+              className={`rounded-full border px-3 py-1.5 text-xs ${draft.autonomyMode === mode ? 'border-accent text-accent' : 'border-border text-text-secondary'}`}
+            >
+              {mode}
+            </button>
+          ))}
         </div>
       </div>
 

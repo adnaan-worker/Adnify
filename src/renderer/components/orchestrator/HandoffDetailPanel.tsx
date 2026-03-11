@@ -51,6 +51,22 @@ export function HandoffDetailPanel({ handoff, workPackage, activity = null }: Ha
             {activity?.userPreview || workPackage.objective}
           </div>
         </div>
+
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-text-secondary">工作区</div>
+          <div className="rounded-lg border border-border bg-background/30 px-3 py-2 text-xs text-text-primary break-all">
+            {workPackage.workspaceId || '暂无工作区路径'}
+          </div>
+        </div>
+
+        {(workPackage.heartbeat?.stuckReason || activity?.stuckReason) ? (
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-text-secondary">卡住原因</div>
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100 break-words">
+              {workPackage.heartbeat?.stuckReason || activity?.stuckReason}
+            </div>
+          </div>
+        ) : null}
       </aside>
     )
   }
