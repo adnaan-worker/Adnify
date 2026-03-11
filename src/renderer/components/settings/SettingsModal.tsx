@@ -195,14 +195,21 @@ export default function SettingsModal() {
     }, [localConfig, localLanguage, localAutoApprove, localPromptTemplateId, localAgentConfig, localAiInstructions, localWebSearchConfig, localTaskTrustSettings, localMcpConfig, localEnableFileLogging, localProviderConfigs, editorSettings, advancedEditorConfig, set, setProvider, save])
 
     // 使用 useMemo 缓存计算结果
-    const providers = useMemo(() =>
-        Object.entries(PROVIDERS).map(([id, p]) => ({
+    const providers = useMemo(() => {
+        const builtinProviders = Object.entries(PROVIDERS).map(([id, p]) => ({
             id,
             name: p.displayName,
-            models: [...(p.models || []), ...(providerConfigs[id]?.customModels || [])]
-        })),
-        [providerConfigs]
-    )
+            models: [...(p.models || []), ...(localProviderConfigs[id]?.customModels || [])]
+        }))
+        const customProviders = Object.entries(localProviderConfigs)
+            .filter(([id]) => !PROVIDERS[id])
+            .map(([id, config]) => ({
+                id,
+                name: config.displayName || id,
+                models: Array.from(new Set([...(config.customModels || []), ...(config.model ? [config.model] : [])])),
+            }))
+        return [...builtinProviders, ...customProviders]
+    }, [localProviderConfigs])
 
     const selectedProvider = useMemo(() =>
         providers.find(p => p.id === localConfig.provider),
@@ -323,7 +330,10 @@ export default function SettingsModal() {
                                     setWebSearchConfig={setLocalWebSearchConfig}
                                     taskTrustSettings={localTaskTrustSettings}
                                     setTaskTrustSettings={setLocalTaskTrustSettings}
-                                    language={language}
+                                    currentLLMConfig={localConfig}
+                                    providerConfigs={localProviderConfigs}
+                                    availableProviders={providers}
+                                    language={localLanguage}
                                 />
                             )}
                             {activeTab === 'rules' && <RulesMemorySettings language={language} />}

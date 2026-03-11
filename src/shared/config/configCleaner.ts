@@ -513,6 +513,7 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
         const profile = value as Record<string, unknown>
         const next: Record<string, unknown> = {}
         if (role === 'frontend' || role === 'logic' || role === 'verifier' || role === 'reviewer') next.role = role
+        if (typeof profile.provider === 'string' || profile.provider === null) next.provider = profile.provider
         if (typeof profile.model === 'string' || profile.model === null) next.model = profile.model
         if (profile.toolPermission === 'read-mostly' || profile.toolPermission === 'workspace-write' || profile.toolPermission === 'elevated') next.toolPermission = profile.toolPermission
         if (profile.networkPermission === 'blocked' || profile.networkPermission === 'workspace-only' || profile.networkPermission === 'allowed') next.networkPermission = profile.networkPermission

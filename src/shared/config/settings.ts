@@ -207,6 +207,7 @@ const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
   specialistProfiles: {
     frontend: {
       role: 'frontend',
+      provider: null,
       model: null,
       toolPermission: 'workspace-write',
       networkPermission: 'workspace-only',
@@ -220,6 +221,7 @@ const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
     },
     logic: {
       role: 'logic',
+      provider: null,
       model: null,
       toolPermission: 'workspace-write',
       networkPermission: 'workspace-only',
@@ -233,6 +235,7 @@ const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
     },
     verifier: {
       role: 'verifier',
+      provider: null,
       model: null,
       toolPermission: 'workspace-write',
       networkPermission: 'workspace-only',
@@ -246,6 +249,7 @@ const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
     },
     reviewer: {
       role: 'reviewer',
+      provider: null,
       model: null,
       toolPermission: 'read-mostly',
       networkPermission: 'blocked',

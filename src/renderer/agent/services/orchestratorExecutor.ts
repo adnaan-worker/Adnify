@@ -32,7 +32,7 @@ import { buildWorkPackageHandoff } from './handoffBrokerService'
 import { createOwnershipRegistrySnapshot, acquireOwnership, releaseOwnership } from './ownershipRegistryService'
 import { buildChangeProposal } from './proposalEngineService'
 import { applyChangeProposal, captureBaselineForScopes } from './proposalApplyService'
-import { resolveModelRoute } from './modelRoutingService'
+import { resolveSpecialistRoute } from './modelRoutingService'
 import { buildBrowserVerificationPrompt, getBrowserVerificationCapability } from './browserVerificationService'
 
 // ============================================
@@ -200,6 +200,9 @@ function buildExecutionAttemptGuidance(profile: SpecialistProfile | null | undef
 
     const lines = ['### Specialist Profile']
 
+    if (profile.provider) {
+        lines.push(`- Preferred provider: ${profile.provider}`)
+    }
     if (profile.model) {
         lines.push(`- Preferred model: ${profile.model}`)
     }
@@ -704,23 +707,22 @@ async function runWorkPackageWithAgent(
     const threadId = ensureDetachedThreadForWorkPackage(workPackage.id)
     const attemptProfile = executionTask.specialistProfilesSnapshot[workPackage.specialist]
     const store = useStore.getState()
-    const providerId = store.llmConfig.provider
-    const providerContext = getProviderModelContext(providerId)
-    const routedModel = resolveModelRoute({
+    const routedModel = resolveSpecialistRoute({
         policy: executionTask.modelRoutingPolicy ?? 'balanced',
         specialist: workPackage.specialist,
+        specialistProvider: attemptProfile?.provider?.trim() || null,
         specialistModel: attemptProfile?.model?.trim() || null,
-        defaultModel: providerContext.defaultModel,
-        availableModels: providerContext.availableModels,
+        defaultProvider: store.llmConfig.provider,
+        resolveProviderContext: getProviderModelContext,
         budget: executionTask.budget,
     })
-    const llmConfig = await getLLMConfigForTask(providerId, routedModel.model)
+    const llmConfig = await getLLMConfigForTask(routedModel.providerId, routedModel.model)
 
     if (!llmConfig) {
         return {
             success: false,
             output: '',
-            error: `Failed to resolve LLM config for ${providerId}/${routedModel.model}`,
+            error: `Failed to resolve LLM config for ${routedModel.providerId}/${routedModel.model}`,
             metrics: { llmCalls: 0, estimatedTokens: 0, verifications: 0 },
             verification: buildDefaultVerificationResult(workPackage),
         }
@@ -1485,18 +1487,24 @@ async function runTaskWithAgent(
             const attemptProfile = resolveExecutionAttemptProfile(executionTask, currentRole)
             const attemptGuidance = buildExecutionAttemptGuidance(attemptProfile)
             const attemptMessage = attemptGuidance ? `${feedbackMessage}\n\n${attemptGuidance}` : feedbackMessage
-            const providerContext = getProviderModelContext(task.provider)
-            const routedModel = resolveModelRoute({
+            const routedModel = resolveSpecialistRoute({
                 policy: executionTask?.modelRoutingPolicy ?? 'manual',
                 specialist: inferSpecialistKindFromRole(currentRole, attemptProfile?.role),
+                specialistProvider: attemptProfile?.provider?.trim() || null,
                 specialistModel: attemptProfile?.model?.trim() || null,
-                defaultModel: task.model || providerContext.defaultModel,
-                availableModels: providerContext.availableModels,
+                defaultProvider: task.provider,
+                resolveProviderContext: (providerId) => {
+                    const providerContext = getProviderModelContext(providerId)
+                    return {
+                        ...providerContext,
+                        defaultModel: providerId === task.provider && task.model ? task.model : providerContext.defaultModel,
+                    }
+                },
                 budget: executionTask?.budget,
             })
-            const llmConfig = await getLLMConfigForTask(task.provider, routedModel.model)
+            const llmConfig = await getLLMConfigForTask(routedModel.providerId, routedModel.model)
             if (!llmConfig) {
-                return { success: false, output: '', error: `Failed to get LLM config for ${task.provider}/${routedModel.model}`, metrics }
+                return { success: false, output: '', error: `Failed to get LLM config for ${routedModel.providerId}/${routedModel.model}`, metrics }
             }
 
             const templateId = mapRoleToTemplateId(currentRole)

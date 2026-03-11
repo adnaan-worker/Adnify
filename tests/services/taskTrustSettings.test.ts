@@ -38,6 +38,7 @@ describe('task trust settings', () => {
     expect(settings.governanceDefaults.rollback.autoRollbackIsolated).toBe(true)
     expect(settings.governanceDefaults.rollback.requireConfirmationForMainWorkspace).toBe(true)
     expect(settings.specialistProfiles.frontend.role).toBe('frontend')
+    expect(settings.specialistProfiles.frontend.provider).toBeNull()
     expect(settings.specialistProfiles.frontend.verificationMode).toBe('browser')
     expect(settings.specialistProfiles.reviewer.toolPermission).toBe('read-mostly')
   })
@@ -46,13 +47,15 @@ describe('task trust settings', () => {
     const settings = normalizeTaskTrustSettings({
       specialistProfiles: {
         frontend: {
-          model: 'gpt-4.1',
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-20250514',
           toolPermission: 'elevated',
         },
       },
     } satisfies PersistedTaskTrustSettings)
 
-    expect(settings.specialistProfiles.frontend.model).toBe('gpt-4.1')
+    expect(settings.specialistProfiles.frontend.provider).toBe('anthropic')
+    expect(settings.specialistProfiles.frontend.model).toBe('claude-sonnet-4-20250514')
     expect(settings.specialistProfiles.frontend.toolPermission).toBe('elevated')
     expect(settings.specialistProfiles.frontend.networkPermission).toBe('workspace-only')
   })

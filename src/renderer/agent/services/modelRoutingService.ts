@@ -22,6 +22,28 @@ export interface ModelRouteDecision {
   degraded: boolean
 }
 
+
+export interface ResolvedProviderContext {
+  providerId: string
+  defaultModel: string
+  availableModels: string[]
+}
+
+export interface ResolveSpecialistRouteInput {
+  policy: ModelRoutingPolicy
+  specialist: SpecialistKind
+  specialistProvider?: string | null
+  specialistModel?: string | null
+  defaultProvider: string
+  resolveProviderContext: (providerId: string) => ResolvedProviderContext
+  budget?: ModelRoutingBudgetSnapshot | null
+}
+
+export interface SpecialistRouteDecision extends ModelRouteDecision {
+  providerId: string
+  providerReason: 'specialist-explicit' | 'global-default'
+}
+
 const SPECIALIST_MODEL_PREFERENCES: Record<SpecialistKind, RegExp[]> = {
   frontend: [/sonnet/i, /gpt-4o/i, /gpt-4\.1/i, /o1/i, /o3/i, /pro/i],
   logic: [/o3/i, /o1/i, /sonnet/i, /gpt-4\.1/i, /gpt-4o/i, /pro/i],
@@ -113,5 +135,25 @@ export function resolveModelRoute(input: ResolveModelRouteInput): ModelRouteDeci
     model: input.defaultModel,
     reason: 'global-default',
     degraded: false,
+  }
+}
+
+
+export function resolveSpecialistRoute(input: ResolveSpecialistRouteInput): SpecialistRouteDecision {
+  const providerId = input.specialistProvider?.trim() || input.defaultProvider
+  const providerContext = input.resolveProviderContext(providerId)
+  const modelDecision = resolveModelRoute({
+    policy: input.policy,
+    specialist: input.specialist,
+    specialistModel: input.specialistModel,
+    defaultModel: providerContext.defaultModel,
+    availableModels: providerContext.availableModels,
+    budget: input.budget,
+  })
+
+  return {
+    ...modelDecision,
+    providerId,
+    providerReason: input.specialistProvider?.trim() ? 'specialist-explicit' : 'global-default',
   }
 }

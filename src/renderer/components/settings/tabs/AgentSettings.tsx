@@ -3,18 +3,20 @@
  * 完整的 Agent 高级配置面板
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { getPromptTemplates } from '@renderer/agent/prompts/promptTemplates'
 import { DEFAULT_AGENT_CONFIG } from '@shared/config/agentConfig'
 import { Button, Input, Select, Switch } from '@components/ui'
 import { AgentSettingsProps } from '../types'
 import { PromptPreviewModal } from './PromptPreviewModal'
+import { resolveSpecialistRoute } from '@renderer/agent/services/modelRoutingService'
 import { Bot, FileText, Zap, BrainCircuit, AlertOctagon, Terminal, Search, Eye, EyeOff, RefreshCw } from 'lucide-react'
 
 export function AgentSettings({
     autoApprove, setAutoApprove, aiInstructions, setAiInstructions,
     promptTemplateId, setPromptTemplateId, agentConfig, setAgentConfig,
-    webSearchConfig, setWebSearchConfig, taskTrustSettings, setTaskTrustSettings, language
+    webSearchConfig, setWebSearchConfig, taskTrustSettings, setTaskTrustSettings,
+    currentLLMConfig, providerConfigs, availableProviders, language
 }: AgentSettingsProps) {
     const templates = getPromptTemplates()
     const [showPreview, setShowPreview] = useState(false)
@@ -110,6 +112,53 @@ export function AgentSettings({
 
         return options.find((option) => option.value === value)?.label || value
     }
+
+
+    const providerNameMap = useMemo(
+        () => Object.fromEntries(availableProviders.map((provider) => [provider.id, provider.name])) as Record<string, string>,
+        [availableProviders]
+    )
+
+    const resolveProviderContext = (providerId: string) => {
+        const provider = availableProviders.find((candidate) => candidate.id === providerId)
+        const configuredModel = providerConfigs[providerId]?.model
+        const globalModel = currentLLMConfig.provider === providerId ? currentLLMConfig.model : ''
+        const models = Array.from(new Set([
+            globalModel,
+            configuredModel || '',
+            ...(provider?.models || []),
+            ...(providerConfigs[providerId]?.customModels || []),
+        ].filter(Boolean)))
+
+        return {
+            providerId,
+            defaultModel: globalModel || configuredModel || models[0] || currentLLMConfig.model,
+            availableModels: models,
+        }
+    }
+
+    const resolvedSpecialistRoutes = useMemo(
+        () => specialistRoles.map((role) => {
+            const profile = taskTrustSettings.specialistProfiles[role]
+            return {
+                role,
+                ...resolveSpecialistRoute({
+                    policy: taskTrustSettings.global.modelRoutingPolicy,
+                    specialist: role,
+                    specialistProvider: profile.provider,
+                    specialistModel: profile.model,
+                    defaultProvider: currentLLMConfig.provider,
+                    resolveProviderContext,
+                }),
+            }
+        }),
+        [specialistRoles, taskTrustSettings.specialistProfiles, taskTrustSettings.global.modelRoutingPolicy, currentLLMConfig.provider, currentLLMConfig.model, availableProviders, providerConfigs]
+    )
+
+    const collapsedSpecialistRoutes = useMemo(
+        () => new Set(resolvedSpecialistRoutes.map((route) => `${route.providerId}:${route.model}`)).size <= 1,
+        [resolvedSpecialistRoutes]
+    )
 
     const specialistRoleMeta: Record<typeof specialistRoles[number], { title: string; description: string }> = {
         frontend: {
@@ -652,15 +701,27 @@ export function AgentSettings({
                                 )}
                             </p>
                         </div>
+                        {collapsedSpecialistRoutes ? (
+                            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-5 text-amber-300">
+                                {t(
+                                    '当前所有专家最终都会使用同一模型。这样仍然有多角色分工，但更接近“多角色单模型”；如需真正的多模型协作，请至少为一个专家单独指定 provider 或 model。',
+                                    'All specialists currently resolve to the same runtime model. You still get role separation, but this is closer to a multi-role single-model setup; assign an explicit provider or model to at least one specialist for true multi-model collaboration.'
+                                )}
+                            </div>
+                        ) : null}
                         <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
                             {specialistRoles.map((role) => {
                                 const profile = taskTrustSettings.specialistProfiles[role]
                                 const roleMeta = specialistRoleMeta[role]
+                                const resolvedRoute = resolvedSpecialistRoutes.find((item) => item.role === role)
                                 const summaryBadges = [
                                     `${t('工具：', 'Tools: ')}${getOptionLabel(toolPermissionOptions, profile.toolPermission)}`,
                                     `${t('网络：', 'Network: ')}${getOptionLabel(networkPermissionOptions, profile.networkPermission)}`,
                                     `${t('Git：', 'Git: ')}${getOptionLabel(gitPermissionOptions, profile.gitPermission)}`,
                                     `${t('验证：', 'Verification: ')}${getOptionLabel(verificationModeOptions, profile.verificationMode)}`,
+                                    resolvedRoute
+                                        ? `${t('最终执行：', 'Runtime: ')}${providerNameMap[resolvedRoute.providerId] || resolvedRoute.providerId} / ${resolvedRoute.model}`
+                                        : `${t('最终执行：', 'Runtime: ')}-`,
                                 ]
 
                                 return (
@@ -690,13 +751,50 @@ export function AgentSettings({
                                                     {t('基础设置', 'Basics')}
                                                 </div>
                                                 <div className="space-y-1.5 min-w-0">
-                                                    <label className="text-xs font-medium text-text-secondary">{t('模型', 'Model')}</label>
-                                                    <Input
-                                                        value={profile.model || ''}
-                                                        onChange={(e) => updateSpecialistProfile(role, { model: e.target.value || null })}
-                                                        placeholder={t('沿用当前默认模型', 'Use current default model')}
-                                                        className="min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                    <label className="text-xs font-medium text-text-secondary">{t('提供商', 'Provider')}</label>
+                                                    <Select
+                                                        value={profile.provider || ''}
+                                                        onChange={(value) => updateSpecialistProfile(role, { provider: value || null, model: profile.provider && value !== profile.provider ? null : profile.model })}
+                                                        options={(() => {
+                                                            const providerOptions: Array<{ value: string; label: string }> = [
+                                                                ...availableProviders.map((provider) => ({ value: provider.id, label: provider.name })),
+                                                            ]
+                                                            if (profile.provider && !providerOptions.some((provider) => provider.value === profile.provider)) {
+                                                                providerOptions.push({ value: profile.provider, label: profile.provider })
+                                                            }
+                                                            return [
+                                                                { value: '', label: t('沿用当前默认提供商', 'Use current default provider') },
+                                                                ...providerOptions,
+                                                            ]
+                                                        })()}
+                                                        className="w-full min-w-0 bg-background/50 rounded-lg border-border text-sm"
                                                     />
+                                                </div>
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-xs font-medium text-text-secondary">{t('模型', 'Model')}</label>
+                                                    <Select
+                                                        value={profile.model || ''}
+                                                        onChange={(value) => updateSpecialistProfile(role, { model: value || null })}
+                                                        options={(() => {
+                                                            const selectedProviderId = profile.provider || currentLLMConfig.provider
+                                                            const providerContext = resolveProviderContext(selectedProviderId)
+                                                            const modelOptions = Array.from(new Set([
+                                                                profile.model || '',
+                                                                ...providerContext.availableModels,
+                                                            ].filter(Boolean)))
+                                                            return [
+                                                                { value: '', label: t('沿用当前路由/默认模型', 'Use routed/default model') },
+                                                                ...modelOptions.map((model) => ({ value: model, label: model })),
+                                                            ]
+                                                        })()}
+                                                        className="w-full min-w-0 bg-background/50 rounded-lg border-border text-sm"
+                                                    />
+                                                    <p className="text-[11px] leading-5 text-text-muted">
+                                                        {t(
+                                                            '空值会继承当前全局 provider/model，并继续参与模型路由策略解析。',
+                                                            'Leave blank to inherit the current global provider/model and still participate in routing.'
+                                                        )}
+                                                    </p>
                                                 </div>
                                                 <div className="space-y-1.5 min-w-0">
                                                     <label className="text-xs font-medium text-text-secondary">{t('验证模式', 'Verification Mode')}</label>

@@ -244,6 +244,7 @@ export interface TaskGovernanceDefaults {
 
 export interface SpecialistProfileSettings {
   role?: TaskSpecialistRole
+  provider?: string | null
   model?: string | null
   toolPermission?: 'read-mostly' | 'workspace-write' | 'elevated'
   networkPermission?: 'blocked' | 'workspace-only' | 'allowed'

@@ -138,6 +138,7 @@ export interface TaskRollbackState {
 
 export interface SpecialistProfile {
   role: SpecialistKind
+  provider: string | null
   model: string | null
   toolPermission: SpecialistToolPermission
   networkPermission: SpecialistNetworkPermission
@@ -260,6 +261,7 @@ const DEFAULT_TASK_BUDGET_LIMITS: TaskBudgetLimits = {
 
 const DEFAULT_SPECIALIST_PROFILES: Record<SpecialistKind, Omit<SpecialistProfile, 'role'>> = {
   frontend: {
+    provider: null,
     model: null,
     toolPermission: 'workspace-write',
     networkPermission: 'workspace-only',
@@ -272,6 +274,7 @@ const DEFAULT_SPECIALIST_PROFILES: Record<SpecialistKind, Omit<SpecialistProfile
     verificationMode: 'browser',
   },
   logic: {
+    provider: null,
     model: null,
     toolPermission: 'workspace-write',
     networkPermission: 'workspace-only',
@@ -284,6 +287,7 @@ const DEFAULT_SPECIALIST_PROFILES: Record<SpecialistKind, Omit<SpecialistProfile
     verificationMode: 'regression',
   },
   verifier: {
+    provider: null,
     model: null,
     toolPermission: 'workspace-write',
     networkPermission: 'workspace-only',
@@ -296,6 +300,7 @@ const DEFAULT_SPECIALIST_PROFILES: Record<SpecialistKind, Omit<SpecialistProfile
     verificationMode: 'regression',
   },
   reviewer: {
+    provider: null,
     model: null,
     toolPermission: 'read-mostly',
     networkPermission: 'blocked',

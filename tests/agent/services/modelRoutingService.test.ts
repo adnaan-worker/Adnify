@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { resolveModelRoute } from '@renderer/agent/services/modelRoutingService'
+import { resolveModelRoute, resolveSpecialistRoute } from '@renderer/agent/services/modelRoutingService'
 
 describe('modelRoutingService', () => {
   it('keeps the explicit specialist model ahead of routing policy changes', () => {
@@ -62,4 +62,34 @@ describe('modelRoutingService', () => {
     expect(decision.reason).toBe('budget-aware-fallback')
     expect(decision.degraded).toBe(true)
   })
+
+  it('resolves an explicit specialist provider before picking the routed model', () => {
+    const decision = resolveSpecialistRoute({
+      policy: 'balanced',
+      specialist: 'verifier',
+      specialistProvider: 'anthropic',
+      specialistModel: null,
+      defaultProvider: 'openai',
+      resolveProviderContext: (providerId) => {
+        if (providerId === 'anthropic') {
+          return {
+            providerId,
+            defaultModel: 'claude-sonnet-4-20250514',
+            availableModels: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022'],
+          }
+        }
+        return {
+          providerId,
+          defaultModel: 'gpt-4o',
+          availableModels: ['gpt-4o', 'gpt-4o-mini'],
+        }
+      },
+    })
+
+    expect(decision.providerId).toBe('anthropic')
+    expect(decision.providerReason).toBe('specialist-explicit')
+    expect(decision.model).toBe('claude-3-5-haiku-20241022')
+    expect(decision.reason).toBe('balanced-default')
+  })
+
 })

@@ -39,7 +39,7 @@ vi.mock('@components/ui', () => ({
   ),
 }))
 
-function createProps(): AgentSettingsProps {
+function createProps(overrides: Partial<AgentSettingsProps> = {}): AgentSettingsProps {
   const noop = vi.fn()
 
   return {
@@ -55,7 +55,34 @@ function createProps(): AgentSettingsProps {
     setWebSearchConfig: noop as AgentSettingsProps['setWebSearchConfig'],
     taskTrustSettings: normalizeTaskTrustSettings(SETTINGS.taskTrustSettings.default),
     setTaskTrustSettings: noop as AgentSettingsProps['setTaskTrustSettings'],
+    currentLLMConfig: {
+      provider: 'openai',
+      model: 'gpt-4o',
+      apiKey: 'test-key',
+      temperature: 0.7,
+      maxTokens: 4096,
+      topP: 1,
+      topK: 0,
+      seed: 0,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      stopSequences: [],
+      logitBias: {},
+      maxRetries: 2,
+      toolChoice: 'auto',
+      parallelToolCalls: true,
+      headers: {},
+      enableThinking: false,
+      thinkingBudget: 10000,
+      reasoningEffort: 'medium',
+    },
+    providerConfigs: SETTINGS.providerConfigs.default,
+    availableProviders: [
+      { id: 'openai', name: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini'] },
+      { id: 'anthropic', name: 'Anthropic', models: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022'] },
+    ],
     language: 'zh',
+    ...overrides,
   }
 }
 
@@ -82,5 +109,25 @@ describe('AgentSettings specialist profiles UI', () => {
     expect(html).toContain('浏览器验证')
     expect(html).toContain('回归验证')
     expect(html).toContain('静态检查')
+  })
+
+  it('renders resolved runtime provider/model summaries and warns when every specialist collapses to one model', () => {
+    const html = renderToStaticMarkup(
+      <AgentSettings
+        {...createProps({
+          taskTrustSettings: normalizeTaskTrustSettings({
+            ...SETTINGS.taskTrustSettings.default,
+            global: {
+              ...SETTINGS.taskTrustSettings.default.global,
+              modelRoutingPolicy: 'manual',
+            },
+          }),
+        })}
+      />,
+    )
+
+    expect(html).toContain('最终执行')
+    expect(html).toContain('OpenAI / gpt-4o')
+    expect(html).toContain('当前所有专家最终都会使用同一模型')
   })
 })

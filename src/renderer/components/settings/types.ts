@@ -87,6 +87,9 @@ export interface AgentSettingsProps {
     setWebSearchConfig: React.Dispatch<React.SetStateAction<WebSearchConfig>>
     taskTrustSettings: TaskTrustSettings
     setTaskTrustSettings: React.Dispatch<React.SetStateAction<TaskTrustSettings>>
+    currentLLMConfig: LLMConfig
+    providerConfigs: Record<string, ProviderModelConfig>
+    availableProviders: { id: string; name: string; models: string[] }[]
     language: Language
 }
 
