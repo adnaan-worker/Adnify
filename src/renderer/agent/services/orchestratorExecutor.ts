@@ -1059,10 +1059,15 @@ export async function stopPlanExecution(): Promise<void> {
 
     const store = useAgentStore.getState()
     const executionTaskId = store.activeExecutionTaskId
+    const activePlanId = store.activePlanId
     store.stopExecution()
 
-    if (executionTaskId) {
-        await cleanupTaskExecutionWorkspace(executionTaskId)
+    try {
+        if (executionTaskId) {
+            await cleanupTaskExecutionWorkspace(executionTaskId)
+        }
+    } finally {
+        useAgentStore.getState().cleanupManualStopState(activePlanId, executionTaskId)
     }
 
     logger.agent.info('[OrchestratorExecutor] Execution stopped')

@@ -201,6 +201,42 @@ function syncTaskDerivedOrchestrationState(
     }
 }
 
+const STOP_RESETTABLE_WORK_PACKAGE_STATUSES = new Set<WorkPackageStatus>([
+    'queued',
+    'leasing',
+    'running',
+    'executing',
+    'verifying',
+    'waiting-approval',
+])
+
+function resolveExecutionTaskStateAfterManualStop(
+    task: ExecutionTask,
+    workPackages: Record<string, WorkPackage>,
+    changeProposals: Record<string, ChangeProposal>,
+): ExecutionTaskState {
+    if (task.state === 'complete' || task.state === 'tripped') {
+        return task.state
+    }
+
+    const hasPendingProposal = Object.values(changeProposals).some((proposal) =>
+        proposal.taskId === task.id && proposal.status === 'pending',
+    )
+    if (hasPendingProposal) {
+        return 'blocked'
+    }
+
+    const taskWorkPackages = task.workPackages
+        .map((workPackageId) => workPackages[workPackageId])
+        .filter(Boolean)
+
+    if (taskWorkPackages.some((workPackage) => ['proposal-ready', 'handoff', 'handoff-ready', 'blocked', 'verified'].includes(workPackage.status))) {
+        return 'blocked'
+    }
+
+    return 'planning'
+}
+
 /** Orchestrator Slice 状态 */
 export interface OrchestratorState {
     /** 所有规划列表 */
@@ -317,6 +353,8 @@ export interface OrchestratorActions {
     resumeExecution: () => void
     /** 结束执行 */
     stopExecution: () => void
+    /** 手动停止后回收运行时残留状态 */
+    cleanupManualStopState: (planId?: string | null, taskId?: string | null) => void
     /** 设置当前任务 */
     setCurrentTask: (taskId: string | null) => void
 
@@ -1280,6 +1318,107 @@ export const createOrchestratorSlice: StateCreator<
             currentTaskId: null,
             phase: 'planning' as OrchestratorPhase,
             controllerState: 'idle' as ControllerState,
+        })
+    },
+
+    cleanupManualStopState: (planId, taskId) => {
+        set((state) => {
+            const resolvedPlanId = planId ?? state.activePlanId
+            const resolvedTaskId = taskId ?? state.activeExecutionTaskId
+            const now = Date.now()
+
+            const plans = resolvedPlanId
+                ? state.plans.map((plan) => {
+                    if (plan.id !== resolvedPlanId) return plan
+
+                    return {
+                        ...plan,
+                        status: plan.status === 'executing' ? 'paused' as PlanStatus : plan.status,
+                        tasks: plan.tasks.map((task) =>
+                            task.status === 'running'
+                                ? { ...task, status: 'pending' as TaskStatus, startedAt: undefined }
+                                : task,
+                        ),
+                    }
+                })
+                : state.plans
+
+            if (!resolvedTaskId) {
+                return { plans }
+            }
+
+            const currentTask = state.executionTasks[resolvedTaskId]
+            if (!currentTask) {
+                return { plans }
+            }
+
+            const ownershipLeases = Object.fromEntries(
+                Object.entries(state.ownershipLeases).map(([leaseId, lease]) => [
+                    leaseId,
+                    lease.taskId === resolvedTaskId && lease.status !== 'released'
+                        ? {
+                            ...lease,
+                            status: 'released',
+                            queuedWorkPackageIds: [],
+                            releasedAt: lease.releasedAt ?? now,
+                        }
+                        : lease,
+                ]),
+            ) as Record<string, OwnershipLease>
+
+            const executionQueueItems = Object.fromEntries(
+                Object.entries(state.executionQueueItems).map(([queueItemId, queueItem]) => [
+                    queueItemId,
+                    queueItem.taskId === resolvedTaskId && queueItem.status !== 'cancelled'
+                        ? {
+                            ...queueItem,
+                            status: 'cancelled',
+                            resolvedAt: queueItem.resolvedAt ?? now,
+                        }
+                        : queueItem,
+                ]),
+            ) as Record<string, ExecutionQueueItem>
+
+            const workPackages = { ...state.workPackages }
+            for (const workPackageId of currentTask.workPackages) {
+                const workPackage = workPackages[workPackageId]
+                if (!workPackage) continue
+
+                if (!STOP_RESETTABLE_WORK_PACKAGE_STATUSES.has(workPackage.status)) {
+                    continue
+                }
+
+                workPackages[workPackageId] = {
+                    ...workPackage,
+                    status: 'queued',
+                    queueReason: null,
+                    workspaceId: null,
+                    workspaceOwnerId: null,
+                    threadId: null,
+                }
+            }
+
+            const executionTask = syncTaskDerivedOrchestrationState(
+                currentTask,
+                ownershipLeases,
+                executionQueueItems,
+                state.changeProposals,
+                {
+                    state: resolveExecutionTaskStateAfterManualStop(currentTask, workPackages, state.changeProposals),
+                    updatedAt: now,
+                },
+            )
+
+            return {
+                plans,
+                ownershipLeases,
+                executionQueueItems,
+                workPackages,
+                executionTasks: {
+                    ...state.executionTasks,
+                    [resolvedTaskId]: executionTask,
+                },
+            }
         })
     },
 

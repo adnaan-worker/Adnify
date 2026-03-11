@@ -13,6 +13,9 @@ vi.mock('@renderer/services/electronAPI', () => ({
       write: vi.fn(),
       delete: vi.fn(),
     },
+    llm: {
+      abort: vi.fn(),
+    },
     lsp: {
       onDiagnostics: vi.fn(() => () => undefined),
     },
@@ -25,13 +28,19 @@ import {
   cleanupTaskExecutionWorkspace,
   prepareTaskExecutionWorkspace,
 } from '@renderer/agent/services/executionWorkspaceService'
-import { __testing as executorTesting } from '@renderer/agent/services/orchestratorExecutor'
+import { __testing as executorTesting, stopPlanExecution } from '@renderer/agent/services/orchestratorExecutor'
 import { hashFileContent } from '@renderer/agent/services/proposalApplyService'
 
 describe('execution workspace service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useAgentStore.setState({
+      plans: [],
+      activePlanId: null,
+      phase: 'planning',
+      isExecuting: false,
+      currentTaskId: null,
+      controllerState: 'idle',
       executionTasks: {},
       workPackages: {},
       taskHandoffs: {},
@@ -268,6 +277,91 @@ describe('execution workspace service', () => {
     expect(Object.values(state.executionQueueItems)).toHaveLength(1)
   })
 
+
+  it('resets active runtime state after manual stop so the same plan can be restarted cleanly', async () => {
+    vi.mocked(api.workspace.createIsolated).mockImplementation(async ({ ownerId }) => ({
+      success: true,
+      workspacePath: `/tmp/${ownerId}`,
+      mode: 'worktree',
+    }))
+    vi.mocked(api.workspace.disposeIsolated).mockResolvedValue({ success: true })
+
+    const store = useAgentStore.getState()
+    const planId = 'plan-stop-cleanup'
+    store.addPlan({
+      id: planId,
+      name: 'Stop cleanup plan',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      requirementsDoc: 'noop.md',
+      executionMode: 'parallel',
+      status: 'approved',
+      tasks: [
+        {
+          id: 'plan-task-1',
+          title: 'Inspect project',
+          description: 'Inspect project structure',
+          provider: 'openai',
+          model: 'gpt-5',
+          role: 'coder',
+          dependencies: [],
+          status: 'pending',
+        },
+      ],
+    })
+    store.setActivePlan(planId)
+    store.startExecution(planId)
+
+    const executionTaskId = store.createExecutionTask({
+      objective: 'Inspect project and summarize',
+      sourcePlanId: planId,
+      specialists: ['logic', 'frontend'],
+      executionTarget: 'isolated',
+      sourceWorkspacePath: '/workspace/adnify',
+      writableScopes: ['src/renderer/components'],
+    })
+    store.selectExecutionTask(executionTaskId)
+    store.setExecutionTaskState(executionTaskId, 'running')
+
+    const [firstPackageId, secondPackageId] = useAgentStore.getState().executionTasks[executionTaskId].workPackages
+
+    const first = await executorTesting.prepareWorkPackageExecution({
+      taskId: executionTaskId,
+      workPackageId: firstPackageId,
+      fallbackWorkspacePath: '/workspace/adnify',
+    })
+    const second = await executorTesting.prepareWorkPackageExecution({
+      taskId: executionTaskId,
+      workPackageId: secondPackageId,
+      fallbackWorkspacePath: '/workspace/adnify',
+    })
+
+    expect(first.ready).toBe(true)
+    expect(second.ready).toBe(false)
+    expect(useAgentStore.getState().workPackages[firstPackageId].status).toBe('executing')
+    expect(useAgentStore.getState().workPackages[secondPackageId].status).toBe('queued')
+
+    await stopPlanExecution()
+
+    const state = useAgentStore.getState()
+    const stoppedPlan = state.plans.find((plan) => plan.id === planId)
+
+    expect(state.isExecuting).toBe(false)
+    expect(state.phase).toBe('planning')
+    expect(state.controllerState).toBe('idle')
+    expect(stoppedPlan?.status).toBe('paused')
+    expect(stoppedPlan?.tasks[0]?.status).toBe('pending')
+    expect(state.executionTasks[executionTaskId].state).toBe('planning')
+    expect(state.workPackages[firstPackageId].status).toBe('queued')
+    expect(state.workPackages[secondPackageId].status).toBe('queued')
+    expect(state.workPackages[firstPackageId].workspaceId).toBeNull()
+    expect(state.workPackages[firstPackageId].workspaceOwnerId).toBeNull()
+    expect(Object.values(state.ownershipLeases).every((lease) => lease.status === 'released')).toBe(true)
+    expect(Object.values(state.executionQueueItems).every((item) => item.status === 'cancelled')).toBe(true)
+    expect(state.executionTasks[executionTaskId].queueSummary.activeLeaseCount).toBe(0)
+    expect(state.executionTasks[executionTaskId].queueSummary.queuedCount).toBe(0)
+    expect(api.workspace.disposeIsolated).toHaveBeenCalledWith(firstPackageId)
+  })
 
   it('applies an approved proposal, then releases queued work and cleans the package workspace', async () => {
     vi.mocked(api.workspace.createIsolated).mockResolvedValue({
