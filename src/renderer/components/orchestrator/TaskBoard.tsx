@@ -18,9 +18,13 @@ import {
     ListTodo,
     Settings2,
     Sparkles,
+    Plus,
 } from 'lucide-react'
 import { Button, Select } from '@/renderer/components/ui'
 import { MarkdownPreview } from '@/renderer/components/editor/FilePreview'
+import { ExecutionTaskPanel } from './ExecutionTaskPanel'
+import { CircuitBreakerBanner } from './CircuitBreakerBanner'
+import { ExecutionTaskComposer, buildExecutionTaskDraftFromPlan, buildExecutionTaskInputFromDraft, type ExecutionTaskDraft } from './ExecutionTaskComposer'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
 import { BUILTIN_PROVIDERS } from '@/shared/config/providers'
@@ -337,11 +341,27 @@ const ExecutionModeToggle = memo(function ExecutionModeToggle({
 
 export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     const [showRequirements, setShowRequirements] = useState(true)
+    const [showComposer, setShowComposer] = useState(false)
     const [requirementsContent, setRequirementsContent] = useState<string>('')
     const plan = useAgentStore((s) => s.plans.find((p) => p.id === planId))
     const isExecuting = useAgentStore((s) => s.isExecuting)
     const updatePlan = useAgentStore((s) => s.updatePlan)
+    const createExecutionTask = useAgentStore((s) => s.createExecutionTask)
+    const executionTasks = useAgentStore((s) => s.executionTasks)
+    const workPackages = useAgentStore((s) => s.workPackages)
+    const taskHandoffs = useAgentStore((s) => s.taskHandoffs)
+    const changeProposals = useAgentStore((s) => s.changeProposals)
+    const adjudicationCases = useAgentStore((s) => s.adjudicationCases)
+    const activeExecutionTaskId = useAgentStore((s) => s.activeExecutionTaskId)
+    const selectedTaskHandoffId = useAgentStore((s) => s.selectedTaskHandoffId)
+    const selectedChangeProposalId = useAgentStore((s) => s.selectedChangeProposalId)
+    const selectTaskHandoff = useAgentStore((s) => s.selectTaskHandoff)
+    const selectChangeProposal = useAgentStore((s) => s.selectChangeProposal)
+    const updateChangeProposal = useAgentStore((s) => s.updateChangeProposal)
+    const resolveExecutionTaskAdjudication = useAgentStore((s) => s.resolveExecutionTaskAdjudication)
+    const completeExecutionTaskRollback = useAgentStore((s) => s.completeExecutionTaskRollback)
     const workspacePath = useStore((s) => s.workspacePath)
+    const taskTrustSettings = useStore((s) => s.taskTrustSettings)
 
     // 加载需求文档内容
     useEffect(() => {
@@ -360,6 +380,25 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
         }
         loadRequirements()
     }, [plan?.requirementsDoc, workspacePath])
+
+    const defaultExecutionDraft = useMemo<ExecutionTaskDraft | null>(() => {
+        if (!plan) return null
+
+        return buildExecutionTaskDraftFromPlan(
+            plan,
+            workspacePath || null,
+            {
+                mode: taskTrustSettings.global?.mode ?? 'balanced',
+                defaultExecutionTarget: taskTrustSettings.global?.defaultExecutionTarget ?? 'auto',
+            }
+        )
+    }, [plan, workspacePath, taskTrustSettings.global?.mode, taskTrustSettings.global?.defaultExecutionTarget])
+
+    const [draft, setDraft] = useState<ExecutionTaskDraft | null>(defaultExecutionDraft)
+
+    useEffect(() => {
+        setDraft(defaultExecutionDraft)
+    }, [defaultExecutionDraft])
 
     // 统计
     const stats = useMemo(() => {
@@ -394,8 +433,81 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     const handleStop = useCallback(async () => {
         // 使用 orchestratorExecutor 停止执行
         const { stopPlanExecution } = await import('@/renderer/agent/services/orchestratorExecutor')
-        stopPlanExecution()
+        await stopPlanExecution()
     }, [])
+
+    const handleCreateExecutionTask = useCallback(() => {
+        if (!plan || !draft) return
+
+        createExecutionTask({
+            ...buildExecutionTaskInputFromDraft(draft),
+            sourcePlanId: plan.id,
+        })
+        setShowComposer(false)
+    }, [createExecutionTask, draft, plan])
+
+    const activeExecutionTask = useMemo(() => {
+        if (activeExecutionTaskId && executionTasks[activeExecutionTaskId]) {
+            return executionTasks[activeExecutionTaskId]
+        }
+
+        return Object.values(executionTasks)[0] || null
+    }, [activeExecutionTaskId, executionTasks])
+
+    const activeExecutionTaskPackages = useMemo(() => {
+        if (!activeExecutionTask) return []
+        return activeExecutionTask.workPackages
+            .map((id) => workPackages[id])
+            .filter(Boolean)
+    }, [activeExecutionTask, workPackages])
+
+    const activeExecutionTaskHandoffs = useMemo(() => {
+        if (!activeExecutionTask) return []
+        return Object.values(taskHandoffs)
+            .filter((handoff) => handoff.taskId === activeExecutionTask.id)
+            .sort((a, b) => b.createdAt - a.createdAt)
+    }, [activeExecutionTask, taskHandoffs])
+
+    const activeExecutionTaskChangeProposals = useMemo(() => {
+        if (!activeExecutionTask) return []
+        return Object.values(changeProposals)
+            .filter((proposal) => proposal.taskId === activeExecutionTask.id)
+            .sort((a, b) => b.createdAt - a.createdAt)
+    }, [activeExecutionTask, changeProposals])
+
+    const activeAdjudicationCase = useMemo(() => {
+        if (!activeExecutionTask?.latestAdjudicationId) return null
+        return adjudicationCases[activeExecutionTask.latestAdjudicationId] || null
+    }, [activeExecutionTask, adjudicationCases])
+
+    const handleResolveAdjudication = useCallback((resolution: Parameters<typeof resolveExecutionTaskAdjudication>[1]) => {
+        if (!activeAdjudicationCase) return
+        resolveExecutionTaskAdjudication(activeAdjudicationCase.id, resolution)
+    }, [activeAdjudicationCase, resolveExecutionTaskAdjudication])
+
+    const handleConfirmRollback = useCallback(async () => {
+        if (!activeExecutionTask || !activeExecutionTask.rollback.proposal) return
+
+        if (activeExecutionTask.rollback.proposal.mode === 'auto-dispose') {
+            const { cleanupTaskExecutionWorkspace } = await import('@/renderer/agent/services/executionWorkspaceService')
+            await cleanupTaskExecutionWorkspace(activeExecutionTask.id)
+        }
+
+        completeExecutionTaskRollback(activeExecutionTask.id)
+    }, [activeExecutionTask, completeExecutionTaskRollback])
+
+    const handleReviewProposal = useCallback((proposalId: string, action: 'apply' | 'return-for-rework' | 'reassign' | 'discard') => {
+        updateChangeProposal(proposalId, {
+            status: action === 'apply'
+                ? 'applied'
+                : action === 'return-for-rework'
+                    ? 'returned-for-rework'
+                    : action === 'reassign'
+                        ? 'reassigned'
+                        : 'discarded',
+        })
+        selectChangeProposal(proposalId)
+    }, [selectChangeProposal, updateChangeProposal])
 
     if (!plan) {
         return (
@@ -424,6 +536,12 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
                             onChange={handleExecutionModeChange}
                             disabled={isExecuting}
                         />
+                        {!isExecuting && (
+                            <Button variant="secondary" size="sm" onClick={() => setShowComposer((value) => !value)}>
+                                <Plus className="w-4 h-4 mr-1" />
+                                准备执行
+                            </Button>
+                        )}
                         {isExecuting ? (
                             <Button variant="danger" size="sm" onClick={handleStop}>
                                 <Pause className="w-4 h-4 mr-1" />
@@ -469,7 +587,34 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
                 </button>
 
                 {/* 任务列表 */}
-                <div className="flex-1 overflow-auto p-4">
+                <div className="flex-1 overflow-auto p-4 space-y-4">
+                    {(showComposer || !activeExecutionTask) && draft && (
+                        <ExecutionTaskComposer
+                            draft={draft}
+                            onDraftChange={setDraft}
+                            onCreate={handleCreateExecutionTask}
+                            disabled={!workspacePath}
+                        />
+                    )}
+                    {activeExecutionTask?.circuitBreaker?.tripped && (
+                        <CircuitBreakerBanner circuitBreaker={activeExecutionTask.circuitBreaker} />
+                    )}
+                    {activeExecutionTask && (
+                        <ExecutionTaskPanel
+                            task={activeExecutionTask}
+                            workPackages={activeExecutionTaskPackages}
+                            handoffs={activeExecutionTaskHandoffs}
+                            changeProposals={activeExecutionTaskChangeProposals}
+                            adjudicationCase={activeAdjudicationCase}
+                            selectedHandoffId={selectedTaskHandoffId}
+                            selectedProposalId={selectedChangeProposalId}
+                            onSelectHandoff={selectTaskHandoff}
+                            onSelectProposal={selectChangeProposal}
+                            onResolveAdjudication={handleResolveAdjudication}
+                            onReviewProposal={handleReviewProposal}
+                            onConfirmRollback={handleConfirmRollback}
+                        />
+                    )}
                     <div className="flex items-center gap-2 mb-3">
                         <ListTodo className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm font-medium text-text-primary">任务列表</span>
