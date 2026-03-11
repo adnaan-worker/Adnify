@@ -18,6 +18,8 @@ export interface LLMConfig extends SharedLLMConfig {
 export interface ExecutionContext {
   workspacePath: string | null
   chatMode: WorkMode
+  /** Orchestrator 阶段：planning = 只有编排工具, executing = 执行工具 */
+  orchestratorPhase?: 'planning' | 'executing'
   abortSignal?: AbortSignal
   /** 绑定的线程 ID（用于后台任务隔离） */
   threadId?: string | null

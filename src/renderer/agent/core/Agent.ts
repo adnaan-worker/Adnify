@@ -174,6 +174,7 @@ export class AgentClass {
         {
           workspacePath,
           chatMode,
+          orchestratorPhase: promptOptions?.orchestratorPhase,
           abortSignal: abortController.signal,
           threadId,
         },

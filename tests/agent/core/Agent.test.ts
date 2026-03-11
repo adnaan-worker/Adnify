@@ -1,5 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const runLoopMock = vi.fn(async () => undefined)
+
+vi.mock('@renderer/agent/core/loop', () => ({
+  runLoop: runLoopMock,
+}))
+
+vi.mock('@renderer/agent/llm/MessageBuilder', () => ({
+  buildContextContent: vi.fn(async () => ''),
+  buildLLMMessages: vi.fn(async () => []),
+}))
+
+vi.mock('@renderer/agent/prompts/PromptBuilder', () => ({
+  buildAgentSystemPrompt: vi.fn(async () => 'system-prompt'),
+}))
+
+vi.mock('@renderer/agent/services/fileCacheService', () => ({
+  fileCacheService: {
+    clear: vi.fn(),
+    getStats: vi.fn(() => ({})),
+    hasValidCache: vi.fn(() => false),
+    markFileAsRead: vi.fn(),
+    getFileHash: vi.fn(() => null),
+  },
+}))
+
 vi.mock('@renderer/services/electronAPI', () => ({
   api: {
     llm: {
@@ -46,6 +71,38 @@ function waitForLoopEnd(threadId: string, timeoutMs = 50) {
   })
 }
 
+describe('Agent orchestrator context', () => {
+  beforeEach(() => {
+    EventBus.clear()
+    useAgentStore.setState({
+      threads: {},
+      currentThreadId: null,
+    })
+    runLoopMock.mockClear()
+  })
+
+  it('passes orchestrator execution phase into the loop context', async () => {
+    await Agent.send(
+      'Execute orchestrator phase',
+      {
+        provider: 'openai',
+        model: 'gpt-5',
+        apiKey: 'test-key',
+      },
+      '/workspace/adnify',
+      'orchestrator',
+      { orchestratorPhase: 'executing' },
+    )
+
+    expect(runLoopMock).toHaveBeenCalledTimes(1)
+    expect(runLoopMock.mock.calls[0]?.[2]).toMatchObject({
+      chatMode: 'orchestrator',
+      orchestratorPhase: 'executing',
+      workspacePath: '/workspace/adnify',
+    })
+  })
+})
+
 describe('Agent detached-thread completion signaling', () => {
   beforeEach(() => {
     EventBus.clear()
@@ -53,6 +110,7 @@ describe('Agent detached-thread completion signaling', () => {
       threads: {},
       currentThreadId: null,
     })
+    runLoopMock.mockClear()
   })
 
   it('emits loop:end for targetThreadId when preflight validation fails', async () => {

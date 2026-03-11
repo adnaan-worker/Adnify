@@ -74,6 +74,7 @@ async function callLLM(
   config: LLMConfig,
   messages: LLMMessage[],
   chatMode: WorkMode,
+  orchestratorPhase: ExecutionContext['orchestratorPhase'],
   assistantId: string | null,
   threadStore: import('../store/AgentStore').ThreadBoundStore,
   requestId: string
@@ -90,6 +91,7 @@ async function callLLM(
     setToolLoadingContext({
       mode: chatMode,
       templateId,
+      orchestratorPhase,
     })
     const tools = chatMode === 'chat' ? [] : toolManager.getAllToolDefinitions()
 
@@ -151,6 +153,7 @@ async function callLLMWithRetry(
   config: LLMConfig,
   messages: LLMMessage[],
   chatMode: WorkMode,
+  orchestratorPhase: ExecutionContext['orchestratorPhase'],
   assistantId: string | null,
   threadStore: import('../store/AgentStore').ThreadBoundStore,
   abortSignal?: AbortSignal,
@@ -178,7 +181,7 @@ async function callLLMWithRetry(
         }
 
         try {
-          const result = await callLLM(config, messages, chatMode, assistantId, threadStore, reqId)
+          const result = await callLLM(config, messages, chatMode, orchestratorPhase, assistantId, threadStore, reqId)
 
           // 工具调用解析错误不应该导致重试，而是返回给 AI 让它反思
           if (result.error) {
@@ -434,7 +437,16 @@ export async function runLoop(
     }
 
     // 调用 LLM（传递 requestId 用于多对话隔离）
-    const result = await callLLMWithRetry(config, llmMessages, context.chatMode, assistantId, threadStore, context.abortSignal, requestId)
+    const result = await callLLMWithRetry(
+      config,
+      llmMessages,
+      context.chatMode,
+      context.orchestratorPhase,
+      assistantId,
+      threadStore,
+      context.abortSignal,
+      requestId,
+    )
 
     // 再次检查中止信号（LLM 调用后）
     if (context.abortSignal?.aborted) {
