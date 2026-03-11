@@ -6,6 +6,13 @@ vi.mock('@renderer/services/electronAPI', () => ({
       createIsolated: vi.fn(),
       disposeIsolated: vi.fn(),
     },
+    file: {
+      read: vi.fn(),
+      readDir: vi.fn(),
+      exists: vi.fn(),
+      write: vi.fn(),
+      delete: vi.fn(),
+    },
     lsp: {
       onDiagnostics: vi.fn(() => () => undefined),
     },
@@ -19,6 +26,7 @@ import {
   prepareTaskExecutionWorkspace,
 } from '@renderer/agent/services/executionWorkspaceService'
 import { __testing as executorTesting } from '@renderer/agent/services/orchestratorExecutor'
+import { hashFileContent } from '@renderer/agent/services/proposalApplyService'
 
 describe('execution workspace service', () => {
   beforeEach(() => {
@@ -117,6 +125,112 @@ describe('execution workspace service', () => {
     expect(useAgentStore.getState().executionTasks[taskId].resolvedWorkspacePath).toBeNull()
   })
 
+
+  it('creates independent isolated workspaces for separate work packages in the same task', async () => {
+    vi.mocked(api.workspace.createIsolated).mockImplementation(async ({ ownerId }) => ({
+      success: true,
+      workspacePath: `/tmp/${ownerId}`,
+      mode: 'worktree',
+    }))
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Run two parallel packages',
+      specialists: ['frontend', 'logic'],
+      executionTarget: 'isolated',
+      sourceWorkspacePath: '/workspace/adnify',
+    })
+    const [firstPackageId, secondPackageId] = useAgentStore.getState().executionTasks[taskId].workPackages
+
+    const first = await prepareTaskExecutionWorkspace(taskId, '/workspace/adnify', firstPackageId)
+    const second = await prepareTaskExecutionWorkspace(taskId, '/workspace/adnify', secondPackageId)
+
+    expect(first.workspacePath).toBe(`/tmp/${firstPackageId}`)
+    expect(second.workspacePath).toBe(`/tmp/${secondPackageId}`)
+    expect(api.workspace.createIsolated).toHaveBeenNthCalledWith(1, {
+      taskId,
+      workspacePath: '/workspace/adnify',
+      ownerId: firstPackageId,
+    })
+    expect(api.workspace.createIsolated).toHaveBeenNthCalledWith(2, {
+      taskId,
+      workspacePath: '/workspace/adnify',
+      ownerId: secondPackageId,
+    })
+  })
+
+  it('disposes package-scoped isolated workspaces independently', async () => {
+    vi.mocked(api.workspace.disposeIsolated).mockResolvedValue({ success: true })
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Dispose one package workspace',
+      specialists: ['frontend', 'logic'],
+      executionTarget: 'isolated',
+      sourceWorkspacePath: '/workspace/adnify',
+      isolationMode: 'worktree',
+      isolationStatus: 'ready',
+    })
+    const [firstPackageId, secondPackageId] = useAgentStore.getState().executionTasks[taskId].workPackages
+
+    useAgentStore.getState().updateWorkPackage(firstPackageId, {
+      workspaceId: '/tmp/pkg-1',
+      workspaceOwnerId: firstPackageId,
+    })
+    useAgentStore.getState().updateWorkPackage(secondPackageId, {
+      workspaceId: '/tmp/pkg-2',
+      workspaceOwnerId: secondPackageId,
+    })
+
+    await cleanupTaskExecutionWorkspace(taskId, firstPackageId)
+
+    expect(api.workspace.disposeIsolated).toHaveBeenCalledWith(firstPackageId)
+    expect(useAgentStore.getState().workPackages[firstPackageId].workspaceId).toBeNull()
+    expect(useAgentStore.getState().workPackages[secondPackageId].workspaceId).toBe('/tmp/pkg-2')
+  })
+
+  it('captures baseline file hashes for writable scopes before package execution starts', async () => {
+    vi.mocked(api.workspace.createIsolated).mockResolvedValue({
+      success: true,
+      workspacePath: '/tmp/adnify-task-2a',
+      mode: 'worktree',
+    })
+    vi.mocked(api.file.readDir).mockImplementation(async (path: string) => {
+      if (path === '/workspace/adnify/src/renderer/components') {
+        return [{ name: 'TaskBoard.tsx', path: '/workspace/adnify/src/renderer/components/TaskBoard.tsx', isDirectory: false }]
+      }
+      return []
+    })
+    vi.mocked(api.file.read).mockImplementation(async (path: string) => {
+      if (path === '/workspace/adnify/src/renderer/components/TaskBoard.tsx') {
+        return 'baseline TaskBoard content'
+      }
+      return null
+    })
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Coordinate renderer changes',
+      specialists: ['frontend', 'logic'],
+      executionTarget: 'isolated',
+      sourceWorkspacePath: '/workspace/adnify',
+      writableScopes: ['src/renderer/components'],
+    })
+    const [firstPackageId] = useAgentStore.getState().executionTasks[taskId].workPackages
+
+    const prepared = await executorTesting.prepareWorkPackageExecution({
+      taskId,
+      workPackageId: firstPackageId,
+      fallbackWorkspacePath: '/workspace/adnify',
+    })
+
+    expect(prepared.ready).toBe(true)
+    expect(useAgentStore.getState().workPackages[firstPackageId].baselineFiles).toEqual({
+      'src/renderer/components/TaskBoard.tsx': {
+        path: 'src/renderer/components/TaskBoard.tsx',
+        exists: true,
+        hash: hashFileContent('baseline TaskBoard content'),
+      },
+    })
+  })
+
   it('queues conflicting work packages until active leases are released', async () => {
     vi.mocked(api.workspace.createIsolated).mockResolvedValue({
       success: true,
@@ -154,7 +268,157 @@ describe('execution workspace service', () => {
     expect(Object.values(state.executionQueueItems)).toHaveLength(1)
   })
 
-  it('creates handoff and proposal state, then wakes queued work on completion', async () => {
+
+  it('applies an approved proposal, then releases queued work and cleans the package workspace', async () => {
+    vi.mocked(api.workspace.createIsolated).mockResolvedValue({
+      success: true,
+      workspacePath: '/tmp/adnify-task-5',
+      mode: 'worktree',
+    })
+    vi.mocked(api.workspace.disposeIsolated).mockResolvedValue({ success: true })
+    vi.mocked(api.file.readDir).mockImplementation(async (path: string) => {
+      if (path === '/workspace/adnify/src/renderer/components') {
+        return [{ name: 'TaskBoard.tsx', path: '/workspace/adnify/src/renderer/components/TaskBoard.tsx', isDirectory: false }]
+      }
+      return []
+    })
+    vi.mocked(api.file.read).mockImplementation(async (path: string) => {
+      if (path === '/workspace/adnify/src/renderer/components/TaskBoard.tsx') {
+        return 'baseline TaskBoard content'
+      }
+      if (path === '/tmp/adnify-task-5/src/renderer/components/TaskBoard.tsx') {
+        return 'new isolated TaskBoard content'
+      }
+      return null
+    })
+    vi.mocked(api.file.exists).mockImplementation(async (path: string) => path === '/tmp/adnify-task-5/src/renderer/components/TaskBoard.tsx')
+    vi.mocked(api.file.write).mockResolvedValue(true)
+    vi.mocked(api.file.delete).mockResolvedValue(true)
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Coordinate renderer changes',
+      specialists: ['frontend', 'logic'],
+      executionTarget: 'isolated',
+      sourceWorkspacePath: '/workspace/adnify',
+      writableScopes: ['src/renderer/components'],
+    })
+    const [firstPackageId, secondPackageId] = useAgentStore.getState().executionTasks[taskId].workPackages
+
+    await executorTesting.prepareWorkPackageExecution({
+      taskId,
+      workPackageId: firstPackageId,
+      fallbackWorkspacePath: '/workspace/adnify',
+    })
+    await executorTesting.prepareWorkPackageExecution({
+      taskId,
+      workPackageId: secondPackageId,
+      fallbackWorkspacePath: '/workspace/adnify',
+    })
+
+    const completion = await executorTesting.completeWorkPackageExecution({
+      taskId,
+      workPackageId: firstPackageId,
+      summary: 'Frontend package is ready for review',
+      changedFiles: ['src/renderer/components/TaskBoard.tsx'],
+      verificationStatus: 'passed',
+      riskLevel: 'low',
+    })
+
+    await executorTesting.reviewChangeProposal(completion.proposalId, 'apply')
+
+    const state = useAgentStore.getState()
+    const queuedItem = Object.values(state.executionQueueItems).find((item) => item.workPackageId === secondPackageId)
+
+    expect(state.changeProposals[completion.proposalId].status).toBe('applied')
+    expect(queuedItem?.status).toBe('ready')
+    expect(api.file.write).toHaveBeenCalledWith(
+      '/workspace/adnify/src/renderer/components/TaskBoard.tsx',
+      'new isolated TaskBoard content',
+    )
+    expect(api.workspace.disposeIsolated).toHaveBeenCalledWith(firstPackageId)
+  })
+
+
+  it('opens adjudication instead of applying when the main workspace drifted before proposal approval', async () => {
+    vi.mocked(api.workspace.createIsolated).mockResolvedValue({
+      success: true,
+      workspacePath: '/tmp/adnify-task-6',
+      mode: 'worktree',
+    })
+    vi.mocked(api.workspace.disposeIsolated).mockResolvedValue({ success: true })
+    vi.mocked(api.file.readDir).mockImplementation(async (path: string) => {
+      if (path === '/workspace/adnify/src/renderer/components') {
+        return [{ name: 'TaskBoard.tsx', path: '/workspace/adnify/src/renderer/components/TaskBoard.tsx', isDirectory: false }]
+      }
+      return []
+    })
+    vi.mocked(api.file.read).mockImplementation(async (path: string) => {
+      if (path === '/workspace/adnify/src/renderer/components/TaskBoard.tsx') {
+        return 'baseline TaskBoard content'
+      }
+      if (path === '/tmp/adnify-task-6/src/renderer/components/TaskBoard.tsx') {
+        return 'new isolated TaskBoard content'
+      }
+      return null
+    })
+    vi.mocked(api.file.exists).mockImplementation(async (path: string) => path === '/tmp/adnify-task-6/src/renderer/components/TaskBoard.tsx')
+    vi.mocked(api.file.write).mockResolvedValue(true)
+    vi.mocked(api.file.delete).mockResolvedValue(true)
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Coordinate renderer changes',
+      specialists: ['frontend', 'logic'],
+      executionTarget: 'isolated',
+      sourceWorkspacePath: '/workspace/adnify',
+      writableScopes: ['src/renderer/components'],
+    })
+    const [firstPackageId, secondPackageId] = useAgentStore.getState().executionTasks[taskId].workPackages
+
+    await executorTesting.prepareWorkPackageExecution({
+      taskId,
+      workPackageId: firstPackageId,
+      fallbackWorkspacePath: '/workspace/adnify',
+    })
+    await executorTesting.prepareWorkPackageExecution({
+      taskId,
+      workPackageId: secondPackageId,
+      fallbackWorkspacePath: '/workspace/adnify',
+    })
+
+    const completion = await executorTesting.completeWorkPackageExecution({
+      taskId,
+      workPackageId: firstPackageId,
+      summary: 'Frontend package is ready for review',
+      changedFiles: ['src/renderer/components/TaskBoard.tsx'],
+      verificationStatus: 'passed',
+      riskLevel: 'low',
+    })
+
+    vi.mocked(api.file.read).mockImplementation(async (path: string) => {
+      if (path === '/workspace/adnify/src/renderer/components/TaskBoard.tsx') {
+        return 'main workspace drifted'
+      }
+      if (path === '/tmp/adnify-task-6/src/renderer/components/TaskBoard.tsx') {
+        return 'new isolated TaskBoard content'
+      }
+      return null
+    })
+
+    await executorTesting.reviewChangeProposal(completion.proposalId, 'apply')
+
+    const state = useAgentStore.getState()
+    const proposal = state.changeProposals[completion.proposalId]
+    const queuedItem = Object.values(state.executionQueueItems).find((item) => item.workPackageId === secondPackageId)
+
+    expect(proposal.status).toBe('pending')
+    expect(proposal.conflictFiles).toEqual(['src/renderer/components/TaskBoard.tsx'])
+    expect(state.executionTasks[taskId].latestAdjudicationId).toBeTruthy()
+    expect(queuedItem?.status).toBe('queued')
+    expect(api.file.write).not.toHaveBeenCalled()
+    expect(api.workspace.disposeIsolated).not.toHaveBeenCalled()
+  })
+
+  it('creates handoff and proposal state while keeping conflicting queued work blocked until review resolution', async () => {
     vi.mocked(api.workspace.createIsolated).mockResolvedValue({
       success: true,
       workspacePath: '/tmp/adnify-task-4',
@@ -199,6 +463,6 @@ describe('execution workspace service', () => {
     expect(state.changeProposals[completion.proposalId].workPackageId).toBe(firstPackageId)
     expect(state.workPackages[firstPackageId].status).toBe('proposal-ready')
     expect(state.executionTasks[taskId].proposalSummary.pendingCount).toBe(1)
-    expect(queuedItem?.status).toBe('ready')
+    expect(queuedItem?.status).toBe('queued')
   })
 })

@@ -42,10 +42,10 @@ export type AgentEvent =
   | { type: 'context:handoff'; document: HandoffDocument }
 
   // 循环事件
-  | { type: 'loop:start' }
-  | { type: 'loop:iteration'; count: number }
-  | { type: 'loop:end'; reason: string }
-  | { type: 'loop:warning'; message: string }
+  | { type: 'loop:start'; threadId?: string }
+  | { type: 'loop:iteration'; count: number; threadId?: string }
+  | { type: 'loop:end'; reason: string; threadId?: string }
+  | { type: 'loop:warning'; message: string; threadId?: string }
 
   // 情绪感知事件
   | { type: 'emotion:changed'; emotion: import('../types/emotion').EmotionDetection }

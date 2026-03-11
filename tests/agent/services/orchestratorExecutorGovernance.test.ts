@@ -1,21 +1,89 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mockState = vi.hoisted(() => ({
+  nextAgentOutput: 'Browser verification passed',
+  browserCapability: {
+    available: true,
+    provider: 'playwright' as 'playwright' | 'puppeteer' | null,
+    serverId: 'playwright',
+    serverName: 'Playwright',
+    toolNames: ['browser_navigate', 'browser_screenshot'],
+    reason: null as string | null,
+  },
+}))
+
+vi.mock('@renderer/agent/core/Agent', () => ({
+  Agent: {
+    send: vi.fn(async (_message: string, _config: unknown, _workspacePath: string, _mode: string, promptOptions?: { targetThreadId?: string }) => {
+      const threadId = promptOptions?.targetThreadId
+      if (!threadId) {
+        throw new Error('missing target thread')
+      }
+
+      const { useAgentStore } = await import('@renderer/agent/store/AgentStore')
+      const { EventBus } = await import('@renderer/agent/core/EventBus')
+      const store = useAgentStore.getState()
+      const { assistantId } = store.prepareExecution('work package execution', [], threadId)
+      store.appendToAssistant(assistantId, mockState.nextAgentOutput, threadId)
+      store.finalizeAssistant(assistantId, threadId)
+      setTimeout(() => {
+        EventBus.emit({ type: 'loop:end', reason: 'complete', threadId })
+      }, 0)
+    }),
+    abort: vi.fn(),
+    abortAll: vi.fn(),
+  },
+}))
+
+vi.mock('@renderer/agent/services/llmConfigService', () => ({
+  getLLMConfigForTask: vi.fn(async () => ({ apiKey: 'test-key', provider: 'openai', model: 'gpt-4o' })),
+  getProviderModelContext: vi.fn(() => ({ providerId: 'openai', defaultModel: 'gpt-4o', availableModels: ['gpt-4o', 'gpt-4o-mini'] })),
+}))
+
+vi.mock('@renderer/agent/services/browserVerificationService', () => ({
+  getBrowserVerificationCapability: vi.fn(() => ({ ...mockState.browserCapability })),
+  buildBrowserVerificationPrompt: vi.fn((input: { serverName: string }) => `Browser prompt via ${input.serverName}`),
+}))
 
 import { useStore } from '@store'
+import { Agent } from '@renderer/agent/core/Agent'
+import type { TaskPlan } from '@renderer/agent/orchestrator/types'
+import { __testing } from '@renderer/agent/services/orchestratorExecutor'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { createEmptySpecialistProfileSnapshot } from '@renderer/agent/types/taskExecution'
-import { __testing } from '@renderer/agent/services/orchestratorExecutor'
 
 describe('orchestrator executor governance', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
+    mockState.nextAgentOutput = 'Browser verification passed'
+    mockState.browserCapability = {
+      available: true,
+      provider: 'playwright',
+      serverId: 'playwright',
+      serverName: 'Playwright',
+      toolNames: ['browser_navigate', 'browser_screenshot'],
+      reason: null,
+    }
+
     useAgentStore.setState({
       executionTasks: {},
       workPackages: {},
       taskHandoffs: {},
+      changeProposals: {},
       adjudicationCases: {},
+      ownershipLeases: {},
+      executionQueueItems: {},
       activeExecutionTaskId: null,
       selectedTaskHandoffId: null,
+      selectedChangeProposalId: null,
     })
     useStore.setState((state) => ({
+      ...state,
+      llmConfig: {
+        ...state.llmConfig,
+        provider: 'openai',
+        model: 'gpt-4o',
+      },
       taskTrustSettings: state.taskTrustSettings,
     }))
   })
@@ -96,5 +164,142 @@ describe('orchestrator executor governance', () => {
     expect(guidance).toContain('Prefer polished UI')
     expect(guidance).toContain('Writable scopes: src/renderer')
     expect(guidance).toContain('Tool permission: workspace-write')
+  })
+
+  it('returns blocked browser verification when MCP browser capability is unavailable', async () => {
+    mockState.browserCapability = {
+      available: false,
+      provider: null,
+      serverId: 'playwright',
+      serverName: 'Playwright',
+      toolNames: [],
+      reason: 'Playwright MCP server is not connected.',
+    }
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Validate settings surface',
+      specialists: ['frontend', 'verifier', 'reviewer'],
+      executionTarget: 'current',
+      sourceWorkspacePath: '/workspace/adnify',
+    })
+    const executionTask = useAgentStore.getState().executionTasks[taskId]
+    const verifierPackage = executionTask.workPackages
+      .map((workPackageId) => useAgentStore.getState().workPackages[workPackageId])
+      .find((workPackage) => workPackage.specialist === 'verifier')!
+    const plan: TaskPlan = {
+      id: 'plan-browser-1',
+      name: 'Browser verify',
+      createdAt: 1,
+      updatedAt: 1,
+      requirementsDoc: 'requirements.md',
+      executionMode: 'parallel',
+      status: 'approved',
+      tasks: [],
+    }
+
+    const result = await __testing.runWorkPackageWithAgent(verifierPackage, executionTask, plan, '/workspace/adnify')
+
+    expect(result.success).toBe(true)
+    expect(result.verification.status).toBe('blocked')
+    expect(result.verification.verificationStatus).toBe('pending')
+    expect(result.verification.reason).toContain('not connected')
+    expect(Agent.send).not.toHaveBeenCalled()
+  })
+
+  it('marks browser verification as passed when the verifier completes the browser flow', async () => {
+    mockState.nextAgentOutput = 'Browser verification passed for navigation and button states.'
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Validate settings surface',
+      specialists: ['frontend', 'verifier', 'reviewer'],
+      executionTarget: 'current',
+      sourceWorkspacePath: '/workspace/adnify',
+    })
+    const executionTask = useAgentStore.getState().executionTasks[taskId]
+    const verifierPackage = executionTask.workPackages
+      .map((workPackageId) => useAgentStore.getState().workPackages[workPackageId])
+      .find((workPackage) => workPackage.specialist === 'verifier')!
+    const plan: TaskPlan = {
+      id: 'plan-browser-2',
+      name: 'Browser verify',
+      createdAt: 1,
+      updatedAt: 1,
+      requirementsDoc: 'requirements.md',
+      executionMode: 'parallel',
+      status: 'approved',
+      tasks: [],
+    }
+
+    const result = await __testing.runWorkPackageWithAgent(verifierPackage, executionTask, plan, '/workspace/adnify')
+
+    expect(result.success).toBe(true)
+    expect(result.verification.status).toBe('passed')
+    expect(result.verification.verificationStatus).toBe('passed')
+    expect(Agent.send).toHaveBeenCalledTimes(1)
+    expect(String(vi.mocked(Agent.send).mock.calls[0]?.[0])).toContain('Browser prompt via Playwright')
+  })
+
+  it('marks browser verification as failed when verifier output reports a browser failure', async () => {
+    mockState.nextAgentOutput = 'FAILED: Login dialog could not be opened in the browser flow.'
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Validate settings surface',
+      specialists: ['frontend', 'verifier', 'reviewer'],
+      executionTarget: 'current',
+      sourceWorkspacePath: '/workspace/adnify',
+    })
+    const executionTask = useAgentStore.getState().executionTasks[taskId]
+    const verifierPackage = executionTask.workPackages
+      .map((workPackageId) => useAgentStore.getState().workPackages[workPackageId])
+      .find((workPackage) => workPackage.specialist === 'verifier')!
+    const plan: TaskPlan = {
+      id: 'plan-browser-3',
+      name: 'Browser verify',
+      createdAt: 1,
+      updatedAt: 1,
+      requirementsDoc: 'requirements.md',
+      executionMode: 'parallel',
+      status: 'approved',
+      tasks: [],
+    }
+
+    const result = await __testing.runWorkPackageWithAgent(verifierPackage, executionTask, plan, '/workspace/adnify')
+
+    expect(result.success).toBe(true)
+    expect(result.verification.status).toBe('failed')
+    expect(result.verification.verificationStatus).toBe('failed')
+  })
+
+  it('blocks apply when proposal verification is incomplete and opens adjudication', async () => {
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Validate settings surface',
+      specialists: ['frontend', 'verifier', 'reviewer'],
+      executionTarget: 'current',
+      sourceWorkspacePath: '/workspace/adnify',
+    })
+    const executionTask = useAgentStore.getState().executionTasks[taskId]
+    const verifierPackage = executionTask.workPackages
+      .map((workPackageId) => useAgentStore.getState().workPackages[workPackageId])
+      .find((workPackage) => workPackage.specialist === 'verifier')!
+    const proposalId = useAgentStore.getState().createChangeProposal({
+      taskId,
+      workPackageId: verifierPackage.id,
+      summary: 'Browser verification blocked',
+      changedFiles: ['src/renderer/components/settings/tabs/AgentSettings.tsx'],
+      verificationStatus: 'pending',
+      verificationMode: 'browser',
+      verificationSummary: 'Browser verification blocked before execution.',
+      verificationBlockedReason: 'Playwright MCP server is not connected.',
+      riskLevel: 'medium',
+      recommendedAction: 'discard',
+    })
+
+    await __testing.reviewChangeProposal(proposalId, 'apply')
+
+    const proposal = useAgentStore.getState().changeProposals[proposalId]
+    const task = useAgentStore.getState().executionTasks[taskId]
+    expect(proposal.status).toBe('pending')
+    expect(proposal.applyError).toContain('not connected')
+    expect(task.latestAdjudicationId).toBeTruthy()
   })
 })

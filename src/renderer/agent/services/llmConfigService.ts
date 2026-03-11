@@ -6,8 +6,14 @@
  */
 
 import { useStore } from '@store'
-import { getBuiltinProvider, BUILTIN_PROVIDERS } from '@shared/config/providers'
+import { getBuiltinProvider, getProviderDefaultModel, BUILTIN_PROVIDERS } from '@shared/config/providers'
 import type { LLMConfig } from '@shared/types/llm'
+
+export interface ProviderModelContext {
+  providerId: string
+  defaultModel: string
+  availableModels: string[]
+}
 
 /**
  * 获取任务执行所需的 LLM 配置
@@ -22,23 +28,17 @@ export async function getLLMConfigForTask(
 ): Promise<LLMConfig | null> {
     const store = useStore.getState()
 
-    // 获取用户配置的提供商信息
     const providerConfig = store.providerConfigs[providerId]
-
-    // 获取内置提供商定义
     const builtinProvider = getBuiltinProvider(providerId)
 
     if (!providerConfig?.apiKey && !builtinProvider) {
         return null
     }
 
-    // 获取 API Key（优先使用用户配置）
     const apiKey = providerConfig?.apiKey || ''
     if (!apiKey) {
-        // 如果没有 API Key，检查是否可以使用默认配置
         const defaultConfig = store.llmConfig
         if (defaultConfig.provider === providerId && defaultConfig.apiKey) {
-            // 使用默认配置的 API Key
             return {
                 provider: providerId,
                 model: modelId,
@@ -63,6 +63,25 @@ export async function getLLMConfigForTask(
     }
 }
 
+export function getProviderModelContext(providerId: string): ProviderModelContext {
+    const store = useStore.getState()
+    const providerConfig = store.providerConfigs[providerId]
+    const configuredModel = providerConfig?.model
+        || (store.llmConfig.provider === providerId ? store.llmConfig.model : '')
+        || getProviderDefaultModel(providerId)
+    const availableModels = getAvailableModels(providerId)
+
+    if (configuredModel && !availableModels.includes(configuredModel)) {
+        availableModels.unshift(configuredModel)
+    }
+
+    return {
+        providerId,
+        defaultModel: configuredModel,
+        availableModels,
+    }
+}
+
 /**
  * 获取可用的提供商列表（有 API Key 的）
  */
@@ -70,7 +89,6 @@ export function getAvailableProviders(): string[] {
     const store = useStore.getState()
     const available: string[] = []
 
-    // 检查每个内置提供商
     for (const providerId of Object.keys(BUILTIN_PROVIDERS)) {
         const config = store.providerConfigs[providerId]
         if (config?.apiKey) {
@@ -78,7 +96,6 @@ export function getAvailableProviders(): string[] {
         }
     }
 
-    // 检查默认配置
     const defaultConfig = store.llmConfig
     if (defaultConfig.apiKey && !available.includes(defaultConfig.provider)) {
         available.push(defaultConfig.provider)
@@ -97,12 +114,10 @@ export function getAvailableModels(providerId: string): string[] {
 
     const models: string[] = []
 
-    // 添加内置模型
     if (builtinProvider?.models) {
         models.push(...builtinProvider.models)
     }
 
-    // 添加用户自定义模型
     if (userConfig?.customModels) {
         for (const model of userConfig.customModels) {
             if (!models.includes(model)) {

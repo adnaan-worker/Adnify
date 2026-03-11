@@ -24,6 +24,7 @@ export interface IsolationPreviewResult extends IsolationChoiceInput {
 export interface CreateIsolatedWorkspaceRequest {
   taskId: string
   workspacePath: string
+  ownerId?: string
   preferredMode?: IsolationMode
 }
 
@@ -41,6 +42,7 @@ export interface IsolatedWorkspaceCleanupSummary {
 }
 
 interface IsolatedWorkspaceRecord {
+  ownerId?: string
   taskId: string
   sourcePath: string
   workspacePath: string
@@ -59,6 +61,10 @@ function formatError(error: unknown): string {
 
 function sanitizeTaskId(taskId: string): string {
   return taskId.replace(/[^a-zA-Z0-9-_]/g, '-').replace(/-+/g, '-') || 'task'
+}
+
+function getWorkspaceOwnerId(input: { taskId: string; ownerId?: string }): string {
+  return input.ownerId || input.taskId
 }
 
 async function ensureIsolationRoot(): Promise<string> {
@@ -80,9 +86,9 @@ async function runGit(args: string[], cwd: string): Promise<{ ok: boolean; stdou
   }
 }
 
-async function createTargetPath(taskId: string): Promise<string> {
+async function createTargetPath(ownerId: string): Promise<string> {
   const root = await ensureIsolationRoot()
-  return path.join(root, `${sanitizeTaskId(taskId)}-${Date.now()}`)
+  return path.join(root, `${sanitizeTaskId(ownerId)}-${Date.now()}`)
 }
 
 export async function previewIsolationChoice(workspacePath: string): Promise<IsolationPreviewResult> {
@@ -107,7 +113,8 @@ export async function createIsolatedWorkspace(
 ): Promise<IsolatedWorkspaceResult> {
   const preview = await previewIsolationChoice(request.workspacePath)
   let mode = request.preferredMode ?? preview.mode
-  const targetPath = await createTargetPath(request.taskId)
+  const ownerId = getWorkspaceOwnerId(request)
+  const targetPath = await createTargetPath(ownerId)
 
   try {
     if (mode === 'worktree') {
@@ -123,7 +130,8 @@ export async function createIsolatedWorkspace(
       await fsPromises.cp(request.workspacePath, targetPath, { recursive: true, force: true })
     }
 
-    isolatedWorkspaceRegistry.set(request.taskId, {
+    isolatedWorkspaceRegistry.set(ownerId, {
+      ownerId,
       taskId: request.taskId,
       sourcePath: request.workspacePath,
       workspacePath: targetPath,
@@ -207,7 +215,7 @@ export function registerIsolatedWorkspaceHandlers(): void {
 
 export const __testing = {
   registerRecord(record: IsolatedWorkspaceRecord) {
-    isolatedWorkspaceRegistry.set(record.taskId, { ...record })
+    isolatedWorkspaceRegistry.set(record.ownerId || record.taskId, { ...record, ownerId: record.ownerId || record.taskId })
   },
   getRegistrySize() {
     return isolatedWorkspaceRegistry.size

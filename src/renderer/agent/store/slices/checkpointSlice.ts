@@ -28,7 +28,7 @@ export interface CheckpointActions {
     getPendingChanges: () => PendingChange[]
 
     // 消息检查点操作
-    createMessageCheckpoint: (messageId: string, description: string, images?: CheckpointImage[], contextItems?: ContextItem[]) => Promise<string>
+    createMessageCheckpoint: (messageId: string, description: string, images?: CheckpointImage[], contextItems?: ContextItem[], targetThreadId?: string) => Promise<string>
     addSnapshotToCurrentCheckpoint: (filePath: string, content: string | null) => void
     restoreToCheckpoint: (checkpointId: string) => Promise<{ success: boolean; restoredFiles: string[]; errors: string[]; images?: CheckpointImage[]; contextItems?: ContextItem[] }>
     getCheckpointForMessage: (messageId: string) => MessageCheckpoint | null
@@ -158,8 +158,8 @@ export const createCheckpointSlice: StateCreator<
     },
 
     // 创建消息检查点
-    createMessageCheckpoint: async (messageId, description, images, contextItems) => {
-        const threadId = get().currentThreadId
+    createMessageCheckpoint: async (messageId, description, images, contextItems, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return ''
 
         const fileSnapshots: Record<string, FileSnapshot> = {}

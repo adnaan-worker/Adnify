@@ -12,6 +12,7 @@ import { logger } from '@shared/utils/Logger'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import type Store from 'electron-store'
 import { buildRuntimeCleanupTasks, type RuntimeCleanupReason } from './lifecycle/runtimeCleanup'
+import { resolveBeforeQuitAction, resolveWindowAllClosedAction } from './lifecycle/quitLifecycle'
 
 // ==========================================
 // 常量定义
@@ -475,7 +476,12 @@ app.on('second-instance', () => {
 app.on('window-all-closed', () => {
   logger.system.info('[Main] All windows closed, platform:', process.platform)
 
-  if (process.platform === 'darwin') {
+  const action = resolveWindowAllClosedAction(process.platform, {
+    cleanupDone: isCleanupDone,
+    cleanupRunning: isQuitCleanupRunning,
+  })
+
+  if (action === 'cleanup-only') {
     performRuntimeCleanup('window-all-closed').catch((err) => {
       logger.system.warn('[Main] Runtime cleanup after window-all-closed failed:', err)
     })
@@ -490,19 +496,36 @@ app.on('window-all-closed', () => {
  * 在该阶段拦截退出信号并执行异步清理
  */
 let isCleanupDone = false
+let isQuitCleanupRunning = false
 app.on('before-quit', async (e) => {
-  if (!isCleanupDone) {
-    // 拦截退出，执行清理
-    e.preventDefault()
-    logger.system.info('[Main] Intercepting before-quit for cleanup')
+  const action = resolveBeforeQuitAction({
+    cleanupDone: isCleanupDone,
+    cleanupRunning: isQuitCleanupRunning,
+  })
 
-    await performRuntimeCleanup('before-quit')
-
-    isCleanupDone = true
-    // 清理完成后再次触发退出
-    logger.system.info('[Main] Cleanup done, re-triggering app.quit()')
-    app.quit()
+  if (action === 'allow') {
+    return
   }
+
+  e.preventDefault()
+
+  if (action === 'wait') {
+    logger.system.info('[Main] Quit cleanup already running, waiting for completion')
+    return
+  }
+
+  logger.system.info('[Main] Intercepting before-quit for cleanup')
+  isQuitCleanupRunning = true
+
+  try {
+    await performRuntimeCleanup('before-quit')
+    isCleanupDone = true
+  } finally {
+    isQuitCleanupRunning = false
+  }
+
+  logger.system.info('[Main] Cleanup done, re-triggering app.quit()')
+  app.quit()
 })
 
 app.on('activate', () => { if (windows.size === 0) createWindow() })

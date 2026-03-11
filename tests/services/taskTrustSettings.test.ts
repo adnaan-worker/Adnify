@@ -7,6 +7,7 @@ describe('task trust settings', () => {
   it('hydrates defaults for global, workspace, and task overrides', () => {
     const settings = normalizeTaskTrustSettings(undefined)
     expect(settings.global.mode).toBe('balanced')
+    expect(settings.global.modelRoutingPolicy).toBe('balanced')
     expect(settings.workspaceOverrides).toEqual({})
     expect(settings.allowTaskOverride).toBe(true)
   })
@@ -25,6 +26,7 @@ describe('task trust settings', () => {
       enableSafetyGuards: true,
       defaultExecutionTarget: 'auto',
       interruptMode: 'phase',
+      modelRoutingPolicy: 'balanced',
     })
   })
 
@@ -36,6 +38,7 @@ describe('task trust settings', () => {
     expect(settings.governanceDefaults.rollback.autoRollbackIsolated).toBe(true)
     expect(settings.governanceDefaults.rollback.requireConfirmationForMainWorkspace).toBe(true)
     expect(settings.specialistProfiles.frontend.role).toBe('frontend')
+    expect(settings.specialistProfiles.frontend.verificationMode).toBe('browser')
     expect(settings.specialistProfiles.reviewer.toolPermission).toBe('read-mostly')
   })
 

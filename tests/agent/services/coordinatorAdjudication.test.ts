@@ -19,6 +19,19 @@ describe('coordinator adjudication', () => {
     expect(caseItem.recommendedAction).toBe('return-for-rework')
   })
 
+  it('uses a conservative recommendation for main workspace conflict adjudication', () => {
+    const caseItem = createAdjudicationCase({
+      id: 'adj-3',
+      taskId: 'task-1',
+      trigger: 'main-workspace-conflict',
+      reason: 'Main workspace changed during package review',
+      changedFiles: ['src/renderer/App.tsx'],
+    })
+
+    expect(caseItem.status).toBe('open')
+    expect(caseItem.recommendedAction).toBe('return-for-rework')
+  })
+
   it('resolves partial acceptance with selected files', () => {
     const caseItem = createAdjudicationCase({
       id: 'adj-2',

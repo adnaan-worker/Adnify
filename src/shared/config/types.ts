@@ -214,6 +214,7 @@ export interface TaskTrustPolicy {
   enableSafetyGuards?: boolean
   defaultExecutionTarget?: 'current' | 'isolated' | 'auto'
   interruptMode?: 'phase' | 'high-risk' | 'failure-only'
+  modelRoutingPolicy?: 'manual' | 'balanced' | 'budget-aware'
 }
 
 export type TaskSpecialistRole = 'frontend' | 'logic' | 'verifier' | 'reviewer'
@@ -258,6 +259,7 @@ export interface SpecialistProfileSettings {
   styleHints?: string
   validationRole?: 'none' | 'secondary' | 'primary'
   trustMode?: 'safe' | 'balanced' | 'autonomous' | 'manual'
+  verificationMode?: 'static' | 'regression' | 'browser'
 }
 
 export interface TaskTrustSettings {

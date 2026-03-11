@@ -182,6 +182,7 @@ const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
     enableSafetyGuards: true,
     defaultExecutionTarget: 'auto',
     interruptMode: 'phase',
+    modelRoutingPolicy: 'balanced',
   },
   workspaceOverrides: {},
   allowTaskOverride: true,
@@ -215,6 +216,7 @@ const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
       styleHints: 'Prefer polished UI, accessibility, and interaction details.',
       validationRole: 'secondary',
       trustMode: 'balanced',
+      verificationMode: 'browser',
     },
     logic: {
       role: 'logic',
@@ -227,6 +229,7 @@ const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
       styleHints: 'Prefer correctness, state integrity, and edge-case handling.',
       validationRole: 'secondary',
       trustMode: 'balanced',
+      verificationMode: 'regression',
     },
     verifier: {
       role: 'verifier',
@@ -239,6 +242,7 @@ const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
       styleHints: 'Prefer focused verification, reproduction, and concise findings.',
       validationRole: 'primary',
       trustMode: 'balanced',
+      verificationMode: 'regression',
     },
     reviewer: {
       role: 'reviewer',
@@ -251,6 +255,7 @@ const defaultTaskTrustSettings: TaskTrustSettingsConfigType = {
       styleHints: 'Prefer risk review, scope control, and minimal-change guidance.',
       validationRole: 'secondary',
       trustMode: 'balanced',
+      verificationMode: 'static',
     },
   },
 }

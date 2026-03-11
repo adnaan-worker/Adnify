@@ -168,7 +168,7 @@ export interface ElectronAPI {
   clearRecentWorkspaces: () => Promise<boolean>
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
   previewIsolationChoice: (workspacePath: string) => Promise<IsolationPreviewResult>
-  createIsolatedWorkspace: (request: { taskId: string; workspacePath: string; preferredMode?: IsolationMode }) => Promise<IsolatedWorkspaceResult>
+  createIsolatedWorkspace: (request: { taskId: string; workspacePath: string; ownerId?: string; preferredMode?: IsolationMode }) => Promise<IsolatedWorkspaceResult>
   disposeIsolatedWorkspace: (taskId: string) => Promise<IsolatedWorkspaceResult>
   readDir: (path: string) => Promise<{ name: string; path: string; isDirectory: boolean }[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
@@ -432,7 +432,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearRecentWorkspaces: () => ipcRenderer.invoke('workspace:clearRecent'),
   removeFromRecentWorkspaces: (path: string) => ipcRenderer.invoke('workspace:removeFromRecent', path),
   previewIsolationChoice: (workspacePath: string) => ipcRenderer.invoke('workspace:previewIsolation', workspacePath),
-  createIsolatedWorkspace: (request: { taskId: string; workspacePath: string; preferredMode?: IsolationMode }) =>
+  createIsolatedWorkspace: (request: { taskId: string; workspacePath: string; ownerId?: string; preferredMode?: IsolationMode }) =>
     ipcRenderer.invoke('workspace:createIsolated', request),
   disposeIsolatedWorkspace: (taskId: string) => ipcRenderer.invoke('workspace:disposeIsolated', taskId),
   readDir: (path: string) => ipcRenderer.invoke('file:readDir', path),

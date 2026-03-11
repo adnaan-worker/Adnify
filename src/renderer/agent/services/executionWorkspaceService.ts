@@ -31,11 +31,25 @@ export function getEffectiveExecutionTarget(task: ExecutionTask): 'current' | 'i
   }) ? 'isolated' : 'current'
 }
 
-export async function prepareTaskExecutionWorkspace(taskId: string, fallbackWorkspacePath: string): Promise<PreparedExecutionWorkspace> {
+export async function prepareTaskExecutionWorkspace(
+  taskId: string,
+  fallbackWorkspacePath: string,
+  ownerId?: string,
+): Promise<PreparedExecutionWorkspace> {
   const store = useAgentStore.getState()
   const task = getTaskOrThrow(taskId)
+  const workPackage = ownerId ? store.workPackages[ownerId] : null
 
-  if (task.resolvedWorkspacePath && task.isolationStatus === 'ready') {
+  if (ownerId && workPackage?.workspaceId) {
+    return {
+      success: true,
+      workspacePath: workPackage.workspaceId,
+      target: workPackage.workspaceOwnerId ? 'isolated' : 'current',
+      mode: workPackage.workspaceOwnerId ? (task.isolationMode ?? undefined) : undefined,
+    }
+  }
+
+  if (!ownerId && task.resolvedWorkspacePath && task.isolationStatus === 'ready') {
     return {
       success: true,
       workspacePath: task.resolvedWorkspacePath,
@@ -65,8 +79,8 @@ export async function prepareTaskExecutionWorkspace(taskId: string, fallbackWork
 
   store.updateExecutionTask(taskId, {
     sourceWorkspacePath,
-    resolvedWorkspacePath: null,
-    isolationMode: null,
+    resolvedWorkspacePath: ownerId ? task.resolvedWorkspacePath : null,
+    isolationMode: ownerId ? task.isolationMode : null,
     isolationStatus: 'preparing',
     isolationError: null,
   })
@@ -74,14 +88,15 @@ export async function prepareTaskExecutionWorkspace(taskId: string, fallbackWork
   const result = await api.workspace.createIsolated({
     taskId,
     workspacePath: sourceWorkspacePath,
+    ownerId,
   })
 
   if (!result.success || !result.workspacePath) {
     const error = result.error || 'Failed to create isolated workspace'
     store.updateExecutionTask(taskId, {
       sourceWorkspacePath,
-      resolvedWorkspacePath: null,
-      isolationMode: null,
+      resolvedWorkspacePath: ownerId ? task.resolvedWorkspacePath : null,
+      isolationMode: ownerId ? task.isolationMode : null,
       isolationStatus: 'failed',
       isolationError: error,
     })
@@ -96,8 +111,8 @@ export async function prepareTaskExecutionWorkspace(taskId: string, fallbackWork
 
   store.updateExecutionTask(taskId, {
     sourceWorkspacePath,
-    resolvedWorkspacePath: result.workspacePath,
-    isolationMode: result.mode ?? null,
+    resolvedWorkspacePath: ownerId ? task.resolvedWorkspacePath : result.workspacePath,
+    isolationMode: result.mode ?? task.isolationMode ?? null,
     isolationStatus: 'ready',
     isolationError: null,
   })
@@ -110,18 +125,47 @@ export async function prepareTaskExecutionWorkspace(taskId: string, fallbackWork
   }
 }
 
-export async function cleanupTaskExecutionWorkspace(taskId: string): Promise<void> {
+export async function cleanupTaskExecutionWorkspace(taskId: string, ownerId?: string): Promise<void> {
   const store = useAgentStore.getState()
   const task = store.executionTasks[taskId]
   if (!task) return
 
-  const shouldDispose = Boolean(task.isolationMode && task.resolvedWorkspacePath && task.isolationStatus !== 'disposed')
-  if (!shouldDispose) return
+  if (ownerId) {
+    const workPackage = store.workPackages[ownerId]
+    if (!workPackage?.workspaceOwnerId || !workPackage.workspaceId) return
 
-  const result = await api.workspace.disposeIsolated(taskId)
-  store.updateExecutionTask(taskId, {
-    resolvedWorkspacePath: result.success ? null : task.resolvedWorkspacePath,
-    isolationStatus: result.success ? 'disposed' : task.isolationStatus,
-    isolationError: result.success ? null : (result.error || 'Failed to dispose isolated workspace'),
-  })
+    const result = await api.workspace.disposeIsolated(workPackage.workspaceOwnerId)
+    if (result.success) {
+      store.updateWorkPackage(ownerId, {
+        workspaceId: null,
+        workspaceOwnerId: null,
+      })
+    }
+    return
+  }
+
+  for (const workPackageId of task.workPackages) {
+    const workPackage = store.workPackages[workPackageId]
+    if (workPackage?.workspaceOwnerId && workPackage.workspaceId) {
+      await cleanupTaskExecutionWorkspace(taskId, workPackageId)
+    }
+  }
+
+  const shouldDisposeTaskWorkspace = Boolean(task.isolationMode && task.resolvedWorkspacePath && task.isolationStatus !== 'disposed')
+  if (shouldDisposeTaskWorkspace) {
+    const result = await api.workspace.disposeIsolated(taskId)
+    store.updateExecutionTask(taskId, {
+      resolvedWorkspacePath: result.success ? null : task.resolvedWorkspacePath,
+      isolationStatus: result.success ? 'disposed' : task.isolationStatus,
+      isolationError: result.success ? null : (result.error || 'Failed to dispose isolated workspace'),
+    })
+    return
+  }
+
+  if (task.isolationMode && task.isolationStatus !== 'disposed') {
+    store.updateExecutionTask(taskId, {
+      isolationStatus: 'disposed',
+      isolationError: null,
+    })
+  }
 }

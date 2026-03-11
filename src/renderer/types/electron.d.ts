@@ -330,7 +330,7 @@ export interface ElectronAPI {
   clearRecentWorkspaces: () => Promise<boolean>
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
   previewIsolationChoice: (workspacePath: string) => Promise<IsolationPreviewResult>
-  createIsolatedWorkspace: (request: { taskId: string; workspacePath: string; preferredMode?: IsolationMode }) => Promise<IsolatedWorkspaceResult>
+  createIsolatedWorkspace: (request: { taskId: string; workspacePath: string; ownerId?: string; preferredMode?: IsolationMode }) => Promise<IsolatedWorkspaceResult>
   disposeIsolatedWorkspace: (taskId: string) => Promise<IsolatedWorkspaceResult>
   readDir: (path: string) => Promise<FileItem[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>

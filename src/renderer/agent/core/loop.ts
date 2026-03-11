@@ -413,7 +413,7 @@ export async function runLoop(
   let iteration = 0
   let shouldContinue = true
 
-  EventBus.emit({ type: 'loop:start' })
+  EventBus.emit({ type: 'loop:start', threadId })
 
   while (shouldContinue && iteration < maxIterations && !context.abortSignal?.aborted) {
     iteration++
@@ -422,14 +422,14 @@ export async function runLoop(
 
     // 检查中止信号
     if (context.abortSignal?.aborted) {
-      EventBus.emit({ type: 'loop:end', reason: 'aborted' })
+      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId })
       break
     }
 
     if (llmMessages.length === 0) {
       logger.agent.error('[Loop] No messages to send')
       threadStore.appendToAssistant(assistantId, '\n\n❌ Error: No messages to send')
-      EventBus.emit({ type: 'loop:end', reason: 'no_messages' })
+      EventBus.emit({ type: 'loop:end', reason: 'no_messages', threadId })
       break
     }
 
@@ -438,7 +438,7 @@ export async function runLoop(
 
     // 再次检查中止信号（LLM 调用后）
     if (context.abortSignal?.aborted) {
-      EventBus.emit({ type: 'loop:end', reason: 'aborted' })
+      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId })
       break
     }
 
@@ -471,7 +471,7 @@ Try again with the corrected tool call.`
         // 其他错误：中止循环
         logger.agent.error('[Loop] LLM error:', result.error)
         threadStore.appendToAssistant(assistantId, `\n\n❌ Error: ${result.error}`)
-        EventBus.emit({ type: 'loop:end', reason: 'error' })
+        EventBus.emit({ type: 'loop:end', reason: 'error', threadId })
         break
       }
     }
@@ -499,7 +499,7 @@ Try again with the corrected tool call.`
 
       // L4 需要中断循环
       if (compressionResult.needsHandoff) {
-        EventBus.emit({ type: 'loop:end', reason: 'handoff_required' })
+        EventBus.emit({ type: 'loop:end', reason: 'handoff_required', threadId })
         break
       }
     } else {
@@ -538,7 +538,7 @@ Try again with the corrected tool call.`
 
       // L4 需要中断循环
       if (compressionResult.needsHandoff) {
-        EventBus.emit({ type: 'loop:end', reason: 'handoff_required' })
+        EventBus.emit({ type: 'loop:end', reason: 'handoff_required', threadId })
         break
       }
     }
@@ -565,7 +565,7 @@ Try again with the corrected tool call.`
         shouldContinue = true
         continue
       }
-      EventBus.emit({ type: 'loop:end', reason: 'complete' })
+      EventBus.emit({ type: 'loop:end', reason: 'complete', threadId })
       break
     }
 
@@ -576,7 +576,7 @@ Try again with the corrected tool call.`
       const suggestion = loopCheck.suggestion ? `\n💡 ${loopCheck.suggestion}` : ''
       threadStore.appendToAssistant(assistantId, `\n\n⚠️ ${loopCheck.reason}${suggestion}`)
       EventBus.emit({ type: 'loop:warning', message: loopCheck.reason || 'Loop detected' })
-      EventBus.emit({ type: 'loop:end', reason: 'loop_detected' })
+      EventBus.emit({ type: 'loop:end', reason: 'loop_detected', threadId })
       break
     }
 
@@ -613,7 +613,7 @@ Try again with the corrected tool call.`
 
     // 检查中止信号（工具执行后）
     if (context.abortSignal?.aborted) {
-      EventBus.emit({ type: 'loop:end', reason: 'aborted' })
+      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId })
       break
     }
 
@@ -629,7 +629,7 @@ Try again with the corrected tool call.`
         threadStore.finalizeAssistant(assistantId)
       }
       threadStore.setStreamPhase('idle')
-      EventBus.emit({ type: 'loop:end', reason: 'waiting_for_user' })
+      EventBus.emit({ type: 'loop:end', reason: 'waiting_for_user', threadId })
       break
     }
 
@@ -638,7 +638,7 @@ Try again with the corrected tool call.`
     if (stopLoopResult) {
       threadStore.finalizeAssistant(assistantId)
       threadStore.setStreamPhase('idle')
-      EventBus.emit({ type: 'loop:end', reason: 'tool_requested_stop' })
+      EventBus.emit({ type: 'loop:end', reason: 'tool_requested_stop', threadId })
       break
     }
 
@@ -683,7 +683,7 @@ Try again with the corrected tool call.`
     }
 
     if (userRejected) {
-      EventBus.emit({ type: 'loop:end', reason: 'user_rejected' })
+      EventBus.emit({ type: 'loop:end', reason: 'user_rejected', threadId })
       break
     }
 
@@ -696,6 +696,6 @@ Try again with the corrected tool call.`
     logger.agent.warn('[Loop] Reached maximum iterations')
     threadStore.appendToAssistant(assistantId, '\n\n⚠️ Reached maximum tool call limit.')
     EventBus.emit({ type: 'loop:warning', message: 'Max iterations reached' })
-    EventBus.emit({ type: 'loop:end', reason: 'max_iterations' })
+    EventBus.emit({ type: 'loop:end', reason: 'max_iterations', threadId })
   }
 }

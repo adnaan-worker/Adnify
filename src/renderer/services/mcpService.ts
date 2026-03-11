@@ -313,6 +313,11 @@ class McpService {
     }
   }
 
+  /** 获取当前服务器状态快照 */
+  getServersStateSnapshot(): McpServerState[] {
+    return [...useStore.getState().mcpServers]
+  }
+
   /** 获取所有可用工具 */
   getAllTools() {
     return useStore.getState().getAllMcpTools()

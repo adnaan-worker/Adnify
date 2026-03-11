@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest'
+
+import { resolveModelRoute } from '@renderer/agent/services/modelRoutingService'
+
+describe('modelRoutingService', () => {
+  it('keeps the explicit specialist model ahead of routing policy changes', () => {
+    const decision = resolveModelRoute({
+      policy: 'budget-aware',
+      specialist: 'frontend',
+      specialistModel: 'claude-3-5-haiku-20241022',
+      defaultModel: 'claude-sonnet-4-20250514',
+      availableModels: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022'],
+      budget: {
+        warningTriggered: true,
+        warningThresholdRatio: 0.8,
+        usage: { llmCalls: 8, estimatedTokens: 90000 },
+        limits: { llmCalls: 10, estimatedTokens: 100000 },
+      },
+    })
+
+    expect(decision.model).toBe('claude-3-5-haiku-20241022')
+    expect(decision.reason).toBe('specialist-explicit')
+    expect(decision.degraded).toBe(false)
+  })
+
+  it('picks a role-appropriate balanced model when no explicit specialist model is configured', () => {
+    const decision = resolveModelRoute({
+      policy: 'balanced',
+      specialist: 'verifier',
+      specialistModel: null,
+      defaultModel: 'gpt-4o',
+      availableModels: ['gpt-4o', 'gpt-4o-mini', 'o1-mini'],
+      budget: {
+        warningTriggered: false,
+        warningThresholdRatio: 0.8,
+        usage: { llmCalls: 1, estimatedTokens: 1000 },
+        limits: { llmCalls: 10, estimatedTokens: 100000 },
+      },
+    })
+
+    expect(decision.model).toBe('gpt-4o-mini')
+    expect(decision.reason).toBe('balanced-default')
+    expect(decision.degraded).toBe(false)
+  })
+
+  it('degrades to a cheaper model when budget-aware routing sees pressure', () => {
+    const decision = resolveModelRoute({
+      policy: 'budget-aware',
+      specialist: 'logic',
+      specialistModel: null,
+      defaultModel: 'gpt-4o',
+      availableModels: ['gpt-4o', 'gpt-4o-mini'],
+      budget: {
+        warningTriggered: true,
+        warningThresholdRatio: 0.8,
+        usage: { llmCalls: 9, estimatedTokens: 85000 },
+        limits: { llmCalls: 10, estimatedTokens: 100000 },
+      },
+    })
+
+    expect(decision.model).toBe('gpt-4o-mini')
+    expect(decision.reason).toBe('budget-aware-fallback')
+    expect(decision.degraded).toBe(true)
+  })
+})

@@ -270,12 +270,14 @@ export interface AppSettingsSchema {
       enableSafetyGuards?: boolean
       defaultExecutionTarget?: 'current' | 'isolated' | 'auto'
       interruptMode?: 'phase' | 'high-risk' | 'failure-only'
+      modelRoutingPolicy?: 'manual' | 'balanced' | 'budget-aware'
     }
     workspaceOverrides?: Record<string, {
       mode?: 'safe' | 'balanced' | 'autonomous' | 'manual'
       enableSafetyGuards?: boolean
       defaultExecutionTarget?: 'current' | 'isolated' | 'auto'
       interruptMode?: 'phase' | 'high-risk' | 'failure-only'
+      modelRoutingPolicy?: 'manual' | 'balanced' | 'budget-aware'
     }>
     allowTaskOverride?: boolean
     governanceDefaults?: {
@@ -313,6 +315,7 @@ export interface AppSettingsSchema {
       styleHints?: string
       validationRole?: 'none' | 'secondary' | 'primary'
       trustMode?: 'safe' | 'balanced' | 'autonomous' | 'manual'
+      verificationMode?: 'static' | 'regression' | 'browser'
     }>
   }
   mcpConfig?: {
@@ -442,6 +445,9 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
       if (global.interruptMode === 'phase' || global.interruptMode === 'high-risk' || global.interruptMode === 'failure-only') {
         cleaned.taskTrustSettings.global.interruptMode = global.interruptMode
       }
+      if (global.modelRoutingPolicy === 'manual' || global.modelRoutingPolicy === 'balanced' || global.modelRoutingPolicy === 'budget-aware') {
+        cleaned.taskTrustSettings.global.modelRoutingPolicy = global.modelRoutingPolicy
+      }
     }
 
     if (tt.workspaceOverrides && typeof tt.workspaceOverrides === 'object') {
@@ -460,6 +466,9 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
         }
         if (override.interruptMode === 'phase' || override.interruptMode === 'high-risk' || override.interruptMode === 'failure-only') {
           next.interruptMode = override.interruptMode
+        }
+        if (override.modelRoutingPolicy === 'manual' || override.modelRoutingPolicy === 'balanced' || override.modelRoutingPolicy === 'budget-aware') {
+          next.modelRoutingPolicy = override.modelRoutingPolicy
         }
         if (Object.keys(next).length > 0) {
           cleaned.taskTrustSettings.workspaceOverrides[workspace] = next as any
@@ -522,6 +531,7 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
         if (typeof profile.styleHints === 'string') next.styleHints = profile.styleHints
         if (profile.validationRole === 'none' || profile.validationRole === 'secondary' || profile.validationRole === 'primary') next.validationRole = profile.validationRole
         if (profile.trustMode === 'safe' || profile.trustMode === 'balanced' || profile.trustMode === 'autonomous' || profile.trustMode === 'manual') next.trustMode = profile.trustMode
+        if (profile.verificationMode === 'static' || profile.verificationMode === 'regression' || profile.verificationMode === 'browser') next.verificationMode = profile.verificationMode
         if (Object.keys(next).length > 0) cleaned.taskTrustSettings.specialistProfiles[role] = next as any
       }
     }

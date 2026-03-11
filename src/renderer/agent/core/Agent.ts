@@ -67,12 +67,13 @@ export class AgentClass {
       promptTemplateId?: string
       orchestratorPhase?: 'planning' | 'executing'
       mentionedSkills?: string[]
+      targetThreadId?: string
     }
   ): Promise<void> {
     const store = useAgentStore.getState()
 
     // 第一次对话时可能还没有 threadId，需要在 addUserMessage 后获取
-    let threadId = store.currentThreadId
+    let threadId = promptOptions?.targetThreadId || store.currentThreadId
 
     // 防止同一线程重复运行
     if (threadId && this.runningTasks.has(threadId)) {
@@ -92,10 +93,10 @@ export class AgentClass {
     try {
       // 1. 【性能关键】批量初始化消息环境（合并用户消息、助手气泡、上下文清理）
       // 这将三次导致全量同步序列化（persist）的更新合并为一次，彻底消除 UI 线程阻塞。
-      const { userMessageId, assistantId } = store.prepareExecution(userMessage, contextItems)
+      const { userMessageId, assistantId } = store.prepareExecution(userMessage, contextItems, threadId ?? undefined)
 
       // 重新获取 threadId（prepareExecution 可能创建了新线程）
-      threadId = useAgentStore.getState().currentThreadId as string
+      threadId = promptOptions?.targetThreadId || (useAgentStore.getState().currentThreadId as string)
       if (!threadId) {
         logger.agent.error('[Agent] No thread ID after prepareExecution')
         return
@@ -126,7 +127,7 @@ export class AgentClass {
       // 6. 创建检查点（用于撤销）
       const checkpointImages = this.extractCheckpointImages(userMessage)
       const messageText = typeof userMessage === 'string' ? userMessage.slice(0, 50) : 'User message'
-      await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems)
+      await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems, threadId)
 
       // 7. 构建 LLM 消息（包含上下文压缩）
       const llmMessages = await buildLLMMessages(userMessage, contextContent, systemPrompt)
@@ -171,52 +172,30 @@ export class AgentClass {
     const store = useAgentStore.getState()
     const currentThreadId = store.currentThreadId
 
-    // 中止当前线程的任务
-    if (currentThreadId && this.runningTasks.has(currentThreadId)) {
-      const task = this.runningTasks.get(currentThreadId)!
-      task.abortController.abort()
-
-      // 更新所有运行中的工具状态
-      if (task.assistantId) {
-        const thread = store.getCurrentThread()
-        if (thread) {
-          const msg = thread.messages.find(m => m.id === task.assistantId)
-          if (msg?.role === 'assistant') {
-            const assistantMsg = msg as import('../types').AssistantMessage
-            for (const tc of assistantMsg.toolCalls || []) {
-              if (['running', 'awaiting', 'pending'].includes(tc.status)) {
-                store.updateToolCall(task.assistantId, tc.id, {
-                  status: 'error',
-                  error: 'Aborted by user',
-                  streamingState: undefined,  // 清除流式状态
-                })
-              }
-            }
-          }
-        }
-        store.finalizeAssistant(task.assistantId)
-      }
-
-      this.runningTasks.delete(currentThreadId)
+    if (currentThreadId) {
+      this.abortThread(currentThreadId)
     }
 
     api.llm.abort()
     approvalService.reject()
 
-    // 确保所有流式消息都被终止
-    const thread = store.getCurrentThread()
-    if (thread) {
-      for (const msg of thread.messages) {
-        if (msg.role === 'assistant') {
-          const assistantMsg = msg as import('../types').AssistantMessage
-          if (assistantMsg.isStreaming) {
-            store.finalizeAssistant(msg.id)
-          }
-        }
-      }
+    if (!currentThreadId) {
+      store.setStreamPhase('idle')
+    }
+  }
+
+  /**
+   * 中止所有运行中的线程（用于编排执行停止/异常收尾）
+   */
+  abortAll(): void {
+    const threadIds = Array.from(this.runningTasks.keys())
+
+    for (const threadId of threadIds) {
+      this.abortThread(threadId)
     }
 
-    store.setStreamPhase('idle')
+    api.llm.abort()
+    approvalService.reject()
   }
 
   /**
@@ -341,6 +320,49 @@ export class AgentClass {
         }))
     }
     return []
+  }
+
+  private abortThread(threadId: string): void {
+    const store = useAgentStore.getState()
+    const task = this.runningTasks.get(threadId)
+    if (!task) return
+
+    task.abortController.abort()
+
+    const threadStore = store.forThread(threadId)
+    const thread = store.threads[threadId]
+
+    if (task.assistantId && thread) {
+      const msg = thread.messages.find(m => m.id === task.assistantId)
+      if (msg?.role === 'assistant') {
+        const assistantMsg = msg as import('../types').AssistantMessage
+        for (const toolCall of assistantMsg.toolCalls || []) {
+          if (['running', 'awaiting', 'pending'].includes(toolCall.status)) {
+            threadStore.updateToolCall(task.assistantId, toolCall.id, {
+              status: 'error',
+              error: 'Aborted by user',
+              streamingState: undefined,
+            })
+          }
+        }
+      }
+
+      threadStore.finalizeAssistant(task.assistantId)
+    }
+
+    if (thread) {
+      for (const msg of thread.messages) {
+        if (msg.role === 'assistant') {
+          const assistantMsg = msg as import('../types').AssistantMessage
+          if (assistantMsg.isStreaming) {
+            threadStore.finalizeAssistant(msg.id)
+          }
+        }
+      }
+    }
+
+    threadStore.setStreamPhase('idle')
+    this.runningTasks.delete(threadId)
   }
 
   /**

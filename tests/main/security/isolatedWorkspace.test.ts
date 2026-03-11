@@ -8,6 +8,7 @@ import {
   __testing,
   chooseIsolationMode,
   cleanupAllIsolatedWorkspaces,
+  disposeIsolatedWorkspace,
 } from '@main/security/isolatedWorkspace'
 
 function makeTempDir(prefix: string): string {
@@ -26,6 +27,39 @@ describe('isolated workspace', () => {
 
   it('falls back to temp copy outside git', () => {
     expect(chooseIsolationMode({ hasGit: false, hasUncommittedChanges: false })).toBe('copy')
+  })
+
+
+  it('disposes package-scoped isolated workspaces independently within one task', async () => {
+    const sourcePath = makeTempDir('adnify-source-')
+    const isolatedA = makeTempDir('adnify-iso-a-')
+    const isolatedB = makeTempDir('adnify-iso-b-')
+
+    __testing.registerRecord({
+      ownerId: 'task-a:pkg-1',
+      taskId: 'task-a',
+      sourcePath,
+      workspacePath: isolatedA,
+      mode: 'copy',
+    })
+    __testing.registerRecord({
+      ownerId: 'task-a:pkg-2',
+      taskId: 'task-a',
+      sourcePath,
+      workspacePath: isolatedB,
+      mode: 'copy',
+    })
+
+    const first = await disposeIsolatedWorkspace('task-a:pkg-1')
+    expect(first.success).toBe(true)
+    expect(fs.existsSync(isolatedA)).toBe(false)
+    expect(fs.existsSync(isolatedB)).toBe(true)
+    expect(__testing.getRegistrySize()).toBe(1)
+
+    const second = await disposeIsolatedWorkspace('task-a:pkg-2')
+    expect(second.success).toBe(true)
+    expect(fs.existsSync(isolatedB)).toBe(false)
+    expect(__testing.getRegistrySize()).toBe(0)
   })
 
   it('cleans all tracked isolated workspaces and is idempotent', async () => {

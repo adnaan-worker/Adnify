@@ -69,6 +69,8 @@ function getRecommendedAction(trigger: AdjudicationTrigger): AdjudicationActionT
       return 'require-verification'
     case 'circuit-breaker':
       return 'return-for-rework'
+    case 'main-workspace-conflict':
+      return 'return-for-rework'
     case 'unsafe-merge':
     default:
       return 'accept-partial'

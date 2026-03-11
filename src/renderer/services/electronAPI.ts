@@ -59,7 +59,7 @@ function createGroupedAPI() {
       clearRecent: () => raw.clearRecentWorkspaces(),
       removeFromRecent: (path: string) => raw.removeFromRecentWorkspaces(path),
       previewIsolation: (workspacePath: string) => raw.previewIsolationChoice(workspacePath),
-      createIsolated: (request: { taskId: string; workspacePath: string; preferredMode?: 'worktree' | 'copy' }) => raw.createIsolatedWorkspace(request),
+      createIsolated: (request: { taskId: string; workspacePath: string; ownerId?: string; preferredMode?: 'worktree' | 'copy' }) => raw.createIsolatedWorkspace(request),
       disposeIsolated: (taskId: string) => raw.disposeIsolatedWorkspace(taskId),
     },
 

@@ -42,6 +42,10 @@ export type SpecialistGitPermission = 'read-only' | 'task-branch' | 'workspace-w
 
 export type SpecialistValidationRole = 'none' | 'secondary' | 'primary'
 
+export type VerificationMode = 'static' | 'regression' | 'browser'
+
+export type ModelRoutingPolicy = 'manual' | 'balanced' | 'budget-aware'
+
 export type OrchestrationMode = 'mixed' | 'manual' | 'automatic'
 
 export type OwnershipPolicy = 'exclusive'
@@ -143,11 +147,12 @@ export interface SpecialistProfile {
   styleHints: string
   validationRole: SpecialistValidationRole
   trustMode: TrustMode
+  verificationMode: VerificationMode
 }
 
 export type SpecialistProfileSnapshot = Partial<Record<SpecialistKind, SpecialistProfile>>
 
-export type AdjudicationTrigger = 'budget-trip' | 'unsafe-merge' | 'verification-failed' | 'rollback-recommended' | 'circuit-breaker'
+export type AdjudicationTrigger = 'budget-trip' | 'unsafe-merge' | 'verification-failed' | 'rollback-recommended' | 'circuit-breaker' | 'main-workspace-conflict'
 
 export type AdjudicationActionType = 'accept-all' | 'accept-partial' | 'return-for-rework' | 'reassign-specialist' | 'require-verification' | 'rollback'
 
@@ -219,6 +224,12 @@ export interface ExecutionQueueItem {
   resolvedAt: number | null
 }
 
+export interface FileBaselineSnapshot {
+  path: string
+  exists: boolean
+  hash: string | null
+}
+
 export interface ChangeProposal {
   id: string
   taskId: string
@@ -226,9 +237,15 @@ export interface ChangeProposal {
   summary: string
   changedFiles: string[]
   verificationStatus: ProposalVerificationStatus
+  verificationMode?: VerificationMode | null
+  verificationSummary?: string | null
+  verificationBlockedReason?: string | null
+  verificationProvider?: 'playwright' | 'puppeteer' | null
   riskLevel: TaskRiskLevel
   recommendedAction: ProposalAction
   status: ChangeProposalStatus
+  applyError?: string | null
+  conflictFiles?: string[]
   createdAt: number
   resolvedAt: number | null
 }
@@ -252,6 +269,7 @@ const DEFAULT_SPECIALIST_PROFILES: Record<SpecialistKind, Omit<SpecialistProfile
     styleHints: 'Prefer polished UI, accessibility, and interaction details.',
     validationRole: 'secondary',
     trustMode: DEFAULT_TRUST_POLICY.mode,
+    verificationMode: 'browser',
   },
   logic: {
     model: null,
@@ -263,6 +281,7 @@ const DEFAULT_SPECIALIST_PROFILES: Record<SpecialistKind, Omit<SpecialistProfile
     styleHints: 'Prefer correctness, state integrity, and edge-case handling.',
     validationRole: 'secondary',
     trustMode: DEFAULT_TRUST_POLICY.mode,
+    verificationMode: 'regression',
   },
   verifier: {
     model: null,
@@ -274,6 +293,7 @@ const DEFAULT_SPECIALIST_PROFILES: Record<SpecialistKind, Omit<SpecialistProfile
     styleHints: 'Prefer focused verification, reproduction, and concise findings.',
     validationRole: 'primary',
     trustMode: DEFAULT_TRUST_POLICY.mode,
+    verificationMode: 'regression',
   },
   reviewer: {
     model: null,
@@ -285,6 +305,7 @@ const DEFAULT_SPECIALIST_PROFILES: Record<SpecialistKind, Omit<SpecialistProfile
     styleHints: 'Prefer risk review, scope control, and minimal-change guidance.',
     validationRole: 'secondary',
     trustMode: DEFAULT_TRUST_POLICY.mode,
+    verificationMode: 'static',
   },
 }
 
@@ -392,6 +413,7 @@ export interface ExecutionTask {
   risk: TaskRiskLevel
   executionTarget: ExecutionTarget
   trustMode: TrustMode
+  modelRoutingPolicy?: ModelRoutingPolicy
   executionStrategy: ExecutionStrategySnapshot
   workPackages: string[]
   sourceWorkspacePath: string | null
@@ -420,12 +442,16 @@ export interface WorkPackage {
   specialist: SpecialistKind
   status: WorkPackageStatus
   targetDomain: WorkPackageDomain
+  verificationMode?: VerificationMode | null
   writableScopes: string[]
   readableScopes: string[]
   dependsOn: string[]
   expectedArtifacts: string[]
   queueReason: string | null
   workspaceId: string | null
+  workspaceOwnerId?: string | null
+  threadId?: string | null
+  baselineFiles?: Record<string, FileBaselineSnapshot>
   handoffId: string | null
   proposalId: string | null
 }
@@ -448,6 +474,7 @@ export interface CreateExecutionTaskInput {
   risk?: TaskRiskLevel
   executionTarget?: ExecutionTarget
   trustMode?: TrustMode
+  modelRoutingPolicy?: ModelRoutingPolicy
   writableScopes?: string[]
   sourceWorkspacePath?: string | null
   resolvedWorkspacePath?: string | null
@@ -492,6 +519,10 @@ export interface CreateChangeProposalInput {
   summary: string
   changedFiles?: string[]
   verificationStatus?: ProposalVerificationStatus
+  verificationMode?: VerificationMode | null
+  verificationSummary?: string | null
+  verificationBlockedReason?: string | null
+  verificationProvider?: 'playwright' | 'puppeteer' | null
   riskLevel?: TaskRiskLevel
   recommendedAction?: ProposalAction
 }

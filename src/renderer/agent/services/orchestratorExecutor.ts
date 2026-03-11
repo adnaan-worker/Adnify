@@ -22,15 +22,18 @@ import { EventBus } from '../core/EventBus'
 import { Agent } from '../core/Agent'
 import { gitService } from './gitService'
 import { ExecutionScheduler } from '../orchestrator/ExecutionScheduler'
-import { getLLMConfigForTask } from './llmConfigService'
+import { getLLMConfigForTask, getProviderModelContext } from './llmConfigService'
 import type { TaskPlan, OrchestratorTask, ExecutionStats } from '../orchestrator/types'
-import type { ExecutionTask, ProposalVerificationStatus, SpecialistKind, SpecialistProfile, TaskRiskLevel, WorkPackage } from '../types/taskExecution'
+import type { ExecutionTask, ProposalAction, ProposalVerificationStatus, SpecialistKind, SpecialistProfile, TaskRiskLevel, VerificationMode, WorkPackage } from '../types/taskExecution'
 import { shouldTripCircuitBreaker } from './circuitBreakerService'
 import { buildExecutionTaskInputFromPlan } from './taskTemplateService'
 import { cleanupTaskExecutionWorkspace, prepareTaskExecutionWorkspace } from './executionWorkspaceService'
 import { buildWorkPackageHandoff } from './handoffBrokerService'
 import { createOwnershipRegistrySnapshot, acquireOwnership, releaseOwnership } from './ownershipRegistryService'
 import { buildChangeProposal } from './proposalEngineService'
+import { applyChangeProposal, captureBaselineForScopes } from './proposalApplyService'
+import { resolveModelRoute } from './modelRoutingService'
+import { buildBrowserVerificationPrompt, getBrowserVerificationCapability } from './browserVerificationService'
 
 // ============================================
 // 模块状态
@@ -58,18 +61,18 @@ interface TaskGovernanceAttemptInput extends TaskExecutionMetrics {
 }
 
 /** 等待单次 Agent 执行完成 */
-function waitForAgentCompletion(): Promise<{ success: boolean; output: string; error?: string }> {
+function waitForAgentCompletion(threadId: string): Promise<{ success: boolean; output: string; error?: string }> {
     return new Promise((resolve) => {
-        const store = useAgentStore.getState()
-        const threadId = store.currentThreadId
-
         if (!threadId) {
             resolve({ success: false, output: '', error: 'Failed to create thread' })
             return
         }
 
         const unsubscribe = EventBus.on('loop:end', (event) => {
-            const thread = store.threads[threadId]
+            if (event.threadId && event.threadId !== threadId) {
+                return
+            }
+            const thread = useAgentStore.getState().threads[threadId]
             if (!thread) {
                 unsubscribe()
                 resolve({ success: false, output: '', error: 'Thread not found after loop end' })
@@ -240,6 +243,10 @@ interface CompleteWorkPackageExecutionInput {
     unresolvedItems?: string[]
     suggestedNextSpecialist?: SpecialistKind
     verificationStatus?: ProposalVerificationStatus
+    verificationMode?: VerificationMode | null
+    verificationSummary?: string | null
+    verificationBlockedReason?: string | null
+    verificationProvider?: 'playwright' | 'puppeteer' | null
     riskLevel?: TaskRiskLevel
 }
 
@@ -247,6 +254,59 @@ interface CompleteWorkPackageExecutionResult {
     handoffId: string
     proposalId: string
     activatedQueueItemIds: string[]
+}
+
+interface WorkPackageVerificationResult {
+    status: 'passed' | 'failed' | 'blocked'
+    verificationStatus: ProposalVerificationStatus
+    mode: VerificationMode | null
+    summary: string | null
+    reason: string | null
+    provider: 'playwright' | 'puppeteer' | null
+}
+
+function buildDefaultVerificationResult(workPackage: WorkPackage): WorkPackageVerificationResult {
+    return {
+        status: 'passed',
+        verificationStatus: 'passed',
+        mode: workPackage.verificationMode ?? null,
+        summary: workPackage.verificationMode ? `${workPackage.verificationMode} verification completed.` : null,
+        reason: null,
+        provider: null,
+    }
+}
+
+function interpretBrowserVerificationResult(output: string, provider: 'playwright' | 'puppeteer' | null): WorkPackageVerificationResult {
+    if (/\bBLOCKED\b/i.test(output)) {
+        return {
+            status: 'blocked',
+            verificationStatus: 'pending',
+            mode: 'browser',
+            summary: 'Browser verification blocked before completion.',
+            reason: output,
+            provider,
+        }
+    }
+
+    if (/\bFAIL(?:ED)?\b/i.test(output)) {
+        return {
+            status: 'failed',
+            verificationStatus: 'failed',
+            mode: 'browser',
+            summary: 'Browser verification reported a failing interaction.',
+            reason: output,
+            provider,
+        }
+    }
+
+    return {
+        status: 'passed',
+        verificationStatus: 'passed',
+        mode: 'browser',
+        summary: 'Browser verification completed successfully.',
+        reason: null,
+        provider,
+    }
 }
 
 function getTaskWorkPackageOrThrow(taskId: string, workPackageId: string): { executionTask: ExecutionTask; workPackage: WorkPackage } {
@@ -302,7 +362,7 @@ async function prepareWorkPackageExecution(input: PrepareWorkPackageExecutionInp
         }),
     )
 
-    const preparedWorkspace = await prepareTaskExecutionWorkspace(executionTask.id, input.fallbackWorkspacePath)
+    const preparedWorkspace = await prepareTaskExecutionWorkspace(executionTask.id, input.fallbackWorkspacePath, input.workPackageId)
     if (!preparedWorkspace.success) {
         leaseIds.forEach((leaseId) => store.releaseOwnershipLease(leaseId))
         store.updateWorkPackage(input.workPackageId, {
@@ -319,9 +379,16 @@ async function prepareWorkPackageExecution(input: PrepareWorkPackageExecutionInp
         }
     }
 
+    const baselineFiles = await captureBaselineForScopes(
+        executionTask.sourceWorkspacePath || input.fallbackWorkspacePath,
+        workPackage.writableScopes,
+    )
+
     store.updateWorkPackage(input.workPackageId, {
         status: 'executing',
         workspaceId: preparedWorkspace.workspacePath,
+        workspaceOwnerId: preparedWorkspace.target === 'isolated' ? input.workPackageId : null,
+        baselineFiles,
         queueReason: null,
     })
 
@@ -360,6 +427,10 @@ async function completeWorkPackageExecution(input: CompleteWorkPackageExecutionI
         changedFiles: input.changedFiles,
         writableScopes: workPackage.writableScopes,
         verificationStatus: input.verificationStatus ?? 'passed',
+        verificationMode: input.verificationMode ?? workPackage.verificationMode ?? null,
+        verificationSummary: input.verificationSummary ?? null,
+        verificationBlockedReason: input.verificationBlockedReason ?? null,
+        verificationProvider: input.verificationProvider ?? null,
         riskLevel: input.riskLevel ?? executionTask.risk,
     })
     const proposalId = store.createChangeProposal({
@@ -368,15 +439,29 @@ async function completeWorkPackageExecution(input: CompleteWorkPackageExecutionI
         summary: proposal.proposal.summary,
         changedFiles: proposal.proposal.changedFiles,
         verificationStatus: proposal.proposal.verificationStatus,
+        verificationMode: proposal.proposal.verificationMode ?? null,
+        verificationSummary: proposal.proposal.verificationSummary ?? null,
+        verificationBlockedReason: proposal.proposal.verificationBlockedReason ?? null,
+        verificationProvider: proposal.proposal.verificationProvider ?? null,
         riskLevel: proposal.proposal.riskLevel,
         recommendedAction: proposal.proposal.recommendedAction,
     })
 
+    return {
+        handoffId,
+        proposalId,
+        activatedQueueItemIds: [],
+    }
+}
+
+
+async function releaseWorkPackageResources(taskId: string, workPackageId: string): Promise<void> {
+    const store = useAgentStore.getState()
     const releaseResult = releaseOwnership(createOwnershipRegistrySnapshot({
-        leases: useAgentStore.getState().ownershipLeases,
-        queueItems: useAgentStore.getState().executionQueueItems,
+        leases: store.ownershipLeases,
+        queueItems: store.executionQueueItems,
     }), {
-        workPackageId: input.workPackageId,
+        workPackageId,
     })
 
     releaseResult.releasedLeaseIds.forEach((leaseId) => store.releaseOwnershipLease(leaseId))
@@ -384,11 +469,89 @@ async function completeWorkPackageExecution(input: CompleteWorkPackageExecutionI
         store.updateExecutionQueueItem(queueItemId, { status: 'ready' })
     })
 
-    return {
-        handoffId,
-        proposalId,
-        activatedQueueItemIds: releaseResult.activatedQueueItemIds,
+    await cleanupTaskExecutionWorkspace(taskId, workPackageId)
+}
+
+async function failWorkPackageExecution(taskId: string, workPackageId: string): Promise<void> {
+    const store = useAgentStore.getState()
+    store.updateWorkPackage(workPackageId, { status: 'failed' })
+    await releaseWorkPackageResources(taskId, workPackageId)
+}
+
+
+export async function reviewChangeProposal(proposalId: string, action: ProposalAction): Promise<void> {
+    const store = useAgentStore.getState()
+    const proposal = store.changeProposals[proposalId]
+    if (!proposal) return
+
+    const executionTask = store.executionTasks[proposal.taskId]
+    const workPackage = store.workPackages[proposal.workPackageId]
+    if (!executionTask || !workPackage) return
+
+    if (action === 'apply') {
+        if (proposal.verificationStatus !== 'passed') {
+            const applyError = proposal.verificationBlockedReason
+                || proposal.verificationSummary
+                || (proposal.verificationStatus === 'failed'
+                    ? 'Verification failed for the proposed changes.'
+                    : 'Proposal verification is incomplete.')
+            store.updateChangeProposal(proposalId, { applyError })
+            store.openExecutionTaskAdjudication(executionTask.id, {
+                trigger: 'verification-failed',
+                reason: applyError,
+                changedFiles: proposal.changedFiles,
+                workPackageId: workPackage.id,
+            })
+            return
+        }
+
+        const taskWorkspacePath = executionTask.sourceWorkspacePath || executionTask.resolvedWorkspacePath
+        if (!taskWorkspacePath) {
+            store.updateChangeProposal(proposalId, { applyError: 'Missing main workspace path' })
+            return
+        }
+
+        const applyResult = await applyChangeProposal({
+            proposal,
+            taskWorkspacePath,
+            workPackage,
+        })
+
+        if (!applyResult.success) {
+            store.updateChangeProposal(proposalId, {
+                applyError: applyResult.error || 'Failed to apply proposal',
+                conflictFiles: applyResult.conflictFiles,
+            })
+
+            if (applyResult.conflictFiles.length > 0) {
+                store.openExecutionTaskAdjudication(executionTask.id, {
+                    trigger: 'main-workspace-conflict',
+                    reason: applyResult.error || 'Main workspace changed during package review',
+                    changedFiles: applyResult.conflictFiles,
+                    workPackageId: workPackage.id,
+                })
+            }
+            return
+        }
+
+        store.updateChangeProposal(proposalId, {
+            status: 'applied',
+            applyError: null,
+            conflictFiles: [],
+        })
+    } else {
+        store.updateChangeProposal(proposalId, {
+            status: action === 'return-for-rework'
+                ? 'returned-for-rework'
+                : action === 'reassign'
+                    ? 'reassigned'
+                    : 'discarded',
+            applyError: null,
+            conflictFiles: [],
+        })
     }
+
+    await releaseWorkPackageResources(executionTask.id, workPackage.id)
 }
 
 export const __testing = {
@@ -397,6 +560,10 @@ export const __testing = {
     buildExecutionAttemptGuidance,
     prepareWorkPackageExecution,
     completeWorkPackageExecution,
+    reviewChangeProposal,
+    getRunnableWorkPackageBatch,
+    getWorkPackageBatchLimit,
+    runWorkPackageWithAgent,
 }
 
 function ensureExecutionTaskForPlan(plan: TaskPlan): string {
@@ -417,6 +584,365 @@ function ensureExecutionTaskForPlan(plan: TaskPlan): string {
     )
     store.selectExecutionTask(executionTaskId)
     return executionTaskId
+}
+
+
+const DEFAULT_WORK_PACKAGE_MAX_CONCURRENCY = 2
+
+function getWorkPackageBatchLimit(plan: Pick<TaskPlan, 'executionMode'>): number {
+    return plan.executionMode === 'parallel'
+        ? DEFAULT_WORK_PACKAGE_MAX_CONCURRENCY
+        : 1
+}
+
+function getRunnableWorkPackageBatch(taskId: string, maxConcurrency = DEFAULT_WORK_PACKAGE_MAX_CONCURRENCY): WorkPackage[] {
+    const store = useAgentStore.getState()
+    const executionTask = store.executionTasks[taskId]
+    if (!executionTask) return []
+
+    const workPackages = executionTask.workPackages
+        .map((workPackageId) => store.workPackages[workPackageId])
+        .filter(Boolean)
+
+    const runnable = workPackages.filter((workPackage) => {
+        if (workPackage.status !== 'queued') return false
+        return workPackage.dependsOn.every((dependencyId) => store.workPackages[dependencyId]?.status === 'applied')
+    })
+
+    return runnable.slice(0, maxConcurrency)
+}
+
+function getLatestPlanSnapshot(plan: TaskPlan): TaskPlan {
+    return useAgentStore.getState().plans.find((candidate) => candidate.id === plan.id) ?? plan
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function ensureDetachedThreadForWorkPackage(workPackageId: string): string {
+    const store = useAgentStore.getState()
+    const existing = store.workPackages[workPackageId]?.threadId
+    if (existing && store.threads[existing]) {
+        return existing
+    }
+
+    const previousThreadId = store.currentThreadId
+    const threadId = store.createThread()
+    if (previousThreadId && previousThreadId !== threadId) {
+        store.switchThread(previousThreadId)
+    }
+    store.updateWorkPackage(workPackageId, { threadId })
+    return threadId
+}
+
+function mapWorkPackageToTemplateId(workPackage: WorkPackage): string {
+    switch (workPackage.specialist) {
+        case 'frontend':
+            return 'uiux-designer'
+        case 'verifier':
+        case 'reviewer':
+            return 'reviewer'
+        default:
+            return 'coder'
+    }
+}
+
+function inferSpecialistKindFromRole(role: string, fallback?: SpecialistKind | null): SpecialistKind {
+    if (fallback) return fallback
+
+    const normalized = role.toLowerCase()
+    if (/(frontend|ui|ux)/.test(normalized)) return 'frontend'
+    if (/(review|audit)/.test(normalized)) return 'reviewer'
+    if (/(verify|qa|test)/.test(normalized)) return 'verifier'
+    return 'logic'
+}
+
+function buildWorkPackageMessage(workPackage: WorkPackage, executionTask: ExecutionTask, plan: TaskPlan): string {
+    const lines: string[] = []
+
+    lines.push('# Work Package Execution Request')
+    lines.push('')
+    lines.push(`## Execution Task Objective: ${executionTask.objective}`)
+    lines.push(`## Work Package: ${workPackage.title}`)
+    lines.push('')
+    lines.push('### Specialist')
+    lines.push(workPackage.specialist)
+    lines.push('')
+    lines.push('### Objective')
+    lines.push(workPackage.objective)
+    lines.push('')
+
+    if (workPackage.writableScopes.length > 0) {
+        lines.push('### Writable Scopes')
+        lines.push(workPackage.writableScopes.map((scope) => `- ${scope}`).join('\n'))
+        lines.push('')
+    }
+
+    if (plan.requirementsContent) {
+        lines.push('### Requirements Context')
+        lines.push(plan.requirementsContent.length > 3000
+            ? `${plan.requirementsContent.slice(0, 3000)}\n\n... (truncated)`
+            : plan.requirementsContent)
+        lines.push('')
+    }
+
+    lines.push('### Instructions')
+    lines.push('- Work only on this work package objective')
+    lines.push('- Respect the writable scopes and avoid unrelated edits')
+    lines.push('- Execute directly without asking the user for confirmation')
+    lines.push('- Finish by summarizing changed files, validation, and remaining risks')
+
+    return lines.join('\n')
+}
+async function runWorkPackageWithAgent(
+    workPackage: WorkPackage,
+    executionTask: ExecutionTask,
+    plan: TaskPlan,
+    workspacePath: string,
+): Promise<{ success: boolean; output: string; error?: string; metrics: TaskExecutionMetrics; verification: WorkPackageVerificationResult }> {
+    const threadId = ensureDetachedThreadForWorkPackage(workPackage.id)
+    const attemptProfile = executionTask.specialistProfilesSnapshot[workPackage.specialist]
+    const store = useStore.getState()
+    const providerId = store.llmConfig.provider
+    const providerContext = getProviderModelContext(providerId)
+    const routedModel = resolveModelRoute({
+        policy: executionTask.modelRoutingPolicy ?? 'balanced',
+        specialist: workPackage.specialist,
+        specialistModel: attemptProfile?.model?.trim() || null,
+        defaultModel: providerContext.defaultModel,
+        availableModels: providerContext.availableModels,
+        budget: executionTask.budget,
+    })
+    const llmConfig = await getLLMConfigForTask(providerId, routedModel.model)
+
+    if (!llmConfig) {
+        return {
+            success: false,
+            output: '',
+            error: `Failed to resolve LLM config for ${providerId}/${routedModel.model}`,
+            metrics: { llmCalls: 0, estimatedTokens: 0, verifications: 0 },
+            verification: buildDefaultVerificationResult(workPackage),
+        }
+    }
+
+    const baseMessage = buildWorkPackageMessage(workPackage, executionTask, plan)
+    const metrics: TaskExecutionMetrics = {
+        llmCalls: 1,
+        estimatedTokens: Math.max(1, Math.ceil(baseMessage.length / 4)),
+        verifications: workPackage.specialist === 'verifier' || workPackage.specialist === 'reviewer' ? 1 : 0,
+    }
+
+    let message = baseMessage
+    let browserProvider: 'playwright' | 'puppeteer' | null = null
+
+    if (workPackage.verificationMode === 'browser') {
+        const capability = getBrowserVerificationCapability()
+        if (!capability.available) {
+            return {
+                success: true,
+                output: capability.reason || 'Browser verification unavailable.',
+                metrics,
+                verification: {
+                    status: 'blocked',
+                    verificationStatus: 'pending',
+                    mode: 'browser',
+                    summary: 'Browser verification blocked before execution.',
+                    reason: capability.reason || 'Browser verification unavailable.',
+                    provider: capability.provider,
+                },
+            }
+        }
+
+        browserProvider = capability.provider
+        message = `${baseMessage}
+
+${buildBrowserVerificationPrompt({
+            objective: executionTask.objective,
+            workPackageTitle: workPackage.title,
+            provider: capability.provider!,
+            serverName: capability.serverName || capability.provider!,
+        })}`
+        metrics.estimatedTokens = Math.max(1, Math.ceil(message.length / 4))
+    }
+
+    await Agent.send(message, llmConfig, workspacePath, 'agent', {
+        promptTemplateId: mapWorkPackageToTemplateId(workPackage),
+        orchestratorPhase: 'executing',
+        targetThreadId: threadId,
+    })
+
+    const result = await waitForAgentCompletion(threadId)
+    return {
+        ...result,
+        metrics,
+        verification: workPackage.verificationMode === 'browser'
+            ? interpretBrowserVerificationResult(result.output, browserProvider)
+            : buildDefaultVerificationResult(workPackage),
+    }
+}
+
+async function executeWorkPackage(
+    taskId: string,
+    workPackage: WorkPackage,
+    plan: TaskPlan,
+    workspacePath: string,
+): Promise<void> {
+    const store = useAgentStore.getState()
+    const executionTask = store.executionTasks[taskId]
+    if (!executionTask) return
+
+    const preparedWorkPackage = await prepareWorkPackageExecution({
+        taskId,
+        workPackageId: workPackage.id,
+        fallbackWorkspacePath: workspacePath,
+    })
+
+    if (!preparedWorkPackage.ready || !preparedWorkPackage.workspacePath) {
+        return
+    }
+
+    const durationStartedAt = Date.now()
+    store.setExecutionTaskState(taskId, 'running')
+
+    try {
+        const result = await runWorkPackageWithAgent(
+            useAgentStore.getState().workPackages[workPackage.id] || workPackage,
+            useAgentStore.getState().executionTasks[taskId] || executionTask,
+            plan,
+            preparedWorkPackage.workspacePath,
+        )
+        const changedFiles = await collectChangedFiles(preparedWorkPackage.workspacePath)
+        const durationMs = Date.now() - durationStartedAt
+
+        if (!result.success) {
+            applyTaskGovernanceForAttempt({
+                taskId,
+                durationMs,
+                changedFiles,
+                failureReason: result.error || 'Unknown work package failure',
+                llmCalls: result.metrics.llmCalls,
+                estimatedTokens: result.metrics.estimatedTokens,
+                verifications: result.metrics.verifications,
+            })
+            await failWorkPackageExecution(taskId, workPackage.id)
+            return
+        }
+
+        const mergeGateResult = scheduler?.validateTaskMerge({
+            writableScopes: workPackage.writableScopes,
+            changedFiles,
+        })
+        const verificationBlocked = result.verification.verificationStatus !== 'passed'
+        if (mergeGateResult && !mergeGateResult.ok) {
+            applyTaskGovernanceForAttempt({
+                taskId,
+                durationMs,
+                changedFiles,
+                adjudicationTrigger: 'unsafe-merge',
+                adjudicationReason: mergeGateResult.reason,
+                llmCalls: result.metrics.llmCalls,
+                estimatedTokens: result.metrics.estimatedTokens,
+                verifications: result.metrics.verifications,
+            })
+            await failWorkPackageExecution(taskId, workPackage.id)
+            return
+        }
+
+        const nextTask = applyTaskGovernanceForAttempt({
+            taskId,
+            durationMs,
+            changedFiles,
+            llmCalls: result.metrics.llmCalls,
+            estimatedTokens: result.metrics.estimatedTokens,
+            verifications: result.metrics.verifications,
+            adjudicationTrigger: verificationBlocked ? 'verification-failed' : undefined,
+            adjudicationReason: verificationBlocked
+                ? (result.verification.reason || result.verification.summary || 'Verification failed or is incomplete.')
+                : undefined,
+        })
+        if (nextTask?.state === 'tripped') {
+            await failWorkPackageExecution(taskId, workPackage.id)
+            return
+        }
+
+        await completeWorkPackageExecution({
+            taskId,
+            workPackageId: workPackage.id,
+            summary: result.output,
+            changedFiles,
+            suggestedNextSpecialist: 'verifier',
+            verificationStatus: result.verification.verificationStatus,
+            verificationMode: result.verification.mode,
+            verificationSummary: result.verification.summary,
+            verificationBlockedReason: result.verification.reason,
+            verificationProvider: result.verification.provider,
+            riskLevel: executionTask.risk,
+        })
+        store.setExecutionTaskState(taskId, verificationBlocked ? 'blocked' : 'verifying')
+    } catch (error) {
+        const failureReason = error instanceof Error ? error.message : String(error)
+        applyTaskGovernanceForAttempt({
+            taskId,
+            durationMs: Date.now() - durationStartedAt,
+            changedFiles: [],
+            failureReason,
+            llmCalls: 0,
+            estimatedTokens: 0,
+            verifications: 0,
+        })
+        await failWorkPackageExecution(taskId, workPackage.id)
+    }
+}
+
+function areWorkPackageDependenciesResolved(workPackage: WorkPackage): boolean {
+    const store = useAgentStore.getState()
+    return workPackage.dependsOn.every((dependencyId) => store.workPackages[dependencyId]?.status === 'applied')
+}
+
+function areAllWorkPackagesResolved(taskId: string): boolean {
+    const store = useAgentStore.getState()
+    const executionTask = store.executionTasks[taskId]
+    if (!executionTask) return true
+
+    return executionTask.workPackages
+        .map((workPackageId) => store.workPackages[workPackageId])
+        .every((workPackage) => workPackage && ['applied', 'failed', 'reassigned'].includes(workPackage.status))
+}
+
+async function runWorkPackageExecutionLoop(plan: TaskPlan, taskId: string, workspacePath: string): Promise<void> {
+    while (isRunning && scheduler && !scheduler.isAborted) {
+        const latestPlan = getLatestPlanSnapshot(plan)
+        const batchLimit = getWorkPackageBatchLimit(latestPlan)
+        const batch = getRunnableWorkPackageBatch(taskId, batchLimit)
+        const store = useAgentStore.getState()
+        const executionTask = store.executionTasks[taskId]
+        if (!executionTask) {
+            await completeExecution(latestPlan)
+            return
+        }
+
+        if (batch.length === 0) {
+            if (areAllWorkPackagesResolved(taskId)) {
+                await completeExecution(latestPlan)
+                return
+            }
+
+            const hasPendingReview = executionTask.workPackages
+                .map((workPackageId) => store.workPackages[workPackageId])
+                .some((workPackage) => workPackage && (workPackage.status === 'proposal-ready' || (workPackage.status === 'queued' && !areWorkPackageDependenciesResolved(workPackage))))
+
+            if (hasPendingReview) {
+                await sleep(150)
+                continue
+            }
+
+            await sleep(150)
+            continue
+        }
+
+        await Promise.all(batch.map((workPackage) => executeWorkPackage(taskId, workPackage, latestPlan, workspacePath)))
+    }
 }
 
 function syncCircuitBreakerState(input: { retryCount: number; repeatedCommands: number; repeatedFiles: number; progressDelta: number }): { trip: boolean; reason?: string } {
@@ -484,13 +1010,16 @@ export async function startPlanExecution(
     }
 
     const executionTaskId = ensureExecutionTaskForPlan(plan)
-    const preparedWorkspace = await prepareTaskExecutionWorkspace(executionTaskId, workspacePath)
-    if (!preparedWorkspace.success) {
-        return { success: false, message: preparedWorkspace.error || 'Failed to prepare execution workspace' }
-    }
+    store.updateExecutionTask(executionTaskId, {
+        sourceWorkspacePath: workspacePath,
+        resolvedWorkspacePath: null,
+        isolationMode: null,
+        isolationStatus: 'pending',
+        isolationError: null,
+    })
 
     // 初始化调度器
-    scheduler = new ExecutionScheduler()
+    scheduler = new ExecutionScheduler({ maxConcurrency: DEFAULT_WORK_PACKAGE_MAX_CONCURRENCY })
     scheduler.start()
     executionStartedAt = Date.now()
     isRunning = true
@@ -504,7 +1033,7 @@ export async function startPlanExecution(
     EventBus.emit({ type: 'plan:start', planId: plan.id } as any)
 
     // 异步执行（不阻塞返回）
-    runExecutionLoop(plan, preparedWorkspace.workspacePath).catch(async error => {
+    runWorkPackageExecutionLoop(plan, executionTaskId, workspacePath).catch(async error => {
         logger.agent.error('[OrchestratorExecutor] Execution loop failed:', error)
         await handleExecutionError(plan, error)
     })
@@ -524,7 +1053,7 @@ export async function stopPlanExecution(): Promise<void> {
     scheduler = null
 
     // 中止当前正在运行的 Agent
-    Agent.abort()
+    Agent.abortAll()
 
     const store = useAgentStore.getState()
     const executionTaskId = store.activeExecutionTaskId
@@ -566,11 +1095,6 @@ export async function resumePlanExecution(): Promise<void> {
     if (!plan || !workspacePath) return
 
     const executionTaskId = store.activeExecutionTaskId ?? ensureExecutionTaskForPlan(plan)
-    const preparedWorkspace = await prepareTaskExecutionWorkspace(executionTaskId, workspacePath)
-    if (!preparedWorkspace.success) {
-        await handleExecutionError(plan, new Error(preparedWorkspace.error || 'Failed to prepare execution workspace'))
-        return
-    }
 
     isRunning = true
     scheduler?.resume()
@@ -579,7 +1103,7 @@ export async function resumePlanExecution(): Promise<void> {
     EventBus.emit({ type: 'plan:resumed', planId: plan.id } as any)
 
     // 继续执行循环
-    runExecutionLoop(plan, preparedWorkspace.workspacePath).catch(async error => {
+    runWorkPackageExecutionLoop(plan, executionTaskId, workspacePath).catch(async error => {
         logger.agent.error('[OrchestratorExecutor] Resume failed:', error)
         await handleExecutionError(plan, error)
     })
@@ -619,7 +1143,7 @@ export function getCurrentPhase(): 'planning' | 'executing' {
 /**
  * 主执行循环
  */
-async function runExecutionLoop(plan: TaskPlan, workspacePath: string): Promise<void> {
+export async function runExecutionLoop(plan: TaskPlan, workspacePath: string): Promise<void> {
     const store = useAgentStore.getState()
 
     while (isRunning && scheduler && !scheduler.isAborted) {
@@ -961,10 +1485,18 @@ async function runTaskWithAgent(
             const attemptProfile = resolveExecutionAttemptProfile(executionTask, currentRole)
             const attemptGuidance = buildExecutionAttemptGuidance(attemptProfile)
             const attemptMessage = attemptGuidance ? `${feedbackMessage}\n\n${attemptGuidance}` : feedbackMessage
-            const effectiveModel = attemptProfile?.model?.trim() || task.model
-            const llmConfig = await getLLMConfigForTask(task.provider, effectiveModel)
+            const providerContext = getProviderModelContext(task.provider)
+            const routedModel = resolveModelRoute({
+                policy: executionTask?.modelRoutingPolicy ?? 'manual',
+                specialist: inferSpecialistKindFromRole(currentRole, attemptProfile?.role),
+                specialistModel: attemptProfile?.model?.trim() || null,
+                defaultModel: task.model || providerContext.defaultModel,
+                availableModels: providerContext.availableModels,
+                budget: executionTask?.budget,
+            })
+            const llmConfig = await getLLMConfigForTask(task.provider, routedModel.model)
             if (!llmConfig) {
-                return { success: false, output: '', error: `Failed to get LLM config for ${task.provider}/${effectiveModel}`, metrics }
+                return { success: false, output: '', error: `Failed to get LLM config for ${task.provider}/${routedModel.model}`, metrics }
             }
 
             const templateId = mapRoleToTemplateId(currentRole)
@@ -981,7 +1513,7 @@ async function runTaskWithAgent(
                 orchestratorPhase: 'executing',
             })
 
-            const result = await waitForAgentCompletion()
+            const result = await waitForAgentCompletion(useAgentStore.getState().currentThreadId || '')
 
             if (!result.success) {
                 return { ...result, metrics }

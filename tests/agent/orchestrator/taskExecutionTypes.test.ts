@@ -12,6 +12,7 @@ describe('task execution types', () => {
   it('defaults to balanced trust with isolation enabled', () => {
     expect(DEFAULT_TRUST_POLICY.mode).toBe('balanced')
     expect(DEFAULT_TRUST_POLICY.enableSafetyGuards).toBe(true)
+    expect(DEFAULT_TRUST_POLICY.modelRoutingPolicy).toBe('balanced')
   })
 
   it('routes medium and large work into isolated workspaces', () => {

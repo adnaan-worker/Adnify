@@ -43,5 +43,7 @@ describe('task governance types', () => {
     expect(snapshot.frontend?.role).toBe('frontend')
     expect(snapshot.verifier?.role).toBe('verifier')
     expect(snapshot.frontend?.trustMode).toBe(DEFAULT_TRUST_POLICY.mode)
+    expect(snapshot.frontend?.verificationMode).toBe('browser')
+    expect(snapshot.verifier?.verificationMode).toBe('regression')
   })
 })

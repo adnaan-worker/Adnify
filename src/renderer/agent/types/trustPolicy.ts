@@ -1,10 +1,11 @@
-import type { ExecutionTarget, InterruptMode, IsolationDecisionInput, TrustMode } from './taskExecution'
+import type { ExecutionTarget, InterruptMode, IsolationDecisionInput, ModelRoutingPolicy, TrustMode } from './taskExecution'
 
 export interface TrustPolicy {
   mode: TrustMode
   enableSafetyGuards: boolean
   defaultExecutionTarget: ExecutionTarget
   interruptMode: InterruptMode
+  modelRoutingPolicy: ModelRoutingPolicy
 }
 
 export const DEFAULT_TRUST_POLICY: TrustPolicy = {
@@ -12,6 +13,7 @@ export const DEFAULT_TRUST_POLICY: TrustPolicy = {
   enableSafetyGuards: true,
   defaultExecutionTarget: 'auto',
   interruptMode: 'phase',
+  modelRoutingPolicy: 'balanced',
 }
 
 export function shouldUseIsolatedWorkspace(input: IsolationDecisionInput): boolean {
