@@ -325,4 +325,67 @@ describe('orchestrator executor governance', () => {
     expect(Agent.abortAll).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps execution active when the detached thread still has recent tool activity', () => {
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Continue a long-running multi-agent task',
+      specialists: ['logic'],
+      executionTarget: 'current',
+      sourceWorkspacePath: '/workspace/adnify',
+    })
+
+    const state = useAgentStore.getState()
+    const workPackageId = state.executionTasks[taskId].workPackages[0]
+    const threadId = state.createThread()
+    const staleHeartbeat = {
+      ...createEmptyExecutionHeartbeatSnapshot(),
+      status: 'active' as const,
+      lastHeartbeatAt: 1_000,
+      lastProgressAt: 1_000,
+    }
+
+    state.selectExecutionTask(taskId)
+    state.updateExecutionTask(taskId, {
+      state: 'running',
+      patrol: {
+        ...createInitialPatrolState(),
+        status: 'active',
+      },
+      heartbeat: staleHeartbeat,
+    })
+    state.updateWorkPackage(workPackageId, {
+      status: 'executing',
+      threadId,
+      heartbeat: staleHeartbeat,
+    })
+    useAgentStore.setState((store) => ({
+      threads: {
+        ...store.threads,
+        [threadId]: {
+          ...store.threads[threadId],
+          lastModified: 19_500,
+          streamState: { phase: 'tool_running' },
+        },
+      },
+    }))
+
+    const result = __testing.syncTaskPatrol(taskId, {
+      now: 20_000,
+      thresholds: {
+        silentMs: 5_000,
+        suspectedStuckMs: 10_000,
+        abandonedMs: 30_000,
+      },
+    })
+
+    const nextState = useAgentStore.getState()
+    const task = nextState.executionTasks[taskId]
+    const workPackage = nextState.workPackages[workPackageId]
+
+    expect(result?.escalated).toBe(false)
+    expect(task.patrol?.status).toBe('active')
+    expect(task.state).toBe('running')
+    expect(workPackage.status).toBe('executing')
+    expect(workPackage.heartbeat?.status).toBe('active')
+  })
+
 })

@@ -38,6 +38,40 @@ interface TaskBoardProps {
     planId: string
 }
 
+export function shouldShowStopExecutionAction(input: {
+    isExecuting: boolean
+    isStopping: boolean
+    controllerState: 'idle' | 'gathering' | 'planning' | 'reviewing' | 'ready' | 'executing' | 'paused' | 'stopping' | 'completed' | 'failed'
+    activeTaskState?: 'planning' | 'running' | 'verifying' | 'blocked' | 'complete' | 'tripped' | null
+    workPackageStatuses?: Array<string | undefined>
+}): boolean {
+    if (input.isStopping || input.controllerState === 'stopping') {
+        return true
+    }
+
+    if (input.controllerState === 'paused' || input.activeTaskState === 'blocked' || input.activeTaskState === 'complete' || input.activeTaskState === 'tripped') {
+        return false
+    }
+
+    if (input.workPackageStatuses?.some((status) => ['executing', 'running', 'verifying'].includes(status || ''))) {
+        return true
+    }
+
+    if (input.activeTaskState === 'running' || input.activeTaskState === 'verifying') {
+        return true
+    }
+
+    if (input.controllerState === 'executing') {
+        return true
+    }
+
+    if (!input.activeTaskState) {
+        return input.isExecuting
+    }
+
+    return input.isExecuting
+}
+
 // ============================================
 // 子组件
 // ============================================
@@ -365,7 +399,6 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     const workspacePath = useStore((s) => s.workspacePath)
     const taskTrustSettings = useStore((s) => s.taskTrustSettings)
     const isStopping = controllerState === 'stopping'
-    const isExecutionBusy = isExecuting || isStopping
 
     // 加载需求文档内容
     useEffect(() => {
@@ -465,6 +498,16 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
             .filter(Boolean)
     }, [activeExecutionTask, workPackages])
 
+    const showStopExecutionAction = useMemo(() => shouldShowStopExecutionAction({
+        isExecuting,
+        isStopping,
+        controllerState,
+        activeTaskState: activeExecutionTask?.state ?? null,
+        workPackageStatuses: activeExecutionTaskPackages.map((workPackage) => workPackage.status),
+    }), [activeExecutionTask?.state, activeExecutionTaskPackages, controllerState, isExecuting, isStopping])
+
+    const isExecutionBusy = showStopExecutionAction || isStopping
+
     const backgroundAutonomyTasks = useMemo(() => (
         Object.values(executionTasks)
             .filter((task) => task.autonomyMode === 'autonomous' && task.id !== activeExecutionTask?.id)
@@ -539,13 +582,13 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
                             onChange={handleExecutionModeChange}
                             disabled={isExecutionBusy}
                         />
-                        {!isExecuting && (
+                        {!showStopExecutionAction && (
                             <Button variant="secondary" size="sm" onClick={() => setShowComposer((value) => !value)} disabled={isStopping}>
                                 <Plus className="w-4 h-4 mr-1" />
                                 准备执行
                             </Button>
                         )}
-                        {isExecuting ? (
+                        {showStopExecutionAction ? (
                             <Button variant="danger" size="sm" onClick={handleStop} disabled={isStopping}>
                                 <Pause className="w-4 h-4 mr-1" />
                                 {isStopping ? '停止中...' : '停止'}

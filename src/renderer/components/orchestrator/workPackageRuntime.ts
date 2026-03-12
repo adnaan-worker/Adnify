@@ -82,6 +82,29 @@ export function getWorkPackagePhaseLabel(phase: ChatThread['streamState']['phase
   }
 }
 
+export function getWorkPackageRuntimePhaseLabel(
+  workPackage: Pick<WorkPackage, 'status' | 'heartbeat'>,
+  phase?: ChatThread['streamState']['phase'] | null,
+): string {
+  if (workPackage.heartbeat?.status === 'abandoned') {
+    return '已失联'
+  }
+
+  if (workPackage.heartbeat?.status === 'suspected-stuck') {
+    return '疑似卡住'
+  }
+
+  if (workPackage.status === 'blocked') {
+    return '已阻塞'
+  }
+
+  if (!phase) {
+    return '等待线程'
+  }
+
+  return getWorkPackagePhaseLabel(phase)
+}
+
 export function buildWorkPackageRuntimeActivity(
   workPackage: WorkPackage,
   thread?: ChatThread | null,
@@ -94,7 +117,7 @@ export function buildWorkPackageRuntimeActivity(
     return {
       threadId: workPackage.threadId,
       phase: 'idle',
-      phaseLabel: '等待线程',
+      phaseLabel: getWorkPackageRuntimePhaseLabel(workPackage, null),
       userPreview: null,
       assistantPreview: null,
       toolPreview: null,
@@ -115,7 +138,7 @@ export function buildWorkPackageRuntimeActivity(
   return {
     threadId: workPackage.threadId,
     phase: thread.streamState.phase,
-    phaseLabel: getWorkPackagePhaseLabel(thread.streamState.phase),
+    phaseLabel: getWorkPackageRuntimePhaseLabel(workPackage, thread.streamState.phase),
     userPreview,
     assistantPreview,
     toolPreview,

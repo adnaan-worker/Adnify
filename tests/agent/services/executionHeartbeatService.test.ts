@@ -27,7 +27,7 @@ describe('execution heartbeat service', () => {
     const withFileMutation = recordHeartbeatFileMutation(withTool, 180)
 
     expect(withTool.lastToolActivityAt).toBe(120)
-    expect(withTool.lastProgressAt).toBe(50)
+    expect(withTool.lastProgressAt).toBe(120)
     expect(withFileMutation.lastFileMutationAt).toBe(180)
     expect(withFileMutation.lastProgressAt).toBe(180)
   })

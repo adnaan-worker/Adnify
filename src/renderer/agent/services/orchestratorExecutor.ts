@@ -710,6 +710,44 @@ function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function maxHeartbeatTimestamp(...values: Array<number | null | undefined>): number | null {
+    const timestamps = values.filter((value): value is number => typeof value === 'number')
+    return timestamps.length > 0 ? Math.max(...timestamps) : null
+}
+
+function syncHeartbeatWithThreadActivity(
+    snapshot: ReturnType<typeof createEmptyExecutionHeartbeatSnapshot> | undefined | null,
+    threadId?: string | null,
+) {
+    if (!threadId) {
+        return snapshot ?? createEmptyExecutionHeartbeatSnapshot()
+    }
+
+    const thread = useAgentStore.getState().threads[threadId]
+    if (!thread) {
+        return snapshot ?? createEmptyExecutionHeartbeatSnapshot()
+    }
+
+    const threadActivityAt = thread.lastModified
+    const latestHeartbeatAt = maxHeartbeatTimestamp(
+        snapshot?.lastHeartbeatAt,
+        snapshot?.lastAssistantOutputAt,
+        snapshot?.lastToolActivityAt,
+        snapshot?.lastFileMutationAt,
+        snapshot?.lastProgressAt,
+    )
+
+    if (latestHeartbeatAt != null && threadActivityAt <= latestHeartbeatAt) {
+        return snapshot ?? createEmptyExecutionHeartbeatSnapshot()
+    }
+
+    if (thread.streamState.phase === 'tool_pending' || thread.streamState.phase === 'tool_running') {
+        return recordHeartbeatToolActivity(snapshot, threadActivityAt)
+    }
+
+    return recordHeartbeatAssistantOutput(snapshot, threadActivityAt)
+}
+
 function markExecutionHeartbeatActive(taskId: string, workPackageId: string, timestamp = Date.now()): void {
     const store = useAgentStore.getState()
     const task = store.executionTasks[taskId]
@@ -847,8 +885,30 @@ function syncTaskPatrol(taskId: string, input?: {
         ...(input?.thresholds || {}),
     }
 
+    const executingWorkPackages = task.workPackages
+        .map((workPackageId) => store.workPackages[workPackageId])
+        .filter((workPackage): workPackage is WorkPackage => Boolean(workPackage) && ['executing', 'running', 'verifying'].includes(workPackage.status))
+
+    const refreshedTaskHeartbeat = executingWorkPackages.reduce((heartbeat, workPackage) => {
+        const nextWorkPackageHeartbeat = syncHeartbeatWithThreadActivity(workPackage.heartbeat, workPackage.threadId)
+
+        if (nextWorkPackageHeartbeat !== workPackage.heartbeat) {
+            store.updateWorkPackage(workPackage.id, {
+                heartbeat: nextWorkPackageHeartbeat,
+            })
+        }
+
+        return syncHeartbeatWithThreadActivity(heartbeat, workPackage.threadId)
+    }, task.heartbeat)
+
+    if (refreshedTaskHeartbeat !== task.heartbeat) {
+        store.updateExecutionTask(taskId, {
+            heartbeat: refreshedTaskHeartbeat,
+        })
+    }
+
     const taskEvaluation = evaluateExecutionPatrol({
-        heartbeat: task.heartbeat,
+        heartbeat: refreshedTaskHeartbeat,
         patrol: task.patrol,
         now,
         thresholds,
@@ -858,22 +918,19 @@ function syncTaskPatrol(taskId: string, input?: {
     let dominantReason = taskEvaluation.patrol.reason
     let dominantWorkPackageId: string | null = null
 
-    const executingWorkPackages = task.workPackages
-        .map((workPackageId) => store.workPackages[workPackageId])
-        .filter((workPackage): workPackage is WorkPackage => Boolean(workPackage) && ['executing', 'running', 'verifying'].includes(workPackage.status))
-
     executingWorkPackages.forEach((workPackage) => {
+        const currentWorkPackage = useAgentStore.getState().workPackages[workPackage.id] || workPackage
         const workPackageEvaluation = evaluateExecutionPatrol({
-            heartbeat: workPackage.heartbeat,
+            heartbeat: currentWorkPackage.heartbeat,
             patrol: {
                 ...createInitialPatrolState(),
-                status: workPackage.heartbeat?.status === 'abandoned'
+                status: currentWorkPackage.heartbeat?.status === 'abandoned'
                     ? 'abandoned'
-                    : workPackage.heartbeat?.status === 'suspected-stuck'
+                    : currentWorkPackage.heartbeat?.status === 'suspected-stuck'
                         ? 'suspected-stuck'
-                        : workPackage.heartbeat?.status === 'silent'
+                        : currentWorkPackage.heartbeat?.status === 'silent'
                             ? 'silent-but-healthy'
-                            : workPackage.heartbeat?.status === 'active'
+                            : currentWorkPackage.heartbeat?.status === 'active'
                                 ? 'active'
                                 : 'idle',
             },
@@ -881,14 +938,14 @@ function syncTaskPatrol(taskId: string, input?: {
             thresholds,
         })
 
-        store.updateWorkPackage(workPackage.id, {
+        store.updateWorkPackage(currentWorkPackage.id, {
             heartbeat: workPackageEvaluation.heartbeat,
         })
 
         if (getPatrolSeverity(workPackageEvaluation.patrol.status) > getPatrolSeverity(dominantStatus)) {
             dominantStatus = workPackageEvaluation.patrol.status
             dominantReason = workPackageEvaluation.patrol.reason
-            dominantWorkPackageId = workPackage.id
+            dominantWorkPackageId = currentWorkPackage.id
         }
     })
 

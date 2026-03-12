@@ -49,6 +49,7 @@ export function recordHeartbeatToolActivity(
     status: 'active',
     lastHeartbeatAt: timestamp,
     lastToolActivityAt: timestamp,
+    lastProgressAt: timestamp,
     stuckReason: null,
   }
 }
