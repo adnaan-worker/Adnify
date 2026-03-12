@@ -20,7 +20,7 @@ import { memoryService } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
 import { composerService } from '../services/composerService'
 import { toRelativePath } from '@shared/utils/pathUtils'
-import { getInteractiveTerminalBackend, isLongRunningCommand } from './commandRuntime'
+import { isLongRunningCommand } from './commandRuntime'
 
 // ===== 辅助函数 =====
 
@@ -700,92 +700,60 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             ? (args.timeout as number) * 1000
             : config.toolTimeoutMs
 
-        // 智能判定长进程
         const isLongRunningProcess = isLongRunningCommand(command, isBackground)
 
-        if (isLongRunningProcess) {
-            try {
-                // 1. 初始化终端并在 UI 里展示
-                const { terminalManager } = await import('@/renderer/services/TerminalManager')
+        try {
+            const { terminalManager } = await import('@/renderer/services/TerminalManager')
 
-                // 确保我们在主进程上下文中
-                const termId = await terminalManager.createTerminal({
-                    name: command.split(' ')[0] || 'Task',
-                    cwd: cwd || ctx.workspacePath || process.cwd(),
-                    backend: getInteractiveTerminalBackend()
-                })
+            // 获取或复用 Agent 专属终端（不再每次新建）
+            const termId = await terminalManager.getOrCreateAgentTerminal(
+                cwd || ctx.workspacePath || '/'
+            )
 
-                // 这边给终端发送换行使其执行
+            // 始终唤出面板并激活 Agent 终端，让用户看到执行过程
+            useStore.getState().setTerminalVisible(true)
+            terminalManager.setActiveTerminal(termId)
+
+            // === 长进程：直接写入并立即返回，让用户在终端里跟踪 ===
+            if (isLongRunningProcess) {
                 terminalManager.writeToTerminal(termId, `${command}\r`)
-
-                // 2. 唤出面板，让用户可见 (如果在渲染器中可获取的话)
-                useStore.getState().setTerminalVisible(true)
-                terminalManager.setActiveTerminal(termId)
-
                 return {
                     success: true,
-                    result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\n\nThe process is now running interactively in the UI terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check its startup logs. Use 'send_terminal_input' if you need to answer prompts or type Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
-                    meta: {
-                        command,
-                        cwd,
-                        terminalId: termId,
-                        isBackground: true
-                    }
-                }
-            } catch (error) {
-                const errorMsg = error instanceof Error ? error.message : String(error)
-                logger.agent.error('[run_command] Interactive execution failed:', errorMsg)
-                return {
-                    success: false,
-                    result: `Error: Failed to start interactive terminal: ${errorMsg}`,
-                    error: errorMsg
+                    result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\n\nThe process is running in the Agent terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check logs. Use 'send_terminal_input' to send input or Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
+                    meta: { command, cwd, terminalId: termId, isBackground: true }
                 }
             }
-        }
 
-        try {
-            // 使用后台执行（不依赖 PTY，更可靠）
-            const result = await api.shell.executeBackground({
+            // === 短命令：用 sentinel 机制精确捕获输出，同时用户可见 ===
+            const { output, exitCode, timedOut } = await terminalManager.executeCommandWithOutput(
+                termId,
                 command,
-                cwd: cwd || ctx.workspacePath || undefined,
                 timeout,
-            })
+            )
 
-            // 构建结果信息
-            const output = result.output || ''
             const hasOutput = output.trim().length > 0
-
             let resultText = output
-            if (result.error) {
-                resultText = hasOutput
-                    ? `${output}\n\n[Error: ${result.error}]`
-                    : `Error: ${result.error}`
-            } else if (!hasOutput) {
-                resultText = result.exitCode === 0 ? 'Command executed successfully (no output)' : `Command exited with code ${result.exitCode} (no output)`
+
+            if (!hasOutput) {
+                resultText = exitCode === 0
+                    ? 'Command executed successfully (no output)'
+                    : `Command exited with code ${exitCode} (no output)`
             }
 
-            // 判断成功：
-            // 1. 退出码为 0 一定是成功
-            // 2. 有正常输出且没有明确错误也视为成功（让 AI 判断内容）
-            // 3. 超时或执行错误才是失败
-            const isSuccess = result.exitCode === 0 || (hasOutput && !result.error)
+            if (timedOut) {
+                resultText = `[Timed out after ${timeout / 1000}s]\n${output}`
+            }
 
+            const isSuccess = exitCode === 0 || (hasOutput && !timedOut)
             return {
                 success: isSuccess,
                 result: resultText,
-                meta: {
-                    command,
-                    cwd,
-                    exitCode: result.exitCode ?? (result.success ? 0 : 1),
-                    timedOut: result.error?.includes('timed out')
-                },
-                error: isSuccess ? undefined : resultText // 设置 error 让 LLM 知道失败了
+                meta: { command, cwd, exitCode, timedOut, terminalId: termId },
+                error: isSuccess ? undefined : resultText
             }
         } catch (error) {
-            // 捕获执行异常（如 IPC 通信失败）
             const errorMsg = error instanceof Error ? error.message : String(error)
             logger.agent.error('[run_command] Execution failed:', errorMsg)
-
             return {
                 success: false,
                 result: `Error: Failed to execute command: ${errorMsg}`,

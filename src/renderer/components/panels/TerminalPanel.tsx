@@ -9,7 +9,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useEffect, useRef, useState, useCallback, memo } from 'react'
-import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal } from 'lucide-react'
+import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal, Bot, Loader2 } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
 import { useAgentStore } from '@/renderer/agent'
 import { themeManager } from '@/renderer/config/themeConfig'
@@ -296,11 +296,10 @@ const TerminalPanel = memo(function TerminalPanel() {
     }, [managerState.terminals.length, setTerminalLayout])
 
     const closePanel = useCallback(() => {
-        // 关闭面板时清理所有终端，避免下次打开时出现空白终端
-        managerState.terminals.forEach(t => terminalManager.closeTerminal(t.id))
-        mountedTerminals.current.clear()
+        // 只隐藏面板，保留所有终端进程和 buffer
+        // 参考 VS Code / Cursor：关闭面板不销毁终端，重新打开时 replay 历史内容
         setTerminalVisible(false)
-    }, [managerState.terminals, setTerminalVisible])
+    }, [setTerminalVisible])
 
     const handleFixWithAI = useCallback(() => {
         if (!managerState.activeId) return
@@ -348,28 +347,36 @@ const TerminalPanel = memo(function TerminalPanel() {
                             <TerminalIcon className="w-4 h-4" />
                         </div>
                         <div className="flex items-center overflow-x-auto no-scrollbar flex-1 h-full">
-                            {terminals.map(term => (
-                                <div
-                                    key={term.id}
-                                    onClick={() => terminalManager.setActiveTerminal(term.id)}
-                                    className={`
-                                        relative flex items-center gap-2 px-3 h-full cursor-pointer min-w-[120px] max-w-[200px] flex-shrink-0 group transition-all border-r border-border/50
-                                        ${activeId === term.id
-                                            ? 'bg-surface text-text-primary font-medium shadow-[inset_0_2px_0_0_rgba(var(--accent))]'
-                                            : 'bg-transparent text-text-muted hover:bg-surface-hover hover:text-text-secondary'}
-                                    `}
-                                >
-                                    <span className="truncate flex-1 text-xs">{term.name}</span>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={(e) => closeTerminal(term.id, e)}
-                                        className={`h-4 w-4 rounded-md transition-all ${activeId === term.id ? 'opacity-0 group-hover:opacity-100' : 'opacity-0 group-hover:opacity-100'} hover:bg-red-500/10 hover:text-red-500`}
+                            {terminals.map(term => {
+                                const isRunning = managerState.runningCommand?.terminalId === term.id
+                                return (
+                                    <div
+                                        key={term.id}
+                                        onClick={() => terminalManager.setActiveTerminal(term.id)}
+                                        className={`
+                                            relative flex items-center gap-1.5 px-3 h-full cursor-pointer min-w-[120px] max-w-[200px] flex-shrink-0 group transition-all border-r border-border/50
+                                            ${activeId === term.id
+                                                ? 'bg-surface text-text-primary font-medium shadow-[inset_0_2px_0_0_rgba(var(--accent))]'
+                                                : 'bg-transparent text-text-muted hover:bg-surface-hover hover:text-text-secondary'}
+                                        `}
                                     >
-                                        <X className="w-3 h-3" />
-                                    </Button>
-                                </div>
-                            ))}
+                                        {term.isAgent && (
+                                            isRunning
+                                                ? <Loader2 className="w-3 h-3 text-accent animate-spin flex-shrink-0" />
+                                                : <Bot className="w-3 h-3 text-accent flex-shrink-0" />
+                                        )}
+                                        <span className="truncate flex-1 text-xs">{term.name}</span>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={(e) => closeTerminal(term.id, e)}
+                                            className={`h-4 w-4 rounded-md transition-all ${activeId === term.id ? 'opacity-0 group-hover:opacity-100' : 'opacity-0 group-hover:opacity-100'} hover:bg-red-500/10 hover:text-red-500`}
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </Button>
+                                    </div>
+                                )
+                            })}
                         </div>
                     </div>
 

@@ -26,11 +26,27 @@ export interface TerminalInstance {
   cwd: string;
   shell: string;
   createdAt: number;
+  /** 是否为 Agent 专属终端 */
+  isAgent?: boolean;
+}
+
+export interface RunningCommandInfo {
+  terminalId: string;
+  command: string;
+  startedAt: number;
 }
 
 export interface TerminalManagerState {
   terminals: TerminalInstance[];
   activeId: string | null;
+  /** 当前正在执行的命令（用于 UI 显示 spinner） */
+  runningCommand: RunningCommandInfo | null;
+}
+
+export interface CommandResult {
+  output: string;
+  exitCode: number;
+  timedOut: boolean;
 }
 
 export type TerminalBackend = 'pty' | 'pipe';
@@ -58,11 +74,25 @@ function getOutputBufferConfig() {
   };
 }
 
+/** 剥离 ANSI 转义序列（用于 sentinel 输出提取） */
+function stripAnsi(str: string): string {
+  return str
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    .replace(/\x1b\][^\x07]*\x07/g, '')
+    .replace(/\x1b[()][AB012B]/g, '')
+    .replace(/\x1b[=><]/g, '')
+    .replace(/\r/g, '')
+}
+
 class TerminalManagerClass {
   private state: TerminalManagerState = {
     terminals: [],
     activeId: null,
+    runningCommand: null,
   };
+
+  /** Agent 专属终端 ID（跨 tool call 复用） */
+  private agentTerminalId: string | null = null;
 
   // xterm 实例管理
   private xtermInstances = new Map<string, XTermInstance>();
@@ -214,6 +244,7 @@ class TerminalManagerClass {
     return {
       terminals: [...this.state.terminals],
       activeId: this.state.activeId,
+      runningCommand: this.state.runningCommand,
     };
   }
 
@@ -233,6 +264,7 @@ class TerminalManagerClass {
     cwd: string;
     shell?: string;
     backend?: TerminalBackend;
+    isAgent?: boolean;
   }): Promise<string> {
     const id = crypto.randomUUID();
 
@@ -242,6 +274,7 @@ class TerminalManagerClass {
       cwd: options.cwd,
       shell: options.shell || "",
       createdAt: Date.now(),
+      isAgent: options.isAgent,
     };
 
     this.state.terminals.push(instance);
@@ -433,6 +466,14 @@ class TerminalManagerClass {
 
     this.xtermInstances.set(id, { terminal, fitAddon, webglAddon, container });
 
+    // 回放已有 buffer —— 解决 xterm 挂载前 PTY 已产生输出导致终端显示为空的问题
+    const existingBuffer = this.outputBuffers.get(id);
+    if (existingBuffer && existingBuffer.lines.length > 0) {
+      for (const chunk of existingBuffer.lines) {
+        terminal.write(chunk);
+      }
+    }
+
     try {
       fitAddon.fit();
     } catch { }
@@ -446,24 +487,23 @@ class TerminalManagerClass {
   }
 
   /**
-   * 当终端隐藏时，卸载 DOM 和 WebGL 以释放内存，但保持 xterm 实例与状态
+   * 卸载 xterm UI 实例以释放 DOM/WebGL 内存，但 PTY 进程和 outputBuffer 完整保留。
+   * 下次 mountTerminal 时会新建 xterm 并将 buffer 全量回放，用户看到完整历史。
    */
   unmountTerminal(id: string) {
     const existing = this.xtermInstances.get(id);
     if (!existing) return;
 
     if (existing.webglAddon) {
-      try {
-        existing.webglAddon.dispose();
-      } catch { }
+      try { existing.webglAddon.dispose(); } catch { }
       existing.webglAddon = undefined;
     }
 
-    if (existing.container) {
-      // 移除 DOM 挂载点以触发 xterm 的内部清理 (它会保留 buffer)
-      existing.terminal.dispose(); // 注意这是内部 DOM 清理，不会真正销毁内存中的 Terminal 数据结构如果保留引用
-      existing.container = null;
-    }
+    try { existing.terminal.dispose(); } catch { }
+
+    // 从 map 中移除，确保下次 mountTerminal 走"新建实例 + buffer replay"分支
+    // 而不是尝试在已销毁的 terminal 上调用 open()（会静默失败导致空白）
+    this.xtermInstances.delete(id);
   }
 
   fitTerminal(id: string) {
@@ -484,6 +524,10 @@ class TerminalManagerClass {
     if (xterm) {
       xterm.terminal.dispose();
       this.xtermInstances.delete(id);
+    }
+
+    if (this.agentTerminalId === id) {
+      this.agentTerminalId = null
     }
 
     this.outputBuffers.delete(id);
@@ -530,6 +574,111 @@ class TerminalManagerClass {
     }
   }
 
+  // ===== Agent 专属终端 =====
+
+  /**
+   * 获取或创建 Agent 专属终端。
+   * Agent 终端跨 tool call 复用，避免每次 run_command 产生孤立 tab。
+   */
+  async getOrCreateAgentTerminal(cwd: string, shell?: string): Promise<string> {
+    // 检查现有 agent 终端是否仍然存活
+    if (this.agentTerminalId) {
+      const exists = this.state.terminals.find(t => t.id === this.agentTerminalId)
+      if (exists) return this.agentTerminalId
+      // 已被关闭，重置
+      this.agentTerminalId = null
+    }
+
+    const id = await this.createTerminal({
+      name: 'Agent',
+      cwd,
+      shell,
+      isAgent: true,
+    })
+    this.agentTerminalId = id
+    return id
+  }
+
+  /**
+   * 在指定终端执行命令，通过 sentinel 标记精确捕获本次命令的输出。
+   * 命令过程对用户可见（在终端面板里显示），同时将 stdout 作为字符串返回给 AI。
+   */
+  executeCommandWithOutput(termId: string, command: string, timeoutMs: number): Promise<CommandResult> {
+    const sentinelId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+    const START = `ADNIFY_CMD_START_${sentinelId}`
+    const END_PREFIX = `ADNIFY_CMD_END_${sentinelId}_`
+
+    // 广播运行状态
+    this.state.runningCommand = { terminalId: termId, command, startedAt: Date.now() }
+    this.notify()
+
+    return new Promise<CommandResult>((resolve) => {
+      let accumulator = ''
+      let settled = false
+
+      const settle = (result: CommandResult) => {
+        if (settled) return
+        settled = true
+        unsub()
+        clearTimeout(timer)
+        this.state.runningCommand = null
+        this.notify()
+        resolve(result)
+      }
+
+      const timer = setTimeout(() => {
+        settle({ output: this.extractSentinelOutput(accumulator, START, END_PREFIX).output, exitCode: -1, timedOut: true })
+      }, timeoutMs)
+
+      const unsub = this.onData((id, data) => {
+        if (id !== termId || settled) return
+        accumulator += stripAnsi(data)
+
+        if (accumulator.includes(END_PREFIX)) {
+          const { output, exitCode } = this.extractSentinelOutput(accumulator, START, END_PREFIX)
+          settle({ output, exitCode, timedOut: false })
+        }
+      })
+
+      // 必须先订阅，再写命令（避免竞态）
+      // 渲染进程无 process 对象，用 navigator.userAgent 判断平台
+      // Sentinel 用 ANSI Conceal（\e[8m）隐藏，用户不可见但仍在流中可被检测
+      const ESC = '\x1b'
+      const HIDE = `${ESC}[8m`  // Conceal on
+      const SHOW = `${ESC}[0m`  // Reset
+      const isWindows = /windows/i.test(navigator.userAgent)
+      // Windows 默认 PowerShell：用 ; 分隔语句，$LASTEXITCODE 获取退出码
+      // Unix/macOS：bash/zsh 用 ; 分隔，$? 获取退出码
+      const wrapped = isWindows
+        ? `Write-Host "${HIDE}${START}${SHOW}"; ${command}; Write-Host "${HIDE}${END_PREFIX}$LASTEXITCODE${SHOW}"\r`
+        : `printf '${HIDE}${START}${SHOW}\\n'; ${command}; printf '${HIDE}${END_PREFIX}'\"$?\"'${SHOW}\\n'\r`
+      this.writeToTerminal(termId, wrapped)
+    })
+  }
+
+  private extractSentinelOutput(buffer: string, start: string, endPrefix: string): { output: string; exitCode: number } {
+    const startIdx = buffer.indexOf(start)
+    if (startIdx === -1) return { output: buffer.trim(), exitCode: 0 }
+
+    // 跳过 start 标记本身及其后的换行/空白
+    let contentStart = startIdx + start.length
+    while (contentStart < buffer.length && '\n \t\r'.includes(buffer[contentStart])) {
+      contentStart++
+    }
+
+    const endIdx = buffer.indexOf(endPrefix, contentStart)
+    if (endIdx === -1) return { output: buffer.slice(contentStart).trim(), exitCode: 0 }
+
+    const output = buffer.slice(contentStart, endIdx).trim()
+
+    // 提取退出码（数字紧跟在 endPrefix 后面）
+    const afterEnd = buffer.slice(endIdx + endPrefix.length)
+    const codeMatch = afterEnd.match(/(\d+)/)
+    const exitCode = codeMatch ? parseInt(codeMatch[1], 10) : 0
+
+    return { output, exitCode }
+  }
+
   cleanup() {
     if (this.ipcCleanup) {
       this.ipcCleanup();
@@ -540,9 +689,11 @@ class TerminalManagerClass {
       this.closeTerminal(terminal.id);
     }
 
+    this.agentTerminalId = null
     this.state = {
       terminals: [],
       activeId: null,
+      runningCommand: null,
     };
     this.notify();
   }

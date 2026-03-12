@@ -246,50 +246,32 @@ const ToolCallCard = memo(function ToolCallCard({
         // 终端命令
         if (name === 'run_command') {
             const cmd = args.command as string
-            const metaInfo = (toolCall as any).meta || {}
-            const terminalId = metaInfo.terminalId
-            const hasActiveTerminal = terminalId && terminalManager.getXterm(terminalId)
+            const terminalId = ((toolCall as any).meta?.terminalId) as string | undefined
 
             return (
                 <div className="font-mono text-[11px] space-y-1">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-text-muted">
-                            <span className="text-accent/60 select-none">$</span>
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-text-muted min-w-0">
+                            <span className="text-accent/60 select-none flex-shrink-0">$</span>
                             <span className="text-text-primary break-all">{cmd}</span>
                         </div>
-                        {isSuccess && (
-                            <button
-                                onClick={async e => {
-                                    e.stopPropagation()
-                                    setTerminalVisible(true)
-
-                                    if (hasActiveTerminal) {
-                                        // 切换到已有的常驻终端
-                                        terminalManager.setActiveTerminal(terminalId)
-                                    } else {
-                                        // 重新运行静默命令或已关闭的进程
-                                        let cwd = metaInfo.cwd || (args.cwd as string) || ''
-                                        const workspacePath = useStore.getState().workspacePath
-                                        if (!cwd && workspacePath) cwd = workspacePath
-                                        else if (cwd && !cwd.includes(':') && !cwd.startsWith('/') && workspacePath) {
-                                            // Handle relative args.cwd by prefixing workspace path
-                                            cwd = `${workspacePath.replace(/\\/g, '/')}/${cwd}`
-                                        }
-
-                                        let currentTermId = terminalManager.getState().activeId
-                                        if (!currentTermId) {
-                                            currentTermId = await terminalManager.createTerminal({ cwd, name: 'Terminal' })
-                                        }
-                                        terminalManager.writeToTerminal(currentTermId, cmd + '\r')
-                                        terminalManager.focusTerminal(currentTermId)
-                                    }
-                                }}
-                                className="text-[10px] px-1.5 py-0.5 hover:bg-surface-hover rounded text-text-muted hover:text-text-primary transition-colors flex-shrink-0 ml-2"
-                                title={hasActiveTerminal ? 'Switch to this running terminal' : 'Run this command in the terminal again'}
-                            >
-                                {hasActiveTerminal ? 'View' : 'Run'}
-                            </button>
-                        )}
+                        {/* 单一按钮：始终打开终端面板并定位到 Agent 终端 */}
+                        <button
+                            onClick={e => {
+                                e.stopPropagation()
+                                setTerminalVisible(true)
+                                if (terminalId) terminalManager.setActiveTerminal(terminalId)
+                            }}
+                            className={`flex items-center gap-1 flex-shrink-0 ml-2 text-[10px] px-1.5 py-0.5 rounded transition-colors
+                                ${isRunning
+                                    ? 'text-accent bg-accent/10 border border-accent/20'
+                                    : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'
+                                }`}
+                            title="在终端面板中查看执行过程"
+                        >
+                            <Terminal className={`w-3 h-3 ${isRunning ? 'animate-pulse' : ''}`} />
+                            <span>{isRunning ? 'Running…' : 'Terminal'}</span>
+                        </button>
                     </div>
                     {toolCall.result && (
                         <div className="text-text-muted/80 whitespace-pre-wrap break-all border-l-2 border-border/30 pl-2 ml-1 mt-1">
