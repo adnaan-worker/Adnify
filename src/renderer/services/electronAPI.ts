@@ -3,9 +3,29 @@
  * 将扁平的 window.electronAPI 包装成分组的 API 结构
  */
 
+import type {
+  ElectronAPI,
+  RemoteShellEntry,
+  RemoteShellServer,
+  RemoteShellUploadResult,
+  RemoteShellDownloadResult,
+} from '@renderer/types/electron'
+
+type ElectronAPIWithRemoteShell = ElectronAPI & {
+  remoteShellList: (server: RemoteShellServer, remotePath?: string) => Promise<RemoteShellEntry[]>
+  remoteShellReadText: (server: RemoteShellServer, remotePath: string) => Promise<string | null>
+  remoteShellWriteText: (server: RemoteShellServer, remotePath: string, content: string) => Promise<boolean>
+  remoteShellMkdir: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => Promise<boolean>
+  remoteShellDelete: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<RemoteShellUploadResult>
+  remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<RemoteShellDownloadResult>
+}
+
 // 创建分组 API 适配器
 function createGroupedAPI() {
-  const raw = window.electronAPI
+  const raw = window.electronAPI as ElectronAPIWithRemoteShell
 
   return {
     // 应用生命周期
@@ -100,7 +120,7 @@ function createGroupedAPI() {
 
     // 终端
     terminal: {
-      create: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe' }) => raw.createTerminal(options),
+      create: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer }) => raw.createTerminal(options),
       write: (id: string, data: string) => raw.writeTerminal(id, data),
       resize: (id: string, cols: number, rows: number) => raw.resizeTerminal(id, cols, rows),
       kill: (id?: string) => raw.killTerminal(id),
@@ -108,6 +128,19 @@ function createGroupedAPI() {
       onData: (callback: Parameters<typeof raw.onTerminalData>[0]) => raw.onTerminalData(callback),
       onExit: (callback: Parameters<typeof raw.onTerminalExit>[0]) => raw.onTerminalExit(callback),
       onError: (callback: Parameters<typeof raw.onTerminalError>[0]) => raw.onTerminalError(callback),
+    },
+
+    // 远程 Shell / SFTP
+    remoteShell: {
+      list: (server: RemoteShellServer, remotePath?: string) => raw.remoteShellList(server, remotePath),
+      readText: (server: RemoteShellServer, remotePath: string) => raw.remoteShellReadText(server, remotePath),
+      writeText: (server: RemoteShellServer, remotePath: string, content: string) => raw.remoteShellWriteText(server, remotePath, content),
+      mkdir: (server: RemoteShellServer, remotePath: string) => raw.remoteShellMkdir(server, remotePath),
+      rename: (server: RemoteShellServer, oldPath: string, newPath: string) => raw.remoteShellRename(server, oldPath, newPath),
+      delete: (server: RemoteShellServer, remotePath: string) => raw.remoteShellDelete(server, remotePath),
+      testConnection: (server: RemoteShellServer) => raw.remoteShellTestConnection(server),
+      upload: (server: RemoteShellServer, remoteDirectory: string) => raw.remoteShellUpload(server, remoteDirectory),
+      download: (server: RemoteShellServer, remotePath: string) => raw.remoteShellDownload(server, remotePath),
     },
 
     // Shell 执行

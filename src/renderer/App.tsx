@@ -22,6 +22,7 @@ startupMetrics.mark('app-module-loaded')
 const Editor = lazy(() => import('./components/editor/Editor'))
 const Sidebar = lazy(() => import('./components/sidebar').then(m => ({ default: m.Sidebar })))
 const ChatPanel = lazy(() => import('./components/agent').then(m => ({ default: m.ChatPanel })))
+const ShellStudio = lazy(() => import('./shell/components/ShellStudio'))
 
 // 面板组件
 const TerminalPanel = lazy(() => import('./components/panels/TerminalPanel'))
@@ -113,6 +114,7 @@ function AppContent() {
 
   // Memoize hasWorkspace 计算
   const hasWorkspace = useMemo(() => workspace && workspace.roots.length > 0, [workspace])
+  const isShellStudioActive = activeSidePanel === 'shell'
 
   return (
     <div className="h-screen flex flex-col bg-transparent overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative">
@@ -124,7 +126,7 @@ function AppContent() {
             <div className="flex-1 flex overflow-hidden">
               <ActivityBar />
 
-              {activeSidePanel && (
+              {activeSidePanel && !isShellStudioActive && (
                 <div ref={sidebarRef} style={{ width: sidebarWidth }} className="flex-shrink-0 relative">
                   <Suspense fallback={<PanelSkeleton />}>
                     <Sidebar />
@@ -141,23 +143,35 @@ function AppContent() {
                 <EmotionAmbientGlow />
 
                 <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                  <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
-                    <ErrorBoundary>
-                      <Suspense fallback={<EditorSkeleton />}>
-                        <Editor />
-                      </Suspense>
-                    </ErrorBoundary>
-                  </div>
-                  <ErrorBoundary>
-                    <Suspense fallback={null}>
-                      <TerminalPanel />
-                    </Suspense>
-                  </ErrorBoundary>
-                  <ErrorBoundary>
-                    <Suspense fallback={null}>
-                      <DebugPanel />
-                    </Suspense>
-                  </ErrorBoundary>
+                  {isShellStudioActive ? (
+                    <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
+                      <ErrorBoundary>
+                        <Suspense fallback={<EditorSkeleton />}>
+                          <ShellStudio />
+                        </Suspense>
+                      </ErrorBoundary>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
+                        <ErrorBoundary>
+                          <Suspense fallback={<EditorSkeleton />}>
+                            <Editor />
+                          </Suspense>
+                        </ErrorBoundary>
+                      </div>
+                      <ErrorBoundary>
+                        <Suspense fallback={null}>
+                          <TerminalPanel />
+                        </Suspense>
+                      </ErrorBoundary>
+                      <ErrorBoundary>
+                        <Suspense fallback={null}>
+                          <DebugPanel />
+                        </Suspense>
+                      </ErrorBoundary>
+                    </>
+                  )}
                 </div>
 
                 <div ref={chatRef} style={{ width: chatWidth }} className="flex-shrink-0 relative border-l border-border">

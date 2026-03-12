@@ -12,6 +12,8 @@ const EXTERNAL_DEPS = [
   'openai',
   '@google/genai',
   'node-pty',
+  'ssh2',
+  'cpu-features',
   '@parcel/watcher',
   '@parcel/watcher-win32-x64',
   '@parcel/watcher-win32-arm64',

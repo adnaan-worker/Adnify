@@ -180,6 +180,33 @@ export interface WorkspaceConfig {
   roots: string[]
 }
 
+export interface RemoteShellEntry {
+  name: string
+  path: string
+  isDirectory: boolean
+  size: number
+  modifyTime?: number
+}
+
+export interface RemoteShellServer {
+  host: string
+  port?: number
+  username?: string
+  password?: string
+  privateKeyPath?: string
+  remotePath?: string
+}
+
+export interface RemoteShellUploadResult {
+  canceled: boolean
+  uploaded: string[]
+}
+
+export interface RemoteShellDownloadResult {
+  canceled: boolean
+  localPath?: string
+}
+
 export interface EmbeddingConfigInput {
   provider?: 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama' | 'custom'
   apiKey?: string
@@ -413,7 +440,7 @@ export interface ElectronAPI {
   }) => Promise<Array<{ text: string; similarity: number; index: number }>>
 
   // Terminal
-  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe' }) => Promise<{ success: boolean; error?: string }>
+  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer }) => Promise<{ success: boolean; error?: string }>
   writeTerminal: (id: string, data: string) => Promise<void>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id?: string) => void
@@ -421,6 +448,17 @@ export interface ElectronAPI {
   onTerminalData: (callback: (event: { id: string; data: string }) => void) => () => void
   onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number }) => void) => () => void
   onTerminalError: (callback: (event: { id: string; error: string }) => void) => () => void
+
+  // Remote Shell / SFTP
+  remoteShellList: (server: RemoteShellServer, remotePath?: string) => Promise<RemoteShellEntry[]>
+  remoteShellReadText: (server: RemoteShellServer, remotePath: string) => Promise<string | null>
+  remoteShellWriteText: (server: RemoteShellServer, remotePath: string, content: string) => Promise<boolean>
+  remoteShellMkdir: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => Promise<boolean>
+  remoteShellDelete: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<RemoteShellUploadResult>
+  remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<RemoteShellDownloadResult>
 
   // Shell
   executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) => Promise<{

@@ -533,6 +533,157 @@ export function registerSecureTerminalHandlers(
     }
   }
 
+  let ssh2ClientCtor: any = null
+
+  const getSsh2ClientCtor = () => {
+    if (ssh2ClientCtor) return ssh2ClientCtor
+
+    try {
+      const cpuFeaturesPath = require.resolve('cpu-features')
+      require.cache[cpuFeaturesPath] = {
+        id: cpuFeaturesPath,
+        filename: cpuFeaturesPath,
+        loaded: true,
+        exports: () => null,
+        children: [],
+        paths: [],
+      } as unknown as NodeJS.Module
+    } catch {
+    }
+
+    ssh2ClientCtor = require('ssh2').Client
+    return ssh2ClientCtor
+  }
+
+  class SshShellSession extends EventEmitter {
+    private connection: any
+    private stream: any
+    private closed = false
+    private cols: number
+    private rows: number
+
+    constructor(private readonly server: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string }, cols = 80, rows = 24) {
+      super()
+      this.cols = cols
+      this.rows = rows
+      this.connection = null
+      this.stream = null
+    }
+
+    async connect(): Promise<void> {
+      const Client = getSsh2ClientCtor()
+      this.connection = new Client()
+
+      const config: Record<string, unknown> = {
+        host: this.server.host.trim(),
+        port: this.server.port && this.server.port > 0 ? this.server.port : 22,
+        username: this.server.username?.trim() || 'root',
+        readyTimeout: 15000,
+        keepaliveInterval: 10000,
+        keepaliveCountMax: 3,
+        tryKeyboard: Boolean(this.server.password),
+      }
+
+      if (this.server.privateKeyPath?.trim()) {
+        config.privateKey = require('fs').readFileSync(this.server.privateKeyPath.trim(), 'utf8')
+      }
+      if (this.server.password?.trim()) {
+        config.password = this.server.password
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        let settled = false
+        const finishReject = (error: unknown) => {
+          if (settled) return
+          settled = true
+          reject(error)
+        }
+
+        this.connection
+          .on('ready', () => {
+            this.connection.shell({ term: 'xterm-256color', cols: this.cols, rows: this.rows }, (error: Error | undefined, stream: any) => {
+              if (error || !stream) {
+                finishReject(error || new Error('Failed to open remote shell'))
+                return
+              }
+
+              this.stream = stream
+              stream.on('data', (data: Buffer | string) => this.emit('data', Buffer.isBuffer(data) ? data.toString() : data))
+              stream.on('close', () => {
+                if (this.closed) return
+                this.closed = true
+                this.emit('exit', { exitCode: 0 })
+                this.connection.end()
+              })
+              stream.on('error', (err: unknown) => this.emit('error', err))
+
+              if (this.server.remotePath?.trim()) {
+                const escaped = this.server.remotePath.trim().replace(/'/g, `'\''`)
+                stream.write(`cd '${escaped}'\n`)
+              }
+
+              if (!settled) {
+                settled = true
+                resolve()
+              }
+            })
+          })
+          .on('keyboard-interactive', (_name: string, _instructions: string, _lang: string, _prompts: Array<unknown>, finish: (responses: string[]) => void) => {
+            finish([this.server.password || ''])
+          })
+          .on('error', (error: unknown) => {
+            this.emit('error', error)
+            finishReject(error)
+          })
+          .on('close', () => {
+            if (this.closed) return
+            this.closed = true
+            this.emit('exit', { exitCode: 0 })
+          })
+          .connect(config as any)
+      })
+    }
+
+    onData(listener: (data: string) => void) {
+      this.on('data', listener)
+      return this
+    }
+
+    onExit(listener: (event: { exitCode: number; signal?: number }) => void) {
+      this.on('exit', listener)
+      return this
+    }
+
+    write(data: string) {
+      if (this.stream) {
+        this.stream.write(data)
+      }
+    }
+
+    resize(cols: number, rows: number) {
+      this.cols = cols
+      this.rows = rows
+      try {
+        this.stream?.setWindow(rows, cols, 0, 0)
+      } catch {
+      }
+    }
+
+    kill() {
+      if (this.closed) return
+      this.closed = true
+      try {
+        this.stream?.end('exit\n')
+      } catch {
+      }
+      try {
+        this.connection?.end()
+      } catch {
+      }
+      this.emit('exit', { exitCode: 0 })
+    }
+  }
+
   const bindTerminalProcess = (id: string, terminalProcess: any, mainWindow: BrowserWindow | null) => {
     terminals.set(id, terminalProcess)
 
@@ -563,11 +714,11 @@ export function registerSecureTerminalHandlers(
    */
   safeIpcHandle('terminal:interactive', async (
     event,
-    options: { id: string; cwd?: string; shell?: string; backend?: TerminalBackend }
+    options: { id: string; cwd?: string; shell?: string; backend?: TerminalBackend; remote?: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string } }
   ) => {
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
-    const { id, cwd, shell, backend = 'pty' } = options
+    const { id, cwd, shell, backend = 'pty', remote } = options
 
     if (backend === 'pty' && !pty) {
       return { success: false, error: 'node-pty not available' }
@@ -579,7 +730,7 @@ export function registerSecureTerminalHandlers(
 
     const targetCwd = (cwd && cwd.trim()) || workspace?.roots?.[0] || process.cwd()
 
-    if (workspace && workspace.roots.length > 0 && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
+    if (workspace && workspace.roots.length > 0 && !remote?.host && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', false, {
         reason: '路径在工作区外',
         cwd: targetCwd,
@@ -641,7 +792,17 @@ export function registerSecureTerminalHandlers(
 
       let terminalProcess: any
 
-      if (backend === 'pipe') {
+      if (remote?.host) {
+        try {
+          const session = new SshShellSession(remote)
+          await session.connect()
+          terminalProcess = session
+        } catch (err) {
+          const errorMsg = toAppError(err).message || 'Failed to connect remote shell'
+          logger.security.error(`[Terminal] Remote SSH spawn failed: ${errorMsg}`, err)
+          return { success: false, error: `Failed to connect remote shell: ${errorMsg}` }
+        }
+      } else if (backend === 'pipe') {
         const child = spawn(shellPath, shellArgs, {
           cwd: targetCwd,
           env: {
@@ -704,10 +865,11 @@ export function registerSecureTerminalHandlers(
         id,
         cwd: targetCwd,
         shell: shellPath,
-        backend,
+        backend: remote?.host ? 'ssh2' : backend,
+        remoteHost: remote?.host,
       })
 
-      logger.security.info(`[Terminal] Created ${backend} terminal ${id} with shell ${shellPath}`)
+      logger.security.info(`[Terminal] Created ${remote?.host ? 'ssh2' : backend} terminal ${id} with shell ${shellPath}`)
       return { success: true }
     } catch (err) {
       logger.security.error('[Terminal] Failed to create terminal:', err)

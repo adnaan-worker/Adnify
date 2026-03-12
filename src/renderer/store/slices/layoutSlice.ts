@@ -4,7 +4,7 @@
  */
 import { StateCreator } from 'zustand'
 
-export type SidePanel = 'explorer' | 'search' | 'git' | 'problems' | 'outline' | 'history' | 'extensions' | 'emotion' | null
+export type SidePanel = 'explorer' | 'search' | 'git' | 'problems' | 'outline' | 'history' | 'extensions' | 'emotion' | 'shell' | null
 
 export interface LayoutSlice {
   activeSidePanel: SidePanel

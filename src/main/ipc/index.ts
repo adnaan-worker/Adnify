@@ -18,6 +18,7 @@ import { registerMcpHandlers, cleanupMcpHandlers } from './mcp' // MCP
 import { registerResourcesHandlers } from './resources' // 资源
 import { registerDebugHandlers } from './debug' // 调试
 import { registerHealthCheckHandlers } from './healthCheck' // 健康检查
+import { registerRemoteShellHandlers } from './remoteShell' // 远程 Shell / SFTP
 
 // 安全模块
 import {
@@ -120,6 +121,9 @@ export function registerAllHandlers(context: IPCContext) {
 
   // 健康检查
   registerHealthCheckHandlers()
+
+  // 远程 Shell / SFTP
+  registerRemoteShellHandlers()
 
   logger.ipc.info('[Security] 所有安全IPC处理器已注册')
 }

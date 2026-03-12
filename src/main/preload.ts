@@ -127,6 +127,23 @@ interface EmbeddingProvider {
   free: boolean
 }
 
+interface RemoteShellEntry {
+  name: string
+  path: string
+  isDirectory: boolean
+  size: number
+  modifyTime?: number
+}
+
+interface RemoteShellServer {
+  host: string
+  port?: number
+  username?: string
+  password?: string
+  privateKeyPath?: string
+  remotePath?: string
+}
+
 export interface ElectronAPI {
   // App lifecycle
   appReady: () => void
@@ -194,7 +211,7 @@ export interface ElectronAPI {
   onLLMDone: (requestId: string, callback: (data: LLMResult) => void) => () => void
 
   // Interactive Terminal
-  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe' }) => Promise<{ success: boolean; error?: string }>
+  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer }) => Promise<{ success: boolean; error?: string }>
   writeTerminal: (id: string, data: string) => Promise<void>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id?: string) => void
@@ -202,6 +219,17 @@ export interface ElectronAPI {
   onTerminalData: (callback: (event: { id: string; data: string }) => void) => () => void
   onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number }) => void) => () => void
   onTerminalError: (callback: (event: { id: string; error: string }) => void) => () => void
+
+  // Remote Shell / SFTP
+  remoteShellList: (server: RemoteShellServer, remotePath?: string) => Promise<RemoteShellEntry[]>
+  remoteShellReadText: (server: RemoteShellServer, remotePath: string) => Promise<string | null>
+  remoteShellWriteText: (server: RemoteShellServer, remotePath: string, content: string) => Promise<boolean>
+  remoteShellMkdir: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => Promise<boolean>
+  remoteShellDelete: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<{ canceled: boolean; uploaded: string[] }>
+  remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<{ canceled: boolean; localPath?: string }>
 
   // Secure Shell Execution
   executeSecureCommand: (request: {
@@ -477,7 +505,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener(channel, handler)
   },
 
-  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe' }) =>
+  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer }) =>
     ipcRenderer.invoke('terminal:interactive', options),
   writeTerminal: (id: string, data: string) => ipcRenderer.invoke('terminal:input', { id, data }),
   executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) =>
@@ -506,6 +534,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('terminal:error', handler)
     return () => ipcRenderer.removeListener('terminal:error', handler)
   },
+
+  remoteShellList: (server: RemoteShellServer, remotePath?: string) => ipcRenderer.invoke('remoteShell:list', server, remotePath),
+  remoteShellReadText: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:readText', server, remotePath),
+  remoteShellWriteText: (server: RemoteShellServer, remotePath: string, content: string) => ipcRenderer.invoke('remoteShell:writeText', server, remotePath, content),
+  remoteShellMkdir: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:mkdir', server, remotePath),
+  remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => ipcRenderer.invoke('remoteShell:rename', server, oldPath, newPath),
+  remoteShellDelete: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:delete', server, remotePath),
+  remoteShellTestConnection: (server: RemoteShellServer) => ipcRenderer.invoke('remoteShell:testConnection', server),
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => ipcRenderer.invoke('remoteShell:upload', server, remoteDirectory),
+  remoteShellDownload: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:download', server, remotePath),
 
   executeSecureCommand: (request: { command: string; args?: string[]; cwd?: string; timeout?: number; requireConfirm?: boolean }) =>
     ipcRenderer.invoke('shell:executeSecure', request),

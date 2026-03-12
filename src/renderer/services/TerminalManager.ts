@@ -28,6 +28,10 @@ export interface TerminalInstance {
   createdAt: number;
   /** 是否为 Agent 专属终端 */
   isAgent?: boolean;
+  /** 远程 SSH 连接信息 */
+  remote?: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string };
+  /** 远程主机地址（用于显示） */
+  remoteHost?: string;
 }
 
 export interface RunningCommandInfo {
@@ -266,6 +270,7 @@ class TerminalManagerClass {
     shell?: string;
     backend?: TerminalBackend;
     isAgent?: boolean;
+    remote?: TerminalInstance['remote'];
   }): Promise<string> {
     const id = crypto.randomUUID();
 
@@ -276,6 +281,8 @@ class TerminalManagerClass {
       shell: options.shell || "",
       createdAt: Date.now(),
       isAgent: options.isAgent,
+      remote: options.remote,
+      remoteHost: options.remote?.host,
     };
 
     this.state.terminals.push(instance);
@@ -283,7 +290,7 @@ class TerminalManagerClass {
     this.notify();
 
     // 创建 PTY
-    const ptyPromise = this.createPty(id, options.cwd, options.shell, options.backend);
+    const ptyPromise = this.createPty(id, options.cwd, options.shell, options.backend, options.remote);
     this.pendingPtyCreation.set(id, ptyPromise);
 
     try {
@@ -303,9 +310,10 @@ class TerminalManagerClass {
     cwd: string,
     shell?: string,
     backend: TerminalBackend = 'pty',
+    remote?: TerminalInstance['remote'],
   ): Promise<boolean> {
     try {
-      const result = await api.terminal.create({ id, cwd, shell, backend });
+      const result = await api.terminal.create({ id, cwd, shell, backend, remote });
       if (!result?.success) {
         const errorMsg = result?.error || "Unknown error";
         logger.system.error(

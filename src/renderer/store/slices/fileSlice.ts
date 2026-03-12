@@ -34,6 +34,8 @@ export interface OpenFile {
   encoding?: string
   /** 文件是否已被外部删除 */
   isDeleted?: boolean
+  /** 远程文件绑定信息（SFTP 编辑） */
+  remote?: { server: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string }; remotePath: string }
 }
 
 export interface FileSlice {
@@ -56,6 +58,7 @@ export interface FileSlice {
   openFile: (path: string, content: string, originalContent?: string, options?: {
     largeFileInfo?: LargeFileInfo
     encoding?: string
+    remote?: OpenFile['remote']
   }) => void
   closeFile: (path: string) => void
   setActiveFile: (path: string | null) => void
@@ -151,6 +154,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
             originalContent,
             largeFileInfo: options?.largeFileInfo,
             encoding: options?.encoding,
+            remote: options?.remote,
           } : f
         )
         // 使用规范化的路径，保持一致性
@@ -165,6 +169,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
           savedVersionId: 1, // Monaco 初始版本号
           largeFileInfo: options?.largeFileInfo,
           encoding: options?.encoding,
+          remote: options?.remote,
         }],
         activeFilePath: normalizedPath, // 使用规范化的路径
       }
