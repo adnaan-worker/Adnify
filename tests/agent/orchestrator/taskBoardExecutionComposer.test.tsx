@@ -155,6 +155,7 @@ describe('ExecutionTaskComposer', () => {
             handoffPolicy: 'auto-on-complete',
             proposalReviewPolicy: 'per-work-package',
           },
+          autonomyMode: 'manual',
           sourceWorkspacePath: '/workspace/adnify',
         }}
         onDraftChange={() => undefined}

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const runLoopMock = vi.fn(async () => undefined)
+const runLoopMock = vi.fn(async (..._args: unknown[]) => undefined)
 
 vi.mock('@renderer/agent/core/loop', () => ({
   runLoop: runLoopMock,
