@@ -1152,13 +1152,15 @@ ${buildBrowserVerificationPrompt({
         metrics.estimatedTokens = Math.max(1, Math.ceil(message.length / 4))
     }
 
+    const completionPromise = waitForAgentCompletion(threadId)
+
     await Agent.send(message, llmConfig, workspacePath, 'agent', {
         promptTemplateId: mapWorkPackageToTemplateId(workPackage),
         orchestratorPhase: 'executing',
         targetThreadId: threadId,
     })
 
-    const result = await waitForAgentCompletion(threadId)
+    const result = await completionPromise
     return {
         ...result,
         metrics,
@@ -2011,12 +2013,16 @@ async function runTaskWithAgent(
                 metrics.verifications += 1
             }
 
+            const threadId = useAgentStore.getState().currentThreadId || useAgentStore.getState().createThread()
+            const completionPromise = waitForAgentCompletion(threadId)
+
             await Agent.send(attemptMessage, llmConfig, workspacePath, 'agent', {
                 promptTemplateId: templateId,
                 orchestratorPhase: 'executing',
+                targetThreadId: threadId,
             })
 
-            const result = await waitForAgentCompletion(useAgentStore.getState().currentThreadId || '')
+            const result = await completionPromise
 
             if (!result.success) {
                 return { ...result, metrics }

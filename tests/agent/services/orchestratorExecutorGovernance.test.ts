@@ -52,6 +52,15 @@ import { __testing } from '@renderer/agent/services/orchestratorExecutor'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { createEmptyExecutionHeartbeatSnapshot, createEmptySpecialistProfileSnapshot, createInitialPatrolState } from '@renderer/agent/types/taskExecution'
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs = 50): Promise<T | 'timeout'> {
+  return Promise.race([
+    promise,
+    new Promise<'timeout'>((resolve) => {
+      setTimeout(() => resolve('timeout'), timeoutMs)
+    }),
+  ])
+}
+
 describe('orchestrator executor governance', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -237,6 +246,53 @@ describe('orchestrator executor governance', () => {
     expect(result.verification.verificationStatus).toBe('passed')
     expect(Agent.send).toHaveBeenCalledTimes(1)
     expect(String(vi.mocked(Agent.send).mock.calls[0]?.[0])).toContain('Browser prompt via Playwright')
+  })
+
+  it('completes a work package when loop:end is emitted before Agent.send resolves', async () => {
+    vi.mocked(Agent.send).mockImplementationOnce(async (_message, _config, _workspacePath, _mode, promptOptions?: { targetThreadId?: string }) => {
+      const threadId = promptOptions?.targetThreadId
+      if (!threadId) {
+        throw new Error('missing target thread')
+      }
+
+      const { EventBus } = await import('@renderer/agent/core/EventBus')
+      const store = useAgentStore.getState()
+      const { assistantId } = store.prepareExecution('work package execution', [], threadId)
+      store.appendToAssistant(assistantId, 'Synchronous completion', threadId)
+      store.finalizeAssistant(assistantId, threadId)
+      EventBus.emit({ type: 'loop:end', reason: 'complete', threadId })
+    })
+
+    const taskId = useAgentStore.getState().createExecutionTask({
+      objective: 'Complete synchronous loop-end work package',
+      specialists: ['logic'],
+      executionTarget: 'current',
+      sourceWorkspacePath: '/workspace/adnify',
+    })
+    const executionTask = useAgentStore.getState().executionTasks[taskId]
+    const workPackage = executionTask.workPackages
+      .map((workPackageId) => useAgentStore.getState().workPackages[workPackageId])
+      .find((candidate) => candidate.specialist === 'logic')!
+    const plan: TaskPlan = {
+      id: 'plan-sync-loop-end',
+      name: 'Sync loop end',
+      createdAt: 1,
+      updatedAt: 1,
+      requirementsDoc: 'requirements.md',
+      executionMode: 'parallel',
+      status: 'approved',
+      tasks: [],
+    }
+
+    const result = await withTimeout(
+      __testing.runWorkPackageWithAgent(workPackage, executionTask, plan, '/workspace/adnify'),
+    )
+
+    expect(result).not.toBe('timeout')
+    expect(result).toMatchObject({
+      success: true,
+      output: 'Synchronous completion',
+    })
   })
 
   it('marks browser verification as failed when verifier output reports a browser failure', async () => {
