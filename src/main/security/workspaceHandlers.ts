@@ -6,6 +6,7 @@
 import { logger } from '@shared/utils/Logger'
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { promises as fsPromises } from 'fs'
+import * as path from 'path'
 import { setupFileWatcher, FileWatcherEvent } from './fileWatcher'
 import { securityManager } from './securityModule'
 
@@ -13,6 +14,72 @@ import { securityManager } from './securityModule'
 export interface WindowManagerContext {
   findWindowByWorkspace?: (roots: string[]) => BrowserWindow | null
   setWindowWorkspace?: (windowId: number, roots: string[]) => void
+}
+
+const WORKSPACE_MARKER_RELATIVE_PATH = path.join('.adnify', 'workspace.json')
+
+interface StoredWorkspaceSession {
+  configPath: string | null
+  roots: string[]
+  workspaceId?: string
+}
+
+async function readWorkspaceMarkerId(root: string): Promise<string | null> {
+  try {
+    const markerPath = path.join(root, WORKSPACE_MARKER_RELATIVE_PATH)
+    const content = await fsPromises.readFile(markerPath, 'utf-8')
+    const parsed = JSON.parse(content) as { id?: string }
+    return typeof parsed.id === 'string' && parsed.id.trim() ? parsed.id : null
+  } catch {
+    return null
+  }
+}
+
+async function ensureWorkspaceMarker(root: string): Promise<string | null> {
+  try {
+    await fsPromises.access(root)
+  } catch {
+    return null
+  }
+
+  const existingId = await readWorkspaceMarkerId(root)
+  if (existingId) {
+    return existingId
+  }
+
+  const markerPath = path.join(root, WORKSPACE_MARKER_RELATIVE_PATH)
+  const markerDir = path.dirname(markerPath)
+  const workspaceId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+
+  await fsPromises.mkdir(markerDir, { recursive: true })
+  await fsPromises.writeFile(markerPath, JSON.stringify({
+    id: workspaceId,
+    createdAt: new Date().toISOString(),
+    version: 1,
+  }, null, 2), 'utf-8')
+
+  return workspaceId
+}
+
+async function isWorkspaceSessionRestorable(session: StoredWorkspaceSession): Promise<boolean> {
+  if (!session.roots.length) return false
+
+  try {
+    await Promise.all(session.roots.map(root => fsPromises.access(root)))
+  } catch {
+    return false
+  }
+
+  const currentWorkspaceId = await readWorkspaceMarkerId(session.roots[0])
+  if (!currentWorkspaceId) {
+    return false
+  }
+
+  if (!session.workspaceId) {
+    return false
+  }
+
+  return currentWorkspaceId === session.workspaceId
 }
 
 /**
@@ -64,11 +131,13 @@ export function registerWorkspaceHandlers(
         windowManager.setWindowWorkspace(webContentsId, [folderPath])
       }
 
+      const workspaceId = await ensureWorkspaceMarker(folderPath)
+
       // 更新安全模块的工作区路径
       securityManager.setWorkspacePath(folderPath)
 
       store.set('lastWorkspacePath', folderPath)
-      store.set('lastWorkspaceSession', { configPath: null, roots: [folderPath] })
+      store.set('lastWorkspaceSession', { configPath: null, roots: [folderPath], workspaceId })
       addRecentWorkspace(folderPath)
       return folderPath
     }
@@ -123,10 +192,16 @@ export function registerWorkspaceHandlers(
         windowManager.setWindowWorkspace(webContentsId, roots)
       }
 
+      const workspaceId = roots[0] ? await ensureWorkspaceMarker(roots[0]) : null
+
       // 更新安全模块的工作区路径
       securityManager.setWorkspacePath(roots[0] || null)
 
-      const session = { configPath: targetPath.endsWith('.adnify-workspace') ? targetPath : null, roots }
+      const session = {
+        configPath: targetPath.endsWith('.adnify-workspace') ? targetPath : null,
+        roots,
+        workspaceId: workspaceId || undefined,
+      }
       store.set('lastWorkspaceSession', session)
       store.set('lastWorkspacePath', roots[0])
       roots.forEach(r => addRecentWorkspace(r))
@@ -179,9 +254,22 @@ export function registerWorkspaceHandlers(
 
   // 恢复工作区
   ipcMain.handle('workspace:restore', async (event) => {
-    const session = store.get('lastWorkspaceSession') as { configPath: string | null; roots: string[] } | null
+    const session = store.get('lastWorkspaceSession') as StoredWorkspaceSession | null
 
     if (session) {
+      const restorable = await isWorkspaceSessionRestorable(session)
+      if (!restorable) {
+        store.delete('lastWorkspaceSession')
+        store.delete('lastWorkspacePath')
+        securityManager.setWorkspacePath(null)
+        return {
+          configPath: null,
+          roots: [],
+          restoreError: 'missing-workspace',
+          missingRoots: session.roots,
+        }
+      }
+
       const webContentsId = event.sender.id
       if (windowManager?.setWindowWorkspace && session.roots.length > 0) {
         windowManager.setWindowWorkspace(webContentsId, session.roots)
@@ -203,6 +291,20 @@ export function registerWorkspaceHandlers(
     // Fallback to legacy
     const legacyPath = store.get('lastWorkspacePath') as string | null
     if (legacyPath) {
+      const legacySession: StoredWorkspaceSession = { configPath: null, roots: [legacyPath] }
+      const restorable = await isWorkspaceSessionRestorable(legacySession)
+      if (!restorable) {
+        store.delete('lastWorkspaceSession')
+        store.delete('lastWorkspacePath')
+        securityManager.setWorkspacePath(null)
+        return {
+          configPath: null,
+          roots: [],
+          restoreError: 'missing-workspace',
+          missingRoots: [legacyPath],
+        }
+      }
+
       const webContentsId = event.sender.id
       if (windowManager?.setWindowWorkspace) {
         windowManager.setWindowWorkspace(webContentsId, [legacyPath])
@@ -217,7 +319,7 @@ export function registerWorkspaceHandlers(
           win.webContents.send('file:changed', data)
         }
       })
-      return { configPath: null, roots: [legacyPath] }
+      return legacySession
     }
 
     return null
@@ -246,11 +348,13 @@ export function registerWorkspaceHandlers(
       windowManager.setWindowWorkspace(webContentsId, roots)
     }
 
+    const workspaceId = roots[0] ? await ensureWorkspaceMarker(roots[0]) : null
+
     // 更新安全模块的工作区路径
     securityManager.setWorkspacePath(roots[0] || null)
 
     store.set('lastWorkspacePath', roots[0])
-    store.set('lastWorkspaceSession', { configPath: null, roots })
+    store.set('lastWorkspaceSession', { configPath: null, roots, workspaceId })
     roots.forEach(r => addRecentWorkspace(r))
 
     logger.security.info('[Workspace] Active workspace set:', roots)

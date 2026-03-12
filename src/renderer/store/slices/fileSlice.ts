@@ -8,6 +8,9 @@ import { normalizePath } from '@shared/utils/pathUtils'
 export interface WorkspaceConfig {
   configPath: string | null
   roots: string[]
+  restoreError?: 'missing-workspace'
+  missingRoots?: string[]
+  workspaceId?: string
 }
 
 /** 大文件信息 */

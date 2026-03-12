@@ -94,6 +94,12 @@ async function restoreWorkspace(): Promise<boolean> {
 
   const workspaceConfig = await api.workspace.restore()
   if (!workspaceConfig?.roots?.length) {
+    if (workspaceConfig?.restoreError === 'missing-workspace') {
+      const missing = workspaceConfig.missingRoots?.[0] || ''
+      const { toast } = await import('@renderer/components/common/ToastProvider')
+      toast.warning('上次打开的工作区已不存在，请重新选择文件夹', missing || undefined)
+    }
+
     startupMetrics.end('restore-workspace')
     return false
   }

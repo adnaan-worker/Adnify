@@ -178,6 +178,9 @@ export interface SecureCommandRequest {
 export interface WorkspaceConfig {
   configPath: string | null
   roots: string[]
+  restoreError?: 'missing-workspace'
+  missingRoots?: string[]
+  workspaceId?: string
 }
 
 export interface EmbeddingConfigInput {

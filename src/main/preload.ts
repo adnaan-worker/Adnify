@@ -145,10 +145,22 @@ export interface ElectronAPI {
   openFile: () => Promise<{ path: string; content: string } | null>
   openFolder: () => Promise<string | null>
   selectFolder: () => Promise<string | null>
-  openWorkspace: () => Promise<{ configPath: string | null; roots: string[] } | null>
+  openWorkspace: () => Promise<{
+    configPath: string | null
+    roots: string[]
+    restoreError?: 'missing-workspace'
+    missingRoots?: string[]
+    workspaceId?: string
+  } | null>
   addFolderToWorkspace: () => Promise<string | null>
   saveWorkspace: (configPath: string, roots: string[]) => Promise<boolean>
-  restoreWorkspace: () => Promise<{ configPath: string | null; roots: string[] } | null>
+  restoreWorkspace: () => Promise<{
+    configPath: string | null
+    roots: string[]
+    restoreError?: 'missing-workspace'
+    missingRoots?: string[]
+    workspaceId?: string
+  } | null>
   getRecentWorkspaces: () => Promise<string[]>
   clearRecentWorkspaces: () => Promise<boolean>
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
