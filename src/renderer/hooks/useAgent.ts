@@ -119,6 +119,7 @@ export function useAgent() {
         thinkingBudget: llmConfig.thinkingBudget,
         reasoningEffort: llmConfig.reasoningEffort,
         protocol: llmConfig.protocol,
+        headers: llmConfig.headers,
         contextLimit: agentConfig.maxContextTokens,
       },
       workspacePath,

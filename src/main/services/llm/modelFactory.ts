@@ -20,7 +20,7 @@ export interface ModelOptions {
  * 根据配置创建 AI SDK model 实例
  */
 export function createModel(config: LLMConfig, options: ModelOptions = {}): LanguageModel {
-    const { provider, model, apiKey, baseUrl } = config
+    const { provider } = config
 
     // 内置 provider
     if (isBuiltinProvider(provider)) {
@@ -29,7 +29,11 @@ export function createModel(config: LLMConfig, options: ModelOptions = {}): Lang
 
     // 自定义 provider - 根据 protocol 选择
     const protocol = config.protocol || 'openai'
-    return createCustomModel(protocol, model, apiKey, baseUrl, options)
+    const customOptions = {
+        ...options,
+        headers: config.headers
+    }
+    return createCustomModel(protocol, config.model, config.apiKey, config.baseUrl, customOptions)
 }
 
 /**

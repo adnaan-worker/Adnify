@@ -60,6 +60,7 @@ export class StreamingService {
       messageCount: messages.length,
       toolCount: tools?.length || 0,
       requestId,
+      headers: config.headers,
     })
 
     try {
