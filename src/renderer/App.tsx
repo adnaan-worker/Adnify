@@ -11,7 +11,7 @@ import { GlobalErrorHandler } from './components/common/GlobalErrorHandler'
 import { ThemeManager } from './components/editor/ThemeManager'
 import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
 import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
-import { emotionAdapter } from './agent/services/emotionAdapter'
+import { emotionAdapter } from './agent/emotion/emotionAdapter'
 import { terminalWatcher } from './agent/services/terminalWatcher'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 

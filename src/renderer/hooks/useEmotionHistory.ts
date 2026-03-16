@@ -5,7 +5,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { EventBus } from '@/renderer/agent/core/EventBus'
-import { emotionDetectionEngine } from '@/renderer/agent/services/emotionDetectionEngine'
+import { emotionDetectionEngine } from '@/renderer/agent/emotion/emotionDetectionEngine'
 import type { EmotionHistory } from '@/renderer/agent/types/emotion'
 
 const HISTORY_DURATION_MS = 24 * 60 * 60 * 1000

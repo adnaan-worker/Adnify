@@ -7,7 +7,7 @@ import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { FileChangeBuffer, createFileChangeHandler } from '../indexing/fileChangeBuffer'
 import { getIndexService } from '../indexing/indexService'
-import { lspManager } from '../lspManager'
+import { lspManager } from '../lsp/lspManager'
 import * as watcher from '@parcel/watcher'
 import picomatch from 'picomatch'
 

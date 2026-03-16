@@ -19,10 +19,10 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { EventBus } from '../core/EventBus'
 import { Agent } from '../core/Agent'
-import { gitService } from './gitService'
-import { ExecutionScheduler } from '../orchestrator/ExecutionScheduler'
-import { getLLMConfigForTask } from './llmConfigService'
-import type { TaskPlan, OrchestratorTask, ExecutionStats } from '../orchestrator/types'
+import { gitService } from '../services/gitService'
+import { ExecutionScheduler } from './ExecutionScheduler'
+import { getLLMConfigForTask } from '../services/llmConfigService'
+import { DEFAULT_ORCHESTRATOR_CONFIG, type TaskPlan, type OrchestratorTask, type ExecutionStats } from './types'
 
 // ============================================
 // 模块状态
@@ -32,11 +32,30 @@ let scheduler: ExecutionScheduler | null = null
 let executionStartedAt = 0
 let isRunning = false
 
-/** 等待单次 Agent 执行完成 */
-function waitForAgentCompletion(): Promise<{ success: boolean; output: string; error?: string }> {
+/** 等待单次 Agent 执行完成（带超时和清理保证） */
+function waitForAgentCompletion(
+    timeoutMs = DEFAULT_ORCHESTRATOR_CONFIG.taskTimeout,
+): Promise<{ success: boolean; output: string; error?: string }> {
     return new Promise((resolve) => {
-        const store = useAgentStore.getState()
-        const threadId = store.currentThreadId
+        let settled = false
+        let timer: ReturnType<typeof setTimeout> | null = null
+
+        const cleanup = () => {
+            if (timer) {
+                clearTimeout(timer)
+                timer = null
+            }
+            unsubscribe()
+        }
+
+        const settle = (result: { success: boolean; output: string; error?: string }) => {
+            if (settled) return
+            settled = true
+            cleanup()
+            resolve(result)
+        }
+
+        const threadId = useAgentStore.getState().currentThreadId
 
         if (!threadId) {
             resolve({ success: false, output: '', error: 'Failed to create thread' })
@@ -44,10 +63,11 @@ function waitForAgentCompletion(): Promise<{ success: boolean; output: string; e
         }
 
         const unsubscribe = EventBus.on('loop:end', (event) => {
-            const thread = store.threads[threadId]
+            const currentStore = useAgentStore.getState()
+            const thread = currentStore.threads[threadId]
+
             if (!thread) {
-                unsubscribe()
-                resolve({ success: false, output: '', error: 'Thread not found after loop end' })
+                settle({ success: false, output: '', error: 'Thread not found after loop end' })
                 return
             }
 
@@ -56,14 +76,17 @@ function waitForAgentCompletion(): Promise<{ success: boolean; output: string; e
                 .pop() as import('../types').AssistantMessage
 
             const output = lastAssistantMsg?.content || 'Task execution completed'
-            unsubscribe()
 
             if (event.reason === 'error' || event.reason === 'aborted') {
-                resolve({ success: false, output: '', error: `Execution ended with reason: ${event.reason}` })
+                settle({ success: false, output: '', error: `Execution ended with reason: ${event.reason}` })
             } else {
-                resolve({ success: true, output })
+                settle({ success: true, output })
             }
         })
+
+        timer = setTimeout(() => {
+            settle({ success: false, output: '', error: `Agent execution timed out after ${timeoutMs}ms` })
+        }, timeoutMs)
     })
 }
 
@@ -119,7 +142,7 @@ export async function startPlanExecution(
     logger.agent.info(`[OrchestratorExecutor] Started execution of plan: ${plan.name}`)
 
     // 发布事件
-    EventBus.emit({ type: 'plan:start', planId: plan.id } as any)
+    EventBus.emit({ type: 'plan:start', planId: plan.id })
 
     // 异步执行（不阻塞返回）
     runExecutionLoop(plan, workspacePath).catch(error => {
@@ -162,7 +185,7 @@ export function pausePlanExecution(): void {
 
     const plan = store.getActivePlan()
     if (plan) {
-        EventBus.emit({ type: 'plan:paused', planId: plan.id } as any)
+        EventBus.emit({ type: 'plan:paused', planId: plan.id })
     }
 
     logger.agent.info('[OrchestratorExecutor] Execution paused')
@@ -182,7 +205,7 @@ export async function resumePlanExecution(): Promise<void> {
     scheduler?.resume()
     store.resumeExecution()
 
-    EventBus.emit({ type: 'plan:resumed', planId: plan.id } as any)
+    EventBus.emit({ type: 'plan:resumed', planId: plan.id })
 
     // 继续执行循环
     runExecutionLoop(plan, workspacePath).catch(error => {
@@ -277,7 +300,7 @@ async function executeTask(
     store.setCurrentTask(task.id)
     store.updateTask(plan.id, task.id, { status: 'running', startedAt: Date.now() })
 
-    EventBus.emit({ type: 'task:start', taskId: task.id, planId: plan.id } as any)
+    EventBus.emit({ type: 'task:start', taskId: task.id, planId: plan.id })
 
     logger.agent.info(`[OrchestratorExecutor] Executing task: ${task.title}`)
 
@@ -295,7 +318,7 @@ async function executeTask(
                 taskId: task.id,
                 output: result.output,
                 duration: Date.now() - (task.startedAt || Date.now())
-            } as any)
+            })
 
             logger.agent.info(`[OrchestratorExecutor] Task completed: ${task.title}`)
         } else {
@@ -307,7 +330,7 @@ async function executeTask(
                 type: 'task:failed',
                 taskId: task.id,
                 error: result.error || 'Unknown error'
-            } as any)
+            })
 
             logger.agent.error(`[OrchestratorExecutor] Task failed: ${task.title}`, result.error)
         }
@@ -316,7 +339,7 @@ async function executeTask(
         scheduler.markTaskFailed(task, errorMsg)
         store.markTaskFailed(plan.id, task.id, errorMsg)
 
-        EventBus.emit({ type: 'task:failed', taskId: task.id, error: errorMsg } as any)
+        EventBus.emit({ type: 'task:failed', taskId: task.id, error: errorMsg })
 
         logger.agent.error(`[OrchestratorExecutor] Task execution error: ${task.title}`, error)
     }
@@ -341,7 +364,7 @@ async function completeExecution(plan: TaskPlan): Promise<void> {
     scheduler.stop()
     scheduler = null
 
-    EventBus.emit({ type: 'plan:complete', planId: plan.id, stats } as any)
+    EventBus.emit({ type: 'plan:complete', planId: plan.id, stats })
 
     logger.agent.info(`[OrchestratorExecutor] Execution complete:`, stats)
 }
@@ -360,7 +383,7 @@ function handleExecutionError(plan: TaskPlan, error: unknown): void {
     scheduler?.stop()
     scheduler = null
 
-    EventBus.emit({ type: 'plan:failed', planId: plan.id, error: errorMsg } as any)
+    EventBus.emit({ type: 'plan:failed', planId: plan.id, error: errorMsg })
 
     logger.agent.error('[OrchestratorExecutor] Plan execution failed:', errorMsg)
 }

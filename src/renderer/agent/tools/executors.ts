@@ -427,7 +427,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 changeType: 'modify',
                 linesAdded,
                 linesRemoved,
-                toolCallId: (ctx as any).toolCallId
+                toolCallId: ctx.toolCallId
             })
 
             await notifyLspAfterWrite(path)
@@ -520,7 +520,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 changeType: 'modify',
                 linesAdded: lineChanges.added,
                 linesRemoved: lineChanges.removed,
-                toolCallId: (ctx as any).toolCallId
+                toolCallId: ctx.toolCallId
             })
 
             await notifyLspAfterWrite(path)
@@ -603,7 +603,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 changeType: 'modify',
                 linesAdded: lineChanges.added,
                 linesRemoved: lineChanges.removed,
-                toolCallId: (ctx as any).toolCallId
+                toolCallId: ctx.toolCallId
             })
 
             await notifyLspAfterWrite(path)
@@ -647,7 +647,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             changeType: originalContent ? 'modify' : 'create',
             linesAdded: lineChanges.added,
             linesRemoved: lineChanges.removed,
-            toolCallId: (ctx as any).toolCallId
+            toolCallId: ctx.toolCallId
         })
         return { success: true, result: 'File written successfully', meta: { filePath: path, oldContent: originalContent, newContent: content, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
     },
@@ -678,7 +678,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 changeType: 'create',
                 linesAdded: content.split('\n').length,
                 linesRemoved: 0,
-                toolCallId: (ctx as any).toolCallId
+                toolCallId: ctx.toolCallId
             })
         }
 
@@ -1197,7 +1197,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 }
             }
 
-            const { startPlanExecution } = await import('../services/orchestratorExecutor')
+            const { startPlanExecution } = await import('../orchestrator/orchestratorExecutor')
 
             // 异步启动执行（不等待完成）
             const result = await startPlanExecution(plan.id)

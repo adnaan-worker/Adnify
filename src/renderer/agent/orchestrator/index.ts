@@ -21,3 +21,13 @@ export { DEFAULT_ORCHESTRATOR_CONFIG } from './types'
 
 // 调度器
 export { ExecutionScheduler } from './ExecutionScheduler'
+
+// 执行引擎
+export {
+    startPlanExecution,
+    stopPlanExecution,
+    pausePlanExecution,
+    resumePlanExecution,
+    getExecutionStatus,
+    getCurrentPhase,
+} from './orchestratorExecutor'

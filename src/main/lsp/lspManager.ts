@@ -24,7 +24,7 @@ import { getCacheConfig } from '@shared/config/agentConfig'
 import {
   getInstalledServerPath,
   commandExists,
-} from './lsp/installer'
+} from './installer'
 
 // 重新导出 LanguageId 供其他模块使用
 export type { LanguageId } from '@shared/languages'

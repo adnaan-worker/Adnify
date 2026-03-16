@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { EventBus } from '@/renderer/agent/core/EventBus'
-import { emotionDetectionEngine } from '@/renderer/agent/services/emotionDetectionEngine'
+import { emotionDetectionEngine } from '@/renderer/agent/emotion/emotionDetectionEngine'
 import type { EmotionDetection } from '@/renderer/agent/types/emotion'
 
 export function useEmotionState(): EmotionDetection | null {

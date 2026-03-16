@@ -67,7 +67,7 @@ let lastActiveWindow: BrowserWindow | null = null
 
 // 延迟加载的模块
 let ipcModule: typeof import('./ipc') | null = null
-let lspManager: typeof import('./lspManager').lspManager | null = null
+let lspManager: typeof import('./lsp/lspManager').lspManager | null = null
 let securityManager: typeof import('./security').securityManager | null = null
 
 // ==========================================
@@ -296,7 +296,7 @@ async function initializeModules(firstWin: BrowserWindow) {
   // 并行加载所有模块
   const [ipc, lsp, security, windowIpc, lspInstaller, updaterService] = await Promise.all([
     import('./ipc'),
-    import('./lspManager'),
+    import('./lsp/lspManager'),
     import('./security'),
     import('./ipc/window'),
     import('./lsp/installer'),

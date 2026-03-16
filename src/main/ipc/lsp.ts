@@ -5,7 +5,7 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { ipcMain } from 'electron'
-import { lspManager, LanguageId } from '../lspManager'
+import { lspManager, LanguageId } from '../lsp/lspManager'
 import { EXTENSION_TO_LANGUAGE } from '@shared/languages'
 import {
   getLspServerStatus,
