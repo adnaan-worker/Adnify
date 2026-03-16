@@ -564,4 +564,57 @@ export const en = {
   'cmd.explorer.revealInSidebar': 'Reveal in Sidebar',
   'cmd.explorer.rename': 'Rename File/Folder',
   'cmd.help.about': 'About',
+
+  // Workspace Dropdown
+  'workspace.newWindow': 'New Window',
+  'workspace.newWindowDesc': 'Open a new editor window',
+  'workspace.openFolder': 'Open Folder...',
+  'workspace.openWorkspace': 'Open Workspace...',
+  'workspace.addFolder': 'Add Folder',
+  'workspace.folderNotExist': 'Folder does not exist, removed from list',
+
+  // Editor Tabs
+  'editor.fileDeleted': 'File has been deleted',
+
+  // Editor Modes
+  'editor.editMode': 'Edit Mode',
+  'editor.splitMode': 'Split Mode',
+  'editor.previewMode': 'Preview Mode',
+  'editor.edit': 'Edit',
+  'editor.split': 'Split',
+  'editor.preview': 'Preview',
+
+  // Tool Call Card
+  'tool.viewInTerminal': 'View execution in terminal panel',
+  'tool.running': 'Running…',
+  'tool.terminal': 'Terminal',
+
+  // File Preview
+  'filePreview.cannotLoadImage': 'Cannot load image',
+  'filePreview.cannotOpenFile': 'Cannot open this file in editor',
+  'filePreview.binaryFileDesc': '"{name}" is a binary file (.{ext}), cannot be edited as text.',
+  'filePreview.unsupportedFileDesc': 'Cannot open .{ext} format files.',
+  'filePreview.openWithDefault': 'Open with default program',
+  'filePreview.fit': 'Fit',
+
+  // Agent Settings
+  'agent.systemInstructionsPlaceholder': 'Enter global system instructions here, e.g.: "Always reply in Chinese", "Code style preferences..."',
+
+  // Error Boundary
+  'errorBoundary.somethingWentWrong': 'Something went wrong',
+  'errorBoundary.unexpectedError': 'An unexpected error occurred.',
+  'errorBoundary.trySuggestion': 'Try refreshing the page.',
+  'errorBoundary.tryAgain': 'Try Again',
+  'errorBoundary.reloadApp': 'Reload App',
+  'errorBoundary.showDetails': 'Show error details',
+
+  // Welcome Page
+  'welcome.openFolder': 'Open Folder',
+  'welcome.openFolderDesc': 'Open a local project folder',
+  'welcome.openWorkspace': 'Open Workspace',
+  'welcome.openWorkspaceDesc': 'Open workspace file (.adnify)',
+  'welcome.newWindow': 'New Window',
+  'welcome.settings': 'Settings',
+  'welcome.noRecentItems': 'No recent items',
+  'welcome.pressForCommands': 'Press {shortcut} for commands',
 } as const

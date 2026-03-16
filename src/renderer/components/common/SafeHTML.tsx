@@ -150,7 +150,7 @@ export function SafeHTML({
   }
 
   // 使用动态标签
-  const Tag = Component as any
+  const Tag = Component as React.ElementType
 
   return (
     <Tag

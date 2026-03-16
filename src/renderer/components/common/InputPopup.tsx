@@ -39,7 +39,7 @@ export function InputPopup<T extends InputPopupItem>({
     const [selectedIndex, setSelectedIndex] = useState(0)
     const listRef = useRef<HTMLDivElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
-    const { language } = useStore()
+    const language = useStore(s => s.language)
 
     useEffect(() => {
         setSelectedIndex(0)

@@ -6,6 +6,7 @@ import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff } from 'lucid
 import { getFileName } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { useAgentStore } from '@renderer/agent'
+import { t } from '@renderer/i18n'
 
 interface EditorTabsProps {
   activeFilePath: string | null
@@ -37,6 +38,7 @@ export const EditorTabs = memo(function EditorTabs({
 }: EditorTabsProps) {
   // 获取数据
   const openFiles = useStore(state => state.openFiles)
+  const language = useStore(state => state.language)
   const plans = useAgentStore(state => state.plans)
 
   return (
@@ -80,7 +82,7 @@ export const EditorTabs = memo(function EditorTabs({
 
             {/* 已删除文件图标 */}
             {file.isDeleted && (
-              <span title="文件已被删除">
+              <span title={t('editor.fileDeleted', language)}>
                 <FileX className="w-3.5 h-3.5 text-status-error flex-shrink-0" />
               </span>
             )}

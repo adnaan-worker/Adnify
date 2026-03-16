@@ -18,6 +18,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { getFileName } from '@shared/utils/pathUtils'
 import { WorkMode } from '@/renderer/modes/types'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -79,7 +80,7 @@ export default function ChatInput({
   activeFilePath,
   onAddFile,
 }: ChatInputProps) {
-  const { language, editorConfig } = useStore()
+  const { language, editorConfig } = useStore(useShallow(s => ({ language: s.language, editorConfig: s.editorConfig })))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(false)
 
@@ -204,17 +205,18 @@ export default function ChatInput({
                   switch (item.type) {
                     case 'File':
                     case 'Folder': {
-                      const uri = (item as any).uri || ''
+                      const uri = (item as import('@/renderer/agent/types').FileContext).uri || ''
                       return getFileName(uri) || uri
                     }
                     case 'CodeSelection': {
-                      const uri = (item as any).uri || ''
-                      const range = (item as any).range as [number, number] | undefined
+                      const codeItem = item as import('@/renderer/agent/types').CodeSelectionContext
+                      const uri = codeItem.uri || ''
+                      const range = codeItem.range as [number, number] | undefined
                       const name = getFileName(uri) || uri
                       return range ? `${name}:${range[0]}-${range[1]}` : name
                     }
                     case 'Skill': {
-                      return `@${(item as any).skillId || 'skill'}`
+                      return `@${(item as import('@/renderer/agent/types').SkillContext).skillId || 'skill'}`
                     }
                     default: return 'Context'
                   }
@@ -222,7 +224,7 @@ export default function ChatInput({
 
                 return (
                   <motion.span
-                    key={`${item.type}-${(item as any).uri || i}`}
+                    key={`${item.type}-${'uri' in item ? (item as { uri: string }).uri : i}`}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8, filter: 'blur(4px)' }}

@@ -13,7 +13,7 @@ import { ContextItem, MessageContent, TextContent, ProblemsContext, ChatMessage,
 import { CacheService } from '@shared/utils/CacheService'
 import { useDiagnosticsStore } from '@/renderer/services/diagnosticsStore'
 import { normalizePath } from '@shared/utils/pathUtils'
-import { retrievalService } from '../services/RetrievalService'
+import { retrievalService } from '../services/retrievalService'
 
 // 创建文件内容缓存（使用 CacheService）
 const fileContentCache = new CacheService<string>('ContextFileCache', {

@@ -31,7 +31,7 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
 
   const variantStyles = {
     danger: {

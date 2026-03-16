@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { PROVIDERS } from '@/shared/config/providers'
 import { getEditorConfig } from '@renderer/settings'
 import KeybindingPanel from '@components/panels/KeybindingPanel'
@@ -30,7 +31,14 @@ export default function SettingsModal() {
         llmConfig, language, autoApprove, providerConfigs, promptTemplateId,
         agentConfig, aiInstructions, webSearchConfig, mcpConfig, enableFileLogging,
         set, setProvider, setShowSettings, save
-    } = useStore()
+    } = useStore(useShallow(s => ({
+        llmConfig: s.llmConfig, language: s.language, autoApprove: s.autoApprove,
+        providerConfigs: s.providerConfigs, promptTemplateId: s.promptTemplateId,
+        agentConfig: s.agentConfig, aiInstructions: s.aiInstructions,
+        webSearchConfig: s.webSearchConfig, mcpConfig: s.mcpConfig,
+        enableFileLogging: s.enableFileLogging, set: s.set, setProvider: s.setProvider,
+        setShowSettings: s.setShowSettings, save: s.save
+    })))
 
     const [activeTab, setActiveTab] = useState<SettingsTab>('provider')
     const [showApiKey, setShowApiKey] = useState(false)

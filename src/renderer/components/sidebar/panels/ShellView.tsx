@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, FolderOpen, MoreHorizontal, Plus, Server, Settings2, Star, Terminal as TerminalIcon, TerminalSquare } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
 import { shellRegistryService, shellService } from '@/renderer/shell'
 import type { AvailableShell, ShellLink, ShellPreset, ShellState } from '@/renderer/shell'
@@ -12,7 +13,7 @@ import { ShellManagerDialog } from '@/renderer/shell'
 type CollapsedState = Record<string, boolean>
 
 export function ShellView() {
-  const { workspace, workspacePath, language, setTerminalVisible } = useStore()
+  const { workspace, workspacePath, language, setTerminalVisible } = useStore(useShallow(s => ({ workspace: s.workspace, workspacePath: s.workspacePath, language: s.language, setTerminalVisible: s.setTerminalVisible })))
   const [availableShells, setAvailableShells] = useState<AvailableShell[]>([])
   const [shellState, setShellState] = useState<ShellState>(() => shellRegistryService.getState())
   const [showManager, setShowManager] = useState(false)

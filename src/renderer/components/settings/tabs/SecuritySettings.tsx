@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { AlertTriangle, Plus, X, RotateCcw } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
 import { api } from '@renderer/services/electronAPI'
@@ -14,7 +15,7 @@ interface SecuritySettingsProps {
 }
 
 export function SecuritySettings({ language }: SecuritySettingsProps) {
-    const { securitySettings, update } = useStore()
+    const { securitySettings, update } = useStore(useShallow(s => ({ securitySettings: s.securitySettings, update: s.update })))
     const [newShellCmd, setNewShellCmd] = useState('')
     const [newGitCmd, setNewGitCmd] = useState('')
 

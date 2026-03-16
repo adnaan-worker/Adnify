@@ -7,6 +7,8 @@ import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
 import { AppError, formatErrorMessage } from '@/shared/errors'
 import { logger } from '@shared/utils/Logger'
+import { t } from '@renderer/i18n'
+import { useStore } from '@store'
 
 interface Props {
   children: ReactNode
@@ -62,11 +64,12 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       const { error, errorInfo } = this.state
+      const language = useStore.getState().language
       const appError = error ? AppError.fromError(error) : null
       const { title, description, suggestion } = appError?.getUserMessage() || {
-        title: 'Something went wrong',
-        description: 'An unexpected error occurred.',
-        suggestion: 'Try refreshing the page.',
+        title: t('errorBoundary.somethingWentWrong', language),
+        description: t('errorBoundary.unexpectedError', language),
+        suggestion: t('errorBoundary.trySuggestion', language),
       }
 
       return (
@@ -97,14 +100,14 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="flex items-center gap-2 px-4 py-2 bg-[var(--accent-primary)] text-white rounded-lg hover:bg-[var(--accent-primary-hover)] transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
-                Try Again
+                {t('errorBoundary.tryAgain', language)}
               </button>
               <button
                 onClick={this.handleGoHome}
                 className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
               >
                 <Home className="w-4 h-4" />
-                Reload App
+                {t('errorBoundary.reloadApp', language)}
               </button>
             </div>
 
@@ -112,7 +115,7 @@ export class ErrorBoundary extends Component<Props, State> {
             {this.props.showDetails && error && (
               <details className="mt-6 w-full text-left">
                 <summary className="cursor-pointer text-sm text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]">
-                  Show error details
+                  {t('errorBoundary.showDetails', language)}
                 </summary>
                 <div className="mt-2 p-4 bg-[var(--bg-secondary)] rounded-lg overflow-auto max-h-[200px]">
                   <pre className="text-xs text-red-400 whitespace-pre-wrap">

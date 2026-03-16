@@ -1055,32 +1055,15 @@ class GitService {
         if (!targetPath) return 'normal'
 
         try {
-            // 检查 .git 目录下的状态文件
-            const checks = [
-                { file: 'MERGE_HEAD', state: 'merge' as const },
-                { file: 'rebase-merge', state: 'rebase' as const },
-                { file: 'rebase-apply', state: 'rebase' as const },
-                { file: 'CHERRY_PICK_HEAD', state: 'cherry-pick' as const },
-                { file: 'REVERT_HEAD', state: 'revert' as const },
-            ]
+            // 单次 git status 即可检测所有进行中的操作
+            const result = await this.exec(['status'], targetPath)
+            if (result.exitCode !== 0) return 'normal'
 
-            for (const check of checks) {
-                const result = await this.exec(['rev-parse', '--git-path', check.file], targetPath)
-                if (result.exitCode === 0) {
-                    const gitPath = result.stdout.trim()
-                    // 检查文件是否存在 (gitPath is used for debugging if needed)
-                    void gitPath
-                    const existsResult = await this.exec(['rev-parse', '--verify', '--quiet', 'HEAD'], targetPath)
-                    if (existsResult.exitCode === 0) {
-                        // 简单检查：如果能获取到路径，假设状态存在
-                        const statusResult = await this.exec(['status'], targetPath)
-                        if (statusResult.stdout.includes('rebase in progress')) return 'rebase'
-                        if (statusResult.stdout.includes('merge in progress') || statusResult.stdout.includes('Unmerged')) return 'merge'
-                        if (statusResult.stdout.includes('cherry-pick')) return 'cherry-pick'
-                        if (statusResult.stdout.includes('revert')) return 'revert'
-                    }
-                }
-            }
+            const output = result.stdout
+            if (output.includes('rebase in progress') || output.includes('interactive rebase')) return 'rebase'
+            if (output.includes('have diverged') || output.includes('Unmerged') || output.includes('fix conflicts')) return 'merge'
+            if (output.includes('cherry-pick')) return 'cherry-pick'
+            if (output.includes('revert')) return 'revert'
 
             return 'normal'
         } catch {

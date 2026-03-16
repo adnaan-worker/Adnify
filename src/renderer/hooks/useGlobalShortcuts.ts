@@ -3,6 +3,7 @@
  */
 import { useEffect, useCallback } from 'react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '@renderer/services/electronAPI'
 
 export function useGlobalShortcuts() {
@@ -22,11 +23,27 @@ export function useGlobalShortcuts() {
     showAbout,
     activeFilePath,
     closeFile,
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    setShowSettings: s.setShowSettings,
+    setShowCommandPalette: s.setShowCommandPalette,
+    setShowComposer: s.setShowComposer,
+    setShowQuickOpen: s.setShowQuickOpen,
+    setShowAbout: s.setShowAbout,
+    terminalVisible: s.terminalVisible,
+    setTerminalVisible: s.setTerminalVisible,
+    debugVisible: s.debugVisible,
+    setDebugVisible: s.setDebugVisible,
+    showCommandPalette: s.showCommandPalette,
+    showComposer: s.showComposer,
+    showQuickOpen: s.showQuickOpen,
+    showAbout: s.showAbout,
+    activeFilePath: s.activeFilePath,
+    closeFile: s.closeFile,
+  })))
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Command Palette: Ctrl+Shift+O or F1
-    if (e.key === 'F1' || (e.ctrlKey && e.key === 'O')) {
+    if (e.key === 'F1' || (e.ctrlKey && e.shiftKey && e.key === 'O')) {
       e.preventDefault()
       setShowCommandPalette(true)
       return

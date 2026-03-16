@@ -6,6 +6,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { useCallback, useMemo, useEffect, useState } from 'react'
 import { useStore, useModeStore } from '@/renderer/store'
+import { useShallow } from 'zustand/react/shallow'
 import {
   useAgentStore,
   selectMessages,
@@ -21,7 +22,7 @@ import { MessageContent, ChatThread, ToolCall } from '@/renderer/agent/types'
 
 export function useAgent() {
   // 从主 store 获取配置
-  const { llmConfig, workspacePath, promptTemplateId, openFiles, activeFilePath } = useStore()
+  const { llmConfig, workspacePath, promptTemplateId, openFiles, activeFilePath } = useStore(useShallow(s => ({ llmConfig: s.llmConfig, workspacePath: s.workspacePath, promptTemplateId: s.promptTemplateId, openFiles: s.openFiles, activeFilePath: s.activeFilePath })))
   // 从 modeStore 获取当前模式
   const chatMode = useModeStore(state => state.currentMode)
 

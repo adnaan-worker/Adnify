@@ -17,6 +17,7 @@ import {
   Globe
 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import type { FileItem } from '@shared/types'
 import { t } from '@renderer/i18n'
 import { getDirPath, joinPath, pathEquals, normalizePath } from '@shared/utils/pathUtils'
@@ -72,7 +73,16 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     activeFilePath,
     language,
     workspacePath
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    expandedFolders: s.expandedFolders,
+    toggleFolder: s.toggleFolder,
+    expandFolder: s.expandFolder,
+    openFile: s.openFile,
+    setActiveFile: s.setActiveFile,
+    activeFilePath: s.activeFilePath,
+    language: s.language,
+    workspacePath: s.workspacePath
+  })))
 
   // 焦点状态
   const [focusedPath, setFocusedPath] = useState<string | null>(null)

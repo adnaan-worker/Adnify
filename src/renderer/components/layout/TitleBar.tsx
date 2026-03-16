@@ -1,6 +1,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { Minus, Square, X, Search, HelpCircle } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { Logo } from '../common/Logo'
 import WorkspaceDropdown from './WorkspaceDropdown'
 import UpdateIndicator from './UpdateIndicator'
@@ -8,11 +9,11 @@ import UpdateIndicator from './UpdateIndicator'
 // 检测是否为 Mac 平台
 const isMac = typeof navigator !== 'undefined' && (
   navigator.platform.toUpperCase().indexOf('MAC') >= 0 ||
-  (navigator as any).userAgentData?.platform?.toUpperCase().indexOf('MAC') >= 0
+  ((navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform?.toUpperCase().indexOf('MAC') ?? -1) >= 0
 )
 
 export default function TitleBar() {
-  const { setShowQuickOpen, setShowAbout } = useStore()
+  const { setShowQuickOpen, setShowAbout } = useStore(useShallow(s => ({ setShowQuickOpen: s.setShowQuickOpen, setShowAbout: s.setShowAbout })))
   return (
     <div className="h-12 flex items-center justify-between px-0 drag-region select-none bg-background/40 backdrop-blur-md z-50 border-b border-border/50">
 

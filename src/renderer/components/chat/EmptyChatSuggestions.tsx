@@ -8,7 +8,7 @@ interface EmptyChatSuggestionsProps {
 }
 
 export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSuggestionsProps) {
-    const { language } = useStore()
+    const language = useStore(s => s.language)
 
     const suggestions = [
         {

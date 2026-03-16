@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { BUILTIN_PROVIDERS, getBuiltinProvider } from '@shared/config/providers'
 
 const PROVIDER_ICONS: Record<string, string> = {
@@ -29,7 +30,7 @@ interface ModelSelectorProps {
 }
 
 export default function ModelSelector({ className = '' }: ModelSelectorProps) {
-  const { llmConfig, update, providerConfigs } = useStore()
+  const { llmConfig, update, providerConfigs } = useStore(useShallow(s => ({ llmConfig: s.llmConfig, update: s.update, providerConfigs: s.providerConfigs })))
   const [isProviderOpen, setIsProviderOpen] = useState(false)
   const [isModelOpen, setIsModelOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)

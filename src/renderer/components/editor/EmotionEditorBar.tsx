@@ -29,7 +29,7 @@ const EDITOR_BAR_EXTRA: Record<EmotionState, {
 }
 
 export const EmotionEditorBar: React.FC = () => {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const emotion = useEmotionState()
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
   const [isHovered, setIsHovered] = useState(false)

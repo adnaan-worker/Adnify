@@ -11,6 +11,7 @@ import {
   X, Zap, Keyboard, Sparkles, Plus, FolderPlus
 } from 'lucide-react'
 import { useStore, useModeStore } from '@/renderer/store'
+import { useShallow } from 'zustand/react/shallow'
 import { useAgentStore } from '@/renderer/agent'
 import { useAgent } from '@/renderer/hooks/useAgent'
 import { t } from '@/renderer/i18n'
@@ -102,7 +103,17 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     setShowQuickOpen,
     setShowComposer,
     setShowAbout,
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    setShowSettings: s.setShowSettings,
+    setTerminalVisible: s.setTerminalVisible,
+    terminalVisible: s.terminalVisible,
+    workspacePath: s.workspacePath,
+    activeFilePath: s.activeFilePath,
+    language: s.language,
+    setShowQuickOpen: s.setShowQuickOpen,
+    setShowComposer: s.setShowComposer,
+    setShowAbout: s.setShowAbout,
+  })))
 
   // 从 AgentStore 获取 setInputPrompt
   const setInputPrompt = useAgentStore(state => state.setInputPrompt)

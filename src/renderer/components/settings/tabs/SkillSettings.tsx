@@ -21,7 +21,7 @@ interface SkillSettingsProps {
 
 export function SkillSettings({ language }: SkillSettingsProps) {
     const t = (zh: string, en: string) => language === 'zh' ? zh : en
-    const { workspacePath } = useStore()
+    const workspacePath = useStore(s => s.workspacePath)
 
     // Skills list
     const [skills, setSkills] = useState<SkillItem[]>([])

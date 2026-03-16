@@ -213,7 +213,7 @@ function detectPlatform() {
 
   // 2. Renderer 进程 fallback：navigator.userAgentData（现代 Chromium API）
   if (typeof navigator !== 'undefined') {
-    const uad = (navigator as any).userAgentData
+    const uad = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
     if (uad?.platform) {
       const p = uad.platform.toLowerCase()
       return {

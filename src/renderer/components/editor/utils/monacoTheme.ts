@@ -38,11 +38,44 @@ export function defineMonacoTheme(
     base: isLight ? 'vs' : 'vs-dark',
     inherit: true,
     rules: [
+      // 注释
       { token: 'comment', foreground: textMuted.slice(1), fontStyle: 'italic' },
+      { token: 'comment.doc', foreground: textMuted.slice(1), fontStyle: 'italic' },
+      // 关键字 & 操作符
       { token: 'keyword', foreground: accent.slice(1) },
+      { token: 'keyword.control', foreground: accent.slice(1) },
+      { token: 'keyword.operator', foreground: isLight ? 'd63384' : 'ff7b72' },
+      // 字面量
       { token: 'string', foreground: isLight ? '036a07' : 'a5d6ff' },
+      { token: 'string.escape', foreground: isLight ? '9a6700' : 'f0c674' },
+      { token: 'regexp', foreground: isLight ? '953800' : 'f97583' },
       { token: 'number', foreground: isLight ? '098658' : 'ffc600' },
+      { token: 'constant', foreground: isLight ? '0550ae' : '79c0ff' },
+      // 类型 & 类
       { token: 'type', foreground: isLight ? '267f99' : '4ec9b0' },
+      { token: 'type.identifier', foreground: isLight ? '267f99' : '4ec9b0' },
+      { token: 'class', foreground: isLight ? '953800' : 'ffa657' },
+      { token: 'interface', foreground: isLight ? '267f99' : '4ec9b0' },
+      { token: 'enum', foreground: isLight ? '267f99' : '4ec9b0' },
+      // 函数 & 方法
+      { token: 'function', foreground: isLight ? '8250df' : 'd2a8ff' },
+      { token: 'function.declaration', foreground: isLight ? '8250df' : 'd2a8ff' },
+      { token: 'method', foreground: isLight ? '8250df' : 'd2a8ff' },
+      // 变量 & 参数
+      { token: 'variable', foreground: text.slice(1) },
+      { token: 'variable.predefined', foreground: isLight ? '0550ae' : '79c0ff' },
+      { token: 'parameter', foreground: isLight ? '953800' : 'ffa657' },
+      // 装饰器 & 注解
+      { token: 'annotation', foreground: isLight ? '8250df' : 'd2a8ff' },
+      { token: 'decorator', foreground: isLight ? '8250df' : 'd2a8ff' },
+      // 标签 (HTML/JSX)
+      { token: 'tag', foreground: isLight ? '116329' : '7ee787' },
+      { token: 'attribute.name', foreground: isLight ? '0550ae' : '79c0ff' },
+      { token: 'attribute.value', foreground: isLight ? '036a07' : 'a5d6ff' },
+      // 元字符
+      { token: 'delimiter', foreground: textMuted.slice(1) },
+      { token: 'delimiter.bracket', foreground: text.slice(1) },
+      { token: 'meta', foreground: textMuted.slice(1) },
     ],
     colors: {
       'editor.background': bg,

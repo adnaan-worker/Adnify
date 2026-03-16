@@ -32,7 +32,7 @@ interface ConversationSidebarProps {
 }
 
 export default function ConversationSidebar({ isOpen, onClose, initialTab = 'history' }: ConversationSidebarProps) {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [searchQuery, setSearchQuery] = useState('')
 

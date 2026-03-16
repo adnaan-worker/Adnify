@@ -15,7 +15,7 @@ import {
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t, type TranslationKey } from '@renderer/i18n'
-import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry } from '@renderer/agent/services/gitService'
+import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry } from '@renderer/services/gitService'
 import { getEditorConfig } from '@renderer/settings'
 import { toast } from '@components/common/ToastProvider'
 import { keybindingService } from '@services/keybindingService'
@@ -1345,9 +1345,14 @@ Commit message:`
                                         onApply={() => handleStashApply(stash.index)}
                                         onPop={() => handleStashPop(stash.index)}
                                         onDrop={() => handleStashDrop(stash.index)}
-                                        onView={() => {
-                                            // TODO: Show stash diff
-                                            toast.info(tt('git.stash'), stash.message || 'WIP')
+                                        onView={async () => {
+                                            const diff = await gitService.getStashDiff(stash.index, workspacePath || undefined)
+                                            if (diff) {
+                                                openFile(`git-diff://stash@{${stash.index}}`, diff, '')
+                                                setActiveFile(`git-diff://stash@{${stash.index}}`)
+                                            } else {
+                                                toast.info(tt('git.stash'), stash.message || 'WIP')
+                                            }
                                         }}
                                     />
                                 ))}
@@ -1376,9 +1381,14 @@ Commit message:`
                                             navigator.clipboard.writeText(commit.hash)
                                             toast.success(tt('git.hashCopied'))
                                         }}
-                                        onClick={() => {
-                                            // TODO: Show commit details
-                                            toast.info(commit.shortHash, commit.message)
+                                        onClick={async () => {
+                                            const diff = await gitService.getCommitDiff(commit.hash, workspacePath || undefined)
+                                            if (diff) {
+                                                openFile(`git-diff://commit/${commit.shortHash}`, diff, '')
+                                                setActiveFile(`git-diff://commit/${commit.shortHash}`)
+                                            } else {
+                                                toast.info(commit.shortHash, commit.message)
+                                            }
                                         }}
                                     />
                                 ))}

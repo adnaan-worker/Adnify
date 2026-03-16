@@ -303,7 +303,7 @@ export async function buildAgentSystemPrompt(
 
 function getOS(): string {
   if (typeof navigator !== 'undefined') {
-    return (navigator as any).userAgentData?.platform || navigator.platform || 'Unknown'
+    return navigator.userAgentData?.platform || navigator.platform || 'Unknown'
   }
   return 'Unknown'
 }

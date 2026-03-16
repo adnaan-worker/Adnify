@@ -7,8 +7,8 @@ import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect, useCallback } from 'react'
 import { GitMerge, Check, X, ArrowLeft, ArrowRight, RefreshCw } from 'lucide-react'
 import { useStore } from '@store'
-import { t } from '@renderer/i18n'
-import { gitService } from '@renderer/agent/services/gitService'
+import { t, type TranslationKey } from '@renderer/i18n'
+import { gitService } from '@renderer/services/gitService'
 import { toast } from '@components/common/ToastProvider'
 import { Button } from '@components/ui'
 import { getFileName } from '@shared/utils/pathUtils'
@@ -110,14 +110,14 @@ function extractConflictContent(content: string, marker: ConflictMarker): {
 }
 
 export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictResolverProps) {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const [content, setContent] = useState<string>('')
   const [conflicts, setConflicts] = useState<ConflictMarker[]>([])
   const [currentConflict, setCurrentConflict] = useState(0)
   const [resolvedContent, setResolvedContent] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
 
-  const tt = useCallback((key: string) => t(key as any, language), [language])
+  const tt = useCallback((key: string) => t(key as TranslationKey, language), [language])
 
   // 加载文件内容
   useEffect(() => {

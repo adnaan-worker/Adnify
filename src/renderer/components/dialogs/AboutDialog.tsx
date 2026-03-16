@@ -22,7 +22,7 @@ const CONTRIBUTORS = [
 ]
 
 export default function AboutDialog({ onClose }: AboutDialogProps) {
-    const { language } = useStore()
+    const language = useStore(s => s.language)
     const [version, setVersion] = useState('1.0.0')
 
     useEffect(() => {

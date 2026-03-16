@@ -82,7 +82,7 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
     React.Children.forEach(children, child => {
       if (typeof child === 'string') {
         text += child
-      } else if (typeof child === 'object' && child !== null && 'props' in child && (child as any).props?.className?.includes('fuzzy-cursor')) {
+      } else if (typeof child === 'object' && child !== null && 'props' in child && (child as React.ReactElement<{ className?: string }>).props?.className?.includes('fuzzy-cursor')) {
         hasCursor = true
       } else if (Array.isArray(child)) {
         // Handle nested arrays if any

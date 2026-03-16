@@ -34,7 +34,7 @@ import {
 const WELCOME_DATA_SPAN_MS = 15 * 60 * 1000
 
 export const EmotionAwarenessPanel: React.FC = () => {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const { history, productivity } = useEmotionHistory()
   const [settings, setSettings] = useState(loadEmotionPanelSettings)
 
@@ -369,7 +369,7 @@ const SettingToggle: React.FC<{
 )
 
 const EmotionTimeline: React.FC<{ history: EmotionHistory[]; inflectionPoints: InflectionPoint[] }> = ({ history, inflectionPoints }) => {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   // 按30分钟窗口聚合，最近12小时
   const timelineData = useMemo(() => {
     const now = Date.now()

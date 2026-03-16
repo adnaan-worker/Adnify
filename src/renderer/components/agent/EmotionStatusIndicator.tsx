@@ -51,7 +51,7 @@ const COOLDOWN: Record<CompanionMessage['type'], number> = {
 const EMOTION_MESSAGES = EMOTION_STATUS_MESSAGE_KEYS
 
 export const EmotionStatusIndicator: React.FC = () => {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const emotion = useEmotionState()
 
   // Base Tooltip State

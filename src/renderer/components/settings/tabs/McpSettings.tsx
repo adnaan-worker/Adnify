@@ -29,9 +29,11 @@ import {
   Lightbulb,
 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { mcpService } from '@services/mcpService'
 import { Button, Switch } from '@components/ui'
 import type { McpServerState, McpServerStatus } from '@shared/types/mcp'
+import { isRemoteConfig, isLocalConfig } from '@shared/types/mcp'
 import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
 
@@ -42,7 +44,7 @@ interface McpSettingsProps {
 }
 
 export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSettingsProps) {
-  const { mcpServers, mcpLoading, mcpError } = useStore()
+  const { mcpServers, mcpLoading, mcpError } = useStore(useShallow(s => ({ mcpServers: s.mcpServers, mcpLoading: s.mcpLoading, mcpError: s.mcpError })))
   const [expandedServer, setExpandedServer] = useState<string | null>(null)
   const [configPaths, setConfigPaths] = useState<{ user: string; workspace: string[] } | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -202,7 +204,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
     const isOAuthPending = oauthPendingServers.has(server.id)
 
     // 通过 presetId 查找预设获取使用示例
-    const presetId = (server.config as any).presetId
+    const presetId = server.config.presetId
     const preset = presetId ? MCP_PRESETS.find(p => p.id === presetId) : undefined
     const usageExamples = language === 'zh' ? preset?.usageExamplesZh : preset?.usageExamples
 
@@ -257,9 +259,9 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
                 )}
               </div>
               <div className="text-xs text-text-muted mt-1.5 font-mono truncate max-w-[300px] opacity-70 bg-black/20 px-2 py-0.5 rounded w-fit">
-                {isRemote 
-                  ? (server.config as any).url 
-                  : `${(server.config as any).command} ...`
+                {isRemote
+                  ? ('url' in server.config ? server.config.url : '')
+                  : `${'command' in server.config ? server.config.command : ''} ...`
                 }
               </div>
             </div>
@@ -469,21 +471,21 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
                 <div className="flex"><span className="text-text-muted w-20 shrink-0">type:</span> <span>{server.config.type}</span></div>
                 {isRemote ? (
                   <>
-                    <div className="flex"><span className="text-text-muted w-20 shrink-0">url:</span> <span className="select-all">{(server.config as any).url}</span></div>
-                    {(server.config as any).oauth !== false && (
+                    <div className="flex"><span className="text-text-muted w-20 shrink-0">url:</span> <span className="select-all">{isRemoteConfig(server.config) && server.config.url}</span></div>
+                    {isRemoteConfig(server.config) && server.config.oauth !== false && (
                       <div className="flex"><span className="text-text-muted w-20 shrink-0">oauth:</span> <span>enabled</span></div>
                     )}
                   </>
                 ) : (
                   <>
-                    <div className="flex"><span className="text-text-muted w-20 shrink-0">command:</span> <span className="text-accent">{(server.config as any).command}</span></div>
-                    {(server.config as any).args && (server.config as any).args.length > 0 && (
-                      <div className="flex"><span className="text-text-muted w-20 shrink-0">args:</span> <span>{(server.config as any).args.join(' ')}</span></div>
+                    <div className="flex"><span className="text-text-muted w-20 shrink-0">command:</span> <span className="text-accent">{isLocalConfig(server.config) && server.config.command}</span></div>
+                    {isLocalConfig(server.config) && server.config.args && server.config.args.length > 0 && (
+                      <div className="flex"><span className="text-text-muted w-20 shrink-0">args:</span> <span>{isLocalConfig(server.config) && server.config.args?.join(' ')}</span></div>
                     )}
-                    {(server.config as any).env && Object.keys((server.config as any).env).length > 0 && (
+                    {isLocalConfig(server.config) && server.config.env && Object.keys(server.config.env).length > 0 && (
                       <div>
                         <span className="text-text-muted block mb-1">env:</span>
-                        {Object.entries((server.config as any).env as Record<string, string>).map(([k, v]) => (
+                        {Object.entries((isLocalConfig(server.config) ? server.config.env : {}) as Record<string, string>).map(([k, v]) => (
                           <div key={k} className="ml-4 flex gap-2"><span className="text-text-primary">{k}</span>=<span className="text-text-muted">{v.length > 20 ? v.slice(0, 8) + '***' : v}</span></div>
                         ))}
                       </div>

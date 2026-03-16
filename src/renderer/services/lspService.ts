@@ -553,14 +553,9 @@ export async function prepareCallHierarchy(
   line: number,
   character: number
 ): Promise<any[] | null> {
-  // 使用类型扩展来访问可能存在的 Call Hierarchy API
-  type LspApiWithCallHierarchy = typeof api.lsp & {
-    prepareCallHierarchy?: (params: LspPositionParams) => Promise<any[] | null>
-  }
-  
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => (api.lsp as LspApiWithCallHierarchy).prepareCallHierarchy?.(params) ?? Promise.resolve(null),
+    (params) => api.lsp.prepareCallHierarchy(params),
     null
   )
 }
@@ -573,13 +568,9 @@ export async function getIncomingCalls(
   line: number,
   character: number
 ): Promise<any[] | null> {
-  type LspApiWithCallHierarchy = typeof api.lsp & {
-    incomingCalls?: (params: LspPositionParams) => Promise<any[] | null>
-  }
-  
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => (api.lsp as LspApiWithCallHierarchy).incomingCalls?.(params) ?? Promise.resolve(null),
+    (params) => api.lsp.incomingCalls(params),
     null
   )
 }
@@ -592,13 +583,9 @@ export async function getOutgoingCalls(
   line: number,
   character: number
 ): Promise<any[] | null> {
-  type LspApiWithCallHierarchy = typeof api.lsp & {
-    outgoingCalls?: (params: LspPositionParams) => Promise<any[] | null>
-  }
-  
   return executeLspPositionRequest(
     filePath, line, character,
-    (params) => (api.lsp as LspApiWithCallHierarchy).outgoingCalls?.(params) ?? Promise.resolve(null),
+    (params) => api.lsp.outgoingCalls(params),
     null
   )
 }

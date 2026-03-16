@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
+import { useShallow } from 'zustand/react/shallow'
 import { useAgent } from '@/renderer/hooks/useAgent'
 import { useAgentStore, selectHandoffRequired } from '@/renderer/agent'
 import { t } from '@/renderer/i18n'
@@ -48,7 +49,15 @@ export default function ChatPanel() {
     language,
     activeFilePath,
     selectedCode,
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    llmConfig: s.llmConfig,
+    workspacePath: s.workspacePath,
+    openFile: s.openFile,
+    setActiveFile: s.setActiveFile,
+    language: s.language,
+    activeFilePath: s.activeFilePath,
+    selectedCode: s.selectedCode,
+  })))
 
   // 从 AgentStore 获取 inputPrompt
   const inputPrompt = useAgentStore(state => state.inputPrompt)

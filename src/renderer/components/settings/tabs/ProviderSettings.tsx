@@ -693,7 +693,7 @@ export function ProviderSettings({
     const providerInfo = PROVIDERS[providerId]
     setLocalConfig({
       ...localConfig,
-      provider: providerId as any,
+      provider: providerId,
       apiKey: nextConfig.apiKey || '',
       baseUrl: nextConfig.baseUrl || providerInfo?.baseUrl || '',
       timeout: nextConfig.timeout || providerInfo?.defaults.timeout || 120000,
@@ -726,7 +726,7 @@ export function ProviderSettings({
 
     setLocalConfig({
       ...localConfig,
-      provider: id as any,
+      provider: id,
       apiKey: customConfig.apiKey || '',
       baseUrl: customConfig.baseUrl || '',
       timeout: customConfig.timeout || 120000,
@@ -763,7 +763,7 @@ export function ProviderSettings({
     // 自动选择新添加的 Provider
     setLocalConfig({
       ...localConfig,
-      provider: id as any,
+      provider: id,
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
       timeout: 120000,

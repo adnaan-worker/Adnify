@@ -268,10 +268,10 @@ const ToolCallCard = memo(function ToolCallCard({
                                     ? 'text-accent bg-accent/10 border border-accent/20'
                                     : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'
                                 }`}
-                            title="在终端面板中查看执行过程"
+                            title={t('tool.viewInTerminal', language)}
                         >
                             <Terminal className={`w-3 h-3 ${isRunning ? 'animate-pulse' : ''}`} />
-                            <span>{isRunning ? 'Running…' : 'Terminal'}</span>
+                            <span>{isRunning ? t('tool.running', language) : t('tool.terminal', language)}</span>
                         </button>
                     </div>
                     {toolCall.result && (

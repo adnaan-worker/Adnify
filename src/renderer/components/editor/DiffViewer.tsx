@@ -35,7 +35,7 @@ export default function DiffViewer({
   isStreaming = false,
   minimal = false,
 }: DiffViewerProps) {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const [collapsed, setCollapsed] = useState(false)
   const [viewMode, setViewMode] = useState<'split' | 'unified'>('unified')
 

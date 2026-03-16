@@ -315,7 +315,7 @@ export default function InlineDiffPreview({
     maxLines = 100,
 }: InlineDiffPreviewProps) {
     const language = useMemo(() => getLanguageFromPath(filePath), [filePath])
-    const { currentTheme } = useStore() // 获取当前主题
+    const currentTheme = useStore(s => s.currentTheme) // 获取当前主题
     const isLight = currentTheme === 'dawn'
 
     // 生成主题相关的代码样式

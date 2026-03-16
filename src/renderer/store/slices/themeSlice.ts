@@ -1,6 +1,11 @@
 import { StateCreator } from 'zustand'
+import { builtinThemes } from '@/renderer/config/themeConfig'
 
-export type ThemeName = 'adnify-dark' | 'midnight' | 'dawn' | 'cyberpunk';
+/** 内置主题 ID 联合类型 */
+export type BuiltinThemeName = 'adnify-dark' | 'midnight' | 'dawn' | 'cyberpunk'
+
+/** 主题名称，支持内置和自定义主题 */
+export type ThemeName = string
 
 export interface ThemeSlice {
     currentTheme: ThemeName;
@@ -8,10 +13,12 @@ export interface ThemeSlice {
 }
 
 export const createThemeSlice: StateCreator<ThemeSlice, [], [], ThemeSlice> = (set) => {
-    // Attempt to read synchronous cache for immediate initialization, fallback to dark
-    const savedTheme = typeof localStorage !== 'undefined' ? localStorage.getItem('adnify-theme-id') as ThemeName : 'adnify-dark';
-    const validThemes = ['adnify-dark', 'midnight', 'dawn', 'cyberpunk'];
-    const initialTheme = validThemes.includes(savedTheme) ? savedTheme : 'adnify-dark';
+    const savedTheme = typeof localStorage !== 'undefined' ? localStorage.getItem('adnify-theme-id') : null
+    const validIds = builtinThemes.map(t => t.id)
+    // 允许内置主题或已保存的自定义主题 ID
+    const initialTheme = savedTheme && (validIds.includes(savedTheme) || savedTheme.startsWith('custom-'))
+        ? savedTheme
+        : 'adnify-dark'
 
     return {
         currentTheme: initialTheme,

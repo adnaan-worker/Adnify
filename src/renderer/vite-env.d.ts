@@ -12,6 +12,16 @@ declare global {
   }
 
   var __PROD__: boolean
+
+  interface NavigatorUAData {
+    platform: string
+    mobile: boolean
+    brands: Array<{ brand: string; version: string }>
+  }
+
+  interface Navigator {
+    userAgentData?: NavigatorUAData
+  }
 }
 
 export { }

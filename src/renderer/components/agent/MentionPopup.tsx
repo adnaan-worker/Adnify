@@ -32,7 +32,7 @@ export default function MentionPopup({
     onSelect,
     onClose,
 }: MentionPopupProps) {
-    const { language } = useStore()
+    const language = useStore(s => s.language)
 
     // 转换为 InputPopup 需要的格式
     const items: MentionItem[] = useMemo(() => {

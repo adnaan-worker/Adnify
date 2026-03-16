@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { useResizePanel } from '@/renderer/hooks/useResizePanel'
 import { Button, Input } from '@/renderer/components/ui'
 import { useAgentStore } from '@/renderer/agent'
@@ -84,7 +85,7 @@ function getSessionTabContent(session: TerminalManagerState['terminals'][number]
 }
 
 export default function ShellStudio() {
-  const { workspace, workspacePath, currentTheme, language, setShowComposer } = useStore()
+  const { workspace, workspacePath, currentTheme, language, setShowComposer } = useStore(useShallow(s => ({ workspace: s.workspace, workspacePath: s.workspacePath, currentTheme: s.currentTheme, language: s.language, setShowComposer: s.setShowComposer })))
   const setInputPrompt = useAgentStore((state) => state.setInputPrompt)
   const [query, setQuery] = useState('')
   const [availableShells, setAvailableShells] = useState<AvailableShell[]>([])

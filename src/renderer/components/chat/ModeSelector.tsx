@@ -49,7 +49,7 @@ const MODES: Array<{
   ]
 
 export default function ModeSelector({ mode, onModeChange, className = '' }: ModeSelectorProps) {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 

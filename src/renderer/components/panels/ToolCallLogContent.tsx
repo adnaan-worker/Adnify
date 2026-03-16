@@ -20,6 +20,7 @@ import {
 import { Button } from '../ui'
 import { JsonHighlight } from '@/renderer/utils/jsonHighlight'
 import { useStore } from '@/renderer/store'
+import { useShallow } from 'zustand/react/shallow'
 
 interface ToolCallLogContentProps {
   language?: 'en' | 'zh'
@@ -28,7 +29,7 @@ interface ToolCallLogContentProps {
 type ViewMode = 'logs' | 'stats'
 
 export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogContentProps) {
-  const { toolCallLogs: logs, clearToolCallLogs, getToolStats, getPerformanceInsights } = useStore()
+  const { toolCallLogs: logs, clearToolCallLogs, getToolStats, getPerformanceInsights } = useStore(useShallow(s => ({ toolCallLogs: s.toolCallLogs, clearToolCallLogs: s.clearToolCallLogs, getToolStats: s.getToolStats, getPerformanceInsights: s.getPerformanceInsights })))
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<'all' | 'request' | 'response'>('all')
   const [copiedId, setCopiedId] = useState<string | null>(null)

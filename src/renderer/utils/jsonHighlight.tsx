@@ -6,6 +6,7 @@
 import React, { useCallback } from 'react'
 import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { joinPath } from '@shared/utils/pathUtils'
 
 export interface HighlightStyle {
@@ -202,7 +203,7 @@ export function JsonHighlight({
         return { content: text, truncated: false, originalLength: text.length }
     }, [data, maxLength])
 
-    const { workspacePath, openFile, setActiveFile } = useStore()
+    const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
     const handleFileClick = useCallback(async (filePath: string) => {
         let absPath = filePath

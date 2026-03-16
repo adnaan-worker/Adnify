@@ -1243,7 +1243,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             if (stack) {
                 // 验证 stack 类型
                 const validStacks = ['html-tailwind', 'react', 'nextjs', 'vue', 'svelte', 'swiftui', 'react-native', 'flutter'] as const
-                const techStack = validStacks.includes(stack as any) ? stack as import('./uiux').TechStack : 'react'
+                const techStack = (validStacks as readonly string[]).includes(stack) ? stack as import('./uiux').TechStack : 'react'
 
                 const result = await uiuxDatabase.searchStack(query, techStack, maxResults)
                 if (result.count === 0) {
@@ -1266,7 +1266,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             // 否则搜索域数据
             // 验证 domain 类型
             const validDomains = ['style', 'color', 'typography', 'chart', 'landing', 'product', 'ux', 'prompt'] as const
-            const uiuxDomain = domain && validDomains.includes(domain as any) ? domain as import('./uiux').UiuxDomain : undefined
+            const uiuxDomain = domain && (validDomains as readonly string[]).includes(domain) ? domain as import('./uiux').UiuxDomain : undefined
 
             const result = await uiuxDatabase.search(query, uiuxDomain, maxResults)
             if (result.count === 0) {

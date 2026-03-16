@@ -18,7 +18,7 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
     isSuccess,
 }) => {
     const [isExpanded, setIsExpanded] = useState(!isSuccess)
-    const { language } = useStore()
+    const language = useStore(s => s.language)
 
     useEffect(() => {
         if (isSuccess) {

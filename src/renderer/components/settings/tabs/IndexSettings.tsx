@@ -33,7 +33,7 @@ const DEFAULT_EMBEDDING_CONFIG: EmbeddingConfigState = {
 }
 
 export function IndexSettings({ language }: IndexSettingsProps) {
-  const { workspacePath } = useStore()
+  const workspacePath = useStore(s => s.workspacePath)
   const [indexMode, setIndexMode] = useState<IndexMode>('structural')
   const [embeddingConfig, setEmbeddingConfig] = useState<EmbeddingConfigState>(DEFAULT_EMBEDDING_CONFIG)
   const [showApiKey, setShowApiKey] = useState(false)

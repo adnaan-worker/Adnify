@@ -240,7 +240,7 @@ class LoggerClass {
   private isWriting = false
 
   // 检测是否在主进程中运行
-  private isMain = typeof process !== 'undefined' && process.versions?.node && !(globalThis as any).window
+  private isMain = typeof process !== 'undefined' && process.versions?.node && typeof (globalThis as Record<string, unknown>).window === 'undefined'
 
   // 缓存生产环境检测结果
   private _isProd: boolean | null = null

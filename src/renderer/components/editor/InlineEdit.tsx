@@ -7,6 +7,7 @@ import { api } from '@renderer/services/electronAPI'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Sparkles, Loader2, StopCircle, Check, X } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
 import { composerService } from '@renderer/agent/services/composerService'
 import { toast } from '../common/ToastProvider'
@@ -33,7 +34,7 @@ export default function InlineEdit({
 	const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
 	const [originalContent, setOriginalContent] = useState<string>('')
 	const inputRef = useRef<HTMLInputElement>(null)
-	const { llmConfig, language, updateFileContent } = useStore()
+	const { llmConfig, language, updateFileContent } = useStore(useShallow(s => ({ llmConfig: s.llmConfig, language: s.language, updateFileContent: s.updateFileContent })))
 	const containerRef = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {

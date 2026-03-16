@@ -160,7 +160,7 @@ export function registerSecureFileHandlers(
       return content
     } catch (err) {
       // 文件不存在是正常情况（如可选的规则文件），不记录为 ERROR
-      if (toAppError(err).code === ErrorCode.FILE_NOT_FOUND || (err as any)?.code === 'ENOENT') {
+      if (toAppError(err).code === ErrorCode.FILE_NOT_FOUND || (err as NodeJS.ErrnoException)?.code === 'ENOENT') {
         logger.security.debug('[File] not found:', filePath)
       } else {
         logger.security.error('[File] read failed:', filePath, toAppError(err).message)

@@ -145,13 +145,37 @@ class McpService {
     }
   }
 
-  /** 调用 MCP 工具 */
-  async callTool(request: McpToolCallRequest): Promise<McpToolCallResult> {
+  /** 调用 MCP 工具（带超时保护 + OAuth 自动刷新） */
+  async callTool(request: McpToolCallRequest, timeoutMs = 60_000): Promise<McpToolCallResult> {
+    const execute = () => Promise.race([
+      api.mcp.callTool(request),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`MCP tool call timed out after ${timeoutMs}ms`)), timeoutMs)
+      ),
+    ])
+
     try {
-      const result = await api.mcp.callTool(request)
+      const result = await execute()
       return result
     } catch (err) {
       const error = toAppError(err)
+
+      // OAuth token 过期自动刷新后重试一次
+      const msg = error.message.toLowerCase()
+      if (msg.includes('401') || msg.includes('unauthorized') || msg.includes('token expired')) {
+        logger.agent.info(`[McpService] Token may be expired for ${request.serverId}, attempting refresh`)
+        const refreshResult = await this.refreshOAuthToken(request.serverId)
+        if (refreshResult.success) {
+          try {
+            return await execute()
+          } catch (retryErr) {
+            const retryError = toAppError(retryErr)
+            logger.agent.error(`[McpService] Retry after token refresh failed: ${retryError.code}`, retryError)
+            return { success: false, error: retryError.message }
+          }
+        }
+      }
+
       logger.agent.error(`[McpService] Call tool failed: ${error.code}`, error)
       return { success: false, error: error.message }
     }

@@ -11,7 +11,7 @@ import { useStore } from '@store'
 import { api } from '@/renderer/services/electronAPI'
 
 export default function UpdateIndicator() {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const [status, setStatus] = useState<UpdateStatus | null>(null)
   const [showPopover, setShowPopover] = useState(false)
   const [currentVersion, setCurrentVersion] = useState<string>('')

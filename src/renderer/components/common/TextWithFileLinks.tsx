@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from 'react'
 import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { joinPath } from '@shared/utils/pathUtils'
 
 interface TextWithFileLinksProps {
@@ -9,7 +10,7 @@ interface TextWithFileLinksProps {
 }
 
 export function TextWithFileLinks({ text, className = '' }: TextWithFileLinksProps) {
-    const { workspacePath, openFile, setActiveFile } = useStore()
+    const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
     const handleFileClick = useCallback(async (e: React.MouseEvent, filePath: string) => {
         e.stopPropagation()
