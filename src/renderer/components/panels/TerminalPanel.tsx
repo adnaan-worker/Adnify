@@ -77,11 +77,20 @@ const TerminalPanel = memo(function TerminalPanel() {
     // ===== 挂载/卸载 xterm 到/从 容器 =====
 
     useEffect(() => {
-        // 当整个终端面板不可见时，销毁所有终端（含 PTY 进程）
+        // 面板隐藏时的资源释放策略：
+        // - Agent 终端：仅 unmount xterm（释放 DOM/WebGL），保留 PTY 进程以便复用
+        // - 用户终端：完全销毁（PTY + buffer），避免后台资源空占
         if (!terminalVisible) {
             const ids = managerState.terminals.map(t => t.id)
             for (const id of ids) {
-                terminalManager.closeTerminal(id)
+                const terminal = managerState.terminals.find(t => t.id === id)
+                if (terminal?.isAgent) {
+                    // Agent 终端：只释放前端资源，保留 PTY
+                    terminalManager.unmountTerminal(id)
+                } else {
+                    // 用户终端：完全销毁
+                    terminalManager.closeTerminal(id)
+                }
             }
             mountedTerminals.current.clear()
             return

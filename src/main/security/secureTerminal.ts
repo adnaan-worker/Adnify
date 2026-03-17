@@ -54,13 +54,38 @@ export function getWhitelist() {
 const terminals = new Map<string, any>() // IPty instances
 
 /**
+ * 可靠地终止 PTY 进程树
+ *
+ * node-pty 的 ConPTY 模式在 Windows 上 kill() 存在异步竞态，
+ * 可能导致 PowerShell/conhost 子进程残留。
+ * 使用 taskkill /F /T 强制终止整个进程树。
+ */
+function killPtyReliably(ptyProcess: any): void {
+  try {
+    ptyProcess.removeAllListeners('exit')
+    ptyProcess.removeAllListeners('data')
+  } catch { /* ignore */ }
+
+  const pid = ptyProcess.pid
+  try {
+    if (process.platform === 'win32' && pid) {
+      // Windows: taskkill /F /T 强制杀死整个进程树（PowerShell + conhost）
+      execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore', timeout: 5000 })
+    } else {
+      ptyProcess.kill()
+    }
+  } catch {
+    // taskkill 失败时 fallback 到 node-pty 原生 kill
+    try { ptyProcess.kill() } catch { /* ignore */ }
+  }
+}
+
+/**
  * 清理所有终端进程
  */
 export function cleanupTerminals(): void {
   for (const [id, ptyProcess] of terminals) {
-    try {
-      ptyProcess.kill()
-    } catch (e) { /* ignore */ }
+    killPtyReliably(ptyProcess)
     terminals.delete(id)
   }
   logger.security.info(`[Terminal] All terminals cleaned up`)
@@ -1183,26 +1208,13 @@ export function registerSecureTerminalHandlers(
     if (id) {
       const ptyProcess = terminals.get(id)
       if (ptyProcess) {
-        try {
-          // Remove listeners to prevent race conditions during kill
-          ptyProcess.removeAllListeners('exit')
-          ptyProcess.removeAllListeners('data')
-          ptyProcess.kill()
-        } catch (err) {
-          logger.security.error(`[Terminal] Kill error (id: ${id}):`, err)
-        }
+        killPtyReliably(ptyProcess)
         terminals.delete(id)
       }
     } else {
       // Kill all terminals
       for (const [termId, ptyProcess] of terminals) {
-        try {
-          ptyProcess.removeAllListeners('exit')
-          ptyProcess.removeAllListeners('data')
-          ptyProcess.kill()
-        } catch (err) {
-          logger.security.error(`[Terminal] Kill error (id: ${termId}):`, err)
-        }
+        killPtyReliably(ptyProcess)
         terminals.delete(termId)
       }
     }

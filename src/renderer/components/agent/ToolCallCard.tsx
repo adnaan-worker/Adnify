@@ -21,6 +21,7 @@ import { t } from '@renderer/i18n'
 import { ToolCall } from '@renderer/agent/types'
 import { JsonHighlight } from '@utils/jsonHighlight'
 import { terminalManager } from '@/renderer/services/TerminalManager'
+import { toast } from '@components/common/ToastProvider'
 import { RichContentRenderer } from './RichContentRenderer'
 import InlineDiffPreview from './InlineDiffPreview'
 import { getFileName } from '@shared/utils/pathUtils'
@@ -259,7 +260,7 @@ const ToolCallCard = memo(function ToolCallCard({
         // 终端命令
         if (name === 'run_command') {
             const cmd = args.command as string
-            const terminalId = ((toolCall as any).meta?.terminalId) as string | undefined
+            const terminalId = (args as any)?._meta?.terminalId as string | undefined
 
             return (
                 <div className="font-mono text-[11px] space-y-1">
@@ -272,6 +273,10 @@ const ToolCallCard = memo(function ToolCallCard({
                         <button
                             onClick={e => {
                                 e.stopPropagation()
+                                if (terminalId && !terminalManager.hasTerminal(terminalId)) {
+                                    toast.info('Terminal has been closed')
+                                    return
+                                }
                                 setTerminalVisible(true)
                                 if (terminalId) terminalManager.setActiveTerminal(terminalId)
                             }}

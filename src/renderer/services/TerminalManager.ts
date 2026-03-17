@@ -144,6 +144,7 @@ class TerminalManagerClass {
 
   /** Agent 专属终端 ID（跨 tool call 复用） */
   private agentTerminalId: string | null = null;
+  private agentTerminalCreating: Promise<string> | null = null;
 
   // xterm 实例管理
   private xtermInstances = new Map<string, XTermInstance>();
@@ -582,7 +583,15 @@ class TerminalManagerClass {
     this.notify();
   }
 
+  hasTerminal(id: string): boolean {
+    return this.state.terminals.some(t => t.id === id);
+  }
+
   setActiveTerminal(id: string | null) {
+    // 验证终端是否存在，不存在则静默忽略（终端可能已被手动关闭）
+    if (id !== null && !this.state.terminals.find(t => t.id === id)) {
+      return;
+    }
     if (this.state.activeId !== id) {
       this.state.activeId = id;
       this.notify();
@@ -625,14 +634,26 @@ class TerminalManagerClass {
       this.agentTerminalId = null
     }
 
-    const id = await this.createTerminal({
+    // 并发锁：防止快速连续的 run_command 创建多个 Agent 终端
+    if (this.agentTerminalCreating) {
+      return this.agentTerminalCreating
+    }
+
+    this.agentTerminalCreating = this.createTerminal({
       name: 'Agent',
       cwd,
       shell,
       isAgent: true,
+    }).then(id => {
+      this.agentTerminalId = id
+      this.agentTerminalCreating = null
+      return id
+    }).catch(err => {
+      this.agentTerminalCreating = null
+      throw err
     })
-    this.agentTerminalId = id
-    return id
+
+    return this.agentTerminalCreating
   }
 
   /**
@@ -780,6 +801,7 @@ class TerminalManagerClass {
     }
 
     this.agentTerminalId = null
+    this.agentTerminalCreating = null
     this.state = {
       terminals: [],
       activeId: null,

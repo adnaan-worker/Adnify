@@ -730,13 +730,16 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         try {
             const { terminalManager } = await import('@/renderer/services/TerminalManager')
 
+            // 先唤出面板，再创建/获取终端，避免竞态：
+            // 若先创建终端，notify() 触发时面板还不可见 → useEffect 销毁刚创建的终端
+            useStore.getState().setTerminalVisible(true)
+
             // 获取或复用 Agent 专属终端（初始 cwd 用工作区根目录，避免反复改变终端目录）
             const termId = await terminalManager.getOrCreateAgentTerminal(
                 ctx.workspacePath || '/'
             )
 
-            // 始终唤出面板并激活 Agent 终端，让用户看到执行过程
-            useStore.getState().setTerminalVisible(true)
+            // 激活 Agent 终端 tab，让用户看到执行过程
             terminalManager.setActiveTerminal(termId)
 
             // === 长进程：直接写入并立即返回，让用户在终端里跟踪 ===
