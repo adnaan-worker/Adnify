@@ -38,6 +38,8 @@ export interface LLMMessage {
     tool_call_id?: string
     /** 工具名称（tool role 时使用） */
     name?: string
+    /** DeepSeek 等模型的推理内容（thinking 模式） */
+    reasoning_content?: string
 }
 
 /** OpenAI 格式的工具调用消息 */

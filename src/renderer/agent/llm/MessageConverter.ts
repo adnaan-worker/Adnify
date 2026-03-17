@@ -50,7 +50,7 @@ export function buildLLMApiMessages(
       const validToolCalls = toolCalls.filter(tc => toolResultMap.has(tc.id))
 
       if (validToolCalls.length > 0) {
-        result.push({
+        const assistantMsg: LLMMessage = {
           role: 'assistant',
           content: msg.content || null,
           tool_calls: validToolCalls.map(tc => ({
@@ -61,7 +61,9 @@ export function buildLLMApiMessages(
               arguments: JSON.stringify(tc.arguments || {}),
             },
           })),
-        })
+        }
+        if (msg.reasoning) assistantMsg.reasoning_content = msg.reasoning
+        result.push(assistantMsg)
 
         for (const tc of validToolCalls) {
           const toolResult = toolResultMap.get(tc.id)!
@@ -79,10 +81,12 @@ export function buildLLMApiMessages(
           }
         }
       } else if (msg.content) {
-        result.push({
+        const assistantMsg: LLMMessage = {
           role: 'assistant',
           content: msg.content,
-        })
+        }
+        if (msg.reasoning) assistantMsg.reasoning_content = msg.reasoning
+        result.push(assistantMsg)
       }
     }
     // 注意：isToolResultMessage 在 for 循环中被静默跳过
