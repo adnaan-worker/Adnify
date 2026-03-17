@@ -895,6 +895,49 @@ Available skills are listed in the system prompt under "Available Skills". Each 
             skill_name: { type: 'string', description: 'The name of the skill to load (as shown in Available Skills list)', required: true },
         },
     },
+
+    todo_write: {
+        name: 'todo_write',
+        displayName: 'Task List',
+        description: 'Create and manage a structured task list for tracking progress on complex tasks.',
+        detailedDescription: `Use this tool to break down complex tasks into trackable subtasks and show progress to the user.
+
+## When to Use
+- Complex multi-step tasks (3+ distinct steps)
+- User provides multiple tasks or a large implementation request
+- Non-trivial implementations requiring careful planning
+
+## When NOT to Use
+- Single, straightforward tasks
+- Trivial changes (typo fix, single-line edit, adding a comment)
+- Pure conversational or informational requests
+- Tasks that can be completed in less than 3 trivial steps
+
+## Task States
+- pending: Task not yet started
+- in_progress: Currently working on (limit to ONE task at a time)
+- completed: Task finished successfully
+
+## Rules
+- Update task status in real-time as you work
+- Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
+- Exactly ONE task must be in_progress at any time during execution
+- Each task needs both \`content\` (imperative form: "Fix the bug") and \`activeForm\` (present continuous: "Fixing the bug")
+- ONLY mark a task as completed when FULLY accomplished — not when partially done or blocked
+- Each call replaces the entire todo list — always include all tasks`,
+        category: 'interaction',
+        approvalType: 'none',
+        parallel: false,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            todos: {
+                type: 'array',
+                description: 'The complete updated todo list. Each item: { content: string, status: "pending"|"in_progress"|"completed", activeForm: string }',
+                required: true,
+            },
+        },
+    },
 }
 
 

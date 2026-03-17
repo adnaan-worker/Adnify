@@ -99,6 +99,8 @@ export interface PromptContext {
   projectSummary?: string | null
   /** Orchestrator 阶段 */
   orchestratorPhase?: 'planning' | 'executing'
+  /** 当前线程的任务列表 */
+  todos?: Array<{ content: string; status: string; activeForm: string }>
 }
 
 // ============================================
@@ -158,6 +160,24 @@ function buildCustomInstructions(instructions: string | null): string | null {
 ${instructions.trim()}`
 }
 
+function buildTodoSection(todos?: PromptContext['todos']): string | null {
+  if (!todos || todos.length === 0) return null
+
+  const completed = todos.filter(t => t.status === 'completed').length
+
+  let section = `## Current Task List (${completed}/${todos.length} completed)\n\n`
+
+  for (const todo of todos) {
+    const icon = todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '●' : '○'
+    const text = todo.status === 'in_progress' ? todo.activeForm : todo.content
+    section += `${icon} [${todo.status}] ${text}\n`
+  }
+
+  section += `\nReview this task list. If continuing previous work, resume from the current in_progress task. If the user's new request is UNRELATED to these tasks, call todo_write with a fresh list (do not keep old tasks).`
+
+  return section
+}
+
 function buildProjectSummary(summary: string | null): string | null {
   if (!summary?.trim()) return null
   logger.agent.info('[PromptBuilder] Injecting project summary into system prompt, length:', summary.length)
@@ -195,6 +215,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     CODE_CONVENTIONS,
     // 使用通用工作流指南
     WORKFLOW_GUIDELINES,
+    buildTodoSection(ctx.todos),
     OUTPUT_FORMAT,
     buildEnvironment(ctx),
     buildProjectSummary(ctx.projectSummary || null),
@@ -298,6 +319,14 @@ export async function buildAgentSystemPrompt(
     }
   }
 
+  // 获取当前线程的任务列表
+  let todos: PromptContext['todos'] | undefined
+  try {
+    const { useAgentStore } = await import('../store/AgentStore')
+    todos = useAgentStore.getState().getTodos() as PromptContext['todos']
+    if (todos && todos.length === 0) todos = undefined
+  } catch { /* store 未初始化时忽略 */ }
+
   // 构建上下文
   const ctx: PromptContext = {
     os: getOS(),
@@ -315,6 +344,7 @@ export async function buildAgentSystemPrompt(
     templateId: template.id,
     projectSummary,
     orchestratorPhase,
+    todos,
   }
 
   // 根据模式选择构建器

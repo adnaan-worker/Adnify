@@ -77,6 +77,8 @@ const CORE_TOOLS: string[] = [
   'remember',
   // Skill 按需加载
   'apply_skill',
+  // 任务列表
+  'todo_write',
 ]
 
 /** UI/UX 工具 - uiux-designer 角色专用 */

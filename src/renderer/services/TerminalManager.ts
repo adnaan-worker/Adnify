@@ -657,6 +657,14 @@ class TerminalManagerClass {
   }
 
   /**
+   * 释放当前 Agent 终端绑定（不关闭终端）。
+   * 长进程占用终端后调用，使下一次 getOrCreateAgentTerminal() 创建新终端。
+   */
+  releaseAgentTerminal() {
+    this.agentTerminalId = null
+  }
+
+  /**
    * 在指定终端执行命令，通过 sentinel 标记精确捕获本次命令的输出。
    * 命令过程对用户可见（在终端面板里显示），同时将 stdout 作为字符串返回给 AI。
    *

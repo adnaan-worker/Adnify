@@ -751,6 +751,11 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                         : `(cd "${resolvedCwd}" && ${command})`)
                     : command
                 terminalManager.writeToTerminal(termId, `${bgCmd}\r`)
+
+                // 长进程占用了当前终端的 shell，释放 agentTerminalId
+                // 使下一次 run_command 自动创建新终端，避免命令被 stdin 吞掉
+                terminalManager.releaseAgentTerminal()
+
                 return {
                     success: true,
                     result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\n\nThe process is running in the Agent terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check logs. Use 'send_terminal_input' to send input or Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
@@ -1444,6 +1449,51 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 error: `Failed to load skill: ${toAppError(err).message}`,
             }
         }
+    },
+
+    async todo_write(args) {
+        const todos = args.todos as Array<{ content: string; status: string; activeForm: string }>
+        if (!Array.isArray(todos)) {
+            return { success: false, result: '', error: 'todos must be an array' }
+        }
+
+        const { useAgentStore } = await import('../store/AgentStore')
+        const store = useAgentStore.getState()
+
+        // 空数组 = 归档清空
+        if (todos.length === 0) {
+            store.setTodos([])
+            return { success: true, result: 'Task list cleared' }
+        }
+
+        // 验证格式
+        for (const todo of todos) {
+            if (!todo.content || !todo.status || !todo.activeForm) {
+                return { success: false, result: '', error: 'Each todo must have content, status, and activeForm' }
+            }
+            if (!['pending', 'in_progress', 'completed'].includes(todo.status)) {
+                return { success: false, result: '', error: `Invalid status: ${todo.status}` }
+            }
+        }
+
+        // 存储到当前线程状态
+        store.setTodos(
+            todos.map(t => ({
+                content: t.content,
+                status: t.status as 'pending' | 'in_progress' | 'completed',
+                activeForm: t.activeForm,
+            }))
+        )
+
+        // 返回摘要
+        const completed = todos.filter(t => t.status === 'completed').length
+        const inProgress = todos.find(t => t.status === 'in_progress')
+        const allCompleted = todos.every(t => t.status === 'completed')
+        const summary = allCompleted
+            ? `All ${todos.length} tasks completed. Call todo_write with empty array [] to clear the list.`
+            : `Task list updated (${completed}/${todos.length} completed)` +
+              (inProgress ? `. Currently: ${inProgress.activeForm}` : '')
+        return { success: true, result: summary }
     },
 }
 

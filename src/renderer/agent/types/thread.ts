@@ -8,6 +8,13 @@ import type { ContextItem } from './context'
 import type { StructuredSummary } from '../context/types'
 import type { CompressionStats } from '../core/types'
 
+/** 任务项 */
+export interface TodoItem {
+  content: string       // 任务描述（祈使句）
+  status: 'pending' | 'in_progress' | 'completed'
+  activeForm: string    // 进行时描述（用于 UI 显示正在做什么）
+}
+
 /** 流阶段 */
 export type StreamPhase = 'idle' | 'streaming' | 'tool_pending' | 'tool_running' | 'error'
 
@@ -41,6 +48,9 @@ export interface ChatThread {
   handoffRequired: boolean
   isCompacting: boolean
   compressionPhase: CompressionPhase
+
+  // === 任务列表 ===
+  todos?: TodoItem[]
 
   // === Handoff 相关 ===
   handoffContext?: string

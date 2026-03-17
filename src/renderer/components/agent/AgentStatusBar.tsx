@@ -40,6 +40,8 @@ interface AgentStatusBarProps {
   // 新增：兜底的工具审批按钮（当工具审批卡片未显示时，仍可在状态栏中批准/取消）
   onApproveTool?: () => void
   onRejectTool?: () => void
+  /** 插入到 header 左侧的额外内容（如切换图标） */
+  headerPrefix?: React.ReactNode
 }
 
 function AgentStatusBar({
@@ -55,6 +57,7 @@ function AgentStatusBar({
   onKeepAll,
   onApproveTool,
   onRejectTool,
+  headerPrefix,
 }: AgentStatusBarProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
@@ -136,6 +139,7 @@ function AgentStatusBar({
         {(isStreaming || isAwaitingApproval) && (
           <div className={`flex items-center justify-between px-4 py-2 ${hasChanges ? 'border-b border-border/50' : ''}`}>
             <div className="flex items-center gap-3">
+              {!hasChanges && headerPrefix}
               {isStreaming ? (
                 <>
                   <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
@@ -199,6 +203,7 @@ function AgentStatusBar({
               onClick={() => setIsExpanded(!isExpanded)}
             >
               <div className="flex items-center gap-3">
+                {headerPrefix}
                 <motion.div
                   animate={{ rotate: isExpanded ? 0 : -90 }}
                   transition={{ duration: 0.15 }}

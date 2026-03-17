@@ -175,6 +175,13 @@ function ToolCallGroup({
             return `Applying ${skillName}`
         }
 
+        // Task List
+        if (name === 'todo_write') {
+            if (isSuccess) return 'Tasks updated'
+            if (isError) return 'Failed to update tasks'
+            return 'Updating tasks'
+        }
+
         return name.replace(/_/g, ' ')
     }, [])
 

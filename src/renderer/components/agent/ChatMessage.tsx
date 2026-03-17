@@ -608,6 +608,11 @@ const RenderPart = React.memo(({
       return null
     }
 
+    // todo_write 通过底部 TodoListPanel 展示，不在聊天流中渲染卡片
+    if (tc.name === 'todo_write') {
+      return null
+    }
+
     // 其他工具使用 ToolCallCard
     return (
       <div className="my-3 animate-fade-in">

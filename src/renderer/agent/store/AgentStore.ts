@@ -28,7 +28,7 @@ import {
     createOrchestratorSlice,
     type OrchestratorSlice,
 } from './slices/orchestratorSlice'
-import type { ChatMessage, ContextItem, StreamState } from '../types'
+import type { ChatMessage, ContextItem, StreamState, TodoItem } from '../types'
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../context/types'
 import { buildHandoffContext } from '../context/HandoffManager'
@@ -338,6 +338,7 @@ export const useAgentStore = create<AgentStore>()(
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_CONTEXT_ITEMS: ContextItem[] = []
+const EMPTY_TODOS: TodoItem[] = []
 const DEFAULT_STREAM_STATE: StreamState = { phase: 'idle' }
 
 export const selectCurrentThread = (state: AgentStore) => {
@@ -458,6 +459,11 @@ export const selectCompressionPhase = (state: AgentStore) => {
 export const selectIsCompacting = (state: AgentStore): boolean => {
     const thread = selectCurrentThread(state)
     return thread?.isCompacting ?? false
+}
+
+export const selectTodos = (state: AgentStore) => {
+    const thread = selectCurrentThread(state)
+    return thread?.todos || EMPTY_TODOS
 }
 
 // ===== StreamingBuffer 初始化 =====

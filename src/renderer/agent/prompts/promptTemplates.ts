@@ -252,7 +252,25 @@ MCP tools are prefixed with \`mcp_<server>__<tool>\`. They connect to external s
 \`\`\`
 mcp_server__get_data items=["a", "b", "c"]  // If batch supported
 // OR make calls sequentially, waiting for each to complete
-\`\`\`\`;`
+\`\`\`
+
+### Task Management
+
+Use \`todo_write\` to track progress on complex tasks (3+ steps).
+
+**Lifecycle rules:**
+
+1. **New task**: If the user's request is unrelated to existing todos, call \`todo_write\` with a completely fresh list. Never mix old and new tasks.
+2. **Resume**: If existing todos have incomplete items AND the user's message relates to them, continue from the current \`in_progress\` task. Do NOT recreate the list from scratch.
+3. **Completion**: When all tasks are done, call \`todo_write\` with an empty array \`[]\` to clear the list. Do not leave a fully-completed list lingering.
+4. **Single task**: Do NOT use \`todo_write\` for simple, single-step tasks.
+
+**Format rules:**
+- Each call sends the ENTIRE list (replaces previous)
+- Exactly ONE task should be \`in_progress\` at any time
+- Mark tasks complete IMMEDIATELY after finishing — don't batch
+- \`content\`: imperative form ("Fix the login bug")
+- \`activeForm\`: present continuous ("Fixing the login bug")`;
 
 // BASE_SYSTEM_INFO 不再需要，由 PromptBuilder 动态构建
 

@@ -8,13 +8,16 @@ import {
   Plus,
   Trash2,
   Upload,
-  ChevronDown
+  ChevronDown,
+  FolderOpen,
+  ListTodo,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAgent } from '@/renderer/hooks/useAgent'
 import { useAgentStore, selectHandoffRequired } from '@/renderer/agent'
+import { selectTodos } from '@/renderer/agent/store/AgentStore'
 import { t } from '@/renderer/i18n'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import {
@@ -31,6 +34,7 @@ import MentionPopup from '@/renderer/components/agent/MentionPopup'
 import { MentionParser, MentionCandidate } from '@/renderer/agent/utils/MentionParser'
 import ChatMessageUI from './ChatMessage'
 import AgentStatusBar from './AgentStatusBar'
+import { TodoListPanel } from './TodoListPanel'
 import { keybindingService } from '@/renderer/services/keybindingService'
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
 import SlashCommandPopup from './SlashCommandPopup'
@@ -112,6 +116,19 @@ export default function ChatPanel() {
   // 斜杠命令状态
   const [showSlashCommand, setShowSlashCommand] = useState(false)
   const [slashCommandQuery, setSlashCommandQuery] = useState('')
+
+  // Task List 状态
+  const todos = useAgentStore(selectTodos)
+  const [bottomTab, setBottomTab] = useState<'files' | 'tasks'>('files')
+
+  // 当 todos 首次出现时自动切换到 tasks tab
+  const prevTodosLenRef = useRef(0)
+  useEffect(() => {
+    if (todos.length > 0 && prevTodosLenRef.current === 0) {
+      setBottomTab('tasks')
+    }
+    prevTodosLenRef.current = todos.length
+  }, [todos.length])
 
   // Handoff 状态
   const handoffRequired = useAgentStore(selectHandoffRequired)
@@ -1068,56 +1085,96 @@ export default function ChatPanel() {
           {/* Bottom Input Area - Unified Tray */}
           <div className="shrink-0 z-20 flex flex-col">
             <div className="mx-4 mb-4 flex flex-col">
-              {/* Status Bar */}
-              <AgentStatusBar
-                pendingChanges={pendingChanges}
-                isStreaming={isStreaming}
-                isAwaitingApproval={isAwaitingApproval}
-                streamingStatus={streamState.statusText}
-                onStop={abort}
-                onReviewFile={async (filePath) => {
-                  const change = pendingChanges.find(c => c.filePath === filePath)
-                  if (!change) return
+              {/* Status Bar + Task List */}
+              {(() => {
+                const hasChanges = pendingChanges.length > 0 || isStreaming || isAwaitingApproval
+                const hasTodos = todos.length > 0
+                const showBoth = hasChanges && hasTodos
+                const activeView = showBoth ? bottomTab : (hasChanges ? 'files' : 'tasks')
 
-                  const currentContent = await api.file.read(filePath)
-                  if (currentContent !== null) {
-                    const diffUri = `diff://${filePath}`
-                    openFile(diffUri, currentContent, change.snapshot.content || '')
-                    setActiveFile(diffUri)
-                  }
-                }}
-                onAcceptFile={async (filePath) => {
-                  acceptChange(filePath)
-                  await composerService.acceptChange(filePath)
-                  toast.success(`Accepted: ${getFileName(filePath)}`)
-                }}
-                onRejectFile={async (filePath) => {
-                  const success = await undoChange(filePath)
-                  await composerService.rejectChange(filePath)
-                  if (success) {
-                    toast.success(`Reverted: ${getFileName(filePath)}`)
-                  } else {
-                    toast.error('Failed to revert')
-                  }
-                }}
-                onUndoAll={async () => {
-                  const result = await undoAllChanges()
-                  await composerService.rejectAll()
-                  if (result.success) {
-                    toast.success(`Reverted ${result.restoredFiles.length} files`)
-                  } else {
-                    toast.error(`Failed to revert some files: ${result.errors.join(', ')}`)
-                  }
-                }}
-                onKeepAll={async () => {
-                  acceptAllChanges()
-                  await composerService.acceptAll()
-                  toast.success('All changes accepted')
-                }}
-                // 兜底工具审批：当卡片未显示或出错时，仍可通过状态栏批准/取消
-                onApproveTool={approveCurrentTool}
-                onRejectTool={rejectCurrentTool}
-              />
+                // 内联切换图标（仅两者都有时渲染）
+                const switcherIcons = showBoth ? (
+                  <div className="flex items-center gap-0.5 mr-1" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => setBottomTab('files')}
+                      className={`p-1 rounded transition-colors ${activeView === 'files'
+                        ? 'text-text-primary bg-surface-hover'
+                        : 'text-text-muted/30 hover:text-text-muted/60'}`}
+                      title="Files"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setBottomTab('tasks')}
+                      className={`p-1 rounded transition-colors ${activeView === 'tasks'
+                        ? 'text-text-primary bg-surface-hover'
+                        : 'text-text-muted/30 hover:text-text-muted/60'}`}
+                      title="Tasks"
+                    >
+                      <ListTodo className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : undefined
+
+                return (hasChanges || hasTodos) ? (
+                  <div className="mb-3">
+                    {activeView === 'files' && hasChanges && (
+                      <AgentStatusBar
+                        pendingChanges={pendingChanges}
+                        isStreaming={isStreaming}
+                        isAwaitingApproval={isAwaitingApproval}
+                        streamingStatus={streamState.statusText}
+                        onStop={abort}
+                        headerPrefix={switcherIcons}
+                        onReviewFile={async (filePath) => {
+                          const change = pendingChanges.find(c => c.filePath === filePath)
+                          if (!change) return
+                          const currentContent = await api.file.read(filePath)
+                          if (currentContent !== null) {
+                            const diffUri = `diff://${filePath}`
+                            openFile(diffUri, currentContent, change.snapshot.content || '')
+                            setActiveFile(diffUri)
+                          }
+                        }}
+                        onAcceptFile={async (filePath) => {
+                          acceptChange(filePath)
+                          await composerService.acceptChange(filePath)
+                          toast.success(`Accepted: ${getFileName(filePath)}`)
+                        }}
+                        onRejectFile={async (filePath) => {
+                          const success = await undoChange(filePath)
+                          await composerService.rejectChange(filePath)
+                          if (success) {
+                            toast.success(`Reverted: ${getFileName(filePath)}`)
+                          } else {
+                            toast.error('Failed to revert')
+                          }
+                        }}
+                        onUndoAll={async () => {
+                          const result = await undoAllChanges()
+                          await composerService.rejectAll()
+                          if (result.success) {
+                            toast.success(`Reverted ${result.restoredFiles.length} files`)
+                          } else {
+                            toast.error(`Failed to revert some files: ${result.errors.join(', ')}`)
+                          }
+                        }}
+                        onKeepAll={async () => {
+                          acceptAllChanges()
+                          await composerService.acceptAll()
+                          toast.success('All changes accepted')
+                        }}
+                        onApproveTool={approveCurrentTool}
+                        onRejectTool={rejectCurrentTool}
+                      />
+                    )}
+
+                    {activeView === 'tasks' && hasTodos && (
+                      <TodoListPanel todos={todos} headerPrefix={switcherIcons} />
+                    )}
+                  </div>
+                ) : null
+              })()}
 
               {/* Input Component */}
               <ChatInput

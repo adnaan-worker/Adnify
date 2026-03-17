@@ -6,7 +6,7 @@
  */
 
 import type { StateCreator } from 'zustand'
-import type { ChatThread, StreamState, CompressionPhase } from '../../types'
+import type { ChatThread, StreamState, CompressionPhase, TodoItem } from '../../types'
 import type { CompressionStats } from '../../core/types'
 import type { StructuredSummary } from '../../context/types'
 
@@ -32,6 +32,10 @@ export interface ThreadActions {
     setCompressionPhase: (phase: CompressionPhase, threadId?: string) => void
     setHandoffRequired: (required: boolean, threadId?: string) => void
     setIsCompacting: (compacting: boolean, threadId?: string) => void
+
+    // 任务列表
+    setTodos: (todos: TodoItem[], threadId?: string) => void
+    getTodos: (threadId?: string) => TodoItem[]
 }
 
 export type ThreadSlice = ThreadStoreState & ThreadActions
@@ -208,5 +212,22 @@ export const createThreadSlice: StateCreator<
         set(state => ({
             threads: updateThread(state.threads, targetId, { isCompacting: compacting })
         }))
+    },
+
+    // === 任务列表 ===
+
+    setTodos: (todos, threadId) => {
+        const targetId = threadId ?? get().currentThreadId
+        if (!targetId) return
+        set(state => ({
+            threads: updateThread(state.threads, targetId, { todos })
+        }))
+    },
+
+    getTodos: (threadId) => {
+        const targetId = threadId ?? get().currentThreadId
+        if (!targetId) return []
+        const thread = get().threads[targetId]
+        return thread?.todos || []
     },
 })

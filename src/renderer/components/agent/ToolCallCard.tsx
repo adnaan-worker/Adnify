@@ -85,6 +85,8 @@ const TOOL_LABELS: Record<string, string> = {
     uiux_recommend: 'UI/UX Recommend',
     // Skill
     apply_skill: 'Apply Skill',
+    // Task List
+    todo_write: 'Task List',
 }
 
 const ToolCallCard = memo(function ToolCallCard({
@@ -241,6 +243,14 @@ const ToolCallCard = memo(function ToolCallCard({
             if (isSuccess) return `Applied ${skillName}`
             if (isError) return `Failed to apply ${skillName}`
             return `Applying ${skillName}`
+        }
+
+        // Task List
+        if (name === 'todo_write') {
+            if (isRunning) return 'Updating tasks...'
+            if (isSuccess) return 'Tasks updated'
+            if (isError) return 'Failed to update tasks'
+            return 'Updating tasks'
         }
 
         // 默认 fallback
