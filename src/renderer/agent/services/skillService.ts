@@ -16,6 +16,12 @@ import { parse as parseYaml } from 'yaml'
 // 类型定义
 // ============================================
 
+/** Skill 触发模式 */
+export type SkillTriggerType = 'auto' | 'manual'
+
+/** Skill 来源层级 */
+export type SkillSource = 'global' | 'project'
+
 export interface SkillItem {
     name: string
     description: string
@@ -24,10 +30,16 @@ export interface SkillItem {
     enabled: boolean
     license?: string
     metadata?: Record<string, string>
+    /** 触发模式：auto LLM 自动选择（默认）, manual 手动 @mention */
+    type: SkillTriggerType
+    /** 来源层级：global 全局, project 项目级 */
+    source: SkillSource
 }
 
 interface SkillConfig {
     disabled: string[]    // 禁用的 Skill 名称列表
+    /** UI 中覆盖的触发模式配置（优先于 SKILL.md frontmatter） */
+    typeOverrides?: Record<string, SkillTriggerType>
 }
 
 interface MarketplaceResult {
@@ -81,6 +93,8 @@ class SkillService {
 
     /**
      * 获取所有 Skills（包括禁用的）
+     * 双层扫描：全局 ({userData}/skills/) + 项目 (.adnify/skills/)
+     * 项目级按 name 覆盖全局级
      */
     async getAllSkills(forceRefresh = false): Promise<SkillItem[]> {
         const now = Date.now()
@@ -88,20 +102,50 @@ class SkillService {
             return this.cache
         }
 
-        const { workspacePath } = useStore.getState()
-        if (!workspacePath) return []
+        const config = await this.loadConfig()
+        const skillMap = new Map<string, SkillItem>()
 
-        const skillsDir = joinPath(workspacePath, this.SKILLS_DIR)
+        // 1. 扫描全局 Skills（最低优先级）
+        try {
+            const globalDir = await api.skills.getGlobalDir()
+            if (globalDir) {
+                await this.scanSkillsDir(globalDir, 'global', config, skillMap)
+            }
+        } catch {
+            // 全局目录不可用时静默跳过
+        }
+
+        // 2. 扫描项目 Skills（覆盖全局同名）
+        const { workspacePath } = useStore.getState()
+        if (workspacePath) {
+            const projectDir = joinPath(workspacePath, this.SKILLS_DIR)
+            await this.scanSkillsDir(projectDir, 'project', config, skillMap)
+        }
+
+        const skills = Array.from(skillMap.values())
+
+        this.cache = skills
+        this.lastScanTime = now
+        logger.agent.info(`[SkillService] Loaded ${skills.length} skills`)
+        return skills
+    }
+
+    /**
+     * 扫描指定目录下的 Skills
+     */
+    private async scanSkillsDir(
+        skillsDir: string,
+        source: SkillSource,
+        config: SkillConfig,
+        skillMap: Map<string, SkillItem>
+    ): Promise<void> {
         let items: any[] | null
         try {
             items = await api.file.readDir(skillsDir)
         } catch {
-            return []
+            return
         }
-        if (!items) return []
-
-        const config = await this.loadConfig()
-        const skills: SkillItem[] = []
+        if (!items) return
 
         for (const item of items) {
             if (!item.isDirectory || item.name.startsWith('.')) continue
@@ -125,7 +169,12 @@ class SkillService {
                 continue
             }
 
-            skills.push({
+            const triggerType = (config.typeOverrides?.[name] as SkillTriggerType)
+                || (frontmatter.type as SkillTriggerType)
+                || 'auto'
+
+            // 项目级覆盖全局级（后扫描的覆盖先扫描的）
+            skillMap.set(name, {
                 name,
                 description,
                 content: body,
@@ -133,13 +182,10 @@ class SkillService {
                 enabled: !config.disabled.includes(name),
                 license: frontmatter.license as string | undefined,
                 metadata: frontmatter.metadata as Record<string, string> | undefined,
+                type: triggerType,
+                source,
             })
         }
-
-        this.cache = skills
-        this.lastScanTime = now
-        logger.agent.info(`[SkillService] Loaded ${skills.length} skills`)
-        return skills
     }
 
     /**
@@ -295,17 +341,28 @@ class SkillService {
 
     /**
      * 创建新 Skill
+     * @param level 保存层级：'project' 保存到项目目录，'global' 保存到全局目录
      */
-    async createSkill(name: string, description = ''): Promise<{ success: boolean; filePath?: string; error?: string }> {
-        const { workspacePath } = useStore.getState()
-        if (!workspacePath) return { success: false, error: 'No workspace open' }
-
+    async createSkill(name: string, description = '', level: SkillSource = 'project'): Promise<{ success: boolean; filePath?: string; error?: string }> {
         // 验证名称格式
         if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(name)) {
             return { success: false, error: 'Name must be lowercase alphanumeric with hyphens (e.g. my-skill)' }
         }
 
-        const skillDir = joinPath(workspacePath, this.SKILLS_DIR, name)
+        let baseDir: string
+        if (level === 'global') {
+            try {
+                baseDir = await api.skills.getGlobalDir()
+            } catch {
+                return { success: false, error: 'Failed to get global skills directory' }
+            }
+        } else {
+            const { workspacePath } = useStore.getState()
+            if (!workspacePath) return { success: false, error: 'No workspace open' }
+            baseDir = joinPath(workspacePath, this.SKILLS_DIR)
+        }
+
+        const skillDir = joinPath(baseDir, name)
         const skillMdPath = joinPath(skillDir, 'SKILL.md')
 
         // 检查是否已存在
@@ -335,12 +392,23 @@ Add your skill instructions here.
 
     /**
      * 删除 Skill
+     * @param level 指定从哪个层级删除，默认 'project'
      */
-    async deleteSkill(name: string): Promise<boolean> {
-        const { workspacePath } = useStore.getState()
-        if (!workspacePath) return false
+    async deleteSkill(name: string, level: SkillSource = 'project'): Promise<boolean> {
+        let baseDir: string
+        if (level === 'global') {
+            try {
+                baseDir = await api.skills.getGlobalDir()
+            } catch {
+                return false
+            }
+        } else {
+            const { workspacePath } = useStore.getState()
+            if (!workspacePath) return false
+            baseDir = joinPath(workspacePath, this.SKILLS_DIR)
+        }
 
-        const skillDir = joinPath(workspacePath, this.SKILLS_DIR, name)
+        const skillDir = joinPath(baseDir, name)
         const success = await api.file.delete(skillDir)
 
         if (success) {
@@ -380,7 +448,43 @@ Add your skill instructions here.
     }
 
     /**
-     * 构建 Skills prompt section
+     * 按名称获取单个 Skill（用于 apply_skill 工具按需加载）
+     */
+    async getSkillByName(name: string): Promise<SkillItem | null> {
+        const skills = await this.getSkills()
+        return skills.find(s => s.name.toLowerCase() === name.toLowerCase() && s.enabled) || null
+    }
+
+    /**
+     * 构建 Skills 轻量索引（仅 name + description，不含完整内容）
+     *
+     * Progressive Disclosure 模式：
+     * - 系统提示词只注入索引（~100 tokens/skill）
+     * - AI 通过 apply_skill 工具按需加载完整内容
+     */
+    buildSkillsIndex(skills: SkillItem[]): string {
+        const enabled = skills.filter(s => s.enabled)
+        if (enabled.length === 0) return ''
+
+        const index = enabled.map(s => {
+            const safeName = s.name.replace(/[&"<>]/g, c => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' }[c] || c))
+            return `- **${safeName}**: ${s.description}`
+        }).join('\n')
+
+        return `## Available Skills
+
+The following project-specific skills can be loaded using the \`apply_skill\` tool.
+
+**IMPORTANT**: Do NOT eagerly apply skills. Only use \`apply_skill\` when:
+- The user's request DIRECTLY matches the skill's domain (e.g., a UI/UX skill for an explicit "improve the design" request)
+- You need the skill's specific instructions to complete the task correctly
+- Do NOT apply skills for general coding tasks, bug fixes, or simple questions — even if a skill seems tangentially related
+
+${index}`
+    }
+
+    /**
+     * 构建 Skills prompt section（完整内容注入，用于 manual @mention 的 skills）
      */
     buildSkillsPrompt(skills: SkillItem[]): string {
         const enabled = skills.filter(s => s.enabled)
@@ -395,8 +499,7 @@ Add your skill instructions here.
             return `<skill name="${safeName}" path="${safePath}">\n${s.description}\n\n${safeContent}\n</skill>`
         }).join('\n\n')
 
-        return `## Skills
-The following project-specific skills are available. 
+        return `## Applied Skills
 
 ### Usage Guidelines
 - **Execution Directory (CRITICAL)**: When executing ANY shell commands (e.g., via \`run_command\`) associated with a skill, you MUST set the \`cwd\` parameter to the skill's installation \`path\`. DO NOT execute skill commands in the project root unless explicitly instructed by the user.
@@ -405,6 +508,31 @@ The following project-specific skills are available.
 - **Tool Integration**: Use the provided tools (shell, file, etc.) to execute these skills as instructed.
 
 ${sections}`
+    }
+
+    /**
+     * 更新 Skill 触发模式（保存到 typeOverrides 配置）
+     */
+    async updateSkillType(name: string, type: SkillTriggerType): Promise<boolean> {
+        const config = await this.loadConfig()
+        if (!config.typeOverrides) config.typeOverrides = {}
+
+        if (type === 'manual') {
+            // manual 是默认值，移除覆盖
+            delete config.typeOverrides[name]
+        } else {
+            config.typeOverrides[name] = type
+        }
+
+        await this.saveConfig(config)
+
+        // 更新缓存
+        if (this.cache) {
+            const skill = this.cache.find(s => s.name === name)
+            if (skill) skill.type = type
+        }
+
+        return true
     }
 
     /**

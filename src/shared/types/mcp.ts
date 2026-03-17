@@ -43,6 +43,8 @@ export interface McpLocalServerConfig {
   timeout?: number
   /** 来源预设 ID（用于匹配预设获取使用示例等信息） */
   presetId?: string
+  /** 配置来源层级（运行时填充，不持久化） */
+  source?: 'user' | 'workspace'
 }
 
 /** 远程 MCP 服务器配置 */
@@ -67,6 +69,8 @@ export interface McpRemoteServerConfig {
   timeout?: number
   /** 来源预设 ID（用于匹配预设获取使用示例等信息） */
   presetId?: string
+  /** 配置来源层级（运行时填充，不持久化） */
+  source?: 'user' | 'workspace'
 }
 
 /** MCP 服务器配置（联合类型） */

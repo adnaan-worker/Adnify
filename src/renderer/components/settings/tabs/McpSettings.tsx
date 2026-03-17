@@ -105,7 +105,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
 
   const handleAddServer = async (config: McpServerFormData): Promise<boolean> => {
     try {
-      const success = await mcpService.addServer(config)
+      const success = await mcpService.addServer(config, config.saveLevel)
       if (success) {
         await mcpService.reloadConfig()
       }
@@ -252,6 +252,15 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
             <div className="flex-1 min-w-0 pt-0.5">
               <div className="flex items-center gap-2.5">
                 <h4 className="text-base font-bold text-text-primary tracking-tight">{server.config.name}</h4>
+                {server.config.source && (
+                  <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border uppercase tracking-tight ${
+                    server.config.source === 'workspace'
+                      ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                      : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                  }`}>
+                    {server.config.source === 'workspace' ? (language === 'zh' ? '项目' : 'Project') : (language === 'zh' ? '全局' : 'Global')}
+                  </span>
+                )}
                 {isRemote && (
                   <span className="px-1.5 py-0.5 text-[9px] font-bold bg-blue-500/10 text-blue-400 rounded border border-blue-500/20 uppercase tracking-tight">
                     Remote

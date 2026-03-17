@@ -69,6 +69,8 @@ export interface McpServerFormData {
   disabled?: boolean
   /** 来源预设 ID */
   presetId?: string
+  /** 保存层级 */
+  saveLevel?: 'user' | 'workspace'
 }
 
 type ViewMode = 'browse' | 'registry' | 'custom' | 'configure'
@@ -138,6 +140,9 @@ export default function McpAddServerModal({
 
   const [registryServers, setRegistryServers] = useState<McpPreset[]>([])
   const [isLoadingRegistry, setIsLoadingRegistry] = useState(false)
+
+  // 保存层级
+  const [saveLevel, setSaveLevel] = useState<'user' | 'workspace'>('user')
 
   // 切换到 Registry 视图时，如果列表为空则触发搜索
   useEffect(() => {
@@ -372,6 +377,7 @@ export default function McpAddServerModal({
         }
       }
 
+      config.saveLevel = saveLevel
       const success = await onAdd(config)
       if (success) {
         onClose()
@@ -835,19 +841,41 @@ export default function McpAddServerModal({
           </div>
         )}
 
-        {/* 底部按钮 */}
-        <div className="flex justify-between pt-4 border-t border-border">
-          {!isBrowsing ? (
-            <Button variant="ghost" onClick={handleBack}>{language === 'zh' ? '返回' : 'Back'}</Button>
-          ) : <div />}
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => { onClose(); resetForm() }}>{language === 'zh' ? '取消' : 'Cancel'}</Button>
-            {!isBrowsing && (
-              <Button variant="primary" onClick={handleSubmit} disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                {language === 'zh' ? '添加服务器' : 'Add Server'}
-              </Button>
-            )}
+        {/* 保存层级选择 + 底部按钮 */}
+        <div className="pt-4 border-t border-border space-y-3">
+          {!isBrowsing && (
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-text-muted">{language === 'zh' ? '保存到：' : 'Save to:'}</span>
+              <div className="flex items-center rounded-md border border-border overflow-hidden">
+                {([['user', language === 'zh' ? '全局配置' : 'Global'], ['workspace', language === 'zh' ? '项目配置' : 'Project']] as ['user' | 'workspace', string][]).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => setSaveLevel(val)}
+                    className={`text-[11px] px-3 py-1 transition-colors ${
+                      saveLevel === val
+                        ? 'bg-accent/20 text-accent font-medium'
+                        : 'bg-black/20 text-text-muted hover:bg-black/30 hover:text-text-secondary'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex justify-between">
+            {!isBrowsing ? (
+              <Button variant="ghost" onClick={handleBack}>{language === 'zh' ? '返回' : 'Back'}</Button>
+            ) : <div />}
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => { onClose(); resetForm() }}>{language === 'zh' ? '取消' : 'Cancel'}</Button>
+              {!isBrowsing && (
+                <Button variant="primary" onClick={handleSubmit} disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                  {language === 'zh' ? '添加服务器' : 'Add Server'}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>

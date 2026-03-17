@@ -267,9 +267,9 @@ class McpService {
     oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
     autoApprove?: string[]
     disabled?: boolean
-  }): Promise<boolean> {
+  }, level?: 'user' | 'workspace'): Promise<boolean> {
     try {
-      const result = await api.mcp.addServer(config)
+      const result = await api.mcp.addServer(config, level)
       return result.success
     } catch (err) {
       const error = toAppError(err)
@@ -279,9 +279,9 @@ class McpService {
   }
 
   /** 删除服务器 */
-  async removeServer(serverId: string): Promise<boolean> {
+  async removeServer(serverId: string, level?: 'user' | 'workspace'): Promise<boolean> {
     try {
-      const result = await api.mcp.removeServer(serverId)
+      const result = await api.mcp.removeServer(serverId, level)
       return result.success
     } catch (err) {
       const error = toAppError(err)
@@ -291,9 +291,9 @@ class McpService {
   }
 
   /** 切换服务器启用/禁用状态 */
-  async toggleServer(serverId: string, disabled: boolean): Promise<boolean> {
+  async toggleServer(serverId: string, disabled: boolean, level?: 'user' | 'workspace'): Promise<boolean> {
     try {
-      const result = await api.mcp.toggleServer(serverId, disabled)
+      const result = await api.mcp.toggleServer(serverId, disabled, level)
       return result.success
     } catch (err) {
       const error = toAppError(err)

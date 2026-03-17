@@ -396,9 +396,9 @@ export interface ElectronAPI {
     env: Record<string, string>
     autoApprove: string[]
     disabled: boolean
-  }) => Promise<{ success: boolean; error?: string }>
-  mcpRemoveServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
-  mcpToggleServer: (serverId: string, disabled: boolean) => Promise<{ success: boolean; error?: string }>
+  }, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
+  mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
+  mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
   mcpSetAutoConnect: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   // Registry
   mcpRegistrySearch: (query?: string) => Promise<{ success: boolean; servers?: any[]; error?: string }>
@@ -408,6 +408,9 @@ export interface ElectronAPI {
   onMcpToolsUpdated: (callback: (event: { serverId: string; tools: any[] }) => void) => () => void
   onMcpResourcesUpdated: (callback: (event: { serverId: string; resources: any[] }) => void) => () => void
   onMcpStateChanged: (callback: (servers: any[]) => void) => () => void
+
+  // Skills
+  skillsGetGlobalDir: () => Promise<string>
 
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => () => void
@@ -680,9 +683,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
     autoApprove?: string[]
     disabled?: boolean
-  }) => ipcRenderer.invoke('mcp:addServer', config),
-  mcpRemoveServer: (serverId: string) => ipcRenderer.invoke('mcp:removeServer', serverId),
-  mcpToggleServer: (serverId: string, disabled: boolean) => ipcRenderer.invoke('mcp:toggleServer', serverId, disabled),
+  }, level?: 'user' | 'workspace') => ipcRenderer.invoke('mcp:addServer', config, level),
+  mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace') => ipcRenderer.invoke('mcp:removeServer', serverId, level),
+  mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace') => ipcRenderer.invoke('mcp:toggleServer', serverId, disabled, level),
   mcpSetAutoConnect: (enabled: boolean) => ipcRenderer.invoke('mcp:setAutoConnect', enabled),
   // Registry
   mcpRegistrySearch: (query?: string) => ipcRenderer.invoke('mcp:registrySearch', query),
@@ -713,6 +716,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('mcp:stateChanged', handler)
     return () => ipcRenderer.removeListener('mcp:stateChanged', handler)
   },
+
+  // Skills
+  skillsGetGlobalDir: () => ipcRenderer.invoke('skills:getGlobalDir'),
 
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => {

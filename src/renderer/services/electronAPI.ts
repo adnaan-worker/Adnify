@@ -217,9 +217,9 @@ function createGroupedAPI() {
       refreshCapabilities: (serverId: string) => raw.mcpRefreshCapabilities(serverId),
       getConfigPaths: () => raw.mcpGetConfigPaths(),
       reloadConfig: () => raw.mcpReloadConfig(),
-      addServer: (config: Parameters<typeof raw.mcpAddServer>[0]) => raw.mcpAddServer(config),
-      removeServer: (serverId: string) => raw.mcpRemoveServer(serverId),
-      toggleServer: (serverId: string, disabled: boolean) => raw.mcpToggleServer(serverId, disabled),
+      addServer: (config: Parameters<typeof raw.mcpAddServer>[0], level?: 'user' | 'workspace') => raw.mcpAddServer(config, level),
+      removeServer: (serverId: string, level?: 'user' | 'workspace') => raw.mcpRemoveServer(serverId, level),
+      toggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace') => raw.mcpToggleServer(serverId, disabled, level),
       setAutoConnect: (enabled: boolean) => raw.mcpSetAutoConnect(enabled),
       startOAuth: (serverId: string) => raw.mcpStartOAuth(serverId),
       finishOAuth: (serverId: string, authorizationCode: string) => raw.mcpFinishOAuth(serverId, authorizationCode),
@@ -230,6 +230,11 @@ function createGroupedAPI() {
       onStateChanged: (callback: Parameters<typeof raw.onMcpStateChanged>[0]) => raw.onMcpStateChanged(callback),
       registrySearch: (query?: string) => raw.mcpRegistrySearch(query),
       registryGetDetails: (serverName: string) => raw.mcpRegistryGetDetails(serverName),
+    },
+
+    // Skills
+    skills: {
+      getGlobalDir: () => raw.skillsGetGlobalDir(),
     },
 
     // LSP

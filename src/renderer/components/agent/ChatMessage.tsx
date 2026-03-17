@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Search, Wrench } from 'lucide-react'
+import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -158,71 +158,28 @@ interface ThinkingBlockProps {
   onTypingComplete?: () => void
 }
 
-const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isStreaming?: boolean }) => {
+// 统一上下文面板 — 单个折叠块，无边框扁平设计
+interface MessageMetaGroupProps {
+  autoSkills?: any[]
+  manualSkills?: any[]
+  searchContent?: string
+  isSearchStreaming?: boolean
+}
+
+const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, isSearchStreaming }: MessageMetaGroupProps) => {
+  const hasAutoSkills = autoSkills && autoSkills.length > 0
+  const hasManualSkills = manualSkills && manualSkills.length > 0
+  const hasSearch = searchContent !== undefined || isSearchStreaming
+  const hasSkills = hasAutoSkills || hasManualSkills
+  const isStreaming = isSearchStreaming
+
+  if (!hasSkills && !hasSearch) return null
+
   const [isExpanded, setIsExpanded] = useState(true)
-  const language = useStore(s => s.language)
-  return (
-    <div className="overflow-hidden w-full group rounded-lg hover:bg-text-primary/[0.02] transition-colors my-0.5">
-      <div
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
-      >
-        <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} className="shrink-0 text-text-muted/40 hover:text-text-muted transition-colors">
-          <ChevronDown className="w-3.5 h-3.5" />
-        </motion.div>
+  const { openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
 
-        <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
-          {isStreaming ? (
-            <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
-              <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-            </div>
-          ) : (
-            <Search className="w-3 h-3 text-text-muted/70" />
-          )}
-        </div>
-
-        <span className={`text-[12px] truncate ${isStreaming ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
-          {language === 'zh' ? '自动关联上下文' : 'Auto-Context'}
-        </span>
-      </div>
-
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="pl-[26px] pr-3 pb-3 pt-0 relative">
-              <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
-              <div className="relative z-10 ms-1 border-l-2 border-border/30 pl-2">
-                {content ? (
-                  <div className="max-h-64 overflow-auto custom-scrollbar text-[11px] text-text-muted/80 leading-relaxed font-sans whitespace-pre-wrap">
-                    {content}
-                  </div>
-                ) : (
-                  <div className="text-[11px] italic text-text-muted/40 py-1">
-                    {language === 'zh' ? '正在分析检索出的代码...' : 'Analyzing retrieved code...'}
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-})
-SearchBlock.displayName = 'SearchBlock'
-
-// 协同元数据面板中的一栏 (无外边框)
-const SkillBlock = React.memo(({ items }: { items: any[] }) => {
-  const { language, openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ language: s.language, openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
-
-  if (items.length === 0) return null
-
-  const handleOpenSkill = async (skillId: string) => {
+  const handleOpenSkill = async (e: React.MouseEvent, skillId: string) => {
+    e.stopPropagation()
     if (!workspacePath) return
     const { api } = await import('@/renderer/services/electronAPI')
     const filePath = `${workspacePath}/.adnify/skills/${skillId}/SKILL.md`.replace(/\//g, '\\')
@@ -233,53 +190,91 @@ const SkillBlock = React.memo(({ items }: { items: any[] }) => {
     }
   }
 
-  return (
-    <div className="overflow-hidden w-full group rounded-lg hover:bg-text-primary/[0.02] transition-colors my-0.5">
-      <div className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer text-text-secondary transition-colors select-none">
-        <div className="shrink-0 text-transparent w-3.5 h-3.5" /> {/* Spacer for alignment */}
+  // 折叠时的摘要
+  const allSkills = [...(autoSkills || []), ...(manualSkills || [])]
+  const skillNames = allSkills.map((s: any) => s.skillId).join(', ')
 
-        <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
-          <Wrench className="w-3 h-3 text-text-muted/70" />
+  return (
+    <div className="overflow-hidden w-full my-0.5 animate-fade-in relative z-10">
+      {/* 标题行 */}
+      <div
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer select-none group rounded-md hover:bg-text-primary/[0.03] transition-colors"
+      >
+        <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 group-hover:text-text-muted transition-colors">
+          <ChevronDown className="w-3.5 h-3.5" />
+        </motion.div>
+
+        <div className="shrink-0 w-4 h-4 flex items-center justify-center">
+          {isStreaming ? (
+            <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
+              <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            </div>
+          ) : (
+            <Wrench className="w-3 h-3 text-text-muted/50" />
+          )}
         </div>
 
-        <span className="text-[12px] whitespace-nowrap group-hover:text-text-primary transition-colors">
-          {language === 'zh' ? '应用技能' : 'Applied Skills'}:
+        <span className={`text-[12px] ${isStreaming ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
+          Context
         </span>
-        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0 ml-1">
-          {items.map((item, i) => (
-            <button
-              key={item.skillId || i}
-              onClick={() => handleOpenSkill(item.skillId)}
-              className="text-[11px] font-mono font-medium text-text-muted hover:text-accent hover:underline underline-offset-2 transition-all focus:outline-none truncate shadow-sm py-0.5 rounded"
-              title={item.description}
-            >
-              {item.skillId}
-            </button>
-          ))}
-        </div>
+
+        {/* 折叠时显示 skill 名称列表 */}
+        {!isExpanded && skillNames && (
+          <span className="text-[11px] text-text-muted/40 truncate ml-0.5">
+            — {skillNames}
+          </span>
+        )}
       </div>
-    </div>
-  )
-})
-SkillBlock.displayName = 'SkillBlock'
 
-// 统一元数据面板组件（System Context Widget 风格）
-interface MessageMetaGroupProps {
-  skills?: any[]
-  searchContent?: string
-  isSearchStreaming?: boolean
-}
+      {/* 展开内容 — 每行一个类别摘要 */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0 }}
+            animate={{ height: 'auto' }}
+            exit={{ height: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden"
+          >
+            <div className="pb-1.5 pl-[38px] pr-3 space-y-0.5">
+              {/* Skill Referenced */}
+              {hasSkills && (
+                <div className="flex items-center gap-1.5 text-[11px]">
+                  <span className="text-text-muted/35 shrink-0">Skill Referenced</span>
+                  {allSkills.map((item: any, i: number) => (
+                    <React.Fragment key={item.skillId || i}>
+                      {i > 0 && <span className="text-text-muted/20">,</span>}
+                      <button
+                        onClick={(e) => handleOpenSkill(e, item.skillId)}
+                        className="font-mono text-text-muted/55 hover:text-accent transition-colors focus:outline-none"
+                      >
+                        {item.skillId}
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
 
-const MessageMetaGroup = React.memo(({ skills, searchContent, isSearchStreaming }: MessageMetaGroupProps) => {
-  const hasSkills = skills && skills.length > 0
-  const hasSearch = searchContent !== undefined || isSearchStreaming
-
-  if (!hasSkills && !hasSearch) return null
-
-  return (
-    <div className="my-1 w-full flex flex-col animate-fade-in relative z-10">
-      {hasSkills && <SkillBlock items={skills} />}
-      {hasSearch && <SearchBlock content={searchContent || ''} isStreaming={isSearchStreaming} />}
+              {/* File Referenced */}
+              {hasSearch && (
+                <div className="text-[11px]">
+                  {searchContent ? (
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-text-muted/35 shrink-0">File Referenced</span>
+                      <div className="text-text-muted/40 leading-relaxed max-h-32 overflow-auto custom-scrollbar whitespace-pre-wrap">
+                        {searchContent}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-text-muted/25 italic">Searching files...</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 })
@@ -348,12 +343,12 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
     <div className="my-3 group/think overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-text-muted/50 hover:text-text-muted hover:bg-surface-hover transition-colors select-none"
+        className="flex w-full items-center gap-2 px-2 py-1.5 text-text-muted/50 hover:text-text-muted rounded-md hover:bg-text-primary/[0.03] transition-colors select-none"
       >
         <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}>
           <ChevronDown className="w-3.5 h-3.5" />
         </div>
-        <span className="text-[11px] font-medium tracking-wide">
+        <span className="text-[12px]">
           {durationText}
         </span>
       </button>
@@ -362,7 +357,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
         <div className={`relative animate-slide-down scroll-shadow-container ${shadowClass}`}>
           <div
             ref={scrollRef}
-            className="max-h-[300px] overflow-y-auto scrollbar-none px-4 pb-3"
+            className="max-h-[300px] overflow-y-auto scrollbar-none pl-[38px] pr-3 pb-3"
           >
             {content ? (
               <div
@@ -852,7 +847,7 @@ const ChatMessage = React.memo(({
   return (
     <div className={`
       w-full group/msg transition-colors duration-300
-      ${isUser ? 'py-1 bg-transparent' : 'py-2 border-border bg-surface hover:bg-surface-hover'}
+      ${isUser ? 'py-1 bg-transparent' : 'py-2 border-border bg-surface'}
     `}>
       <div className="w-full px-4 flex flex-col gap-1">
 
@@ -1020,7 +1015,8 @@ const ChatMessage = React.memo(({
               {/* System Context Widget at the top of the content */}
               {isAssistantMessage(message) && (message.contextItems?.some((item: any) => item.type === 'Skill') || message.parts?.some(isSearchPart)) && (
                 <MessageMetaGroup
-                  skills={message.contextItems?.filter((item: any) => item.type === 'Skill')}
+                  autoSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && item.auto)}
+                  manualSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && !item.auto)}
                   searchContent={message.parts?.find(isSearchPart)?.content || undefined}
                   isSearchStreaming={(message.parts?.find(isSearchPart) as any)?.isStreaming}
                 />

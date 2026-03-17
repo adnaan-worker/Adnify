@@ -82,6 +82,8 @@ const TOOL_LABELS: Record<string, string> = {
     // UI/UX
     uiux_search: 'UI/UX Search',
     uiux_recommend: 'UI/UX Recommend',
+    // Skill
+    apply_skill: 'Apply Skill',
 }
 
 const ToolCallCard = memo(function ToolCallCard({
@@ -228,6 +230,16 @@ const ToolCallCard = memo(function ToolCallCard({
             if (isSuccess) return `Analyzed ${target}`
             if (isError) return `Analysis failed`
             return `Analyzing ${target}`
+        }
+
+        // Skill
+        if (name === 'apply_skill') {
+            const skillName = args.skill_name as string
+            if (!skillName) return isRunning ? 'Loading skill...' : ''
+            if (isRunning) return `Applying ${skillName}...`
+            if (isSuccess) return `Applied ${skillName}`
+            if (isError) return `Failed to apply ${skillName}`
+            return `Applying ${skillName}`
         }
 
         // 默认 fallback

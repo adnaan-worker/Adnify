@@ -90,7 +90,10 @@ export interface PromptContext {
   personality: string
   projectRules: ProjectRules | null
   memories: MemoryItem[]
-  skills: SkillItem[]
+  /** auto skills — 只注入轻量索引，AI 通过 apply_skill 工具按需加载 */
+  autoSkills: SkillItem[]
+  /** manual @mention skills — 完整内容注入 */
+  mentionedSkills: SkillItem[]
   customInstructions: string | null
   templateId?: string
   projectSummary?: string | null
@@ -164,9 +167,15 @@ ${summary.trim()}
 Note: This is an auto-generated project summary. Use it to understand the codebase structure before exploring files.`
 }
 
-function buildSkills(skills: SkillItem[]): string | null {
-  const prompt = skillService.buildSkillsPrompt(skills)
-  return prompt || null
+/**
+ * 构建 Skills 提示词（Progressive Disclosure）
+ * - auto skills: 轻量索引（name + description），AI 通过 apply_skill 按需加载
+ * - mentioned skills: 完整内容注入（用户显式 @mention）
+ */
+function buildSkillsSections(autoSkills: SkillItem[], mentionedSkills: SkillItem[]): (string | null)[] {
+  const index = skillService.buildSkillsIndex(autoSkills) || null
+  const fullContent = skillService.buildSkillsPrompt(mentionedSkills) || null
+  return [index, fullContent]
 }
 
 // ============================================
@@ -191,7 +200,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
-    buildSkills(ctx.skills),
+    ...buildSkillsSections(ctx.autoSkills, ctx.mentionedSkills),
     buildCustomInstructions(ctx.customInstructions),
   ]
 
@@ -213,7 +222,7 @@ export function buildChatPrompt(ctx: PromptContext): string {
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
-    buildSkills(ctx.skills),
+    ...buildSkillsSections(ctx.autoSkills, ctx.mentionedSkills),
     buildCustomInstructions(ctx.customInstructions),
   ]
 
@@ -245,7 +254,7 @@ export async function buildAgentSystemPrompt(
     /** 被提到的 Skills (按需加载) */
     mentionedSkills?: string[]
   }
-): Promise<string> {
+): Promise<{ prompt: string; activeSkills: { name: string; description: string }[] }> {
   const { openFiles = [], activeFile, customInstructions, promptTemplateId, orchestratorPhase, mentionedSkills } = options || {}
 
   // 获取模板
@@ -259,20 +268,34 @@ export async function buildAgentSystemPrompt(
   }
 
   // 并行加载动态内容（包括项目摘要和 Skills）
-  let [projectRules, memories, skills, projectSummary] = await Promise.all([
+  const [projectRules, memories, allSkills, projectSummary] = await Promise.all([
     rulesService.getRules(),
     memoryService.getMemories(),
     skillService.getSkills(),
     workspacePath ? loadProjectSummary(workspacePath) : Promise.resolve(null),
   ])
 
-  // 按需过滤技能
-  // 如果提供了 mentionedSkills（用户显式 @ 的），只加载这些
-  // 如果 mentionedSkills 是空数组或未定义（没有 @ 任何 skill），则不加载任何 skill
-  if (mentionedSkills && mentionedSkills.length > 0) {
-    skills = skills.filter(s => mentionedSkills.includes(s.name.toLowerCase()))
-  } else {
-    skills = []
+  // Skill 过滤（Progressive Disclosure）
+  // 1. auto:   只注入轻量索引（name + description），AI 通过 apply_skill 工具按需加载完整内容
+  // 2. manual: 仅 @mention 时完整注入
+  const autoSkills = allSkills.filter(s => s.type === 'auto' && s.enabled)
+
+  const mentionedManualSkills = mentionedSkills?.length
+    ? allSkills.filter(s =>
+        s.type === 'manual' &&
+        s.enabled &&
+        mentionedSkills.includes(s.name.toLowerCase())
+      )
+    : []
+
+  // activeSkills 用于 UI 展示（返回给 Agent.ts 写入 assistant message）
+  const activeSkillNames = new Set<string>()
+  const activeSkillsList: typeof allSkills = []
+  for (const s of [...autoSkills, ...mentionedManualSkills]) {
+    if (!activeSkillNames.has(s.name)) {
+      activeSkillNames.add(s.name)
+      activeSkillsList.push(s)
+    }
   }
 
   // 构建上下文
@@ -286,7 +309,8 @@ export async function buildAgentSystemPrompt(
     personality: template.personality,
     projectRules,
     memories,
-    skills,
+    autoSkills,
+    mentionedSkills: mentionedManualSkills,
     customInstructions: customInstructions || null,
     templateId: template.id,
     projectSummary,
@@ -294,7 +318,11 @@ export async function buildAgentSystemPrompt(
   }
 
   // 根据模式选择构建器
-  return mode === 'chat' ? buildChatPrompt(ctx) : buildSystemPrompt(ctx)
+  const prompt = mode === 'chat' ? buildChatPrompt(ctx) : buildSystemPrompt(ctx)
+  return {
+    prompt,
+    activeSkills: activeSkillsList.map(s => ({ name: s.name, description: s.description })),
+  }
 }
 
 // ============================================

@@ -166,6 +166,15 @@ function ToolCallGroup({
             return `Searching ${qStr}`
         }
 
+        // Skill
+        if (name === 'apply_skill') {
+            const skillName = args.skill_name as string
+            if (!skillName) return ''
+            if (isSuccess) return `Applied ${skillName}`
+            if (isError) return `Failed to apply ${skillName}`
+            return `Applying ${skillName}`
+        }
+
         return name.replace(/_/g, ' ')
     }, [])
 

@@ -114,10 +114,17 @@ export class AgentClass {
         .map(item => (item as import('../types').SkillContext).skillId)
 
       // 4. 构建系统提示词（异步执行）
-      const systemPrompt = await buildAgentSystemPrompt(chatMode, workspacePath, {
+      const { prompt: systemPrompt, activeSkills } = await buildAgentSystemPrompt(chatMode, workspacePath, {
         ...promptOptions,
-        mentionedSkills: mentionedSkills.length > 0 ? mentionedSkills : undefined
+        mentionedSkills: mentionedSkills.length > 0 ? mentionedSkills : undefined,
       })
+
+      // 将 auto 选中的 skills 追加到 assistant message（排除已 @mention 的）
+      const mentionedSet = new Set(mentionedSkills)
+      const autoSelectedSkills = activeSkills.filter(s => !mentionedSet.has(s.name))
+      if (autoSelectedSkills.length > 0) {
+        store.addSkillsToMessage(assistantId, autoSelectedSkills)
+      }
 
       // 5. 准备上下文（搜索状态会更新到刚才创建的助手消息中）
       const userQuery = this.extractUserQuery(userMessage)

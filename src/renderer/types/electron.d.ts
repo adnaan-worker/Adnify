@@ -589,9 +589,9 @@ export interface ElectronAPI {
     oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
     autoApprove?: string[]
     disabled?: boolean
-  }) => Promise<{ success: boolean; error?: string }>
-  mcpRemoveServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
-  mcpToggleServer: (serverId: string, disabled: boolean) => Promise<{ success: boolean; error?: string }>
+  }, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
+  mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
+  mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
   mcpSetAutoConnect: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   mcpRegistrySearch: (query?: string) => Promise<{ success: boolean; servers?: any[]; error?: string }>
   mcpRegistryGetDetails: (serverName: string) => Promise<{ success: boolean; server?: any; requiredEnvVars?: any[]; localConfig?: any; error?: string }>
@@ -644,6 +644,9 @@ export interface ElectronAPI {
 
   // App Error (from main process)
   onAppError: (callback: (error: { title: string; message: string; variant?: string }) => void) => () => void
+
+  // Skills
+  skillsGetGlobalDir: () => Promise<string>
 
   // Command
   onExecuteCommand: (callback: (commandId: string) => void) => () => void

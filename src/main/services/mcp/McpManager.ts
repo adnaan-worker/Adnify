@@ -318,27 +318,27 @@ export class McpManager extends EventEmitter {
   }
 
   /** 添加服务器 */
-  async addServer(config: McpServerConfig): Promise<void> {
-    await this.configLoader.addServer(config)
-    logger.mcp?.info(`[McpManager] Added server: ${config.id}`)
+  async addServer(config: McpServerConfig, level: 'user' | 'workspace' = 'user'): Promise<void> {
+    await this.configLoader.addServer(config, level)
+    logger.mcp?.info(`[McpManager] Added server: ${config.id} (${level})`)
   }
 
   /** 删除服务器 */
-  async removeServer(serverId: string): Promise<void> {
+  async removeServer(serverId: string, level: 'user' | 'workspace' = 'user'): Promise<void> {
     if (this.clients.has(serverId)) {
       await this.disconnectServer(serverId)
     }
-    await this.configLoader.removeServer(serverId)
-    logger.mcp?.info(`[McpManager] Removed server: ${serverId}`)
+    await this.configLoader.removeServer(serverId, level)
+    logger.mcp?.info(`[McpManager] Removed server: ${serverId} (${level})`)
   }
 
   /** 切换服务器启用/禁用 */
-  async toggleServer(serverId: string, disabled: boolean): Promise<void> {
-    await this.configLoader.toggleServer(serverId, disabled)
+  async toggleServer(serverId: string, disabled: boolean, level: 'user' | 'workspace' = 'user'): Promise<void> {
+    await this.configLoader.toggleServer(serverId, disabled, level)
     if (disabled && this.clients.has(serverId)) {
       await this.disconnectServer(serverId)
     }
-    logger.mcp?.info(`[McpManager] Toggled server ${serverId}: disabled=${disabled}`)
+    logger.mcp?.info(`[McpManager] Toggled server ${serverId}: disabled=${disabled} (${level})`)
   }
 
   /** 获取配置路径 */

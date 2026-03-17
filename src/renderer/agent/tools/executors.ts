@@ -1365,6 +1365,83 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
         }
     },
+
+    async apply_skill(args, _ctx) {
+        const skillName = args.skill_name as string
+        if (!skillName) return { success: false, result: '', error: 'Missing skill_name' }
+
+        try {
+            const { skillService } = await import('../services/skillService')
+            const skill = await skillService.getSkillByName(skillName)
+            if (!skill) {
+                return {
+                    success: false,
+                    result: '',
+                    error: `Skill "${skillName}" not found. Check available skills in the system prompt.`,
+                }
+            }
+
+            // skill 安装目录
+            const installPath = skill.filePath.replace(/[/\\]SKILL\.md$/i, '')
+            const { platform } = await import('@shared/utils/pathUtils')
+            const isWin = platform.isWindows
+            const normalizedPath = isWin ? installPath.replace(/\//g, '\\') : installPath
+
+            // 扫描 skill 目录下的所有文件，让 AI 知道有哪些脚本可用
+            let fileTree = ''
+            try {
+                const items = await api.file.readDir(installPath)
+                if (items && items.length > 0) {
+                    const listFiles = async (dir: string, prefix: string): Promise<string[]> => {
+                        const entries = await api.file.readDir(dir)
+                        if (!entries) return []
+                        const lines: string[] = []
+                        for (const entry of entries) {
+                            if (entry.name === 'SKILL.md' || entry.name.startsWith('.') || entry.name === 'node_modules') continue
+                            const entryPath = `${dir}${isWin ? '\\' : '/'}${entry.name}`
+                            if (entry.isDirectory) {
+                                lines.push(`${prefix}${entry.name}/`)
+                                lines.push(...await listFiles(entryPath, prefix + '  '))
+                            } else {
+                                lines.push(`${prefix}${entry.name}`)
+                            }
+                        }
+                        return lines
+                    }
+                    const tree = await listFiles(installPath, '  ')
+                    if (tree.length > 0) {
+                        fileTree = `\n\n## Skill Directory Contents\n\`\`\`\n${normalizedPath}/\n${tree.join('\n')}\n\`\`\``
+                    }
+                }
+            } catch {
+                // 扫描失败不影响主流程
+            }
+
+            const scriptHint = isWin
+                ? `On Windows: use \`node\` for .js, \`python\` for .py, \`cmd /c\` for .bat/.cmd`
+                : `Use \`bash\` for .sh, \`node\` for .js, \`python\` for .py`
+
+            const result = [
+                `<skill name="${skill.name}" path="${normalizedPath}">`,
+                skill.content,
+                `</skill>`,
+                fileTree,
+                ``,
+                `## Execution Guidelines`,
+                `- **Working Directory (CRITICAL)**: Set \`cwd\` to \`${normalizedPath}\` for ALL shell commands from this skill`,
+                `- **Scripts**: If the skill references scripts or commands, execute them from the skill directory. ${scriptHint}`,
+                `- **Relative Paths**: All relative paths in the skill instructions are relative to \`${normalizedPath}\``,
+            ].join('\n')
+
+            return { success: true, result }
+        } catch (err) {
+            return {
+                success: false,
+                result: '',
+                error: `Failed to load skill: ${toAppError(err).message}`,
+            }
+        }
+    },
 }
 
 

@@ -58,6 +58,7 @@ export interface MessageActions {
     setInteractive: (messageId: string, interactive: InteractiveContent, targetThreadId?: string) => void
 
     // 上下文操作
+    addSkillsToMessage: (messageId: string, skills: { name: string; description: string }[], targetThreadId?: string) => void
     addContextItem: (item: ContextItem, targetThreadId?: string) => void
     removeContextItem: (index: number, targetThreadId?: string) => void
     clearContextItems: (targetThreadId?: string) => void
@@ -886,6 +887,36 @@ export const createMessageSlice: StateCreator<
                     },
                 },
             }
+        })
+    },
+
+    // 追加 auto 选中的 Skills 到指定消息的 contextItems
+    addSkillsToMessage: (messageId, skills, targetThreadId) => {
+        if (skills.length === 0) return
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        set(state => {
+            const thread = state.threads[threadId!]
+            if (!thread) return state
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id !== messageId || msg.role !== 'assistant') return msg
+                const aMsg = msg as AssistantMessage
+                const items: ContextItem[] = aMsg.contextItems || []
+                const existing = new Set(
+                    items
+                        .filter((i): i is import('../../types').SkillContext => i.type === 'Skill')
+                        .map(i => i.skillId)
+                )
+                const newItems = skills
+                    .filter(s => !existing.has(s.name))
+                    .map(s => ({ type: 'Skill' as const, skillId: s.name, name: s.name, description: s.description, auto: true }))
+                if (newItems.length === 0) return msg
+                return { ...aMsg, contextItems: [...items, ...newItems] }
+            })
+
+            return { threads: { ...state.threads, [threadId!]: { ...thread, messages } } }
         })
     },
 

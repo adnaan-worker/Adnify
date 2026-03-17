@@ -874,6 +874,27 @@ Don't wait for the user to ask — if you learn something that would save time i
             content: { type: 'string', description: 'The fact, preference, or convention to remember. Write as a clear, standalone statement that will make sense without conversation context.', required: true },
         },
     },
+
+    // ===== Skill 工具 =====
+    apply_skill: {
+        name: 'apply_skill',
+        displayName: 'Apply Skill',
+        description: 'Load a project skill by name when it is directly relevant to the current task.',
+        detailedDescription: `Load a project-specific skill's full content (instructions, guidelines, templates) by name.
+
+Available skills are listed in the system prompt under "Available Skills". Each skill has a name and description.
+- Do NOT eagerly apply skills — only when the user's task DIRECTLY requires the skill's domain knowledge
+- General coding, bug fixes, or simple questions do NOT need skills, even if tangentially related
+- The tool returns the full skill content which you should follow as project-specific instructions`,
+        category: 'interaction',
+        approvalType: 'none',
+        parallel: true,
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {
+            skill_name: { type: 'string', description: 'The name of the skill to load (as shown in Available Skills list)', required: true },
+        },
+    },
 }
 
 

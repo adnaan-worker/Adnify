@@ -94,20 +94,20 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
   })
 
   // 添加服务器（支持本地和远程）
-  safeIpcHandle('mcp:addServer', async (_, config: McpServerConfig) => {
-    await mcpManager.addServer(config)
+  safeIpcHandle('mcp:addServer', async (_, config: McpServerConfig, level?: 'user' | 'workspace') => {
+    await mcpManager.addServer(config, level)
     return { success: true }
   })
 
   // 删除服务器
-  safeIpcHandle('mcp:removeServer', async (_, serverId: string) => {
-    await mcpManager.removeServer(serverId)
+  safeIpcHandle('mcp:removeServer', async (_, serverId: string, level?: 'user' | 'workspace') => {
+    await mcpManager.removeServer(serverId, level)
     return { success: true }
   })
 
   // 切换服务器启用/禁用
-  safeIpcHandle('mcp:toggleServer', async (_, serverId: string, disabled: boolean) => {
-    await mcpManager.toggleServer(serverId, disabled)
+  safeIpcHandle('mcp:toggleServer', async (_, serverId: string, disabled: boolean, level?: 'user' | 'workspace') => {
+    await mcpManager.toggleServer(serverId, disabled, level)
     return { success: true }
   })
 

@@ -43,7 +43,7 @@ export class McpConfigLoader {
     if (userConfig) {
       for (const [id, serverConfig] of Object.entries(userConfig.mcpServers)) {
         if (!seenIds.has(id)) {
-          configs.push(this.normalizeConfig(id, serverConfig as Record<string, any>))
+          configs.push(this.normalizeConfig(id, serverConfig as Record<string, any>, 'user'))
           seenIds.add(id)
         }
       }
@@ -62,7 +62,7 @@ export class McpConfigLoader {
             configs.splice(existingIndex, 1)
           }
           // 添加新配置
-          configs.push(this.normalizeConfig(id, serverConfig as Record<string, any>))
+          configs.push(this.normalizeConfig(id, serverConfig as Record<string, any>, 'workspace'))
           seenIds.add(id)
         }
       }
@@ -72,8 +72,8 @@ export class McpConfigLoader {
     return configs
   }
 
-  /** 自动推断配置的 type 字段 */
-  private normalizeConfig(id: string, serverConfig: Record<string, any>): McpServerConfig {
+  /** 自动推断配置的 type 字段，标记来源层级 */
+  private normalizeConfig(id: string, serverConfig: Record<string, any>, source: 'user' | 'workspace' = 'user'): McpServerConfig {
     let type = serverConfig.type
     if (!type) {
       if ('url' in serverConfig) {
@@ -82,7 +82,7 @@ export class McpConfigLoader {
         type = 'local'
       }
     }
-    return { ...serverConfig, id, type } as McpServerConfig
+    return { ...serverConfig, id, type, source } as McpServerConfig
   }
 
   /** 保存用户级配置 */
@@ -111,30 +111,41 @@ export class McpConfigLoader {
     return getWorkspaceConfigFilePath(workspaceRoot, CONFIG_FILES.MCP, CONFIG_FILES.SETTINGS_DIR)
   }
 
-  /** 添加服务器到用户配置 */
-  async addServer(serverConfig: McpServerConfig): Promise<void> {
-    const config = (await this.loadConfigFile(this.userConfigPath)) || { mcpServers: {} }
-    const { id, ...rest } = serverConfig
+  /** 添加服务器到配置 */
+  async addServer(serverConfig: McpServerConfig, level: 'user' | 'workspace' = 'user'): Promise<void> {
+    const configPath = this.resolveConfigPath(level)
+    const config = (await this.loadConfigFile(configPath)) || { mcpServers: {} }
+    const { id, source: _source, ...rest } = serverConfig as McpServerConfig & { source?: string }
     config.mcpServers[id] = rest
-    await this.saveConfigFile(this.userConfigPath, config)
+    await this.saveConfigFile(configPath, config)
   }
 
-  /** 从用户配置删除服务器 */
-  async removeServer(serverId: string): Promise<void> {
-    const config = await this.loadConfigFile(this.userConfigPath)
+  /** 从配置删除服务器 */
+  async removeServer(serverId: string, level: 'user' | 'workspace' = 'user'): Promise<void> {
+    const configPath = this.resolveConfigPath(level)
+    const config = await this.loadConfigFile(configPath)
     if (config && config.mcpServers[serverId]) {
       delete config.mcpServers[serverId]
-      await this.saveConfigFile(this.userConfigPath, config)
+      await this.saveConfigFile(configPath, config)
     }
   }
 
   /** 切换服务器启用/禁用状态 */
-  async toggleServer(serverId: string, disabled: boolean): Promise<void> {
-    const config = await this.loadConfigFile(this.userConfigPath)
+  async toggleServer(serverId: string, disabled: boolean, level: 'user' | 'workspace' = 'user'): Promise<void> {
+    const configPath = this.resolveConfigPath(level)
+    const config = await this.loadConfigFile(configPath)
     if (config && config.mcpServers[serverId]) {
       config.mcpServers[serverId].disabled = disabled
-      await this.saveConfigFile(this.userConfigPath, config)
+      await this.saveConfigFile(configPath, config)
     }
+  }
+
+  /** 解析配置文件路径 */
+  private resolveConfigPath(level: 'user' | 'workspace'): string {
+    if (level === 'workspace' && this.workspaceRoots.length > 0) {
+      return this.getWorkspaceConfigPath(this.workspaceRoots[0])
+    }
+    return this.userConfigPath
   }
 
   /** 清理资源 */
