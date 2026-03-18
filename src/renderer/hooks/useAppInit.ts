@@ -16,6 +16,8 @@ interface UseAppInitOptions {
 
 export function useAppInit(options: UseAppInitOptions = {}) {
   const initRef = useRef(false)
+  const optionsRef = useRef(options)
+  optionsRef.current = options
 
   const updateLoaderStatus = useCallback((status: string) => {
     const statusEl = document.querySelector('#initial-loader .loader-status')
@@ -55,7 +57,7 @@ export function useAppInit(options: UseAppInitOptions = {}) {
       setTimeout(() => {
         removeInitialLoader()
         api.appReady()
-        options.onInitialized?.(result)
+        optionsRef.current.onInitialized?.(result)
       }, 50)
     }
 
@@ -73,7 +75,7 @@ export function useAppInit(options: UseAppInitOptions = {}) {
         delete window.__errorUnsubscribe
       }
     }
-  }, [updateLoaderStatus, removeInitialLoader, options])
+  }, [updateLoaderStatus, removeInitialLoader])
 
   // 初始化工作区状态同步
   useEffect(() => {
