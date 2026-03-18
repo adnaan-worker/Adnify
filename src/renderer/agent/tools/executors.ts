@@ -8,7 +8,7 @@ import { toAppError } from '@shared/utils/errorHandler'
 import { logger } from '@utils/Logger'
 import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
 import { validatePath, isSensitivePath } from '@shared/utils/pathUtils'
-import { pathToLspUri, waitForDiagnostics, isLanguageSupported, getLanguageId } from '@/renderer/services/lspService'
+import { pathToLspUri, waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
 import {
     calculateLineChanges,
 } from '@/renderer/utils/searchReplace'
@@ -27,14 +27,20 @@ import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 
 /**
  * 文件写入后通知 LSP 并等待诊断
- * 用于在 Agent 修改文件后获取最新的诊断信息
+ *
+ * 关键：必须先 didOpen/didChange 让 LSP 感知文件内容，
+ * 否则 LSP 不会为未打开的文件推送诊断。
  */
-async function notifyLspAfterWrite(filePath: string): Promise<void> {
+async function notifyLspAfterWrite(filePath: string, newContent?: string): Promise<void> {
     const languageId = getLanguageId(filePath)
     if (!isLanguageSupported(languageId)) return
 
     try {
-        // 等待 LSP 返回诊断信息（最多等待 3 秒）
+        // 1. 通知 LSP 文件内容变更（didOpen 内部处理了已打开→didChange 的切换）
+        if (newContent !== undefined) {
+            await didOpenDocument(filePath, newContent)
+        }
+        // 2. 等待 LSP 返回诊断信息（最多等待 3 秒）
         await waitForDiagnostics(filePath)
     } catch {
         // 忽略错误，不影响主流程
@@ -452,7 +458,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded, linesRemoved, toolCallId: ctx.toolCallId })
 
-            await notifyLspAfterWrite(path)
+            await notifyLspAfterWrite(path, newContent)
 
             if (allWarnings.length > 0) {
                 logger.agent.warn(`[edit_file] ${path}: Detected ${allWarnings.length} potential issues in batch`, allWarnings)
@@ -514,7 +520,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             lines.splice(startLine - 1, endLine - startLine + 1, ...newLines)
             const newContent = lines.join('\n')
 
-            // 🎯 Fast-Edit 精华：智能警告检测
+            // Fast-Edit 精华：智能警告检测
             const { checkLineReplaceWarnings } = await import('../../utils/smartReplace')
             const warnings = checkLineReplaceWarnings(oldLines, newLines, lines, startLine, endLine)
 
@@ -531,7 +537,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const lineChanges = calculateLineChanges(originalContent, newContent)
             notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
 
-            await notifyLspAfterWrite(path)
+            await notifyLspAfterWrite(path, newContent)
 
             const warningsSuffix = warnings.length > 0 ? ` (${warnings.length} warning${warnings.length > 1 ? 's' : ''} detected)` : ''
             return {
@@ -598,7 +604,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const lineChanges = calculateLineChanges(originalContent, newContent)
             notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
 
-            await notifyLspAfterWrite(path)
+            await notifyLspAfterWrite(path, newContent)
 
             const strategyInfo = result.strategy !== 'exact' ? ` (matched via ${result.strategy} strategy)` : ''
 
@@ -626,7 +632,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
         // 通知 LSP 并等待诊断
-        await notifyLspAfterWrite(path)
+        await notifyLspAfterWrite(path, content)
 
         const lineChanges = calculateLineChanges(originalContent, content)
 
@@ -649,7 +655,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         if (success) {
             // 通知 LSP 并等待诊断
-            await notifyLspAfterWrite(path)
+            await notifyLspAfterWrite(path, content)
 
             notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: null, newContent: content, changeType: 'create', linesAdded: content.split('\n').length, linesRemoved: 0, toolCallId: ctx.toolCallId })
         }
@@ -836,7 +842,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
     async get_lint_errors(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath, true)
-        const errors = await lintService.getLintErrors(path, args.refresh as boolean)
+        const { errors, notInstalled } = await lintService.getLintErrors(path, args.refresh as boolean)
+        if (notInstalled) {
+            return { success: true, result: notInstalled }
+        }
         return { success: true, result: errors.length ? errors.map((e) => `[${e.severity}] ${e.message} (Line ${e.startLine})`).join('\n') : 'No lint errors found.' }
     },
 

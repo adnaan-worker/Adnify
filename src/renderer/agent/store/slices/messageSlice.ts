@@ -54,6 +54,10 @@ export interface MessageActions {
     updateSearchPart: (messageId: string, partId: string, content: string, isStreaming?: boolean, append?: boolean, targetThreadId?: string) => void
     finalizeSearchPart: (messageId: string, partId: string, targetThreadId?: string) => void
 
+    // Lint Check 操作
+    addLintCheckPart: (messageId: string, targetThreadId?: string) => void
+    updateLintCheckPart: (messageId: string, updates: Partial<import('../../types').LintCheckPart>, targetThreadId?: string) => void
+
     // 交互式内容操作
     setInteractive: (messageId: string, interactive: InteractiveContent, targetThreadId?: string) => void
 
@@ -856,6 +860,59 @@ export const createMessageSlice: StateCreator<
                     ...state.threads,
                     [threadId]: { ...thread, messages },
                 },
+            }
+        })
+    },
+
+    // 添加 Lint Check 部分
+    addLintCheckPart: (messageId, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id === messageId && msg.role === 'assistant') {
+                    const assistantMsg = msg as AssistantMessage
+                    const newPart: AssistantPart = { type: 'lint_check', files: [], status: 'checking' }
+                    return { ...assistantMsg, parts: [...assistantMsg.parts, newPart] }
+                }
+                return msg
+            })
+
+            return {
+                threads: { ...state.threads, [threadId]: { ...thread, messages } },
+            }
+        })
+    },
+
+    // 更新 Lint Check 部分
+    updateLintCheckPart: (messageId, updates, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id === messageId && msg.role === 'assistant') {
+                    const assistantMsg = msg as AssistantMessage
+                    const newParts = assistantMsg.parts.map(part => {
+                        if (part.type === 'lint_check') {
+                            return { ...part, ...updates }
+                        }
+                        return part
+                    })
+                    return { ...assistantMsg, parts: newParts }
+                }
+                return msg
+            })
+
+            return {
+                threads: { ...state.threads, [threadId]: { ...thread, messages } },
             }
         })
     },

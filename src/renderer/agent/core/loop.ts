@@ -15,7 +15,6 @@ import { performanceMonitor, withRetry, isRetryableError } from '@shared/utils'
 import { useAgentStore } from '../store/AgentStore'
 import { useStore } from '@store'
 import { toolManager, initializeToolProviders, setToolLoadingContext, initializeTools } from '../tools'
-import { toolRegistry } from '../tools/registry'
 import { getAgentConfig, READ_TOOLS } from '../utils/AgentConfig'
 import { LoopDetector } from '../utils/LoopDetector'
 import { getReadOnlyTools, isFileEditTool } from '@/shared/config/tools'
@@ -28,6 +27,7 @@ import {
   generateHandoffDocument,
 } from '../context'
 import { updateStats, LEVEL_NAMES, estimateMessagesTokens } from '../context/CompressionManager'
+import type { LintCheckFile } from '../types'
 import type { ChatMessage } from '../types'
 import type { LLMMessage } from '@/shared/types'
 import type { WorkMode } from '@/renderer/modes/types'
@@ -193,15 +193,23 @@ async function callLLMWithRetry(
 
 // ===== 自动修复 =====
 
+/** autoFix 结果 */
+interface AutoFixResult {
+  /** 注入给 LLM 的错误描述 */
+  content: string
+  /** 结构化的检查结果（用于 UI） */
+  files: LintCheckFile[]
+}
+
 /**
  * 检查编辑过的文件是否有 lint 错误
  *
- * @returns 需要注入到 llmMessages 的错误内容（null 表示无错误）
+ * @returns 结构化结果（null 表示无错误）
  */
 async function autoFix(
   toolCalls: any[],
   workspacePath: string,
-): Promise<string | null> {
+): Promise<AutoFixResult | null> {
   const writeToolCalls = toolCalls.filter(tc => !READ_TOOLS.includes(tc.name))
   if (writeToolCalls.length === 0) return null
 
@@ -215,28 +223,35 @@ async function autoFix(
 
   if (editedFiles.length === 0) return null
 
+  const { lintService } = await import('../services/lintService')
+  const allFiles: LintCheckFile[] = []
+
   // 并行检查所有文件的 lint 错误
-  const results = await Promise.all(
+  await Promise.all(
     editedFiles.map(async (filePath) => {
       try {
-        const result = await toolRegistry.execute('get_lint_errors', { path: filePath }, { workspacePath })
-        if (result.success && result.result) {
-          const text = result.result.trim()
-          if (text && text !== '[]' && text !== 'No diagnostics found') {
-            if (/\[error\]/i.test(text) || text.includes('failed to compile') || text.includes('syntax error')) {
-              return `File: ${filePath}\n${text}`
-            }
-          }
-        }
+        const { errors } = await lintService.getLintErrors(filePath, true)
+        // 只收集 error 级别的（warning 不触发自动修复）
+        const errorItems = errors.filter(e => e.severity === 'error')
+        allFiles.push({
+          filePath,
+          errors: errorItems.map(e => ({ severity: e.severity as 'error' | 'warning', message: e.message, line: e.startLine ?? 1 })),
+        })
       } catch { /* ignore */ }
-      return null
     })
   )
 
-  const errors = results.filter((e): e is string => e !== null)
-  if (errors.length === 0) return null
+  const filesWithErrors = allFiles.filter(f => f.errors.length > 0)
+  if (filesWithErrors.length === 0) return null
 
-  return `Auto-check detected ${errors.length} lint error(s) in the files you just edited. Please fix them:\n\n${errors.join('\n\n')}`
+  // 构建注入给 LLM 的文本
+  const lines = filesWithErrors.map(f => {
+    const errLines = f.errors.map(e => `  [${e.severity}] Line ${e.line}: ${e.message}`).join('\n')
+    return `File: ${f.filePath}\n${errLines}`
+  })
+  const content = `Auto-check detected lint errors in ${filesWithErrors.length} file(s). Please fix them:\n\n${lines.join('\n\n')}`
+
+  return { content, files: allFiles }
 }
 
 // ===== 压缩检查与处理 =====
@@ -659,10 +674,16 @@ Try again with the corrected tool call.`
 
     // 自动修复：检查 lint 错误，若有则注入到 llmMessages 让 AI 可以看到并修复
     if (enableAutoFix && !userRejected && context.workspacePath) {
-      const autoFixContent = await autoFix(result.toolCalls, context.workspacePath)
-      if (autoFixContent) {
-        threadStore.appendToAssistant(assistantId, '\n\n🔍 **Auto-check**: Detected lint errors. Fixing...')
-        llmMessages.push({ role: 'user', content: autoFixContent })
+      const autoFixResult = await autoFix(result.toolCalls, context.workspacePath)
+      if (autoFixResult) {
+        // 添加结构化的 lint check part（UI 展示用）
+        threadStore.addLintCheckPart(assistantId)
+        threadStore.updateLintCheckPart(assistantId, {
+          files: autoFixResult.files,
+          status: 'failed',
+        })
+        // 注入文本给 LLM
+        llmMessages.push({ role: 'user', content: autoFixResult.content })
         // 强制继续循环让 AI 看到错误并修复
         shouldContinue = true
         threadStore.setStreamPhase('streaming')

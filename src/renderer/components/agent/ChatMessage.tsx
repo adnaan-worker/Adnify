@@ -24,10 +24,12 @@ import {
   isReasoningPart,
   ReasoningPart,
   isSearchPart,
+  isLintCheckPart,
   ToolCall,
 } from '@renderer/agent/types'
 import FileChangeCard from './FileChangeCard'
 import ToolCallCard from './ToolCallCard'
+import { LintCheckCard } from './LintCheckCard'
 import ToolCallGroup from './ToolCallGroup'
 import { InteractiveCard } from './InteractiveCard'
 import { MemoryApprovalInline } from './MemoryApprovalInline'
@@ -562,6 +564,16 @@ const RenderPart = React.memo(({
   // Search results are static for now, finish immediately
   if (isSearchPart(part)) {
     return <CompletionSignal onComplete={onTypingComplete} />
+  }
+
+  // Lint check results
+  if (isLintCheckPart(part)) {
+    return (
+      <>
+        <LintCheckCard part={part} />
+        <CompletionSignal onComplete={onTypingComplete} />
+      </>
+    )
   }
 
   // Tool calls handled by RenderPart (single)

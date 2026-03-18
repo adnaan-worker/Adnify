@@ -124,6 +124,10 @@ export interface ThreadBoundStore {
     updateSearchPart: (messageId: string, partId: string, content: string, isStreaming?: boolean, append?: boolean) => void
     finalizeSearchPart: (messageId: string, partId: string) => void
 
+    // Lint Check 操作
+    addLintCheckPart: (messageId: string) => void
+    updateLintCheckPart: (messageId: string, updates: Partial<import('../types').LintCheckPart>) => void
+
     // 交互式内容操作
     setInteractive: (messageId: string, interactive: import('../types').InteractiveContent) => void
 }
@@ -303,6 +307,12 @@ export const useAgentStore = create<AgentStore>()(
                     messageSlice.updateSearchPart(messageId, partId, content, isStreaming, append, threadId),
                 finalizeSearchPart: (messageId, partId) =>
                     messageSlice.finalizeSearchPart(messageId, partId, threadId),
+
+                // Lint Check 操作
+                addLintCheckPart: (messageId) =>
+                    messageSlice.addLintCheckPart(messageId, threadId),
+                updateLintCheckPart: (messageId, updates) =>
+                    messageSlice.updateLintCheckPart(messageId, updates, threadId),
 
                 // 交互式内容操作
                 setInteractive: (messageId, interactive) =>

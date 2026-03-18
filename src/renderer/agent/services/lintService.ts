@@ -10,6 +10,8 @@ import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'
 import { useDiagnosticsStore } from '@services/diagnosticsStore'
 import { normalizePath } from '@shared/utils/pathUtils'
+import { getServerIdForLanguage, LSP_SERVER_DEFINITIONS } from '@shared/languages'
+import { getLanguageId } from '@services/lspService'
 
 // 支持的语言和对应的 lint 命令
 const LINT_COMMANDS: Record<string, { command: string; parser: (output: string, file: string) => LintError[] }> = {
@@ -185,6 +187,31 @@ function getLspDiagnosticsForFile(filePath: string): LintError[] | null {
 	return null
 }
 
+/** lint 检查结果 */
+export interface LintResult {
+	errors: LintError[]
+	/** LSP 服务器未安装时的提示信息 */
+	notInstalled?: string
+}
+
+// LSP 服务器安装状态缓存（避免每次 lint 都查询）
+let _serverStatusCache: Record<string, { installed: boolean }> | null = null
+let _serverStatusTimestamp = 0
+const SERVER_STATUS_TTL = 60_000 // 60 秒
+
+async function getServerStatus(): Promise<Record<string, { installed: boolean }>> {
+	if (_serverStatusCache && Date.now() - _serverStatusTimestamp < SERVER_STATUS_TTL) {
+		return _serverStatusCache
+	}
+	try {
+		_serverStatusCache = await api.lsp.getServerStatus()
+		_serverStatusTimestamp = Date.now()
+	} catch {
+		_serverStatusCache = {}
+	}
+	return _serverStatusCache!
+}
+
 class LintService {
 	private cache: CacheService<LintError[]>
 
@@ -201,42 +228,60 @@ class LintService {
 	/**
 	 * 获取文件的 lint 错误
 	 */
-	async getLintErrors(filePath: string, forceRefresh: boolean = false): Promise<LintError[]> {
+	async getLintErrors(filePath: string, forceRefresh: boolean = false): Promise<LintResult> {
 		// 1. 优先使用 LSP 诊断信息（与面板完全相同的数据源，支持所有 LSP 语言）
 		const lspErrors = getLspDiagnosticsForFile(filePath)
 		if (lspErrors !== null) {
-			// LSP 已就绪，直接返回（空数组表示该文件无错误）
-			return lspErrors
+			// LSP 已推送过诊断，直接返回（空数组表示该文件无错误）
+			return { errors: lspErrors }
 		}
 
-		// 2. 检查缓存（LSP 尚未推送诊断时的后备）
+		// 2. 检查该语言是否有对应的 LSP 服务器
+		const languageId = getLanguageId(filePath)
+		const serverId = getServerIdForLanguage(languageId)
+
+		if (serverId) {
+			const status = await getServerStatus()
+			const serverStatus = status[serverId]
+			if (!serverStatus || !serverStatus.installed) {
+				// LSP 未安装 → 提示用户
+				const serverDef = LSP_SERVER_DEFINITIONS.find(s => s.id === serverId)
+				const serverName = serverDef?.name || serverId
+				const serverDesc = serverDef?.description || serverId
+				return {
+					errors: [],
+					notInstalled: `Language server "${serverName}" (${serverDesc}) is not installed. Install it in Settings > LSP to enable lint checking for ${languageId} files.`,
+				}
+			}
+			// LSP 已安装但尚未推送诊断（可能诊断 IPC 还在路上）
+			// 信任 LSP，返回空结果，不走 CLI 回退
+			return { errors: [] }
+		}
+
+		// 3. 该语言没有 LSP 服务器定义 → 尝试 CLI 回退
+		if (languageId === 'plaintext') {
+			return { errors: [], notInstalled: `Unsupported file type for lint checking.` }
+		}
+
+		// 检查缓存
 		if (!forceRefresh) {
 			const cached = this.cache.get(filePath)
 			if (cached) {
-				return cached
+				return { errors: cached }
 			}
 		}
 
 		const ext = filePath.split('.').pop()?.toLowerCase() || ''
 		const lang = EXT_TO_LANG[ext]
+		const lintConfig = lang ? LINT_COMMANDS[lang] : undefined
 
-		if (!lang) {
-			return [] // 不支持的语言
-		}
-
-		const lintConfig = LINT_COMMANDS[lang]
 		if (!lintConfig) {
-			return []
+			return { errors: [] }
 		}
 
 		try {
-			// 解析命令和参数
 			const [baseCommand, ...commandArgs] = lintConfig.command.split(' ')
-
-			// 对于 TypeScript，尝试在工作区根目录运行以关联 tsconfig
-			const allArgs = lang === 'typescript'
-				? [...commandArgs, '--project', '.', '--file', `"${filePath}"`]
-				: [...commandArgs, `"${filePath}"`]
+			const allArgs = [...commandArgs, `"${filePath}"`]
 
 			const result = await api.shell.executeSecure({
 				command: baseCommand,
@@ -247,21 +292,19 @@ class LintService {
 			const output = (result.output || '') + (result.errorOutput || '')
 			const errors = lintConfig.parser(output, filePath)
 
-			// 更新缓存（CacheService 自动处理大小限制和 TTL）
 			this.cache.set(filePath, errors)
-
-			return errors
+			return { errors }
 		} catch (error) {
 			logger.agent.error('Lint error:', error)
-			return []
+			return { errors: [] }
 		}
 	}
 
 	/**
 	 * 批量获取多个文件的 lint 错误
 	 */
-	async getLintErrorsForFiles(filePaths: string[]): Promise<Map<string, LintError[]>> {
-		const results = new Map<string, LintError[]>()
+	async getLintErrorsForFiles(filePaths: string[]): Promise<Map<string, LintResult>> {
+		const results = new Map<string, LintResult>()
 
 		// 并行执行，但限制并发数
 		const batchSize = 3
@@ -270,12 +313,12 @@ class LintService {
 			const batchResults = await Promise.all(
 				batch.map(async (path) => ({
 					path,
-					errors: await this.getLintErrors(path),
+					result: await this.getLintErrors(path),
 				}))
 			)
 
-			for (const { path, errors } of batchResults) {
-				results.set(path, errors)
+			for (const { path, result } of batchResults) {
+				results.set(path, result)
 			}
 		}
 
