@@ -18,6 +18,7 @@ import { getEditorConfig } from "@renderer/settings";
 import { logger } from "@utils/Logger";
 import { toAppError } from "@shared/utils/errorHandler";
 import { isMac } from "@services/keybindingService";
+import { getInteractiveTerminalBackend } from "@/renderer/agent/tools/commandRuntime";
 
 // ===== 类型定义 =====
 
@@ -302,6 +303,9 @@ class TerminalManagerClass {
     remote?: TerminalInstance['remote'];
   }): Promise<string> {
     const id = crypto.randomUUID();
+    const backend =
+      options.backend ??
+      (options.isAgent ? getInteractiveTerminalBackend() : 'pty');
 
     const instance: TerminalInstance = {
       id,
@@ -319,7 +323,7 @@ class TerminalManagerClass {
     this.notify();
 
     // 创建 PTY
-    const ptyPromise = this.createPty(id, options.cwd, options.shell, options.backend, options.remote);
+    const ptyPromise = this.createPty(id, options.cwd, options.shell, backend, options.remote);
     this.pendingPtyCreation.set(id, ptyPromise);
 
     try {

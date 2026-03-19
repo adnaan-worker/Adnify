@@ -802,8 +802,10 @@ export function registerSecureTerminalHandlers(
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
     const { id, cwd, shell, backend = 'pty', remote } = options
+    const effectiveBackend: TerminalBackend =
+      process.platform === 'darwin' && !remote?.host ? 'pipe' : backend
 
-    if (backend === 'pty' && !pty) {
+    if (effectiveBackend === 'pty' && !pty) {
       return { success: false, error: 'node-pty not available' }
     }
 
@@ -851,12 +853,12 @@ export function registerSecureTerminalHandlers(
         }) || '/bin/bash'
 
         logger.security.info(`[Terminal] Using shell: ${shellPath}`)
-        shellArgs = backend === 'pipe' ? ['-il'] : ['-l']
+        shellArgs = effectiveBackend === 'pipe' ? ['-il'] : ['-l']
       } else {
         shellPath = process.env.SHELL || '/bin/bash'
       }
 
-      logger.security.info(`[Terminal] Spawning ${backend.toUpperCase()} terminal: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
+      logger.security.info(`[Terminal] Spawning ${effectiveBackend.toUpperCase()} terminal: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
 
       const fs = require('fs')
       const pathModule = require('path')
@@ -885,7 +887,7 @@ export function registerSecureTerminalHandlers(
           logger.security.error(`[Terminal] Remote SSH spawn failed: ${errorMsg}`, err)
           return { success: false, error: `Failed to connect remote shell: ${errorMsg}` }
         }
-      } else if (backend === 'pipe') {
+      } else if (effectiveBackend === 'pipe') {
         const child = spawn(shellPath, shellArgs, {
           cwd: targetCwd,
           env: {
@@ -948,11 +950,11 @@ export function registerSecureTerminalHandlers(
         id,
         cwd: targetCwd,
         shell: shellPath,
-        backend: remote?.host ? 'ssh2' : backend,
+        backend: remote?.host ? 'ssh2' : effectiveBackend,
         remoteHost: remote?.host,
       })
 
-      logger.security.info(`[Terminal] Created ${remote?.host ? 'ssh2' : backend} terminal ${id} with shell ${shellPath}`)
+      logger.security.info(`[Terminal] Created ${remote?.host ? 'ssh2' : effectiveBackend} terminal ${id} with shell ${shellPath}`)
       return { success: true }
     } catch (err) {
       logger.security.error('[Terminal] Failed to create terminal:', err)
