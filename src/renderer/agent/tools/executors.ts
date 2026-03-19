@@ -5,6 +5,8 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { toAppError } from '@shared/utils/errorHandler'
+import { resolveEditFileRequest } from '@/shared/utils/editFile'
+import { resolveReadFileRequest } from '@/shared/utils/readFile'
 import { logger } from '@utils/Logger'
 import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
 import { validatePath, isSensitivePath } from '@shared/utils/pathUtils'
@@ -134,21 +136,12 @@ function resolvePath(p: unknown, workspacePath: string | null, allowRead = false
 const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
     async read_file(args, ctx) {
         // 支持单个文件或多个文件
-        let pathArg = args.path
-
-        // 鲁棒性增强：如果 path 是字符串形式的 JSON 数组（某些模型会这样做），尝试解析它
-        if (typeof pathArg === 'string' && pathArg.trim().startsWith('[') && pathArg.trim().endsWith(']')) {
-            try {
-                const parsed = JSON.parse(pathArg)
-                if (Array.isArray(parsed)) {
-                    pathArg = parsed
-                }
-            } catch (e) {
-                // 如果解析失败，保留原样，由 resolvePath 处理
-            }
+        const resolution = resolveReadFileRequest(args)
+        if (!resolution.ok) {
+            return { success: false, result: '', error: `Validation failed: ${resolution.error}` }
         }
 
-        const paths = Array.isArray(pathArg) ? pathArg : [pathArg as string]
+        const paths = resolution.mode === 'multi' ? resolution.args.paths : [resolution.args.path]
 
         // 如果是多个文件，使用并行读取
         if (paths.length > 1) {
@@ -211,8 +204,12 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         } catch (e) { }
 
         const lines = content.split('\n')
-        const startLine = typeof args.start_line === 'number' ? Math.max(1, args.start_line) : 1
-        const endLine = typeof args.end_line === 'number' ? Math.min(lines.length, args.end_line) : lines.length
+        const startLine = resolution.mode === 'single' && typeof resolution.args.start_line === 'number'
+            ? Math.max(1, resolution.args.start_line)
+            : 1
+        const endLine = resolution.mode === 'single' && typeof resolution.args.end_line === 'number'
+            ? Math.min(lines.length, resolution.args.end_line)
+            : lines.length
         let numberedContent = lines.slice(startLine - 1, endLine).map((line, i) => `${startLine + i}: ${line}`).join('\n')
 
         // 使用 maxSingleFileChars 限制单个文件的输出大小
@@ -311,19 +308,19 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const originalContent = await api.file.read(path)
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
 
+        const resolution = resolveEditFileRequest(args)
+
         // 判断使用哪种模式：content 单独存在时不触发 line mode（保持与 validate 逻辑一致）
-        const hasBatchMode = !!(args.edits && Array.isArray(args.edits))
-        const hasLineMode = !!(args.start_line !== undefined || args.end_line !== undefined)
+        if (!resolution.ok) {
+            return { success: false, result: '', error: `Validation failed: ${resolution.error}` }
+        }
+
+        const hasBatchMode = resolution.mode === 'batch'
+        const hasLineMode = resolution.mode === 'line'
 
         // 🎯 Fast-Edit 精华：批量编辑模式
         if (hasBatchMode) {
-            const edits = args.edits as Array<{
-                action: 'replace' | 'insert' | 'delete'
-                start_line?: number
-                end_line?: number
-                after_line?: number
-                content?: string
-            }>
+            const { edits } = resolution.args
 
             // 验证缓存
             if (!fileCacheService.hasValidCache(path)) {
@@ -483,9 +480,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         if (hasLineMode) {
             // 行模式（原 replace_file_content）
-            const startLine = args.start_line as number
-            const endLine = args.end_line as number
-            const content = args.content as string
+            const { start_line: startLine, end_line: endLine, content } = resolution.args
 
             // 验证缓存
             if (!fileCacheService.hasValidCache(path)) {
@@ -554,9 +549,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
         } else {
             // 字符串模式（原 edit_file）
-            const oldString = args.old_string as string
-            const newString = args.new_string as string
-            const replaceAll = args.replace_all as boolean | undefined
+            const { old_string: oldString, new_string: newString, replace_all: replaceAll } = resolution.args
 
             const normalizedContent = normalizeLineEndings(originalContent)
             const normalizedOld = normalizeLineEndings(oldString)

@@ -9,6 +9,8 @@
 
 import { z } from 'zod'
 import type { ToolApprovalType } from '@/shared/types/llm'
+import { normalizeEditFileArgs, resolveEditFileRequest } from '@/shared/utils/editFile'
+import { normalizeReadFileArgs, resolveReadFileRequest } from '@/shared/utils/readFile'
 
 // ============================================
 // 类型定义
@@ -65,6 +67,22 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 - Single file: path="src/main.ts"
 - Multiple files: path=["src/a.ts", "src/b.ts"]
 - Large files will be truncated, use search_files to locate target first`,
+        customSchema: z.object({
+            path: z.union([
+                z.string().min(1, 'path is required'),
+                z.array(z.string().min(1, 'path items must be non-empty')).min(1, 'path array must not be empty')
+            ]),
+            start_line: z.number().optional(),
+            end_line: z.number().optional(),
+        }).passthrough()
+            .transform((data) => normalizeReadFileArgs(data as Record<string, unknown>))
+            .refine(
+                (data) => resolveReadFileRequest(data as Record<string, unknown>).ok,
+                (data) => {
+                    const resolution = resolveReadFileRequest(data as Record<string, unknown>)
+                    return { message: resolution.ok ? 'Validation failed' : resolution.error }
+                }
+            ),
         category: 'read',
         approvalType: 'none',
         parallel: true,
@@ -78,12 +96,6 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
             },
             start_line: { type: 'number', description: 'Starting line (1-indexed, single file only)' },
             end_line: { type: 'number', description: 'Ending line inclusive (single file only)' },
-        },
-        validate: (data) => {
-            if (data.start_line && data.end_line && (data.start_line as number) > (data.end_line as number)) {
-                return { valid: false, error: 'start_line must be <= end_line' }
-            }
-            return { valid: true }
         },
     },
 
@@ -184,6 +196,32 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
             { error: 'Overlapping edits', solution: 'Ensure edit ranges do not overlap' },
             { error: 'Cannot mix string mode, line mode, and batch mode', solution: 'Use ONLY one mode per call: either old_string+new_string OR start_line+end_line+content OR edits array' },
         ],
+        customSchema: z.object({
+            path: z.string().min(1, 'path is required'),
+            old_string: z.string().optional(),
+            new_string: z.string().optional(),
+            start_line: z.number().optional(),
+            end_line: z.number().optional(),
+            content: z.string().optional(),
+            replace_all: z.boolean().optional(),
+            edits: z.array(
+                z.object({
+                    action: z.enum(['replace', 'insert', 'delete']),
+                    start_line: z.number().optional(),
+                    end_line: z.number().optional(),
+                    after_line: z.number().optional(),
+                    content: z.string().optional(),
+                })
+            ).optional(),
+        }).passthrough()
+            .transform((data) => normalizeEditFileArgs(data as Record<string, unknown>))
+            .refine(
+                (data) => resolveEditFileRequest(data as Record<string, unknown>).ok,
+                (data) => {
+                    const resolution = resolveEditFileRequest(data as Record<string, unknown>)
+                    return { message: resolution.ok ? 'Validation failed' : resolution.error }
+                }
+            ),
         category: 'write',
         approvalType: 'none',
         parallel: false,
@@ -212,71 +250,6 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
                     }
                 }
             },
-        },
-        validate: (data) => {
-            // 模式判定：content 单独存在时不算 line mode，避免 AI 在 string mode 下顺带传 content 触发误报
-            const hasStringMode = !!(data.old_string !== undefined || data.new_string !== undefined)
-            const hasLineMode = !!(data.start_line !== undefined || data.end_line !== undefined)
-            const hasBatchMode = !!(data.edits)
-
-            const modeCount = [hasStringMode, hasLineMode, hasBatchMode].filter(Boolean).length
-            if (modeCount > 1) {
-                return { valid: false, error: 'Cannot mix string mode, line mode, and batch mode parameters' }
-            }
-
-            if (modeCount === 0) {
-                return { valid: false, error: 'Must provide either (old_string + new_string), (start_line + end_line + content), or (edits array)' }
-            }
-
-            // 验证字符串模式
-            if (hasStringMode && (!data.old_string || data.new_string === undefined)) {
-                return { valid: false, error: 'String mode requires both old_string and new_string' }
-            }
-
-            // 验证行模式
-            if (hasLineMode) {
-                if (!data.start_line || !data.end_line || data.content === undefined) {
-                    return { valid: false, error: 'Line mode requires start_line, end_line, and content' }
-                }
-                if ((data.start_line as number) > (data.end_line as number)) {
-                    return { valid: false, error: 'start_line must be <= end_line' }
-                }
-            }
-
-            // 验证批量模式
-            if (hasBatchMode) {
-                if (!Array.isArray(data.edits) || data.edits.length === 0) {
-                    return { valid: false, error: 'Batch mode requires non-empty edits array' }
-                }
-
-                for (let i = 0; i < data.edits.length; i++) {
-                    const edit = data.edits[i]
-                    if (!edit.action || !['replace', 'insert', 'delete'].includes(edit.action)) {
-                        return { valid: false, error: `Edit ${i}: action must be "replace", "insert", or "delete"` }
-                    }
-
-                    if (edit.action === 'replace' || edit.action === 'delete') {
-                        if (!edit.start_line || !edit.end_line) {
-                            return { valid: false, error: `Edit ${i}: ${edit.action} requires start_line and end_line` }
-                        }
-                        if (edit.start_line > edit.end_line) {
-                            return { valid: false, error: `Edit ${i}: start_line must be <= end_line` }
-                        }
-                    }
-
-                    if (edit.action === 'insert') {
-                        if (edit.after_line === undefined) {
-                            return { valid: false, error: `Edit ${i}: insert requires after_line` }
-                        }
-                    }
-
-                    if ((edit.action === 'replace' || edit.action === 'insert') && edit.content === undefined) {
-                        return { valid: false, error: `Edit ${i}: ${edit.action} requires content` }
-                    }
-                }
-            }
-
-            return { valid: true }
         },
     },
 
@@ -1120,38 +1093,40 @@ function createZodType(prop: ToolPropertyDef): z.ZodTypeAny {
 
 /** 生成 Zod Schema */
 export function generateZodSchema(config: ToolConfig): z.ZodSchema {
+    let objectSchema: z.ZodTypeAny
+
     if (config.customSchema) {
-        return config.customSchema
-    }
+        objectSchema = config.customSchema
+    } else {
+        const shape: Record<string, z.ZodTypeAny> = {}
 
-    const shape: Record<string, z.ZodTypeAny> = {}
+        for (const [key, prop] of Object.entries(config.parameters)) {
+            let schema = createZodType(prop)
 
-    for (const [key, prop] of Object.entries(config.parameters)) {
-        let schema = createZodType(prop)
-
-        // 重新应用顶层的 required 验证消息
-        if (prop.type === 'string' && prop.required && !prop.enum) {
-            schema = z.string().min(1, `${key} is required`)
-        }
-
-        if (!prop.required) {
-            schema = schema.optional()
-            if (prop.default !== undefined) {
-                schema = schema.default(prop.default)
+            // 重新应用顶层的 required 验证消息
+            if (prop.type === 'string' && prop.required && !prop.enum) {
+                schema = z.string().min(1, `${key} is required`)
             }
+
+            if (!prop.required) {
+                schema = schema.optional()
+                if (prop.default !== undefined) {
+                    schema = schema.default(prop.default)
+                }
+            }
+
+            shape[key] = schema
         }
 
-        shape[key] = schema
+        // 使用 passthrough() 允许额外的字段（如 _meta）
+        objectSchema = z.object(shape).passthrough()
     }
-
-    // 使用 passthrough() 允许额外的字段（如 _meta）
-    const objectSchema = z.object(shape).passthrough()
 
     // 添加自定义验证
     if (config.validate) {
         return objectSchema.refine(
-            (data) => config.validate!(data).valid,
-            (data) => ({ message: config.validate!(data).error || 'Validation failed' })
+            (data) => config.validate!(data as Record<string, unknown>).valid,
+            (data) => ({ message: config.validate!(data as Record<string, unknown>).error || 'Validation failed' })
         )
     }
 
