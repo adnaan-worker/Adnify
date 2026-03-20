@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 消息管理 Slice
  * 负责消息的添加、更新、删除
  */
@@ -275,10 +275,7 @@ export const createMessageSlice: StateCreator<
                     // 清理幽灵工具调用：如果 LLM 已结束，但仍有处于非终态的工具，将它们标记为错误
                     const cleanToolCall = (tc: ToolCall): ToolCall => {
                         if (['pending', 'running', 'awaiting'].includes(tc.status)) {
-                            return { ...tc, status: 'error', result: 'Interrupted or failed to parse', streamingState: undefined }
-                        }
-                        if (tc.streamingState) {
-                            return { ...tc, streamingState: undefined }
+                            return { ...tc, status: 'error', result: 'Interrupted or failed to parse' }
                         }
                         return tc
                     }
@@ -307,6 +304,8 @@ export const createMessageSlice: StateCreator<
                 },
             }
         })
+
+        get().clearToolStreamingPreviews(threadId)
     },
 
     /**
@@ -487,6 +486,8 @@ export const createMessageSlice: StateCreator<
             }
         })
 
+        get().clearToolStreamingPreviews(threadId)
+
         // 清理工具调用日志（在 useStore 中）
         // 注意：这里需要导入 useStore，但为了避免循环依赖，我们在调用处处理
     },
@@ -520,6 +521,8 @@ export const createMessageSlice: StateCreator<
                 compressionStats: null,
             }
         })
+
+        get().clearToolStreamingPreviews(threadId)
     },
 
     // 获取消息列表
@@ -529,8 +532,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 添加工具调用部分
-    addToolCallPart: (messageId, toolCall) => {
-        const threadId = get().currentThreadId
+    addToolCallPart: (messageId, toolCall, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         // 关键修复：在添加工具调用 part 之前，先刷新文本缓冲区
@@ -539,6 +542,11 @@ export const createMessageSlice: StateCreator<
         const store = get() as ThreadSlice & MessageSlice & { _flushTextBuffer?: (id: string) => void }
         if (store._flushTextBuffer) {
             store._flushTextBuffer(messageId)
+        }
+
+        const persistedToolCall: Omit<ToolCall, 'status'> = {
+            ...toolCall,
+            streamingState: undefined,
         }
 
         set(state => {
@@ -553,7 +561,7 @@ export const createMessageSlice: StateCreator<
                         return msg
                     }
 
-                    const newToolCall: ToolCall = { ...toolCall, status: 'pending' }
+                    const newToolCall: ToolCall = { ...persistedToolCall, status: 'pending' }
                     const newParts: AssistantPart[] = [...assistantMsg.parts, { type: 'tool_call', toolCall: newToolCall }]
                     const newToolCalls = [...(assistantMsg.toolCalls || []), newToolCall]
 
@@ -572,9 +580,52 @@ export const createMessageSlice: StateCreator<
     },
 
     // 更新工具调用（如果不存在则添加）
-    updateToolCall: (messageId, toolCallId, updates) => {
-        const threadId = get().currentThreadId
+    updateToolCall: (messageId, toolCallId, updates, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
+
+        const hasStreamingStateUpdate = Object.prototype.hasOwnProperty.call(updates, 'streamingState')
+        const previewState = updates.streamingState
+        const currentPreview = get().getToolStreamingPreview(toolCallId, threadId)
+        const hasStablePayloadUpdate = ['arguments', 'result', 'error', 'richContent'].some(key =>
+            Object.prototype.hasOwnProperty.call(updates, key)
+        )
+        const shouldStageNameInPreview =
+            typeof updates.name === 'string' &&
+            !!previewState?.isStreaming &&
+            !hasStablePayloadUpdate
+
+        if (hasStreamingStateUpdate && previewState) {
+            get().setToolStreamingPreview(toolCallId, {
+                ...currentPreview,
+                ...previewState,
+                name: shouldStageNameInPreview ? updates.name : (previewState.name ?? currentPreview?.name),
+            }, threadId)
+        } else if (shouldStageNameInPreview) {
+            get().setToolStreamingPreview(toolCallId, {
+                ...(currentPreview || { isStreaming: true }),
+                name: updates.name,
+            }, threadId)
+        }
+
+        const shouldClearPreview =
+            (hasStreamingStateUpdate && previewState === undefined) ||
+            (updates.status !== undefined && !['pending', 'running', 'awaiting'].includes(updates.status))
+
+        const cleanUpdates = Object.fromEntries(
+            Object.entries(updates).filter(([key, value]) => key !== 'streamingState' && value !== undefined)
+        ) as Partial<ToolCall>
+
+        if (shouldStageNameInPreview) {
+            delete cleanUpdates.name
+        }
+
+        if (Object.keys(cleanUpdates).length === 0) {
+            if (shouldClearPreview) {
+                get().clearToolStreamingPreview(toolCallId, threadId)
+            }
+            return
+        }
 
         set(state => {
             const thread = state.threads[threadId]
@@ -592,21 +643,6 @@ export const createMessageSlice: StateCreator<
                         // 更新已存在的工具调用
                         updated = true
 
-                        // 只合并非 undefined 的字段
-                        const cleanUpdates = Object.fromEntries(
-                            Object.entries(updates).filter(([_, v]) => v !== undefined)
-                        ) as Partial<ToolCall>
-
-                        // 自动清理：如果状态变为非pending/awaiting，自动清除streamingState
-                        if (cleanUpdates.status && !['pending', 'awaiting'].includes(cleanUpdates.status)) {
-                            if (cleanUpdates.streamingState === undefined) {
-                                // 已经显式设置为undefined，保持
-                            } else if (!('streamingState' in cleanUpdates)) {
-                                // 没有提供streamingState，自动清除
-                                cleanUpdates.streamingState = undefined
-                            }
-                        }
-
                         // 创建新的 toolCall 对象（确保引用变化）
                         const updatedToolCall = { ...existingToolCall, ...cleanUpdates }
 
@@ -622,22 +658,22 @@ export const createMessageSlice: StateCreator<
                         )
 
                         return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
-                    } else {
-                        // 工具调用不存在，添加新的
-                        updated = true
-
-                        const newToolCall: ToolCall = {
-                            id: toolCallId,
-                            name: (updates.name as string) || '',
-                            arguments: (updates.arguments as Record<string, unknown>) || {},
-                            status: (updates.status as ToolCall['status']) || 'pending',
-                            ...updates,
-                        }
-                        const newParts: AssistantPart[] = [...assistantMsg.parts, { type: 'tool_call', toolCall: newToolCall }]
-                        const newToolCalls = [...(assistantMsg.toolCalls || []), newToolCall]
-
-                        return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
                     }
+
+                    // 工具调用不存在，添加新的
+                    updated = true
+
+                    const newToolCall: ToolCall = {
+                        id: toolCallId,
+                        name: (cleanUpdates.name as string) || '',
+                        arguments: (cleanUpdates.arguments as Record<string, unknown>) || {},
+                        status: (cleanUpdates.status as ToolCall['status']) || 'pending',
+                        ...cleanUpdates,
+                    }
+                    const newParts: AssistantPart[] = [...assistantMsg.parts, { type: 'tool_call', toolCall: newToolCall }]
+                    const newToolCalls = [...(assistantMsg.toolCalls || []), newToolCall]
+
+                    return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
                 }
                 return msg
             })
@@ -652,6 +688,10 @@ export const createMessageSlice: StateCreator<
                 },
             }
         })
+
+        if (shouldClearPreview) {
+            get().clearToolStreamingPreview(toolCallId, threadId)
+        }
     },
 
     // 添加推理部分
@@ -1052,3 +1092,4 @@ export const createMessageSlice: StateCreator<
         })
     },
 })
+

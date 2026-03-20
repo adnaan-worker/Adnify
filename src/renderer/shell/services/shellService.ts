@@ -53,7 +53,7 @@ class ShellService {
     if (privateKey) args.push('-i', this.quoteShellArg(privateKey));
     args.push(login);
     if (remotePath) {
-      args.push(`'cd ${this.escapeSingleQuotes(remotePath)} && exec ${process.platform === 'win32' ? 'bash' : '$SHELL -l'}'`);
+      args.push(`'cd ${this.escapeSingleQuotes(remotePath)} && exec \${SHELL:-sh} -l'`);
     }
 
     return args.join(' ');

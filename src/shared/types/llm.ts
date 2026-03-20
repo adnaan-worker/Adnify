@@ -1,10 +1,10 @@
 /**
- * LLM 相关类型定义
- * 单一来源 - 所有 LLM 相关类型从此文件导出
+ * Shared LLM-related types.
+ * This file is the single export point for LLM payloads, tool schemas, and tool UI state.
  */
 
 // ============================================
-// 消息内容类型
+// Message content
 // ============================================
 
 export interface TextContent {
@@ -16,8 +16,8 @@ export interface ImageContent {
     type: 'image'
     source: {
         type: 'base64' | 'url'
-        media_type?: string  // 改为可选，AI SDK 会自动推断
-        data: string  // base64 数据或 URL
+        media_type?: string
+        data: string
     }
 }
 
@@ -25,24 +25,23 @@ export type MessageContentPart = TextContent | ImageContent
 export type MessageContent = string | MessageContentPart[]
 
 // ============================================
-// LLM 消息类型
+// LLM messages
 // ============================================
 
 export interface LLMMessage {
     role: 'user' | 'assistant' | 'system' | 'tool'
-    /** 消息内容，assistant 有 tool_calls 时可为 null */
+    /** Assistant messages with tool calls may use `null` content. */
     content: MessageContent | null
-    /** OpenAI 格式的工具调用 */
+    /** OpenAI-style tool calls. */
     tool_calls?: LLMToolCallMessage[]
-    /** 工具结果对应的调用 ID */
+    /** Tool-call id for tool role messages. */
     tool_call_id?: string
-    /** 工具名称（tool role 时使用） */
+    /** Tool name for tool role messages. */
     name?: string
-    /** DeepSeek 等模型的推理内容（thinking 模式） */
+    /** Reasoning text for providers that expose it. */
     reasoning_content?: string
 }
 
-/** OpenAI 格式的工具调用消息 */
 export interface LLMToolCallMessage {
     id: string
     type: 'function'
@@ -53,14 +52,19 @@ export interface LLMToolCallMessage {
 }
 
 // ============================================
-// Provider 配置
+// Provider config
 // ============================================
 
-export type ProviderType = 'openai' | 'anthropic' | 'gemini' | 'deepseek' | 'groq' | 'mistral' | 'ollama' | 'custom'
+export type ProviderType =
+    | 'openai'
+    | 'anthropic'
+    | 'gemini'
+    | 'deepseek'
+    | 'groq'
+    | 'mistral'
+    | 'ollama'
+    | 'custom'
 
-/**
- * 统一的 LLM 配置接口
- */
 export interface LLMConfig {
     provider: string
     model: string
@@ -68,7 +72,7 @@ export interface LLMConfig {
     baseUrl?: string
     timeout?: number
 
-    // LLM 核心参数
+    // Core generation params.
     maxTokens?: number
     temperature?: number
     topP?: number
@@ -79,23 +83,19 @@ export interface LLMConfig {
     seed?: number
     logitBias?: Record<string, number>
 
-    // AI SDK 高级参数
-    /** 最大重试次数 */
+    // Extended AI SDK params.
     maxRetries?: number
-    /** 工具选择策略 */
     toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }
-    /** 并行工具调用 */
     parallelToolCalls?: boolean
-    /** 自定义请求头 */
     headers?: Record<string, string>
 
-    /** 协议类型 - 用于 AI SDK provider 选择 */
+    /** Provider protocol selection for AI SDK adapters. */
     protocol?: import('@shared/config/providers').ApiProtocol
-    /** 启用深度思考（如 Claude extended thinking, OpenAI o1） */
+    /** Enables reasoning / thinking mode where supported. */
     enableThinking?: boolean
-    /** 思考 token 预算（Anthropic budgetTokens / Gemini 2.5 thinkingBudget），默认 10000 */
+    /** Thinking token budget for providers that support it. */
     thinkingBudget?: number
-    /** 推理深度（OpenAI reasoningEffort / Gemini 3 thinkingLevel） */
+    /** Reasoning effort level for providers that support it. */
     reasoningEffort?: 'low' | 'medium' | 'high'
 }
 
@@ -111,10 +111,10 @@ export interface LLMParameters {
 }
 
 // ============================================
-// LLM 响应类型
+// LLM responses
 // ============================================
 
-/** LLM 返回的工具调用（无 UI 状态） */
+/** Raw tool call returned by the model before execution state is added. */
 export interface LLMToolCall {
     id: string
     name: string
@@ -122,7 +122,16 @@ export interface LLMToolCall {
 }
 
 export interface LLMStreamChunk {
-    type: 'text' | 'tool_call' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_delta_end' | 'tool_call_end' | 'tool_call_available' | 'reasoning' | 'error'
+    type:
+        | 'text'
+        | 'tool_call'
+        | 'tool_call_start'
+        | 'tool_call_delta'
+        | 'tool_call_delta_end'
+        | 'tool_call_end'
+        | 'tool_call_available'
+        | 'reasoning'
+        | 'error'
     content?: string
     toolCall?: LLMToolCall
     toolCallDelta?: {
@@ -145,7 +154,7 @@ export interface LLMResult {
 }
 
 // ============================================
-// 错误类型
+// Errors
 // ============================================
 
 export interface LLMError {
@@ -168,7 +177,7 @@ export enum LLMErrorCode {
 }
 
 // ============================================
-// IPC 通信参数
+// IPC payloads
 // ============================================
 
 export interface LLMSendMessageParams {
@@ -176,17 +185,16 @@ export interface LLMSendMessageParams {
     messages: LLMMessage[]
     tools?: ToolDefinition[]
     systemPrompt?: string
-    activeTools?: string[]  // 限制可用的工具列表
+    activeTools?: string[]
 }
 
 // ============================================
-// 工具定义（发送给 LLM）
+// Tool definitions
 // ============================================
 
 export interface ToolDefinition {
     name: string
     description: string
-    /** 审批类型（可选） */
     approvalType?: ToolApprovalType
     parameters: {
         type: 'object'
@@ -205,14 +213,25 @@ export interface ToolPropertySchema {
 }
 
 // ============================================
-// 工具执行（Renderer 使用）
+// Tool execution / UI state
 // ============================================
 
 export type ToolStatus = 'pending' | 'awaiting' | 'running' | 'success' | 'error' | 'rejected'
 export type ToolApprovalType = 'none' | 'terminal' | 'dangerous' | 'interaction'
 export type ToolResultType = 'tool_request' | 'running_now' | 'success' | 'tool_error' | 'rejected'
 
-/** UI 层的工具调用记录（包含执行状态） */
+/**
+ * Ephemeral tool preview state used while a tool call is still streaming.
+ * The canonical live source now lives on the thread store.
+ */
+export interface ToolStreamingPreview {
+    isStreaming: boolean
+    name?: string
+    partialArgs?: Record<string, unknown>
+    lastUpdateTime?: number
+}
+
+/** Tool call record rendered in the chat UI. */
 export interface ToolCall {
     id: string
     name: string
@@ -220,52 +239,49 @@ export interface ToolCall {
     status: ToolStatus
     result?: string
     error?: string
-    /** 富内容结果（图片、代码、表格等） */
+    /** Structured rich results such as images, code, tables, or files. */
     richContent?: ToolRichContent[]
-    /** 流式状态（独立字段，不污染 arguments） */
-    streamingState?: {
-        isStreaming: boolean
-        partialArgs?: Record<string, unknown>
-        lastUpdateTime?: number
-    }
+    /**
+     * Legacy compatibility field.
+     * Live streaming previews should read from thread-level `ToolStreamingPreview` state instead.
+     */
+    streamingState?: ToolStreamingPreview
 }
 
 export interface ToolExecutionResult {
     success: boolean
-    /** 文本结果 */
+    /** Plain-text result returned to the model. */
     result: string
     error?: string
-    /** 元数据 */
+    /** Extra execution metadata for UI and follow-up logic. */
     meta?: Record<string, unknown>
-    /** 富内容结果（支持多种类型） */
+    /** Structured rich output for renderer-side display. */
     richContent?: ToolRichContent[]
 }
 
-/** 工具富内容类型 */
-export type ToolRichContentType = 'text' | 'image' | 'code' | 'json' | 'markdown' | 'html' | 'file' | 'link' | 'table'
+export type ToolRichContentType =
+    | 'text'
+    | 'image'
+    | 'code'
+    | 'json'
+    | 'markdown'
+    | 'html'
+    | 'file'
+    | 'link'
+    | 'table'
 
-/** 工具富内容 */
 export interface ToolRichContent {
-    /** 内容类型 */
     type: ToolRichContentType
-    /** 文本内容 */
     text?: string
-    /** Base64 数据（用于图片等二进制内容） */
     data?: string
-    /** MIME 类型 */
     mimeType?: string
-    /** 文件路径或 URI */
     uri?: string
-    /** 标题 */
     title?: string
-    /** 代码语言（type 为 code 时使用） */
     language?: string
-    /** 表格数据（type 为 table 时使用） */
     tableData?: {
         headers: string[]
         rows: string[][]
     }
-    /** 链接 URL（type 为 link 时使用） */
     url?: string
 }
 
@@ -287,7 +303,7 @@ export interface ValidationResult<T = unknown> {
     error?: string
 }
 
-/** AST 调用图节点（用于代码结构分析） */
+/** AST node used by code graph / call graph analysis. */
 export interface CodeGraphNode {
     id: string
     name: string

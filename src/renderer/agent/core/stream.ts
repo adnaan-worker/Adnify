@@ -1,13 +1,6 @@
 /**
- * 流式处理模块
- *
- * 职责：
- * - 订阅 IPC 事件，收集 LLM 流式响应数据
- * - 解析文本、推理、工具调用
- * - 通过 Promise 返回最终结果
- * 
- * 注意：此模块只负责数据收集，不控制全局状态（streamState.phase）
- * 状态控制由 Agent.cleanupTask 统一处理
+ * Stream processing for assistant responses.
+ * Collects text, reasoning, and tool-call events and resolves a final result.
  */
 
 import { api } from '@/renderer/services/electronAPI'
@@ -19,26 +12,85 @@ import { getErrorMessage, ErrorCode } from '@shared/utils/errorHandler'
 import type { ToolCall, TokenUsage } from '../types'
 import type { LLMCallResult } from './types'
 
-// 全局监听器计数器（用于调试内存泄漏）
+// Tracks active IPC listeners for leak debugging.
 let activeListenerCount = 0
 
 export function getActiveListenerCount(): number {
   return activeListenerCount
 }
 
-// 解析部分 JSON 参数，提取已完成的字段
-function parsePartialJsonArgs(argsString: string): Record<string, unknown> | null {
+const STREAMABLE_TOOL_ARG_KEYS = new Set([
+  'path',
+  'command',
+  'query',
+  'pattern',
+  'url',
+  'cwd',
+  'line',
+  'column',
+  'terminal_id',
+  'file_pattern',
+  'is_background',
+  'timeout',
+  'refresh',
+])
+
+const PARTIAL_ARGS_SCAN_LIMIT = 4096
+
+function arePartialArgsEqual(
+  left?: Record<string, unknown>,
+  right?: Record<string, unknown>
+): boolean {
+  if (left === right) return true
+  if (!left || !right) return !left && !right
+
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function parseFinalJsonArgs(argsString: string): Record<string, unknown> | null {
   if (!argsString) return null
 
   try {
-    return JSON.parse(argsString)
+    const parsed = JSON.parse(argsString)
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null
+  } catch {
+    return null
+  }
+}
+
+function parsePartialJsonArgs(argsString: string): Record<string, unknown> | null {
+  if (!argsString) return null
+  const scanTarget = argsString.length > PARTIAL_ARGS_SCAN_LIMIT
+    ? argsString.slice(0, PARTIAL_ARGS_SCAN_LIMIT)
+    : argsString
+
+  try {
+    const parsed = JSON.parse(scanTarget)
+    if (!parsed || typeof parsed !== 'object') return null
+    const filtered = Object.fromEntries(
+      Object.entries(parsed).filter(([key, value]) =>
+        STREAMABLE_TOOL_ARG_KEYS.has(key) && typeof value !== 'object'
+      )
+    )
+    return Object.keys(filtered).length > 0 ? filtered : null
   } catch {
     const result: Record<string, unknown> = {}
 
-    // 匹配简单字符串字段
+    // Match simple string fields.
     const stringFieldRegex = /"(\w+)":\s*"((?:[^"\\]|\\.)*)"/g
     let match
-    while ((match = stringFieldRegex.exec(argsString)) !== null) {
+    while ((match = stringFieldRegex.exec(scanTarget)) !== null) {
+      if (!STREAMABLE_TOOL_ARG_KEYS.has(match[1])) continue
       try {
         result[match[1]] = JSON.parse(`"${match[2]}"`)
       } catch {
@@ -46,15 +98,16 @@ function parsePartialJsonArgs(argsString: string): Record<string, unknown> | nul
       }
     }
 
-    // 匹配布尔值字段
     const boolFieldRegex = /"(\w+)":\s*(true|false)/g
-    while ((match = boolFieldRegex.exec(argsString)) !== null) {
+    while ((match = boolFieldRegex.exec(scanTarget)) !== null) {
+      if (!STREAMABLE_TOOL_ARG_KEYS.has(match[1])) continue
       result[match[1]] = match[2] === 'true'
     }
 
-    // 匹配数字字段
+    // Match numeric fields.
     const numFieldRegex = /"(\w+)":\s*(-?\d+(?:\.\d+)?)/g
-    while ((match = numFieldRegex.exec(argsString)) !== null) {
+    while ((match = numFieldRegex.exec(scanTarget)) !== null) {
+      if (!STREAMABLE_TOOL_ARG_KEYS.has(match[1])) continue
       result[match[1]] = parseFloat(match[2])
     }
 
@@ -62,7 +115,7 @@ function parsePartialJsonArgs(argsString: string): Record<string, unknown> | nul
   }
 }
 
-// ===== 流式处理器 =====
+// ===== Stream Processor =====
 
 export interface StreamProcessor {
   wait: () => Promise<LLMCallResult>
@@ -72,7 +125,7 @@ export interface StreamProcessor {
 export function createStreamProcessor(
   assistantId: string | null,
   store: import('../store/AgentStore').ThreadBoundStore,
-  requestId: string  // 必传，用于 IPC 频道隔离
+  requestId: string
 ): StreamProcessor {
 
   let content = ''
@@ -84,18 +137,78 @@ export function createStreamProcessor(
   let error: string | undefined
   let isCleanedUp = false
 
-  // 工具调用流式状态
-  const streamingToolCalls = new Map<string, { id: string; name: string; argsString: string; lastUpdateTime: number }>()
+  const streamingToolCalls = new Map<string, {
+    id: string
+    name: string
+    argsString: string
+    lastPreviewArgs?: Record<string, unknown>
+  }>()
 
-  // 节流：工具参数更新（避免过于频繁的状态更新）
-  const TOOL_UPDATE_THROTTLE_MS = 50 // 每 50ms 最多更新一次
+  let toolUpdateRafId: number | null = null
+  const pendingToolPreviewUpdates = new Map<string, {
+    partialArgs?: Record<string, unknown>
+    name?: string
+    timestamp: number
+  }>()
 
-  // 清理函数列表
+  // Cleanup callbacks for request-scoped listeners.
   const cleanups: (() => void)[] = []
+
+  const flushToolPreviewUpdates = () => {
+    if (toolUpdateRafId !== null) {
+      cancelAnimationFrame(toolUpdateRafId)
+      toolUpdateRafId = null
+    }
+
+    if (!assistantId || pendingToolPreviewUpdates.size === 0) return
+
+    for (const [toolId, update] of pendingToolPreviewUpdates) {
+      store.setToolStreamingPreview(toolId, {
+        isStreaming: true,
+        ...(update.partialArgs ? { partialArgs: update.partialArgs } : {}),
+        ...(update.name ? { name: update.name } : {}),
+        lastUpdateTime: update.timestamp,
+      })
+    }
+
+    pendingToolPreviewUpdates.clear()
+  }
+
+  const scheduleToolPreviewUpdates = () => {
+    if (toolUpdateRafId !== null) return
+
+    toolUpdateRafId = requestAnimationFrame(() => {
+      toolUpdateRafId = null
+      flushToolPreviewUpdates()
+    })
+  }
+
+  const queueToolPreviewUpdate = (
+    toolId: string,
+    update: {
+      partialArgs?: Record<string, unknown>
+      name?: string
+      timestamp: number
+    }
+  ) => {
+    const current = pendingToolPreviewUpdates.get(toolId)
+    pendingToolPreviewUpdates.set(toolId, {
+      ...current,
+      ...update,
+      timestamp: update.timestamp,
+    })
+    scheduleToolPreviewUpdates()
+  }
 
   const cleanup = () => {
     if (isCleanedUp) return
     isCleanedUp = true
+
+    if (toolUpdateRafId !== null) {
+      cancelAnimationFrame(toolUpdateRafId)
+      toolUpdateRafId = null
+    }
+    pendingToolPreviewUpdates.clear()
 
     for (const fn of cleanups) {
       try {
@@ -109,7 +222,6 @@ export function createStreamProcessor(
     logger.agent.info('[StreamProcessor] Active listeners remaining:', activeListenerCount)
   }
 
-  // 处理流式数据（AI SDK 格式）
   const handleStream = (data: {
     type: string
     content?: string
@@ -119,12 +231,9 @@ export function createStreamProcessor(
     argumentsDelta?: string
     usage?: unknown
   }) => {
-    // 动态频道已实现隔离，无需过滤
-
     switch (data.type) {
       case 'text':
         if (data.content) {
-          // 收到文本内容时，结束 reasoning 状态
           if (isInReasoning && assistantId && reasoningPartId) {
             store.finalizeReasoningPart(assistantId, reasoningPartId)
             EventBus.emit({ type: 'stream:reasoning', text: '', phase: 'end' })
@@ -137,7 +246,7 @@ export function createStreamProcessor(
           }
           EventBus.emit({ type: 'stream:text', text: data.content })
 
-          // 检测 XML 工具调用
+          // Detect XML-style tool calls embedded in text streams.
           const detected = parseXMLToolCalls(content)
           for (const tc of detected) {
             if (!toolCalls.find((t) => t.id === tc.id)) {
@@ -181,33 +290,32 @@ export function createStreamProcessor(
         const toolId = data.id || `tool-${Date.now()}`
         const toolName = data.name || '...'
 
-        // 收到工具调用时，结束 reasoning 状态
         if (isInReasoning && assistantId && reasoningPartId) {
           store.finalizeReasoningPart(assistantId, reasoningPartId)
           EventBus.emit({ type: 'stream:reasoning', text: '', phase: 'end' })
           isInReasoning = false
         }
 
-        streamingToolCalls.set(toolId, { id: toolId, name: toolName, argsString: '', lastUpdateTime: 0 })
+        streamingToolCalls.set(toolId, {
+          id: toolId,
+          name: toolName,
+          argsString: '',
+        })
 
-        // 关键修复：先结束当前文本输出，再添加工具调用
-        // 这样工具调用会出现在文本之后的正确位置
+        // Finalize text first so the tool card appears after prior text.
         if (assistantId && content.length > 0) {
-          // 如果有未完成的文本，先 finalize 文本部分
-          // 这会确保工具调用出现在文本之后
           store.finalizeTextBeforeToolCall(assistantId)
         }
 
-        // 立即添加到 UI（使用 streamingState 而非污染 arguments）
         if (assistantId) {
           store.addToolCallPart(assistantId, {
             id: toolId,
             name: toolName,
             arguments: {},
-            streamingState: {
-              isStreaming: true,
-              partialArgs: {},
-            },
+          })
+          store.setToolStreamingPreview(toolId, {
+            isStreaming: true,
+            name: toolName,
           })
         }
         EventBus.emit({ type: 'stream:tool_start', id: toolId, name: toolName })
@@ -224,32 +332,26 @@ export function createStreamProcessor(
             if (argsDelta) {
               tc.argsString += argsDelta
 
-              // 节流更新：第一次立即更新，后续根据时间间隔节流
               if (assistantId) {
-                const now = Date.now()
-                const timeSinceLastUpdate = now - tc.lastUpdateTime
-
-                // 第一次更新（lastUpdateTime === 0）或距离上次更新超过阈值时，立即更新
-                if (tc.lastUpdateTime === 0 || timeSinceLastUpdate >= TOOL_UPDATE_THROTTLE_MS) {
-                  tc.lastUpdateTime = now
-                  const partialArgs = parsePartialJsonArgs(tc.argsString)
-                  if (partialArgs && Object.keys(partialArgs).length > 0) {
-                    store.updateToolCall(assistantId, tc.id, {
-                      streamingState: {
-                        isStreaming: true,
-                        partialArgs,
-                        lastUpdateTime: now,
-                      },
+                const partialArgs = parsePartialJsonArgs(tc.argsString)
+                if (partialArgs && Object.keys(partialArgs).length > 0) {
+                  if (!arePartialArgsEqual(tc.lastPreviewArgs, partialArgs)) {
+                    tc.lastPreviewArgs = partialArgs
+                    queueToolPreviewUpdate(tc.id, {
+                      partialArgs,
+                      timestamp: Date.now(),
                     })
                   }
                 }
-                // 否则跳过此次更新（节流）
               }
             }
             if (data.name && data.name !== tc.name) {
               tc.name = data.name
               if (assistantId) {
-                store.updateToolCall(assistantId, tc.id, { name: data.name })
+                queueToolPreviewUpdate(tc.id, {
+                  name: data.name,
+                  timestamp: Date.now(),
+                })
               }
             }
             EventBus.emit({ type: 'stream:tool_delta', id: tc.id, args: tc.argsString })
@@ -263,24 +365,23 @@ export function createStreamProcessor(
         if (tcId && assistantId) {
           const tc = streamingToolCalls.get(tcId)
           if (tc) {
-            // 参数传输完成，立即解析并更新最终参数（清除 streamingState）
-            const finalArgs = parsePartialJsonArgs(tc.argsString)
+            flushToolPreviewUpdates()
+            const finalArgs = parseFinalJsonArgs(tc.argsString) || {}
             if (finalArgs) {
               store.updateToolCall(assistantId, tc.id, {
                 arguments: finalArgs,
-                streamingState: undefined,  // 清除流式状态
+                streamingState: undefined,
               })
             }
 
-            // 添加到 toolCalls 数组（用于返回给 loop.ts）
             const toolCall: ToolCall = {
               id: tc.id,
               name: tc.name,
-              arguments: finalArgs || {},
+              arguments: finalArgs,
               status: 'pending',
             }
 
-            // 检查是否已存在（避免重复）
+            // Avoid duplicate tool calls in the final array.
             if (!toolCalls.find(t => t.id === tc.id)) {
               toolCalls.push(toolCall)
             }
@@ -294,12 +395,11 @@ export function createStreamProcessor(
         const toolName = data.name || ''
         const args = data.arguments as Record<string, unknown>
 
-        // 清除流式状态
         if (tcId) {
+          flushToolPreviewUpdates()
           streamingToolCalls.delete(tcId)
         }
 
-        // 添加到 toolCalls 数组（用于返回给 loop.ts）
         const toolCall: ToolCall = {
           id: tcId,
           name: toolName,
@@ -307,18 +407,17 @@ export function createStreamProcessor(
           status: 'pending',
         }
 
-        // 检查是否已存在（避免重复）
+        // Avoid duplicate tool calls in the final array.
         if (!toolCalls.find(tc => tc.id === tcId)) {
           toolCalls.push(toolCall)
         }
 
-        // 更新为最终参数（清除 streamingState）
         if (assistantId && tcId) {
           store.updateToolCall(assistantId, tcId, {
             name: toolName,
             arguments: args,
             status: 'pending',
-            streamingState: undefined,  // 清除流式状态
+            streamingState: undefined,
           })
         }
 
@@ -334,7 +433,6 @@ export function createStreamProcessor(
     }
   }
 
-  // 结束推理的辅助函数
   const finalizeReasoning = () => {
     if (isInReasoning) {
       if (assistantId && reasoningPartId) {
@@ -345,12 +443,10 @@ export function createStreamProcessor(
     }
   }
 
-  // Promise resolve 函数（在外部定义，避免在 Promise 内部创建监听器）
+  // Promise resolver is hoisted to avoid listener registration races.
   let resolveWait: ((result: LLMCallResult) => void) | null = null
   let isResolved = false
 
-  // 立即创建 Promise，避免竞态条件
-  // 这确保即使 done 事件在 wait() 被调用之前到达，也能正确 resolve
   const waitPromise = new Promise<LLMCallResult>((resolve) => {
     resolveWait = resolve
   })
@@ -359,24 +455,20 @@ export function createStreamProcessor(
     if (isResolved) return
     isResolved = true
 
-    // 先 resolve Promise，再 cleanup
     if (resolveWait) {
       resolveWait(result)
     }
 
-    // cleanup 放在最后
     cleanup()
   }
 
-  // 处理错误事件
+  // Handle request error.
   const handleError = (err: { message?: string; code?: string } | string) => {
-    // 动态频道已实现隔离，无需过滤
     let errorMsg: string
 
     if (typeof err === 'string') {
       errorMsg = err
     } else {
-      // 如果有错误码，使用国际化消息，并将具体错误贴在后面
       if (err.code && err.code in ErrorCode) {
         const language = useStore.getState().language
         const baseMsg = getErrorMessage(err.code as ErrorCode, language)
@@ -389,21 +481,18 @@ export function createStreamProcessor(
     logger.agent.error('[StreamProcessor] Error:', errorMsg)
     error = errorMsg
     finalizeReasoning()
-    // 只 resolve，不 emit EventBus - 状态由 Agent.cleanupTask 控制
     doResolve({ content, toolCalls, usage, error: errorMsg })
   }
 
-  // 处理完成事件 - 只收集数据并 resolve，不控制全局状态
   const handleDone = (result: { usage?: unknown }) => {
     if (result?.usage) {
       usage = result.usage as TokenUsage
     }
     finalizeReasoning()
-    // 只 resolve，不 emit EventBus - 状态由 Agent.cleanupTask 控制
     doResolve({ content, toolCalls, usage, error })
   }
 
-  // 订阅特定请求的 IPC 频道（实现请求隔离）
+  // Subscribe only to this request's IPC channel.
   const unsubStream = api.llm.onStream(requestId, handleStream)
   const unsubError = api.llm.onError(requestId, handleError)
   const unsubDone = api.llm.onDone(requestId, handleDone)
@@ -411,8 +500,9 @@ export function createStreamProcessor(
   cleanups.push(unsubStream, unsubError, unsubDone)
   activeListenerCount += 3
 
-  // 等待完成 - 返回已创建的 Promise
+  // Expose the already-created completion promise.
   const wait = (): Promise<LLMCallResult> => waitPromise
 
   return { wait, cleanup }
 }
+

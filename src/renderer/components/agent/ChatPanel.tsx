@@ -251,10 +251,19 @@ export default function ChatPanel() {
     setAtBottom(true)
     setShowScrollButton(false)
   }, [filteredMessages.length])
+  const followOutput = useCallback((isListAtBottom: boolean) => {
+    if (!isStreaming) return false
+    return isListAtBottom ? 'smooth' : false
+  }, [isStreaming])
+
+  const handleTotalListHeightChanged = useCallback(() => {
+    if (!atBottom || !isStreaming) return
+    virtuosoRef.current?.autoscrollToBottom()
+  }, [atBottom, isStreaming])
 
   // 流式输出时的自动滚动 - 只在用户处于底部时才滚动
   useEffect(() => {
-    if (!isStreaming || !atBottom) return
+    if (!isStreaming || !atBottom || typeof virtuosoRef.current?.autoscrollToBottom === 'function') return
 
     let rafId: number
     let intervalId: NodeJS.Timeout
@@ -1098,14 +1107,17 @@ export default function ChatPanel() {
           <Virtuoso
             ref={virtuosoRef}
             data={filteredMessages}
+            computeItemKey={(_, message) => message.id}
             atBottomStateChange={handleAtBottomStateChange}
             initialTopMostItemIndex={Math.max(0, filteredMessages.length - 1)}
-            followOutput={isStreaming ? 'smooth' : false}
+            followOutput={followOutput}
             itemContent={(_, message) => renderMessage(message)}
             className="flex-1 custom-scrollbar"
             style={{ minHeight: '100px' }}
             overscan={200}
             atBottomThreshold={200}
+            totalListHeightChanged={handleTotalListHeightChanged}
+            skipAnimationFrameInResizeObserver
             components={virtuosoComponents}
           />
 

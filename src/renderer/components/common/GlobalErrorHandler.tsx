@@ -118,7 +118,7 @@ function shouldShowToast(error: AppError): boolean {
   }
 
   // 开发环境的 HMR 错误不显示
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     if (error.message?.includes('HMR') || error.message?.includes('hot module')) {
       return false
     }

@@ -98,6 +98,13 @@ const ALLOWED_SHELL_COMMANDS = new Set(SECURITY_DEFAULTS.SHELL_COMMANDS.map(cmd 
 
 const ALLOWED_GIT_SUBCOMMANDS = new Set(SECURITY_DEFAULTS.GIT_SUBCOMMANDS.map(cmd => cmd.toLowerCase()))
 
+function normalizeCommandName(command: string): string {
+  const baseName = path.basename(command).toLowerCase()
+  return process.platform === 'win32'
+    ? baseName.replace(/\.(cmd|bat|exe)$/i, '')
+    : baseName
+}
+
 class SecurityManager implements SecurityModule {
   private sessionStorage: Map<string, boolean> = new Map()
   private config: Partial<SecuritySettings> = {}
@@ -236,16 +243,18 @@ class SecurityManager implements SecurityModule {
    */
   isAllowedCommand(command: string, type: 'shell' | 'git'): boolean {
     const parts = command.trim().split(/\s+/)
-    const baseCommand = parts[0]?.toLowerCase()
+    const baseCommand = normalizeCommandName(parts[0] || '')
 
     if (type === 'git') {
-      const subCommand = parts[1]?.toLowerCase()
+      const subCommand = normalizeCommandName(parts[1] || '')
       return ALLOWED_GIT_SUBCOMMANDS.has(subCommand)
     }
 
     if (type === 'shell') {
       if (this.config.allowedShellCommands && Array.isArray(this.config.allowedShellCommands)) {
-        return this.config.allowedShellCommands.includes(baseCommand)
+        return this.config.allowedShellCommands
+          .map(cmd => normalizeCommandName(cmd))
+          .includes(baseCommand)
       }
       return ALLOWED_SHELL_COMMANDS.has(baseCommand)
     }

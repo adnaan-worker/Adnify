@@ -9,6 +9,7 @@ import {
   type McpPreset,
   type McpPresetCategory,
 } from '@shared/types/mcp'
+import { platform as runtimePlatform } from '@shared/utils/pathUtils'
 
 /** 分类显示名称 */
 export const MCP_CATEGORY_NAMES: Record<McpPresetCategory, { en: string; zh: string }> = {
@@ -801,9 +802,8 @@ export function searchPresets(query: string): McpPreset[] {
 
 /** 获取当前平台 */
 export function getCurrentPlatform(): McpPlatform {
-  const platform = process.platform
-  if (platform === 'win32') return 'windows'
-  if (platform === 'darwin') return 'macos'
+  if (runtimePlatform.isWindows) return 'windows'
+  if (runtimePlatform.isMac) return 'macos'
   return 'linux'
 }
 

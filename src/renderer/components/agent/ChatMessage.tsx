@@ -647,21 +647,6 @@ const RenderPart = React.memo(({
 
 RenderPart.displayName = 'RenderPart'
 
-// Helper for Sequential Group Rendering
-const SequentialToolGroup = ({
-  children,
-  onComplete
-}: {
-  children: React.ReactNode,
-  onComplete?: () => void
-}) => {
-  useEffect(() => {
-    const timer = setTimeout(() => onComplete?.(), 100)
-    return () => clearTimeout(timer)
-  }, [])
-  return <>{children}</>
-}
-
 // 助手消息内容组件 - 将分组逻辑提取出来并 memoize
 const AssistantMessageContent = React.memo(({
   parts,
@@ -712,40 +697,9 @@ const AssistantMessageContent = React.memo(({
     return result
   }, [parts])
 
-  // Sequential Reveal State
-  const [visibleIndex, setVisibleIndex] = useState(() => {
-    // If streaming, start from 0. If history, show all.
-    // Note: isStreaming prop is for the message status. 
-    return isStreaming ? 0 : 9999
-  })
-
-  // Watch for streaming restart
-  useEffect(() => {
-    if (isStreaming) {
-      // Reset if starting fresh? 
-      // Actually, relying on initial state is safer to avoid flashing content on re-renders.
-      // If we need to support "regenerate" clearing this, key change handles it.
-    } else {
-      // If streaming finishes, show everything immediately
-      setVisibleIndex(9999)
-    }
-  }, [isStreaming])
-
-  const handleGroupComplete = useCallback((index: number) => {
-    setVisibleIndex(prev => Math.max(prev, index + 1))
-  }, [])
-
   return (
     <>
-      {groups.map((group, groupIdx) => {
-        // Simple visibility check
-        // If we are streaming and this is the last group, always show it
-        const isStreamingLastGroup = isStreaming && groupIdx === groups.length - 1;
-
-        if (groupIdx > visibleIndex && !isStreamingLastGroup) return null
-
-        const isLastVisible = groupIdx === visibleIndex || isStreamingLastGroup
-
+      {groups.map((group) => {
         if (group.type === 'part') {
           return (
             <RenderPart
@@ -759,53 +713,38 @@ const AssistantMessageContent = React.memo(({
               fontSize={fontSize}
               isStreaming={isStreaming}
               messageId={messageId}
-              onTypingComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}
             />
           )
-        } else {
-          const content = (
-            <ToolCallGroup
-              key={`group-${group.startIndex}`}
-              toolCalls={group.toolCalls}
+        }
+
+        if (group.toolCalls.length === 1) {
+          return (
+            <RenderPart
+              key={`part-${group.startIndex}`}
+              part={parts[group.startIndex]}
+              index={group.startIndex}
               pendingToolId={pendingToolId}
               onApproveTool={onApproveTool}
               onRejectTool={onRejectTool}
               onOpenDiff={onOpenDiff}
+              fontSize={fontSize}
+              isStreaming={isStreaming}
               messageId={messageId}
             />
           )
-
-          if (group.toolCalls.length === 1) {
-            // For single tool call, RenderPart handles it (via recursive AssistantMessageContent logic? No, wait)
-            // The grouping logic puts single tool call in 'tool_group' if it was bunched?
-            // Ah, previous logic: "if (group.toolCalls.length === 1) return RenderPart..."
-            // Let's stick to that but wrapped for timing.
-            return (
-              <SequentialToolGroup key={`seq-${group.startIndex}`} onComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}>
-                <RenderPart
-                  key={`part-${group.startIndex}`}
-                  part={parts[group.startIndex]}
-                  index={group.startIndex}
-                  pendingToolId={pendingToolId}
-                  onApproveTool={onApproveTool}
-                  onRejectTool={onRejectTool}
-                  onOpenDiff={onOpenDiff}
-                  fontSize={fontSize}
-                  isStreaming={isStreaming}
-                  messageId={messageId}
-                  // Note: RenderPart for tool call handles onTypingComplete internally via useEffect!
-                  onTypingComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}
-                />
-              </SequentialToolGroup>
-            )
-          }
-
-          return (
-            <SequentialToolGroup key={`seq-${group.startIndex}`} onComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}>
-              {content}
-            </SequentialToolGroup>
-          )
         }
+
+        return (
+          <ToolCallGroup
+            key={`group-${group.startIndex}`}
+            toolCalls={group.toolCalls}
+            pendingToolId={pendingToolId}
+            onApproveTool={onApproveTool}
+            onRejectTool={onRejectTool}
+            onOpenDiff={onOpenDiff}
+            messageId={messageId}
+          />
+        )
       })}
     </>
   )

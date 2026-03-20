@@ -223,6 +223,7 @@ export const SECURITY_SETTINGS_DEFAULTS = {
   allowedShellCommands: [
     'npm', 'yarn', 'pnpm', 'bun',
     'node', 'npx', 'deno',
+    'eslint', 'tsc',
     'git',
     'python', 'python3', 'pip', 'pip3',
     'java', 'javac', 'mvn', 'gradle',

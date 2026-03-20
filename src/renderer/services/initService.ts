@@ -189,7 +189,7 @@ export async function initializeApp(
     startupMetrics.end('init-total')
 
     // 打印启动性能报告（开发环境）
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       startupMetrics.mark('app-ready')
       startupMetrics.printReport()
     }

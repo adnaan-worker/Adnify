@@ -224,22 +224,18 @@ async function autoFix(
   if (editedFiles.length === 0) return null
 
   const { lintService } = await import('../services/lintService')
+  const uniqueEditedFiles = Array.from(new Set(editedFiles))
+  const lintResults = await lintService.getLintErrorsForFiles(uniqueEditedFiles, true)
   const allFiles: LintCheckFile[] = []
 
-  // 并行检查所有文件的 lint 错误
-  await Promise.all(
-    editedFiles.map(async (filePath) => {
-      try {
-        const { errors } = await lintService.getLintErrors(filePath, true)
-        // 只收集 error 级别的（warning 不触发自动修复）
-        const errorItems = errors.filter(e => e.severity === 'error')
-        allFiles.push({
-          filePath,
-          errors: errorItems.map(e => ({ severity: e.severity as 'error' | 'warning', message: e.message, line: e.startLine ?? 1 })),
-        })
-      } catch { /* ignore */ }
+  for (const filePath of uniqueEditedFiles) {
+    const result = lintResults.get(filePath)
+    const errorItems = (result?.errors || []).filter(e => e.severity === 'error')
+    allFiles.push({
+      filePath,
+      errors: errorItems.map(e => ({ severity: e.severity as 'error' | 'warning', message: e.message, line: e.startLine ?? 1 })),
     })
-  )
+  }
 
   const filesWithErrors = allFiles.filter(f => f.errors.length > 0)
   if (filesWithErrors.length === 0) return null

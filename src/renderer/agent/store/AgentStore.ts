@@ -33,6 +33,7 @@ import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../context/types'
 import { buildHandoffContext } from '../context/HandoffManager'
 import type { EmotionDetection, EmotionHistory } from '../types/emotion'
+import type { ToolStreamingPreview } from '@/shared/types'
 
 // 重新导出刷新函数供外部使用
 export { flushStreamingBuffer }
@@ -108,6 +109,9 @@ export interface ThreadBoundStore {
     // 状态操作
     setStreamState: (state: Partial<StreamState>) => void
     setStreamPhase: (phase: StreamState['phase']) => void
+    setToolStreamingPreview: (toolCallId: string, preview: ToolStreamingPreview) => void
+    clearToolStreamingPreview: (toolCallId: string) => void
+    getToolStreamingPreview: (toolCallId: string) => ToolStreamingPreview | undefined
     setCompressionStats: (stats: CompressionStats | null) => void
     setContextSummary: (summary: StructuredSummary | null) => void
     setCompressionPhase: (phase: import('../types').CompressionPhase) => void
@@ -286,6 +290,12 @@ export const useAgentStore = create<AgentStore>()(
                 // 状态操作
                 setStreamState: (state) => threadSlice.setStreamState(state, threadId),
                 setStreamPhase: (phase) => threadSlice.setStreamState({ phase }, threadId),
+                setToolStreamingPreview: (toolCallId, preview) =>
+                    threadSlice.setToolStreamingPreview(toolCallId, preview, threadId),
+                clearToolStreamingPreview: (toolCallId) =>
+                    threadSlice.clearToolStreamingPreview(toolCallId, threadId),
+                getToolStreamingPreview: (toolCallId) =>
+                    threadSlice.getToolStreamingPreview(toolCallId, threadId),
                 setCompressionStats: (stats) => threadSlice.setCompressionStats(stats, threadId),
                 setContextSummary: (summary) => threadSlice.setContextSummary(summary, threadId),
                 setCompressionPhase: (phase) => threadSlice.setCompressionPhase(phase, threadId),
@@ -360,6 +370,11 @@ export const selectMessages = (state: AgentStore) => {
     if (!state.currentThreadId) return EMPTY_MESSAGES
     const thread = state.threads[state.currentThreadId]
     return thread?.messages || EMPTY_MESSAGES
+}
+
+export const selectToolStreamingPreview = (toolCallId: string) => (state: AgentStore) => {
+    if (!state.currentThreadId) return undefined
+    return state.threads[state.currentThreadId]?.toolStreamingPreviews?.[toolCallId]
 }
 
 // 从当前线程获取流状态

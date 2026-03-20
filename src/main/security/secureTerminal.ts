@@ -7,6 +7,7 @@ import { toAppError } from '@shared/utils/errorHandler'
 import { BrowserWindow, ipcMain } from 'electron'
 import { spawn, execSync, execFile, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
+import * as path from 'path'
 const execFileAsync = promisify(execFile)
 import { EventEmitter } from 'events'
 import { securityManager, OperationType } from './securityModule'
@@ -146,19 +147,29 @@ interface SecurityCheckResult {
  * 安全命令解析器
  */
 class SecureCommandParser {
+  private static normalizeCommandForWhitelist(baseCommand: string): string {
+    const normalized = path.basename(baseCommand).toLowerCase()
+    if (process.platform === 'win32') {
+      return normalized.replace(/\.(cmd|bat|exe)$/i, '')
+    }
+    return normalized
+  }
+
   /**
    * 验证命令是否在白名单中
    */
   static validateCommand(baseCommand: string, type: 'shell' | 'git'): SecurityCheckResult {
+    const normalizedCommand = this.normalizeCommandForWhitelist(baseCommand)
+
     if (type === 'git') {
-      const allowed = WHITELIST.git.has(baseCommand.toLowerCase())
+      const allowed = WHITELIST.git.has(normalizedCommand)
       return {
         safe: allowed,
         reason: allowed ? undefined : `Git子命令"${baseCommand}"不在白名单中`,
       }
     }
 
-    const allowed = WHITELIST.shell.has(baseCommand.toLowerCase())
+    const allowed = WHITELIST.shell.has(normalizedCommand)
     return {
       safe: allowed,
       reason: allowed ? undefined : `Shell命令"${baseCommand}"不在白名单中`,

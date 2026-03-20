@@ -9,24 +9,95 @@ import { LintError } from '../types'
 import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'
 import { useDiagnosticsStore } from '@services/diagnosticsStore'
-import { normalizePath } from '@shared/utils/pathUtils'
+import { getNpxCommand, joinPath, normalizePath, platform } from '@shared/utils/pathUtils'
 import { getServerIdForLanguage, LSP_SERVER_DEFINITIONS } from '@shared/languages'
-import { getLanguageId } from '@services/lspService'
+import { ensureServerForFile, getFileWorkspaceRoot, getLanguageId, waitForDiagnostics } from '@services/lspService'
 
 // 支持的语言和对应的 lint 命令
-const LINT_COMMANDS: Record<string, { command: string; parser: (output: string, file: string) => LintError[] }> = {
+const LINT_COMMANDS: Record<string, {
+	getCommand: () => { command: string; args: string[] }
+	parser: (output: string, file: string) => LintError[]
+}> = {
 	typescript: {
-		command: 'npx tsc --noEmit --pretty false',
+		getCommand: () => ({
+			command: getNpxCommand(),
+			args: ['tsc', '--noEmit', '--pretty', 'false'],
+		}),
 		parser: parseTscOutput,
 	},
 	javascript: {
-		command: 'npx eslint --format json',
+		getCommand: () => ({
+			command: getNpxCommand(),
+			args: ['eslint', '--format', 'json'],
+		}),
 		parser: parseEslintOutput,
 	},
 	python: {
-		command: 'python -m pylint --output-format=json',
+		getCommand: () => ({
+			command: 'python',
+			args: ['-m', 'pylint', '--output-format=json'],
+		}),
 		parser: parsePylintOutput,
 	},
+}
+
+interface ResolvedLintCommand {
+	command: string
+	args: string[]
+	cwd?: string
+}
+
+async function resolveWorkspaceTool(
+	workspaceRoot: string | null,
+	relativePaths: string[],
+	args: string[]
+): Promise<ResolvedLintCommand | null> {
+	if (!workspaceRoot) return null
+
+	for (const relativePath of relativePaths) {
+		const fullPath = joinPath(workspaceRoot, relativePath)
+		try {
+			if (await api.file.exists(fullPath)) {
+				return { command: fullPath, args, cwd: workspaceRoot }
+			}
+		} catch {
+			// ignore and keep falling back
+		}
+	}
+
+	return null
+}
+
+async function resolveLintCommand(filePath: string, language: string): Promise<ResolvedLintCommand | null> {
+	const workspaceRoot = getFileWorkspaceRoot(filePath)
+
+	if (language === 'typescript') {
+		const localTsc = await resolveWorkspaceTool(
+			workspaceRoot,
+			[joinPath('node_modules', '.bin', platform.isWindows ? 'tsc.cmd' : 'tsc')],
+			['--noEmit', '--pretty', 'false', filePath]
+		)
+		if (localTsc) return localTsc
+	}
+
+	if (language === 'javascript') {
+		const localEslint = await resolveWorkspaceTool(
+			workspaceRoot,
+			[joinPath('node_modules', '.bin', platform.isWindows ? 'eslint.cmd' : 'eslint')],
+			['--format', 'json', filePath]
+		)
+		if (localEslint) return localEslint
+	}
+
+	const lintConfig = LINT_COMMANDS[language]
+	if (!lintConfig) return null
+
+	const fallback = lintConfig.getCommand()
+	return {
+		command: fallback.command,
+		args: [...fallback.args, filePath],
+		cwd: workspaceRoot || undefined,
+	}
 }
 
 // 文件扩展名到语言的映射
@@ -253,9 +324,23 @@ class LintService {
 					notInstalled: `Language server "${serverName}" (${serverDesc}) is not installed. Install it in Settings > LSP to enable lint checking for ${languageId} files.`,
 				}
 			}
-			// LSP 已安装但尚未推送诊断（可能诊断 IPC 还在路上）
-			// 信任 LSP，返回空结果，不走 CLI 回退
-			return { errors: [] }
+
+			// 强制刷新时，主动确保 LSP 已启动并等待一次诊断。
+			// 如果仍然没有结果，再继续走 CLI 回退，避免打包环境中“已安装但返回空”的假阴性。
+			if (forceRefresh) {
+				try {
+					const serverReady = await ensureServerForFile(filePath)
+					if (serverReady) {
+						await waitForDiagnostics(filePath)
+						const refreshedErrors = getLspDiagnosticsForFile(filePath)
+						if (refreshedErrors !== null) {
+							return { errors: refreshedErrors }
+						}
+					}
+				} catch (error) {
+					logger.agent.warn('[Lint] Failed to refresh diagnostics via LSP, falling back if available:', error)
+				}
+			}
 		}
 
 		// 3. 该语言没有 LSP 服务器定义 → 尝试 CLI 回退
@@ -280,12 +365,15 @@ class LintService {
 		}
 
 		try {
-			const [baseCommand, ...commandArgs] = lintConfig.command.split(' ')
-			const allArgs = [...commandArgs, `"${filePath}"`]
+			const resolvedCommand = await resolveLintCommand(filePath, lang)
+			if (!resolvedCommand) {
+				return { errors: [] }
+			}
 
 			const result = await api.shell.executeSecure({
-				command: baseCommand,
-				args: allArgs,
+				command: resolvedCommand.command,
+				args: resolvedCommand.args,
+				cwd: resolvedCommand.cwd,
 				timeout: 60000,
 				requireConfirm: false
 			})
@@ -303,7 +391,7 @@ class LintService {
 	/**
 	 * 批量获取多个文件的 lint 错误
 	 */
-	async getLintErrorsForFiles(filePaths: string[]): Promise<Map<string, LintResult>> {
+	async getLintErrorsForFiles(filePaths: string[], forceRefresh: boolean = false): Promise<Map<string, LintResult>> {
 		const results = new Map<string, LintResult>()
 
 		// 并行执行，但限制并发数
@@ -313,7 +401,7 @@ class LintService {
 			const batchResults = await Promise.all(
 				batch.map(async (path) => ({
 					path,
-					result: await this.getLintErrors(path),
+					result: await this.getLintErrors(path, forceRefresh),
 				}))
 			)
 

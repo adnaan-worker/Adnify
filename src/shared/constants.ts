@@ -83,6 +83,7 @@ export const SECURITY_DEFAULTS = {
   SHELL_COMMANDS: [
     'npm', 'yarn', 'pnpm', 'bun',
     'node', 'npx', 'deno',
+    'eslint', 'tsc',
     'git',
     'python', 'python3', 'pip', 'pip3',
     'java', 'javac', 'mvn', 'gradle',
@@ -98,5 +99,4 @@ export const SECURITY_DEFAULTS = {
     'clone', 'init', 'stash', 'tag', 'config', 'symbolic-ref',
   ],
 } as const
-
 
