@@ -34,6 +34,12 @@ import type { HandoffDocument, StructuredSummary } from '../context/types'
 import { buildHandoffContext } from '../context/HandoffManager'
 import type { EmotionDetection, EmotionHistory } from '../types/emotion'
 import type { ToolStreamingPreview } from '@/shared/types'
+import type { ChangeProposal, ExecutionTask } from '../types/taskExecution'
+import {
+    createTaskSession as buildTaskSession,
+    type CreateTaskSessionInput,
+    type TaskSession,
+} from '../types/taskSession'
 
 // 重新导出刷新函数供外部使用
 export { flushStreamingBuffer }
@@ -88,6 +94,17 @@ interface UIState {
 
 }
 
+interface TaskSessionState {
+    taskSessions: Record<string, TaskSession>
+    currentTaskSessionId: string | null
+    createTaskSession: (input: Omit<CreateTaskSessionInput, 'id'> & { id?: string }) => string
+    switchTaskSession: (sessionId: string) => void
+    getCurrentTaskSession: () => TaskSession | null
+    bindThreadToTaskSession: (sessionId: string, threadId: string | null) => void
+    bindExecutionTaskToTaskSession: (sessionId: string, task: ExecutionTask) => void
+    syncTaskSessionProposals: (sessionId: string, proposals: ChangeProposal[]) => void
+}
+
 // 线程绑定的 Store 操作接口
 // 用于后台任务，确保操作不会影响其他线程
 export interface ThreadBoundStore {
@@ -136,7 +153,7 @@ export interface ThreadBoundStore {
     setInteractive: (messageId: string, interactive: import('../types').InteractiveContent) => void
 }
 
-export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & BranchSlice & OrchestratorSlice & UIState & {
+export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & BranchSlice & OrchestratorSlice & UIState & TaskSessionState & {
     _flushTextBuffer: (messageId: string) => void
     forThread: (threadId: string) => ThreadBoundStore
 }
@@ -247,6 +264,142 @@ export const useAgentStore = create<AgentStore>()(
                 })),
             }
 
+            const generateTaskSessionId = () =>
+                globalThis.crypto?.randomUUID?.() ?? `task-session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+            const collectTaskProposals = (
+                taskId: string | null,
+                proposals: Record<string, ChangeProposal>,
+            ): ChangeProposal[] => {
+                if (!taskId) return []
+                return Object.values(proposals).filter((proposal) => proposal.taskId === taskId)
+            }
+
+            const taskSessionState: TaskSessionState = {
+                taskSessions: {},
+                currentTaskSessionId: null,
+                createTaskSession: (input) => {
+                    const sessionId = input.id ?? generateTaskSessionId()
+                    const session = buildTaskSession({
+                        ...input,
+                        id: sessionId,
+                    })
+
+                    set((state) => ({
+                        taskSessions: {
+                            ...state.taskSessions,
+                            [sessionId]: session,
+                        },
+                        currentTaskSessionId: sessionId,
+                    }))
+
+                    return sessionId
+                },
+                switchTaskSession: (sessionId) => {
+                    if (!get().taskSessions[sessionId]) return
+                    set({ currentTaskSessionId: sessionId })
+                },
+                getCurrentTaskSession: () => {
+                    const state = get()
+                    if (!state.currentTaskSessionId) return null
+                    return state.taskSessions[state.currentTaskSessionId] || null
+                },
+                bindThreadToTaskSession: (sessionId, threadId) => {
+                    set((state) => {
+                        const session = state.taskSessions[sessionId]
+                        if (!session) return state
+
+                        const task = session.activeExecutionTaskId
+                            ? state.executionTasks[session.activeExecutionTaskId] || null
+                            : null
+                        const proposals = collectTaskProposals(task?.id ?? null, state.changeProposals)
+                        const nextSession = buildTaskSession({
+                            id: session.id,
+                            objective: session.objective,
+                            successCriteria: session.successCriteria,
+                            threadId,
+                            task,
+                            proposals,
+                            createdAt: session.createdAt,
+                            updatedAt: task?.updatedAt ?? session.updatedAt,
+                        })
+
+                        return {
+                            taskSessions: {
+                                ...state.taskSessions,
+                                [sessionId]: nextSession,
+                            },
+                        }
+                    })
+                },
+                bindExecutionTaskToTaskSession: (sessionId, task) => {
+                    set((state) => {
+                        const session = state.taskSessions[sessionId]
+                        if (!session) return state
+
+                        const executionTasks = {
+                            ...state.executionTasks,
+                            [task.id]: task,
+                        }
+                        const proposals = collectTaskProposals(task.id, state.changeProposals)
+                        const nextSession = buildTaskSession({
+                            id: session.id,
+                            objective: session.objective,
+                            successCriteria: session.successCriteria,
+                            threadId: session.threadId,
+                            task,
+                            proposals,
+                            createdAt: session.createdAt,
+                            updatedAt: task.updatedAt,
+                        })
+
+                        return {
+                            executionTasks,
+                            taskSessions: {
+                                ...state.taskSessions,
+                                [sessionId]: nextSession,
+                            },
+                            currentTaskSessionId: sessionId,
+                        }
+                    })
+                },
+                syncTaskSessionProposals: (sessionId, proposals) => {
+                    set((state) => {
+                        const session = state.taskSessions[sessionId]
+                        if (!session) return state
+
+                        const changeProposals = {
+                            ...state.changeProposals,
+                            ...Object.fromEntries(proposals.map((proposal) => [proposal.id, proposal])),
+                        }
+                        const task = session.activeExecutionTaskId
+                            ? state.executionTasks[session.activeExecutionTaskId] || null
+                            : null
+                        const nextProposals = task
+                            ? collectTaskProposals(task.id, changeProposals)
+                            : proposals
+                        const nextSession = buildTaskSession({
+                            id: session.id,
+                            objective: session.objective,
+                            successCriteria: session.successCriteria,
+                            threadId: session.threadId,
+                            task,
+                            proposals: nextProposals,
+                            createdAt: session.createdAt,
+                            updatedAt: task?.updatedAt ?? session.updatedAt,
+                        })
+
+                        return {
+                            changeProposals,
+                            taskSessions: {
+                                ...state.taskSessions,
+                                [sessionId]: nextSession,
+                            },
+                        }
+                    })
+                },
+            }
+
             // 重写 finalizeAssistant 先刷新 StreamingBuffer
             const originalFinalizeAssistant = messageSlice.finalizeAssistant
             messageSlice.finalizeAssistant = (messageId: string, targetThreadId?: string) => {
@@ -336,6 +489,7 @@ export const useAgentStore = create<AgentStore>()(
                 ...branchSlice,
                 ...orchestratorSlice,
                 ...uiState,
+                ...taskSessionState,
                 _flushTextBuffer,
                 forThread,
             }
@@ -360,6 +514,9 @@ export const useAgentStore = create<AgentStore>()(
                 taskHandoffs: state.taskHandoffs,
                 activeExecutionTaskId: state.activeExecutionTaskId,
                 selectedTaskHandoffId: state.selectedTaskHandoffId,
+                changeProposals: state.changeProposals,
+                taskSessions: state.taskSessions,
+                currentTaskSessionId: state.currentTaskSessionId,
             }),
         }
     )
@@ -469,6 +626,10 @@ export const selectIsOnBranch = (state: AgentStore) => {
 export const selectContextStats = (state: AgentStore) => state.contextStats
 export const selectInputPrompt = (state: AgentStore) => state.inputPrompt
 export const selectCurrentSessionId = (state: AgentStore) => state.currentSessionId
+export const selectCurrentTaskSession = (state: AgentStore) => {
+    if (!state.currentTaskSessionId) return null
+    return state.taskSessions[state.currentTaskSessionId] || null
+}
 
 export const selectCompressionStats = (state: AgentStore): CompressionStats | null => {
     const thread = selectCurrentThread(state)
