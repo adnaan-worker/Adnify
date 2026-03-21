@@ -19,6 +19,28 @@
 
 ---
 
+## [Unreleased] - 2026-03-21 🧠 混合 Agent IDE 第一阶段
+
+> "把任务、执行、审核和验证收拢成一个更顺滑的闭环" 🔁
+
+### ✨ 新功能
+- 🗂️ **Task Session 聚合模型** (Codex)
+  - 新增任务会话抽象，统一聚合线程、执行任务、提案批次与验证摘要，让编排状态更容易被面板直接消费。
+- 🧾 **统一执行控制台** (Codex)
+  - 为执行任务面板加入统一的执行台视图，在一个区域内同时展示运行态、工具活动、助手最新输出与验证摘要。
+- 🧠 **Task-first Composer 入口** (Codex)
+  - Composer 新增 `Generate Plan` 与 `Patch Review` 双模式，支持从目标、成功标准、上下文附件进入任务驱动流程。
+- 🚦 **任务级 Gate Helper** (Codex)
+  - 增加 planning / workspace / patch / verify 四类门禁判定 helper，为后续任务级治理与 UI 提示提供统一决策基础。
+
+### 🛡️ 安全与验证
+- 🔒 **任务驱动安全集成覆盖** (Codex)
+  - 补齐 isolated workspace、secure terminal、secure file 在 task-driven 场景下的测试覆盖，确认隔离工作区、终端与文件边界保持有效。
+- ✅ **端到端验证补强** (Codex)
+  - 补充 execution console、patch batch、task-session store/model、composer task entry 等测试，并修正现有测试夹具以匹配最新 Agent 契约。
+
+---
+
 ## [1.7.17] - 2026-03-20 🚀 渲染与稳定性优化
 
 > "更顺滑的界面反馈，配上更稳的执行体验" ✨
@@ -47,7 +69,7 @@
 
 ---
 
-## [1.7.15] - 2026-03-18 🛠️ 流程与性能深度优化 (即将发布)
+## [1.7.15] - 2026-03-18 🛠️ 流程与性能深度优化
 
 > "打磨极致流程，赋能高效开发" ⚡ 自动化与性能双进化
 
