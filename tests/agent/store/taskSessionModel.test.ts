@@ -13,8 +13,6 @@ import {
   type ChangeProposal,
   type ExecutionTask,
   type ProposalVerificationStatus,
-  type TaskRiskLevel,
-  type VerificationMode,
 } from '@renderer/agent/types/taskExecution'
 import { createTaskSession, derivePatchBatchSummary, deriveTaskSessionStage } from '@renderer/agent/types/taskSession'
 

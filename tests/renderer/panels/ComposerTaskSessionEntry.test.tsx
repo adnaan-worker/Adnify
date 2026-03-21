@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
-const { mockStoreState, useStoreMock } = vi.hoisted(() => {
+const { useStoreMock } = vi.hoisted(() => {
   const storeState = {
     openFiles: [
       {
@@ -24,7 +24,6 @@ const { mockStoreState, useStoreMock } = vi.hoisted(() => {
   storeMock.getState = () => storeState as never
 
   return {
-    mockStoreState: storeState,
     useStoreMock: storeMock,
   }
 })

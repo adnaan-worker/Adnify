@@ -12,7 +12,10 @@ vi.mock('@renderer/agent/llm/MessageBuilder', () => ({
 }))
 
 vi.mock('@renderer/agent/prompts/PromptBuilder', () => ({
-  buildAgentSystemPrompt: vi.fn(async () => 'system-prompt'),
+  buildAgentSystemPrompt: vi.fn(async () => ({
+    prompt: 'system-prompt',
+    activeSkills: [],
+  })),
 }))
 
 vi.mock('@renderer/agent/services/fileCacheService', () => ({
