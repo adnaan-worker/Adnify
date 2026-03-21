@@ -128,6 +128,12 @@ export function registerSecureFileHandlers(
   // 读取文件（无弹窗，使用拆分的 fileUtils）
   ipcMain.handle('file:read', async (event, filePath: string) => {
     if (!filePath) return null
+
+    // 跳过虚拟协议路径（如 git-diff://、diff:// 等），这些不是真实文件路径
+    if (/^[a-zA-Z][\w-]*:\/\//.test(filePath) && !(/^[a-zA-Z]:\\/.test(filePath))) {
+      return null
+    }
+
     const workspace = getWorkspaceSessionFn(event)
 
     // 强制工作区边界
@@ -160,7 +166,7 @@ export function registerSecureFileHandlers(
       return content
     } catch (err) {
       // 文件不存在是正常情况（如可选的规则文件），不记录为 ERROR
-      if (toAppError(err).code === ErrorCode.FILE_NOT_FOUND || (err as any)?.code === 'ENOENT') {
+      if (toAppError(err).code === ErrorCode.FILE_NOT_FOUND || (err as NodeJS.ErrnoException)?.code === 'ENOENT') {
         logger.security.debug('[File] not found:', filePath)
       } else {
         logger.security.error('[File] read failed:', filePath, toAppError(err).message)
@@ -256,8 +262,10 @@ export function registerSecureFileHandlers(
   })
 
   // 确保目录存在
-  ipcMain.handle('file:ensureDir', async (_, dirPath: string) => {
+  ipcMain.handle('file:ensureDir', async (event, dirPath: string) => {
     if (!dirPath) return false
+    const workspace = getWorkspaceSessionFn(event)
+    if (workspace && !securityManager.validateWorkspacePath(dirPath, workspace.roots)) return false
     if (securityManager.isSensitivePath(dirPath)) return false
     try {
       await fsPromises.mkdir(dirPath, { recursive: true })
@@ -329,8 +337,10 @@ export function registerSecureFileHandlers(
   })
 
   // 创建目录（无弹窗）
-  ipcMain.handle('file:mkdir', async (_, dirPath: string) => {
+  ipcMain.handle('file:mkdir', async (event, dirPath: string) => {
     if (!dirPath || typeof dirPath !== 'string') return false
+    const workspace = getWorkspaceSessionFn(event)
+    if (workspace && !securityManager.validateWorkspacePath(dirPath, workspace.roots)) return false
     if (securityManager.isSensitivePath(dirPath)) return false
 
     try {
@@ -346,8 +356,34 @@ export function registerSecureFileHandlers(
     }
   })
 
+  // 递归计算目录大小
+  async function calculateDirectorySize(dirPath: string): Promise<number> {
+    let totalSize = 0
+    const entries = await fsPromises.readdir(dirPath, { withFileTypes: true })
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry.name)
+      if (entry.isDirectory()) {
+        totalSize += await calculateDirectorySize(entryPath)
+      } else {
+        const stat = await fsPromises.stat(entryPath)
+        totalSize += stat.size
+      }
+      // 提前退出：超过阈值无需继续统计
+      if (totalSize > 100 * 1024 * 1024) break
+    }
+    return totalSize
+  }
+
   // 删除文件/目录（无弹窗，仅底线检查）
-  ipcMain.handle('file:delete', async (_, filePath: string) => {
+  ipcMain.handle('file:delete', async (event, filePath: string) => {
+    if (!filePath) return false
+    const workspace = getWorkspaceSessionFn(event)
+    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
+      securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
+        reason: '安全底线：超出工作区边界',
+      })
+      return false
+    }
     if (securityManager.isSensitivePath(filePath)) {
       securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
         reason: '安全底线：敏感路径',
@@ -369,11 +405,14 @@ export function registerSecureFileHandlers(
     // 大目录保护
     try {
       const stat = await fsPromises.stat(filePath)
-      if (stat.isDirectory() && stat.size > 100 * 1024 * 1024) {
-        securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
-          reason: `安全底线：目录过大 (${(stat.size / 1024 / 1024).toFixed(1)}MB)`,
-        })
-        return false
+      if (stat.isDirectory()) {
+        const dirSize = await calculateDirectorySize(filePath)
+        if (dirSize > 100 * 1024 * 1024) {
+          securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
+            reason: `安全底线：目录过大 (${(dirSize / 1024 / 1024).toFixed(1)}MB)`,
+          })
+          return false
+        }
       }
     } catch {
       return false
@@ -398,9 +437,16 @@ export function registerSecureFileHandlers(
   })
 
   // 重命名文件（无弹窗）
-  ipcMain.handle('file:rename', async (_, oldPath: string, newPath: string) => {
+  ipcMain.handle('file:rename', async (event, oldPath: string, newPath: string) => {
     if (!oldPath || !newPath) return false
-
+    const workspace = getWorkspaceSessionFn(event)
+    if (workspace && (!securityManager.validateWorkspacePath(oldPath, workspace.roots) || !securityManager.validateWorkspacePath(newPath, workspace.roots))) {
+      securityManager.logOperation(OperationType.FILE_RENAME, oldPath, false, {
+        reason: '安全底线：超出工作区边界',
+        newPath,
+      })
+      return false
+    }
     if (securityManager.isSensitivePath(oldPath) || securityManager.isSensitivePath(newPath)) {
       securityManager.logOperation(OperationType.FILE_RENAME, oldPath, false, {
         reason: '安全底线：敏感路径',
@@ -460,16 +506,7 @@ export function registerSecureFileHandlers(
     }
   })
 
-  // ========== 安全审计功能 ==========
-
-  ipcMain.handle('security:getAuditLogs', (_, limit = 100) => {
-    return securityManager.getAuditLogs(limit)
-  })
-
-  ipcMain.handle('security:clearAuditLogs', () => {
-    securityManager.clearAuditLogs()
-    return true
-  })
+  // ========== 安全权限功能 ==========
 
   ipcMain.handle('security:getPermissions', () => {
     const securityStore = new Store({ name: 'security' })
@@ -479,8 +516,6 @@ export function registerSecureFileHandlers(
   ipcMain.handle('security:resetPermissions', () => {
     const securityStore = new Store({ name: 'security' })
     securityStore.delete('permissions')
-    // 审计日志现在存储在工作区 .adnify/audit.log，不再使用 electron-store
-    securityManager.clearAuditLogs()
     return true
   })
 }

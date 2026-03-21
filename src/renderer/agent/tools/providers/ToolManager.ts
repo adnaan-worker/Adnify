@@ -15,6 +15,7 @@ import type {
 
 class ToolManager {
   private providers = new Map<string, ToolProvider>()
+  private providerPriorities = new Map<string, number>()
   private providerOrder: string[] = []
 
   /**
@@ -28,11 +29,12 @@ class ToolManager {
     }
 
     this.providers.set(provider.id, provider)
-    
-    // 按优先级排序
+    this.providerPriorities.set(provider.id, priority)
+
+    // 按各 provider 自身的优先级排序
     this.providerOrder = Array.from(this.providers.keys()).sort((a, b) => {
-      const priorityA = a === 'builtin' ? 0 : priority
-      const priorityB = b === 'builtin' ? 0 : priority
+      const priorityA = this.providerPriorities.get(a) ?? 100
+      const priorityB = this.providerPriorities.get(b) ?? 100
       return priorityA - priorityB
     })
 

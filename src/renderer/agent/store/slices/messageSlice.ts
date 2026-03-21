@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 消息管理 Slice
  * 负责消息的添加、更新、删除
  */
@@ -54,10 +54,15 @@ export interface MessageActions {
     updateSearchPart: (messageId: string, partId: string, content: string, isStreaming?: boolean, append?: boolean, targetThreadId?: string) => void
     finalizeSearchPart: (messageId: string, partId: string, targetThreadId?: string) => void
 
+    // Lint Check 操作
+    addLintCheckPart: (messageId: string, targetThreadId?: string) => void
+    updateLintCheckPart: (messageId: string, updates: Partial<import('../../types').LintCheckPart>, targetThreadId?: string) => void
+
     // 交互式内容操作
     setInteractive: (messageId: string, interactive: InteractiveContent, targetThreadId?: string) => void
 
     // 上下文操作
+    addSkillsToMessage: (messageId: string, skills: { name: string; description: string }[], targetThreadId?: string) => void
     addContextItem: (item: ContextItem, targetThreadId?: string) => void
     removeContextItem: (index: number, targetThreadId?: string) => void
     clearContextItems: (targetThreadId?: string) => void
@@ -229,21 +234,21 @@ export const createMessageSlice: StateCreator<
             const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1]
 
             // 检查是否有 _textFinalized 标记（表示文本已结束，工具调用即将开始）
-            const textFinalized = (assistantMsg as any)._textFinalized
+            const textFinalized = assistantMsg._textFinalized
 
             // 如果文本已 finalized，或最后一个 part 不是 text，创建新的 text part
             if (textFinalized || !lastPart || lastPart.type !== 'text') {
                 newParts = [...assistantMsg.parts, { type: 'text', content }]
-                // 清除 finalized 标记
-                delete (assistantMsg as any)._textFinalized
             } else {
                 // 追加到现有的 text part
                 newParts = [...assistantMsg.parts]
                 newParts[newParts.length - 1] = { type: 'text', content: lastPart.content + content }
             }
 
+            // 构建新消息对象，清除 _textFinalized 标记（通过解构避免直接修改 state）
+            const { _textFinalized: _, ...cleanMsg } = assistantMsg
             const newMessages = [...thread.messages]
-            newMessages[messageIdx] = { ...assistantMsg, content: newContent, parts: newParts }
+            newMessages[messageIdx] = { ...cleanMsg, content: newContent, parts: newParts }
 
             return {
                 threads: {
@@ -270,10 +275,7 @@ export const createMessageSlice: StateCreator<
                     // 清理幽灵工具调用：如果 LLM 已结束，但仍有处于非终态的工具，将它们标记为错误
                     const cleanToolCall = (tc: ToolCall): ToolCall => {
                         if (['pending', 'running', 'awaiting'].includes(tc.status)) {
-                            return { ...tc, status: 'error', result: 'Interrupted or failed to parse', streamingState: undefined }
-                        }
-                        if (tc.streamingState) {
-                            return { ...tc, streamingState: undefined }
+                            return { ...tc, status: 'error', result: 'Interrupted or failed to parse' }
                         }
                         return tc
                     }
@@ -302,6 +304,8 @@ export const createMessageSlice: StateCreator<
                 },
             }
         })
+
+        get().clearToolStreamingPreviews(threadId)
     },
 
     /**
@@ -313,7 +317,7 @@ export const createMessageSlice: StateCreator<
         if (!threadId) return
 
         // 关键修复：先刷新文本缓冲区，确保所有文本都已写入
-        const store = get() as any
+        const store = get() as ThreadSlice & MessageSlice & { _flushTextBuffer?: (id: string) => void }
         if (store._flushTextBuffer) {
             store._flushTextBuffer(messageId)
         }
@@ -354,8 +358,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 更新消息
-    updateMessage: (messageId, updates) => {
-        const threadId = get().currentThreadId
+    updateMessage: (messageId, updates, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         set(state => {
@@ -379,8 +383,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 添加工具结果
-    addToolResult: (toolCallId, name, content, type, rawParams) => {
-        const threadId = get().currentThreadId
+    addToolResult: (toolCallId, name, content, type, rawParams, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return ''
 
         const message: ToolResultMessage = {
@@ -414,8 +418,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 添加检查点
-    addCheckpoint: (type, fileSnapshots) => {
-        const threadId = get().currentThreadId
+    addCheckpoint: (type, fileSnapshots, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return ''
 
         const message: CheckpointMessage = {
@@ -430,7 +434,15 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const newMessages = [...thread.messages, message]
+            let newMessages = [...thread.messages, message]
+
+            // 限制 checkpoint 消息数量，防止内存膨胀
+            const MAX_CHECKPOINTS = 20
+            const checkpointMessages = newMessages.filter(m => m.role === 'checkpoint')
+            if (checkpointMessages.length > MAX_CHECKPOINTS) {
+                const oldestCheckpointId = checkpointMessages[0].id
+                newMessages = newMessages.filter(m => m.id !== oldestCheckpointId)
+            }
 
             return {
                 threads: {
@@ -447,8 +459,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 清空消息（同时清理检查点和待确认更改）
-    clearMessages: () => {
-        const threadId = get().currentThreadId
+    clearMessages: (targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         // 压缩状态会在 store 中重置
@@ -474,13 +486,15 @@ export const createMessageSlice: StateCreator<
             }
         })
 
+        get().clearToolStreamingPreviews(threadId)
+
         // 清理工具调用日志（在 useStore 中）
         // 注意：这里需要导入 useStore，但为了避免循环依赖，我们在调用处处理
     },
 
     // 删除指定消息之后的所有消息
-    deleteMessagesAfter: (messageId) => {
-        const threadId = get().currentThreadId
+    deleteMessagesAfter: (messageId, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         // 重置 handoff 状态（回退消息后可能不再需要 handoff）
@@ -507,6 +521,8 @@ export const createMessageSlice: StateCreator<
                 compressionStats: null,
             }
         })
+
+        get().clearToolStreamingPreviews(threadId)
     },
 
     // 获取消息列表
@@ -516,16 +532,21 @@ export const createMessageSlice: StateCreator<
     },
 
     // 添加工具调用部分
-    addToolCallPart: (messageId, toolCall) => {
-        const threadId = get().currentThreadId
+    addToolCallPart: (messageId, toolCall, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         // 关键修复：在添加工具调用 part 之前，先刷新文本缓冲区
         // 这确保了工具调用 part 会出现在正确的位置（在之前的文本之后）
         // 注意：这个调用是同步的，不会影响性能
-        const store = get() as any
+        const store = get() as ThreadSlice & MessageSlice & { _flushTextBuffer?: (id: string) => void }
         if (store._flushTextBuffer) {
             store._flushTextBuffer(messageId)
+        }
+
+        const persistedToolCall: Omit<ToolCall, 'status'> = {
+            ...toolCall,
+            streamingState: undefined,
         }
 
         set(state => {
@@ -540,7 +561,7 @@ export const createMessageSlice: StateCreator<
                         return msg
                     }
 
-                    const newToolCall: ToolCall = { ...toolCall, status: 'pending' }
+                    const newToolCall: ToolCall = { ...persistedToolCall, status: 'pending' }
                     const newParts: AssistantPart[] = [...assistantMsg.parts, { type: 'tool_call', toolCall: newToolCall }]
                     const newToolCalls = [...(assistantMsg.toolCalls || []), newToolCall]
 
@@ -559,9 +580,52 @@ export const createMessageSlice: StateCreator<
     },
 
     // 更新工具调用（如果不存在则添加）
-    updateToolCall: (messageId, toolCallId, updates) => {
-        const threadId = get().currentThreadId
+    updateToolCall: (messageId, toolCallId, updates, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
+
+        const hasStreamingStateUpdate = Object.prototype.hasOwnProperty.call(updates, 'streamingState')
+        const previewState = updates.streamingState
+        const currentPreview = get().getToolStreamingPreview(toolCallId, threadId)
+        const hasStablePayloadUpdate = ['arguments', 'result', 'error', 'richContent'].some(key =>
+            Object.prototype.hasOwnProperty.call(updates, key)
+        )
+        const shouldStageNameInPreview =
+            typeof updates.name === 'string' &&
+            !!previewState?.isStreaming &&
+            !hasStablePayloadUpdate
+
+        if (hasStreamingStateUpdate && previewState) {
+            get().setToolStreamingPreview(toolCallId, {
+                ...currentPreview,
+                ...previewState,
+                name: shouldStageNameInPreview ? updates.name : (previewState.name ?? currentPreview?.name),
+            }, threadId)
+        } else if (shouldStageNameInPreview) {
+            get().setToolStreamingPreview(toolCallId, {
+                ...(currentPreview || { isStreaming: true }),
+                name: updates.name,
+            }, threadId)
+        }
+
+        const shouldClearPreview =
+            (hasStreamingStateUpdate && previewState === undefined) ||
+            (updates.status !== undefined && !['pending', 'running', 'awaiting'].includes(updates.status))
+
+        const cleanUpdates = Object.fromEntries(
+            Object.entries(updates).filter(([key, value]) => key !== 'streamingState' && value !== undefined)
+        ) as Partial<ToolCall>
+
+        if (shouldStageNameInPreview) {
+            delete cleanUpdates.name
+        }
+
+        if (Object.keys(cleanUpdates).length === 0) {
+            if (shouldClearPreview) {
+                get().clearToolStreamingPreview(toolCallId, threadId)
+            }
+            return
+        }
 
         set(state => {
             const thread = state.threads[threadId]
@@ -579,21 +643,6 @@ export const createMessageSlice: StateCreator<
                         // 更新已存在的工具调用
                         updated = true
 
-                        // 只合并非 undefined 的字段
-                        const cleanUpdates = Object.fromEntries(
-                            Object.entries(updates).filter(([_, v]) => v !== undefined)
-                        ) as Partial<ToolCall>
-
-                        // 自动清理：如果状态变为非pending/awaiting，自动清除streamingState
-                        if (cleanUpdates.status && !['pending', 'awaiting'].includes(cleanUpdates.status)) {
-                            if (cleanUpdates.streamingState === undefined) {
-                                // 已经显式设置为undefined，保持
-                            } else if (!('streamingState' in cleanUpdates)) {
-                                // 没有提供streamingState，自动清除
-                                cleanUpdates.streamingState = undefined
-                            }
-                        }
-
                         // 创建新的 toolCall 对象（确保引用变化）
                         const updatedToolCall = { ...existingToolCall, ...cleanUpdates }
 
@@ -609,22 +658,22 @@ export const createMessageSlice: StateCreator<
                         )
 
                         return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
-                    } else {
-                        // 工具调用不存在，添加新的
-                        updated = true
-
-                        const newToolCall: ToolCall = {
-                            id: toolCallId,
-                            name: (updates.name as string) || '',
-                            arguments: (updates.arguments as Record<string, unknown>) || {},
-                            status: (updates.status as ToolCall['status']) || 'pending',
-                            ...updates,
-                        }
-                        const newParts: AssistantPart[] = [...assistantMsg.parts, { type: 'tool_call', toolCall: newToolCall }]
-                        const newToolCalls = [...(assistantMsg.toolCalls || []), newToolCall]
-
-                        return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
                     }
+
+                    // 工具调用不存在，添加新的
+                    updated = true
+
+                    const newToolCall: ToolCall = {
+                        id: toolCallId,
+                        name: (cleanUpdates.name as string) || '',
+                        arguments: (cleanUpdates.arguments as Record<string, unknown>) || {},
+                        status: (cleanUpdates.status as ToolCall['status']) || 'pending',
+                        ...cleanUpdates,
+                    }
+                    const newParts: AssistantPart[] = [...assistantMsg.parts, { type: 'tool_call', toolCall: newToolCall }]
+                    const newToolCalls = [...(assistantMsg.toolCalls || []), newToolCall]
+
+                    return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
                 }
                 return msg
             })
@@ -639,6 +688,10 @@ export const createMessageSlice: StateCreator<
                 },
             }
         })
+
+        if (shouldClearPreview) {
+            get().clearToolStreamingPreview(toolCallId, threadId)
+        }
     },
 
     // 添加推理部分
@@ -646,7 +699,7 @@ export const createMessageSlice: StateCreator<
         const threadId = get().currentThreadId
         if (!threadId) return ''
 
-        const partId = `reasoning-${Date.now()}`
+        const partId = `reasoning-${crypto.randomUUID()}`
 
         set(state => {
             const thread = state.threads[threadId]
@@ -851,6 +904,59 @@ export const createMessageSlice: StateCreator<
         })
     },
 
+    // 添加 Lint Check 部分
+    addLintCheckPart: (messageId, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id === messageId && msg.role === 'assistant') {
+                    const assistantMsg = msg as AssistantMessage
+                    const newPart: AssistantPart = { type: 'lint_check', files: [], status: 'checking' }
+                    return { ...assistantMsg, parts: [...assistantMsg.parts, newPart] }
+                }
+                return msg
+            })
+
+            return {
+                threads: { ...state.threads, [threadId]: { ...thread, messages } },
+            }
+        })
+    },
+
+    // 更新 Lint Check 部分
+    updateLintCheckPart: (messageId, updates, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id === messageId && msg.role === 'assistant') {
+                    const assistantMsg = msg as AssistantMessage
+                    const newParts = assistantMsg.parts.map(part => {
+                        if (part.type === 'lint_check') {
+                            return { ...part, ...updates }
+                        }
+                        return part
+                    })
+                    return { ...assistantMsg, parts: newParts }
+                }
+                return msg
+            })
+
+            return {
+                threads: { ...state.threads, [threadId]: { ...thread, messages } },
+            }
+        })
+    },
+
     // 设置交互式内容（用于 ask_user 工具）
     setInteractive: (messageId, interactive) => {
         const threadId = get().currentThreadId
@@ -878,6 +984,36 @@ export const createMessageSlice: StateCreator<
                     },
                 },
             }
+        })
+    },
+
+    // 追加 auto 选中的 Skills 到指定消息的 contextItems
+    addSkillsToMessage: (messageId, skills, targetThreadId) => {
+        if (skills.length === 0) return
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        set(state => {
+            const thread = state.threads[threadId!]
+            if (!thread) return state
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id !== messageId || msg.role !== 'assistant') return msg
+                const aMsg = msg as AssistantMessage
+                const items: ContextItem[] = aMsg.contextItems || []
+                const existing = new Set(
+                    items
+                        .filter((i): i is import('../../types').SkillContext => i.type === 'Skill')
+                        .map(i => i.skillId)
+                )
+                const newItems = skills
+                    .filter(s => !existing.has(s.name))
+                    .map(s => ({ type: 'Skill' as const, skillId: s.name, name: s.name, description: s.description, auto: true }))
+                if (newItems.length === 0) return msg
+                return { ...aMsg, contextItems: [...items, ...newItems] }
+            })
+
+            return { threads: { ...state.threads, [threadId!]: { ...thread, messages } } }
         })
     },
 
@@ -956,3 +1092,4 @@ export const createMessageSlice: StateCreator<
         })
     },
 })
+

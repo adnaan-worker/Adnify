@@ -424,9 +424,9 @@ export const zh = {
   'emotion.welcome.cta': '正常开始工作',
   'emotion.welcome.ctaHint': '约 15 分钟后会显示洞察。',
   'emotion.welcome.trendPlaceholder': '工作一段时间后，情绪趋势会显示在这里。',
-  'emotion.timeAgo12h': '12h ago',
-  'emotion.timeAgo6h': '6h ago',
-  'emotion.timeNow': 'Now',
+  'emotion.timeAgo12h': '12小时前',
+  'emotion.timeAgo6h': '6小时前',
+  'emotion.timeNow': '现在',
   'emotion.state.focused': '专注',
   'emotion.state.flow': '心流',
   'emotion.state.frustrated': '沮丧',
@@ -564,4 +564,72 @@ export const zh = {
   'cmd.explorer.revealInSidebar': '在侧边栏中定位',
   'cmd.explorer.rename': '重命名文件/文件夹',
   'cmd.help.about': '关于',
+
+  // Workspace Dropdown
+  'workspace.newWindow': '新建窗口',
+  'workspace.newWindowDesc': '打开一个新的编辑器窗口',
+  'workspace.openFolder': '打开文件夹...',
+  'workspace.openWorkspace': '打开工作区...',
+  'workspace.addFolder': '添加文件夹',
+  'workspace.folderNotExist': '文件夹不存在，已从列表移除',
+
+  // Editor Tabs
+  'editor.fileDeleted': '文件已被删除',
+
+  // Editor Modes
+  'editor.editMode': '编辑模式',
+  'editor.splitMode': '分屏模式',
+  'editor.previewMode': '预览模式',
+  'editor.edit': '编辑',
+  'editor.split': '分屏',
+  'editor.preview': '预览',
+
+  // Tool Call Card
+  'tool.viewInTerminal': '在终端面板中查看执行过程',
+  'tool.running': '运行中…',
+  'tool.terminal': '终端',
+
+  // File Preview
+  'filePreview.cannotLoadImage': '无法加载图片',
+  'filePreview.cannotOpenFile': '无法在编辑器中打开此文件',
+  'filePreview.binaryFileDesc': '"{name}" 是二进制文件（.{ext}），无法作为文本编辑。',
+  'filePreview.unsupportedFileDesc': '不支持打开 .{ext} 格式的文件。',
+  'filePreview.openWithDefault': '使用默认程序打开',
+  'filePreview.fit': '适应',
+
+  // Agent Settings
+  'agent.systemInstructionsPlaceholder': '在此输入全局系统指令，例如："总是使用中文回答"、"代码风格偏好..."',
+
+  // Error Boundary
+  'errorBoundary.somethingWentWrong': '出错了',
+  'errorBoundary.unexpectedError': '发生了意外错误。',
+  'errorBoundary.trySuggestion': '请尝试刷新页面。',
+  'errorBoundary.tryAgain': '重试',
+  'errorBoundary.reloadApp': '重新加载',
+  'errorBoundary.showDetails': '显示错误详情',
+
+  // Welcome Page
+  'welcome.openFolder': '打开文件夹',
+  'welcome.openFolderDesc': 'Open a local project folder',
+  'welcome.openWorkspace': '打开工作区',
+  'welcome.openWorkspaceDesc': 'Open workspace file (.adnify)',
+  'welcome.newWindow': '新建窗口',
+  'welcome.settings': '设置',
+  'welcome.noRecentItems': '没有最近的项目',
+  'welcome.pressForCommands': '按 {shortcut} 打开命令面板',
+
+  // Context Menu
+  'copyPath': '复制路径',
+  'copyRelativePath': '复制相对路径',
+  'revealInExplorer': '在资源管理器中显示',
+  'openInBrowser': '在浏览器中打开',
+  'pathCopied': '路径已复制',
+  'failedToOpenInBrowser': '无法在浏览器中打开',
+
+  // Search
+  'recentSearches': '最近搜索',
+  'tryDifferentKeyword': '尝试其他关键词或正则表达式',
+
+  // Settings
+  'unsavedChangesConfirm': '您有未保存的更改，确定要关闭吗？',
 } as const

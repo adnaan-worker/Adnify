@@ -6,15 +6,15 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { emotionDetectionEngine } from '@/renderer/agent/services/emotionDetectionEngine'
+import { emotionDetectionEngine } from '@/renderer/agent/emotion/emotionDetectionEngine'
 import { useStore } from '@store'
 import { t } from '@/renderer/i18n'
 import { Sparkles, ThumbsUp, ThumbsDown, Coffee } from 'lucide-react'
 import { EventBus } from '@/renderer/agent/core/EventBus'
-import { emotionFeedback } from '@/renderer/agent/services/emotionFeedback'
-import { getRecommendedActions } from '@/renderer/agent/services/emotionActions'
+import { emotionFeedback } from '@/renderer/agent/emotion/emotionFeedback'
+import { getRecommendedActions } from '@/renderer/agent/emotion/emotionActions'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
-import type { EmotionActionDef } from '@/renderer/agent/services/emotionActions'
+import type { EmotionActionDef } from '@/renderer/agent/emotion/emotionActions'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_META, EMOTION_STATUS_MESSAGE_KEYS } from '@/renderer/agent/emotion'
 
@@ -51,7 +51,7 @@ const COOLDOWN: Record<CompanionMessage['type'], number> = {
 const EMOTION_MESSAGES = EMOTION_STATUS_MESSAGE_KEYS
 
 export const EmotionStatusIndicator: React.FC = () => {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const emotion = useEmotionState()
 
   // Base Tooltip State
@@ -127,6 +127,7 @@ export const EmotionStatusIndicator: React.FC = () => {
 
   useEffect(() => {
     emotionDetectionEngine.start()
+    return () => emotionDetectionEngine.stop()
   }, [])
 
   useEffect(() => {
@@ -134,11 +135,12 @@ export const EmotionStatusIndicator: React.FC = () => {
     const newState = emotion.state
 
     // Base Notification Logic (was in EmotionStatusIndicator & StateNotice)
+    let timer: ReturnType<typeof setTimeout> | undefined
     if (prevStateRef.current !== newState) {
       setJustChanged(true)
       setMessageIndex(0)
 
-      const timer = setTimeout(() => setJustChanged(false), 8000)
+      timer = setTimeout(() => setJustChanged(false), 8000)
 
       // If significant, trigger rules engine / actions (from Companion logic)
       if (newState !== 'flow' && prevStateRef.current !== newState) {
@@ -160,9 +162,8 @@ export const EmotionStatusIndicator: React.FC = () => {
       }
       prevStateRef.current = newState
       lastNoticeTimeRef.current = Date.now()
-
-      return () => clearTimeout(timer)
     }
+    return () => { if (timer !== undefined) clearTimeout(timer) }
   }, [emotion, showMessage, buildActionButtons, dismissActiveMessage])
 
   // Event Subscriptions

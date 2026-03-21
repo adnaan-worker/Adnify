@@ -13,7 +13,7 @@ import {
   Plus
 } from 'lucide-react'
 import { useAgentStore, selectBranches, selectActiveBranch, selectIsOnBranch } from '@/renderer/agent'
-import { useAgent } from '@/renderer/hooks/useAgent'
+import { useAgent, useAllThreads } from '@/renderer/hooks/useAgent'
 import { Button } from '../ui'
 import { Tooltip } from '../ui/Tooltip'
 import { ChatThread, getMessageText } from '@/renderer/agent/types'
@@ -32,7 +32,7 @@ interface ConversationSidebarProps {
 }
 
 export default function ConversationSidebar({ isOpen, onClose, initialTab = 'history' }: ConversationSidebarProps) {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -174,8 +174,9 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
 }
 
 function HistoryList({ searchQuery, onClose, language }: { searchQuery: string, onClose: () => void, language: string }) {
-  const { allThreads, currentThreadId, switchThread, deleteThread } = useAgent()
-  
+  const { currentThreadId, switchThread, deleteThread } = useAgent()
+  const allThreads = useAllThreads()
+
   const filteredThreads = useMemo(() => {
     return allThreads.filter(thread => {
       if (!searchQuery) return true

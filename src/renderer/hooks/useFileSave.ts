@@ -4,6 +4,7 @@
  */
 import { useCallback, useRef, useEffect } from 'react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '@renderer/services/electronAPI'
 import { getFileName } from '@shared/utils/pathUtils'
 import { toast } from '@renderer/components/common/ToastProvider'
@@ -19,7 +20,7 @@ function getModelVersionId(filePath: string): number | undefined {
 }
 
 export function useFileSave() {
-  const { openFiles, markFileSaved, closeFile, language } = useStore()
+  const { openFiles, markFileSaved, closeFile, language } = useStore(useShallow(s => ({ openFiles: s.openFiles, markFileSaved: s.markFileSaved, closeFile: s.closeFile, language: s.language })))
 
   // 保存单个文件
   const saveFile = useCallback(async (filePath: string): Promise<boolean> => {

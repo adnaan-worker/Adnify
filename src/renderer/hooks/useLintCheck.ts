@@ -20,7 +20,7 @@ export function useLintCheck() {
 
     setIsLinting(true)
     try {
-      const errors = await lintService.getLintErrors(filePath, true)
+      const { errors } = await lintService.getLintErrors(filePath, true)
       setLintErrors(errors)
 
       // 在编辑器中显示错误标记

@@ -345,3 +345,12 @@ export function cleanupLLMService(webContentsId: number) {
     compactionServices.delete(webContentsId)
   }
 }
+
+/**
+ * 清理所有窗口的 LLM 服务（应用退出时调用）
+ */
+export function cleanupAllLLMServices() {
+  for (const [id] of llmServices) {
+    cleanupLLMService(id)
+  }
+}

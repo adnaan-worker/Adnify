@@ -1,10 +1,15 @@
 /**
  * Agent Hook
  * 提供 Agent 功能的 React Hook 接口
+ *
+ * 性能优化：
+ * - 所有 selector 都返回稳定引用
+ * - action 函数通过 getState() 获取，不作为 selector 订阅
+ * - allThreads 使用引用缓存，threads 不变时返回同一数组
  */
 
 import { api } from '@/renderer/services/electronAPI'
-import { useCallback, useMemo, useEffect, useState } from 'react'
+import { useCallback, useMemo, useEffect, useState, useRef } from 'react'
 import { useStore, useModeStore } from '@/renderer/store'
 import {
   useAgentStore,
@@ -19,9 +24,36 @@ import {
 import { Agent, getAgentConfig } from '@/renderer/agent'
 import { MessageContent, ChatThread, ToolCall } from '@/renderer/agent/types'
 
+// ========== 独立 selector hooks（按需使用，避免全部订阅） ==========
+
+/** useAllThreads 的引用缓存，threads 对象不变时返回同一排序数组 */
+let _threadsRef: Record<string, ChatThread> | null = null
+let _sortedResult: ChatThread[] = []
+
+/** 获取排序后的所有线程列表（仅在需要时使用） */
+export function useAllThreads(): ChatThread[] {
+  return useAgentStore(state => {
+    if (state.threads === _threadsRef) return _sortedResult
+    _threadsRef = state.threads
+    _sortedResult = Object.values(state.threads).sort((a, b) => b.lastModified - a.lastModified)
+    return _sortedResult
+  })
+}
+
+// ========== Actions 直接获取（引用永远稳定，不需要 selector 订阅） ==========
+
+const getActions = () => useAgentStore.getState()
+
+// ========== 主 hook ==========
+
 export function useAgent() {
-  // 从主 store 获取配置
-  const { llmConfig, workspacePath, promptTemplateId, openFiles, activeFilePath } = useStore()
+  // 从主 store 获取配置（使用 selector 分离，setter 引用稳定）
+  const llmConfig = useStore(state => state.llmConfig)
+  const workspacePath = useStore(state => state.workspacePath)
+  const promptTemplateId = useStore(state => state.promptTemplateId)
+  const openFiles = useStore(state => state.openFiles)
+  const activeFilePath = useStore(state => state.activeFilePath)
+
   // 从 modeStore 获取当前模式
   const chatMode = useModeStore(state => state.currentMode)
 
@@ -44,111 +76,73 @@ export function useAgent() {
   const pendingChanges = useAgentStore(selectPendingChanges)
   const messageCheckpoints = useAgentStore(selectMessageCheckpoints)
 
-  // 获取线程相关状态
-  const threads = useAgentStore(state => state.threads)
+  // 线程 ID（轻量 selector，不订阅整个 threads 对象）
   const currentThreadId = useAgentStore(state => state.currentThreadId)
   const orchestratorPhase = useAgentStore(state => state.phase)
 
   // 确保有一个默认线程（首次加载时）
-  const createThreadAction = useAgentStore(state => state.createThread)
   useEffect(() => {
     const state = useAgentStore.getState()
     if (!state.currentThreadId || !state.threads[state.currentThreadId]) {
-      createThreadAction()
+      state.createThread()
     }
   }, [])
 
-  // 分开获取每个 action（避免每次渲染创建新对象导致无限循环）
-  const createThread = useAgentStore(state => state.createThread)
-  const switchThread = useAgentStore(state => state.switchThread)
-  const deleteThread = useAgentStore(state => state.deleteThread)
-  const clearMessagesAction = useAgentStore(state => state.clearMessages)
-  const deleteMessagesAfter = useAgentStore(state => state.deleteMessagesAfter)
-  const addContextItem = useAgentStore(state => state.addContextItem)
-  const removeContextItem = useAgentStore(state => state.removeContextItem)
-  const clearContextItems = useAgentStore(state => state.clearContextItems)
-
-  // 待确认更改操作
-  const acceptAllChanges = useAgentStore(state => state.acceptAllChanges)
-  const undoAllChanges = useAgentStore(state => state.undoAllChanges)
-  const acceptChange = useAgentStore(state => state.acceptChange)
-  const undoChange = useAgentStore(state => state.undoChange)
-
-  // 消息检查点操作
-  const restoreToCheckpoint = useAgentStore(state => state.restoreToCheckpoint)
-  const getCheckpointForMessage = useAgentStore(state => state.getCheckpointForMessage)
-
   // 清空消息（包括工具调用日志和 handoff 状态）
   const clearMessages = useCallback(() => {
-    clearMessagesAction()
-    // 同时清理工具调用日志
+    getActions().clearMessages()
     useStore.getState().clearToolCallLogs()
-    // 重置 handoff 状态
-    useAgentStore.getState().setHandoffRequired(false)
-    useAgentStore.getState().setHandoffDocument(null)
-    useAgentStore.getState().setCompressionStats(null)
-  }, [clearMessagesAction])
-  const clearCheckpoints = useAgentStore(state => state.clearMessageCheckpoints)
+    getActions().setHandoffRequired(false)
+    getActions().setHandoffDocument(null)
+    getActions().setCompressionStats(null)
+  }, [])
 
-  // 分支操作
-  const createBranch = useAgentStore(state => state.createBranch)
-  const switchBranch = useAgentStore(state => state.switchBranch)
-  const regenerateFromMessage = useAgentStore(state => state.regenerateFromMessage)
+  // 使用 ref 持有最新值，避免 sendMessage 回调频繁重建
+  const sendParamsRef = useRef({ llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath, orchestratorPhase })
+  sendParamsRef.current = { llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath, orchestratorPhase }
 
-  // 发送消息
+  // 发送消息 — 依赖通过 ref 访问，回调引用永远稳定
   const sendMessage = useCallback(async (content: MessageContent) => {
-    // 收集元数据，但不在这里构建提示词（避免阻塞 UI）
-    const openFilePaths = openFiles.map(f => f.path)
-    const activeFile = activeFilePath || undefined
-
-    // 获取 agent 配置中的 contextLimit
+    const { llmConfig: cfg, workspacePath: ws, chatMode: mode, promptTemplateId: tplId, aiInstructions: ai, openFiles: files, activeFilePath: active, orchestratorPhase: phase } = sendParamsRef.current
+    const openFilePaths = files.map(f => f.path)
     const agentConfig = getAgentConfig()
 
     await Agent.send(
       content,
       {
-        provider: llmConfig.provider,
-        model: llmConfig.model,
-        apiKey: llmConfig.apiKey,
-        baseUrl: llmConfig.baseUrl,
-        timeout: llmConfig.timeout,
-        maxTokens: llmConfig.maxTokens,
-        temperature: llmConfig.temperature,
-        topP: llmConfig.topP,
-        enableThinking: llmConfig.enableThinking,
-        thinkingBudget: llmConfig.thinkingBudget,
-        reasoningEffort: llmConfig.reasoningEffort,
-        protocol: llmConfig.protocol,
+        provider: cfg.provider,
+        model: cfg.model,
+        apiKey: cfg.apiKey,
+        baseUrl: cfg.baseUrl,
+        timeout: cfg.timeout,
+        maxTokens: cfg.maxTokens,
+        temperature: cfg.temperature,
+        topP: cfg.topP,
+        enableThinking: cfg.enableThinking,
+        thinkingBudget: cfg.thinkingBudget,
+        reasoningEffort: cfg.reasoningEffort,
+        protocol: cfg.protocol,
+        headers: cfg.headers,
         contextLimit: agentConfig.maxContextTokens,
       },
-      workspacePath,
-      chatMode,
+      ws,
+      mode,
       {
         openFiles: openFilePaths,
-        activeFile,
-        customInstructions: aiInstructions,
-        promptTemplateId,
-        orchestratorPhase: chatMode === 'orchestrator' ? orchestratorPhase : undefined,
+        activeFile: active || undefined,
+        customInstructions: ai,
+        promptTemplateId: tplId,
+        orchestratorPhase: mode === 'orchestrator' ? phase : undefined,
       }
     )
-  }, [llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath, orchestratorPhase])
+  }, [])
 
   // 中止
-  const abort = useCallback(() => {
-    Agent.abort()
-  }, [])
+  const abort = useCallback(() => { Agent.abort() }, [])
 
-  // 批准当前工具
-  const approveCurrentTool = useCallback(() => {
-    Agent.approve()
-  }, [])
-
-  // 拒绝当前工具
-  const rejectCurrentTool = useCallback(() => {
-    Agent.reject()
-  }, [])
-
-
+  // 工具审批
+  const approveCurrentTool = useCallback(() => { Agent.approve() }, [])
+  const rejectCurrentTool = useCallback(() => { Agent.reject() }, [])
 
   // 获取当前等待审批的工具调用
   const pendingToolCall = useMemo((): ToolCall | undefined => {
@@ -157,11 +151,6 @@ export function useAgent() {
     }
     return undefined
   }, [streamState])
-
-  // 所有线程列表
-  const allThreads = useMemo((): ChatThread[] => {
-    return Object.values(threads).sort((a, b) => b.lastModified - a.lastModified)
-  }, [threads])
 
   return {
     // 状态
@@ -175,41 +164,40 @@ export function useAgent() {
     messageCheckpoints,
 
     // 线程
-    allThreads,
     currentThreadId,
-    createThread,
-    switchThread,
-    deleteThread,
+    createThread: getActions().createThread,
+    switchThread: getActions().switchThread,
+    deleteThread: getActions().deleteThread,
 
     // 消息操作
     sendMessage,
     abort,
     clearMessages,
-    deleteMessagesAfter,
+    deleteMessagesAfter: getActions().deleteMessagesAfter,
 
     // 工具审批
     approveCurrentTool,
     rejectCurrentTool,
 
     // 待确认更改操作
-    acceptAllChanges,
-    undoAllChanges,
-    acceptChange,
-    undoChange,
+    acceptAllChanges: getActions().acceptAllChanges,
+    undoAllChanges: getActions().undoAllChanges,
+    acceptChange: getActions().acceptChange,
+    undoChange: getActions().undoChange,
 
     // 消息检查点操作
-    restoreToCheckpoint,
-    getCheckpointForMessage,
-    clearCheckpoints,
+    restoreToCheckpoint: getActions().restoreToCheckpoint,
+    getCheckpointForMessage: getActions().getCheckpointForMessage,
+    clearCheckpoints: getActions().clearMessageCheckpoints,
 
     // 上下文操作
-    addContextItem,
-    removeContextItem,
-    clearContextItems,
+    addContextItem: getActions().addContextItem,
+    removeContextItem: getActions().removeContextItem,
+    clearContextItems: getActions().clearContextItems,
 
     // 分支
-    createBranch,
-    switchBranch,
-    regenerateFromMessage,
+    createBranch: getActions().createBranch,
+    switchBranch: getActions().switchBranch,
+    regenerateFromMessage: getActions().regenerateFromMessage,
   }
 }

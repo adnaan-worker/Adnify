@@ -3,7 +3,7 @@ import iconPng from '@renderer/assets/icon.png'
 import dawnIconPng from '@renderer/assets/dawn_icon.png'
 
 export function Logo({ className = "w-6 h-6", glow = false }: { className?: string; glow?: boolean }) {
-  const { currentTheme } = useStore()
+  const currentTheme = useStore(s => s.currentTheme)
   const isDawn = currentTheme === 'dawn'
 
   return (

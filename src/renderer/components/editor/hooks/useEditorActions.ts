@@ -74,8 +74,8 @@ export function useEditorActions(
               setInlineEditState({
                 show: true,
                 position: {
-                  x: rect.left + coords.left,
-                  y: rect.top + coords.top + 20
+                  x: rect.left + Math.max(0, coords.left - 20),
+                  y: rect.top + Math.max(0, coords.top - 36)
                 },
                 selectedCode: selectedText,
                 lineRange: [newSelection.startLineNumber, newSelection.endLineNumber]

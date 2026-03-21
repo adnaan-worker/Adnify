@@ -43,6 +43,8 @@ export interface McpLocalServerConfig {
   timeout?: number
   /** 来源预设 ID（用于匹配预设获取使用示例等信息） */
   presetId?: string
+  /** 配置来源层级（运行时填充，不持久化） */
+  source?: 'user' | 'workspace'
 }
 
 /** 远程 MCP 服务器配置 */
@@ -67,6 +69,8 @@ export interface McpRemoteServerConfig {
   timeout?: number
   /** 来源预设 ID（用于匹配预设获取使用示例等信息） */
   presetId?: string
+  /** 配置来源层级（运行时填充，不持久化） */
+  source?: 'user' | 'workspace'
 }
 
 /** MCP 服务器配置（联合类型） */
@@ -414,6 +418,10 @@ export interface McpRemotePreset extends McpBasePreset {
   type: 'remote'
   /** 远程 URL */
   url: string
+  /** 自定义请求头模板（支持 ${ENV_VAR} 占位符替换） */
+  headers?: Record<string, string>
+  /** OAuth 配置，设为 false 禁用 OAuth（使用 headers 认证时需禁用） */
+  oauth?: McpOAuthConfig | false
 }
 
 /** MCP 服务器预设（辨别联合类型） */

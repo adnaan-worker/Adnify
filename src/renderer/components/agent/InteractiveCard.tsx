@@ -41,7 +41,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
     const [customText, setCustomText] = useState('')
     const [showCustomInput, setShowCustomInput] = useState(false)
     const inputRef = useRef<HTMLTextAreaElement>(null)
-    const { language } = useStore()
+    const language = useStore(s => s.language)
 
     useEffect(() => {
         if (content.selectedIds?.length) {

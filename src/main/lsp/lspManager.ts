@@ -24,7 +24,7 @@ import { getCacheConfig } from '@shared/config/agentConfig'
 import {
   getInstalledServerPath,
   commandExists,
-} from './lsp/installer'
+} from './installer'
 
 // 重新导出 LanguageId 供其他模块使用
 export type { LanguageId } from '@shared/languages'
@@ -452,6 +452,9 @@ class LspManager {
   private static readonly DIAGNOSTICS_DEBOUNCE_MS = 100
   private static readonly DIAGNOSTICS_TIMEOUT_MS = 3000
 
+  // 记录启动失败的冷却时间（防止无限重试轰炸日志）
+  private unavailableServers: Map<string, number> = new Map()
+
   constructor() {
     // 初始化诊断缓存
     const cacheConfig = getCacheConfig('lspDiagnostics')
@@ -514,6 +517,12 @@ class LspManager {
 
     if (existing?.process && existing.initialized) return true
 
+    // 如果最近短时间内启动失败过，直接返回避免刷日志 (冷却时间 60s)
+    const lastFailed = this.unavailableServers.get(key)
+    if (lastFailed && Date.now() - lastFailed < 60000) {
+      return false
+    }
+
     if (this.startingServers.has(key)) {
       await new Promise(resolve => setTimeout(resolve, 200))
       return this.servers.get(key)?.initialized || false
@@ -524,7 +533,13 @@ class LspManager {
 
     this.startingServers.add(key)
     try {
-      return await this.spawnServer(config, workspacePath)
+      const success = await this.spawnServer(config, workspacePath)
+      if (!success) {
+        this.unavailableServers.set(key, Date.now())
+      } else {
+        this.unavailableServers.delete(key)
+      }
+      return success
     } finally {
       this.startingServers.delete(key)
     }

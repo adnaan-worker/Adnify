@@ -9,6 +9,8 @@
 
 import { z } from 'zod'
 import type { ToolApprovalType } from '@/shared/types/llm'
+import { normalizeEditFileArgs, resolveEditFileRequest } from '@/shared/utils/editFile'
+import { normalizeReadFileArgs, resolveReadFileRequest } from '@/shared/utils/readFile'
 
 // ============================================
 // 类型定义
@@ -65,6 +67,22 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 - Single file: path="src/main.ts"
 - Multiple files: path=["src/a.ts", "src/b.ts"]
 - Large files will be truncated, use search_files to locate target first`,
+        customSchema: z.object({
+            path: z.union([
+                z.string().min(1, 'path is required'),
+                z.array(z.string().min(1, 'path items must be non-empty')).min(1, 'path array must not be empty')
+            ]),
+            start_line: z.number().optional(),
+            end_line: z.number().optional(),
+        }).passthrough()
+            .transform((data) => normalizeReadFileArgs(data as Record<string, unknown>))
+            .refine(
+                (data) => resolveReadFileRequest(data as Record<string, unknown>).ok,
+                (data) => {
+                    const resolution = resolveReadFileRequest(data as Record<string, unknown>)
+                    return { message: resolution.ok ? 'Validation failed' : resolution.error }
+                }
+            ),
         category: 'read',
         approvalType: 'none',
         parallel: true,
@@ -73,17 +91,11 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         parameters: {
             path: {
                 type: 'string',
-                description: 'File path (string) or multiple paths (array). Examples: "src/main.ts" or ["src/a.ts", "src/b.ts"]',
+                description: 'File path string OR JSON array of paths. Single: "src/main.ts". Multiple: ["src/a.ts", "src/b.ts"]. start_line/end_line only apply to single-file reads.',
                 required: true
             },
-            start_line: { type: 'number', description: 'Starting line for single file (1-indexed)' },
-            end_line: { type: 'number', description: 'Ending line for single file (inclusive)' },
-        },
-        validate: (data) => {
-            if (data.start_line && data.end_line && (data.start_line as number) > (data.end_line as number)) {
-                return { valid: false, error: 'start_line must be <= end_line' }
-            }
-            return { valid: true }
+            start_line: { type: 'number', description: 'Starting line (1-indexed, single file only)' },
+            end_line: { type: 'number', description: 'Ending line inclusive (single file only)' },
         },
     },
 
@@ -169,16 +181,47 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     edit_file: {
         name: 'edit_file',
         displayName: 'Edit File',
-        description: 'Edit file by replacing text or line ranges. Three modes: 1) String replacement: old_string + new_string. 2) Line replacement: start_line + end_line + content. 3) Batch mode: edits array for multiple changes. CRITICAL: Must read_file first.',
-        detailedDescription: `Three editing modes:
-- String mode: old_string + new_string (include 3-5 lines context)
-- Line mode: start_line + end_line + content (use line numbers from read_file)
+        description: `Edit an existing file. Choose EXACTLY ONE mode — NEVER mix parameters from different modes:
+- **String mode**: provide \`old_string\` + \`new_string\` only. Do NOT add start_line/end_line/content.
+- **Line mode**: provide \`start_line\` + \`end_line\` + \`content\` only. Do NOT add old_string/new_string.
+- **Batch mode**: provide \`edits\` array only. Do NOT add any other mode parameters.
+CRITICAL: Read the file first. NEVER pass parameters from two different modes in the same call.`,
+        detailedDescription: `Three mutually exclusive editing modes:
+- String mode: old_string + new_string (include 3-5 lines context around the change)
+- Line mode: start_line + end_line + content (use exact line numbers from read_file)
 - Batch mode: edits=[{action, start_line, end_line, content}, ...] (auto-sorted, prevents line number shifts)`,
         commonErrors: [
-            { error: 'old_string not found', solution: 'Read file again, copy exact content' },
-            { error: 'Multiple matches', solution: 'Include more context lines' },
+            { error: 'old_string not found', solution: 'Read file again, copy exact content including whitespace' },
+            { error: 'Multiple matches', solution: 'Include more surrounding context lines in old_string' },
             { error: 'Overlapping edits', solution: 'Ensure edit ranges do not overlap' },
+            { error: 'Cannot mix string mode, line mode, and batch mode', solution: 'Use ONLY one mode per call: either old_string+new_string OR start_line+end_line+content OR edits array' },
         ],
+        customSchema: z.object({
+            path: z.string().min(1, 'path is required'),
+            old_string: z.string().optional(),
+            new_string: z.string().optional(),
+            start_line: z.number().optional(),
+            end_line: z.number().optional(),
+            content: z.string().optional(),
+            replace_all: z.boolean().optional(),
+            edits: z.array(
+                z.object({
+                    action: z.enum(['replace', 'insert', 'delete']),
+                    start_line: z.number().optional(),
+                    end_line: z.number().optional(),
+                    after_line: z.number().optional(),
+                    content: z.string().optional(),
+                })
+            ).optional(),
+        }).passthrough()
+            .transform((data) => normalizeEditFileArgs(data as Record<string, unknown>))
+            .refine(
+                (data) => resolveEditFileRequest(data as Record<string, unknown>).ok,
+                (data) => {
+                    const resolution = resolveEditFileRequest(data as Record<string, unknown>)
+                    return { message: resolution.ok ? 'Validation failed' : resolution.error }
+                }
+            ),
         category: 'write',
         approvalType: 'none',
         parallel: false,
@@ -186,12 +229,12 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root', required: true },
-            old_string: { type: 'string', description: 'Text to find (string mode, include 3-5 lines context)' },
-            new_string: { type: 'string', description: 'Replacement text (string mode)' },
-            start_line: { type: 'number', description: 'Start line (line mode, 1-indexed)' },
-            end_line: { type: 'number', description: 'End line (line mode, inclusive)' },
-            content: { type: 'string', description: 'New content (line mode)' },
-            replace_all: { type: 'boolean', description: 'Replace all occurrences (string mode)', default: false },
+            old_string: { type: 'string', description: '[STRING MODE ONLY] Exact text to find — include 3-5 lines of context. Do NOT use together with start_line/end_line/content/edits.' },
+            new_string: { type: 'string', description: '[STRING MODE ONLY] Replacement text. Do NOT use together with start_line/end_line/content/edits.' },
+            start_line: { type: 'number', description: '[LINE MODE ONLY] First line to replace (1-indexed). Do NOT use together with old_string/new_string/edits.' },
+            end_line: { type: 'number', description: '[LINE MODE ONLY] Last line to replace (inclusive). Do NOT use together with old_string/new_string/edits.' },
+            content: { type: 'string', description: '[LINE MODE ONLY] New content for the line range. Do NOT use together with old_string/new_string/edits.' },
+            replace_all: { type: 'boolean', description: '[STRING MODE ONLY] Replace all occurrences instead of just the first', default: false },
             edits: {
                 type: 'array',
                 description: 'Batch edits array (batch mode). Each edit: {action: "replace"|"insert"|"delete", start_line?, end_line?, after_line?, content?}. Auto-sorted to prevent line shifts.',
@@ -208,82 +251,15 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
                 }
             },
         },
-        validate: (data) => {
-            // 验证模式选择
-            const hasStringMode = data.old_string || data.new_string
-            const hasLineMode = data.start_line || data.end_line || data.content
-            const hasBatchMode = data.edits
-
-            const modeCount = [hasStringMode, hasLineMode, hasBatchMode].filter(Boolean).length
-            if (modeCount > 1) {
-                return { valid: false, error: 'Cannot mix string mode, line mode, and batch mode parameters' }
-            }
-
-            if (modeCount === 0) {
-                return { valid: false, error: 'Must provide either (old_string + new_string), (start_line + end_line + content), or (edits array)' }
-            }
-
-            // 验证字符串模式
-            if (hasStringMode && (!data.old_string || data.new_string === undefined)) {
-                return { valid: false, error: 'String mode requires both old_string and new_string' }
-            }
-
-            // 验证行模式
-            if (hasLineMode) {
-                if (!data.start_line || !data.end_line || data.content === undefined) {
-                    return { valid: false, error: 'Line mode requires start_line, end_line, and content' }
-                }
-                if ((data.start_line as number) > (data.end_line as number)) {
-                    return { valid: false, error: 'start_line must be <= end_line' }
-                }
-            }
-
-            // 验证批量模式
-            if (hasBatchMode) {
-                if (!Array.isArray(data.edits) || data.edits.length === 0) {
-                    return { valid: false, error: 'Batch mode requires non-empty edits array' }
-                }
-
-                for (let i = 0; i < data.edits.length; i++) {
-                    const edit = data.edits[i]
-                    if (!edit.action || !['replace', 'insert', 'delete'].includes(edit.action)) {
-                        return { valid: false, error: `Edit ${i}: action must be "replace", "insert", or "delete"` }
-                    }
-
-                    if (edit.action === 'replace' || edit.action === 'delete') {
-                        if (!edit.start_line || !edit.end_line) {
-                            return { valid: false, error: `Edit ${i}: ${edit.action} requires start_line and end_line` }
-                        }
-                        if (edit.start_line > edit.end_line) {
-                            return { valid: false, error: `Edit ${i}: start_line must be <= end_line` }
-                        }
-                    }
-
-                    if (edit.action === 'insert') {
-                        if (edit.after_line === undefined) {
-                            return { valid: false, error: `Edit ${i}: insert requires after_line` }
-                        }
-                    }
-
-                    if ((edit.action === 'replace' || edit.action === 'insert') && edit.content === undefined) {
-                        return { valid: false, error: `Edit ${i}: ${edit.action} requires content` }
-                    }
-                }
-            }
-
-            return { valid: true }
-        },
     },
 
     write_file: {
         name: 'write_file',
         displayName: 'Write File',
-        description: 'Create new file or completely overwrite existing file. WARNING: This replaces entire file content. For partial edits, use edit_file instead.',
-        detailedDescription: `Write complete file content.
-- Creates new file if doesn't exist
-- OVERWRITES entire file if exists`,
+        description: 'Write complete content to a file. Use for: (1) creating a new file, (2) completely rewriting an existing file. WARNING: overwrites all existing content. For partial changes to an existing file, use edit_file instead.',
         criticalRules: [
-            'OVERWRITES entire file - use edit_file for partial changes',
+            'OVERWRITES entire file — use edit_file for any partial change',
+            'Prefer over create_file_or_folder when you have file content ready',
         ],
         category: 'write',
         approvalType: 'none',
@@ -335,7 +311,7 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'Path relative to workspace root to delete (e.g., "src/old.ts")', required: true },
-            recursive: { type: 'boolean', description: 'Delete folder contents', default: false },
+            recursive: { type: 'boolean', description: 'REQUIRED for non-empty folders. If false (default) and the folder has contents, deletion will fail. Always set true when deleting a folder.', default: false },
         },
     },
 
@@ -360,7 +336,8 @@ For long-running servers or watch tasks:
         ],
         criticalRules: [
             'NEVER use cat/grep/sed - use dedicated tools',
-            'Use cwd parameter instead of cd',
+            'Use cwd parameter instead of cd — NEVER write "cd path && command" or "cd path; command" inside command field',
+            'NEVER use && in command — it is not supported on Windows PowerShell 5 (use cwd parameter for directory changes)',
             'Always use is_background=true for servers and dev tasks',
         ],
         category: 'terminal',
@@ -371,7 +348,7 @@ For long-running servers or watch tasks:
         parameters: {
             command: { type: 'string', description: 'Shell command', required: true },
             cwd: { type: 'string', description: 'Working directory relative to workspace root (e.g., "packages/core", NOT "./packages/core")', },
-            timeout: { type: 'number', description: 'Timeout seconds (default: 30)', default: 30 },
+            timeout: { type: 'number', description: 'Timeout seconds (default: 60). Increase for slow commands like installs.', default: 60 },
             is_background: { type: 'boolean', description: 'Run in background as a visible UI terminal. Required for long-running processes like servers or watchers.', default: false },
         },
     },
@@ -409,8 +386,8 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             terminal_id: { type: 'string', description: 'The ID of the terminal to send input to', required: true },
-            input: { type: 'string', description: 'The string/key to send (e.g. "yes\\n", "c" for Ctrl+C)', required: true },
-            is_ctrl: { type: 'boolean', description: 'If true, treats input as a control character (e.g. "c" becomes Ctrl+C)', default: false },
+            input: { type: 'string', description: 'Text to send. For regular text/answers: "yes\\n", "Y\\n". For Ctrl combos: MUST be a single letter (e.g. "c" for Ctrl+C, "d" for Ctrl+D, "z" for Ctrl+Z) — only used when is_ctrl=true.', required: true },
+            is_ctrl: { type: 'boolean', description: 'If true, sends input as a Ctrl key combo. input MUST be a single character (e.g. is_ctrl=true, input="c" → Ctrl+C). Default: false.', default: false },
         },
     },
 
@@ -434,12 +411,14 @@ For long-running servers or watch tasks:
     get_lint_errors: {
         name: 'get_lint_errors',
         displayName: 'Lint Errors',
-        description: 'Get TypeScript/ESLint errors for a file. Use after editing to verify code. Call once per file.',
+        description: 'Get TypeScript/ESLint errors for a file. Use after editing to verify code. If results seem stale, pass refresh=true to force re-check.',
         detailedDescription: `Get diagnostics (errors, warnings) for a file.
 - Shows TypeScript/ESLint errors
-- Use after editing to verify code`,
+- Use after editing to verify code
+- Use refresh=true if results seem outdated`,
         criticalRules: [
             'Call once after editing, not repeatedly',
+            'If errors persist after a fix, use refresh=true to force re-check',
         ],
         category: 'lsp',
         approvalType: 'none',
@@ -448,15 +427,18 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root to check (e.g., "src/main.ts")', required: true },
+            refresh: { type: 'boolean', description: 'Force re-check instead of using cached diagnostics (default: false)', default: false },
         },
     },
 
     find_references: {
         name: 'find_references',
         displayName: 'Find References',
-        description: 'Find all references to symbol at position.',
+        description: 'Find all references to a symbol across the codebase. TIP: Use read_file to see the line/column of the symbol first, or use get_document_symbols to find symbol positions.',
         detailedDescription: `Find all usages of a symbol across codebase.
 - Requires exact file position (line, column)
+- To find the position: use read_file and note the line number, column is the 1-indexed character offset within the line
+- Or use get_document_symbols to list all symbols with their positions
 - Useful for refactoring`,
         category: 'lsp',
         approvalType: 'none',
@@ -465,15 +447,18 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
-            line: { type: 'number', description: 'Line number (1-indexed)', required: true },
-            column: { type: 'number', description: 'Column number (1-indexed)', required: true },
+            line: { type: 'number', description: 'Line number (1-indexed). Use read_file to find it.', required: true },
+            column: { type: 'number', description: 'Column (character offset, 1-indexed). Count from start of line to the symbol.', required: true },
         },
     },
 
     go_to_definition: {
         name: 'go_to_definition',
         displayName: 'Go to Definition',
-        description: 'Get definition location of symbol.',
+        description: 'Get the definition location of a symbol. TIP: Use read_file to find the line/column where the symbol is used, or use get_document_symbols to list positions.',
+        detailedDescription: `Navigate to where a symbol is defined.
+- To find position: read_file and note line number; column is 1-indexed character offset within the line
+- Or use get_document_symbols to find symbol positions in a file`,
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
@@ -481,15 +466,18 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
-            line: { type: 'number', description: 'Line number (1-indexed)', required: true },
-            column: { type: 'number', description: 'Column number (1-indexed)', required: true },
+            line: { type: 'number', description: 'Line number (1-indexed). Use read_file to find it.', required: true },
+            column: { type: 'number', description: 'Column (character offset, 1-indexed). Count from start of line to the symbol.', required: true },
         },
     },
 
     get_hover_info: {
         name: 'get_hover_info',
         displayName: 'Hover Info',
-        description: 'Get type info and docs for symbol.',
+        description: 'Get type info and documentation for a symbol at a position. TIP: Use read_file to find the line/column, or get_document_symbols for symbol positions.',
+        detailedDescription: `Get TypeScript type info, signatures, and JSDoc for a symbol.
+- To find position: read_file and note line number; column is 1-indexed character offset within the line
+- Useful for understanding unfamiliar types or APIs`,
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
@@ -497,8 +485,8 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
-            line: { type: 'number', description: 'Line number (1-indexed)', required: true },
-            column: { type: 'number', description: 'Column number (1-indexed)', required: true },
+            line: { type: 'number', description: 'Line number (1-indexed). Use read_file to find it.', required: true },
+            column: { type: 'number', description: 'Column (character offset, 1-indexed). Count from start of line to the symbol.', required: true },
         },
     },
 
@@ -592,7 +580,7 @@ TIPS:
 - The tool blocks until user makes a selection`,
         examples: [
             'ask_user question="What type of task?" options=[{id:"feature",label:"New Feature"},{id:"bugfix",label:"Bug Fix"}]',
-            'ask_user question="Which files to modify?" options=[...] multiSelect=true',
+            'ask_user question="Which files to modify?" options=[...] multi_select=true',
         ],
         criticalRules: [
             'Use to gather requirements, preferences, or confirmations',
@@ -622,7 +610,7 @@ TIPS:
                     },
                 },
             },
-            multiSelect: { type: 'boolean', description: 'Allow multiple selections (default: false)', default: false },
+            multi_select: { type: 'boolean', description: 'Allow selecting multiple options (default: false)', default: false },
         },
     },
 
@@ -662,9 +650,9 @@ TIPS:
                     properties: {
                         title: { type: 'string', description: 'Task title', required: true },
                         description: { type: 'string', description: 'Detailed task description', required: true },
-                        suggestedProvider: { type: 'string', description: 'Recommended provider (openai, anthropic, gemini)', required: true },
-                        suggestedModel: { type: 'string', description: 'Recommended model', required: true },
-                        suggestedRole: { type: 'string', description: 'Recommended role/persona', required: true },
+                        suggestedProvider: { type: 'string', description: 'Recommended provider', required: true, enum: ['anthropic', 'openai', 'gemini', 'ollama'] },
+                        suggestedModel: { type: 'string', description: 'Recommended model ID (e.g., "claude-sonnet-4-6", "gpt-4o", "gemini-2.0-flash")', required: true },
+                        suggestedRole: { type: 'string', description: 'Recommended role/persona (e.g., "coder", "reviewer", "planner", "tester")', required: true },
                         dependencies: { type: 'array', description: 'IDs of tasks this depends on', items: { type: 'string', description: 'Task ID' } },
                     },
                 },
@@ -834,19 +822,100 @@ This will trigger the task executor to run through the plan.`,
     remember: {
         name: 'remember',
         displayName: 'Remember',
-        description: 'Propose a new project-level memory (fact or preference) to be remembered across conversations. This will show a confirmation card to the user.',
-        detailedDescription: `Use this to persist important information about the project, such as:
-- Technical stack or architectural decisions
-- Recurring bugs and their fixes
-- User preferences for code style or behavior
-- Project-specific terminology`,
+        description: 'Save a project-level fact or preference so it persists across all future conversations. Use proactively when you discover something important that should not be re-discovered every session.',
+        detailedDescription: `Persist important project knowledge across conversations.
+
+PROACTIVELY use remember when you discover:
+- Architectural decisions ("Uses Zustand for global state, not Redux")
+- Tech stack specifics ("Node version pinned to 18.x in .nvmrc")
+- Recurring bugs and their root causes ("navigator.userAgent instead of process.platform in renderer")
+- User code style preferences ("Prefer functional components, no class components")
+- Project conventions ("All API calls go through src/services/, never directly in components")
+- Environment quirks ("Windows PowerShell is default shell, use ; not &&")
+
+Don't wait for the user to ask — if you learn something that would save time in future sessions, remember it.`,
+        examples: [
+            'remember content="Uses pnpm workspaces. Always run install from root, not individual packages."',
+            'remember content="User prefers snake_case for all tool/API parameter names."',
+        ],
         category: 'interaction',
         approvalType: 'none',
         parallel: false,
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            content: { type: 'string', description: 'The fact or preference to remember', required: true },
+            content: { type: 'string', description: 'The fact, preference, or convention to remember. Write as a clear, standalone statement that will make sense without conversation context.', required: true },
+        },
+    },
+
+    // ===== Skill 工具 =====
+    apply_skill: {
+        name: 'apply_skill',
+        displayName: 'Apply Skill',
+        description: 'Load a project skill by name when it is directly relevant to the current task.',
+        detailedDescription: `Load a project-specific skill's full content (instructions, guidelines, templates) by name.
+
+Available skills are listed in the system prompt under "Available Skills". Each skill has a name and description.
+- Do NOT eagerly apply skills — only when the user's task DIRECTLY requires the skill's domain knowledge
+- General coding, bug fixes, or simple questions do NOT need skills, even if tangentially related
+- The tool returns the full skill content which you should follow as project-specific instructions`,
+        category: 'interaction',
+        approvalType: 'none',
+        parallel: true,
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {
+            skill_name: { type: 'string', description: 'The name of the skill to load (as shown in Available Skills list)', required: true },
+        },
+    },
+
+    todo_write: {
+        name: 'todo_write',
+        displayName: 'Task List',
+        description: 'Create and manage a structured task list for tracking progress on complex tasks.',
+        detailedDescription: `Track progress on multi-step tasks. Provides a visible task list in the UI so the user can see what's done, what's in progress, and what's next.
+
+## MUST use when:
+- Task touches 3+ files or requires 3+ distinct steps
+- User gives multiple requirements in one message
+- User explicitly asks to track progress or create a task list
+- Multi-phase workflow (implement → test → fix → verify)
+
+## Do NOT use when:
+- Single-file fix, one-line change, typo correction
+- Pure Q&A, explanation, or code review
+- Task completable in 1-2 trivial steps
+
+## Timing:
+- Call BEFORE you start coding, not halfway through
+- Call with \`[]\` to clear after all tasks are done
+
+## Format:
+- Each call replaces the ENTIRE list
+- Exactly ONE task \`in_progress\` at a time
+- Mark \`completed\` IMMEDIATELY after finishing — never batch
+- \`content\`: imperative ("Fix the bug"), \`activeForm\`: continuous ("Fixing the bug")
+- ONLY mark completed when FULLY done — not when partial or blocked`,
+        category: 'interaction',
+        approvalType: 'none',
+        parallel: false,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            todos: {
+                type: 'array',
+                description: 'The complete updated todo list.',
+                required: true,
+                items: {
+                    type: 'object',
+                    description: 'A single todo item',
+                    properties: {
+                        content: { type: 'string', description: 'Imperative form of the task (e.g., "Fix the bug")', required: true },
+                        status: { type: 'string', description: 'Task status: "pending", "in_progress", or "completed"', required: true, enum: ['pending', 'in_progress', 'completed'] },
+                        activeForm: { type: 'string', description: 'Present continuous form (e.g., "Fixing the bug")', required: true },
+                    },
+                },
+            },
         },
     },
 }
@@ -862,29 +931,24 @@ This will trigger the task executor to run through the plan.`,
  * 根据场景选择最合适的工具
  */
 export const FILE_EDIT_DECISION_GUIDE = `
-## File Editing Tool Selection
+## File Editing Decision Guide
 
-**Decision Tree:**
-1. Is this a NEW file that doesn't exist?
-   → Use \`write_file\` or \`create_file_or_folder\`
+**Which tool to use:**
+1. NEW file that doesn't exist → \`write_file\` or \`create_file_or_folder\`
+2. REPLACE ENTIRE file content → \`write_file\`
+3. Edit part of an existing file → \`edit_file\` (choose one mode below)
 
-2. Do you need to REPLACE THE ENTIRE file content?
-   → Use \`write_file\`
+**edit_file modes — pick EXACTLY ONE, NEVER mix:**
+| You have... | Use mode | Parameters |
+|-------------|----------|------------|
+| Exact text to find/replace | String mode | \`old_string\` + \`new_string\` |
+| Exact line numbers (from read_file) | Line mode | \`start_line\` + \`end_line\` + \`content\` |
+| Multiple non-overlapping edits | Batch mode | \`edits\` array |
 
-3. Do you know the EXACT LINE NUMBERS to change?
-   → Use \`replace_file_content\` (preferred for precision)
-
-4. Do you know the EXACT TEXT to find and replace?
-   → Use \`edit_file\` with old_string/new_string
-
-**Quick Reference:**
-| Scenario | Tool | Why |
-|----------|------|-----|
-| Create new file | write_file | Creates with full content |
-| Rewrite entire file | write_file | Complete replacement |
-| Change specific lines | replace_file_content | Line-based precision |
-| Replace exact text | edit_file | String matching |
-| Add to end of file | edit_file | Match last lines, add new |
+**⚠️ CRITICAL RULE: Each call to edit_file must use ONLY ONE mode.**
+- String mode: old_string + new_string → DO NOT add start_line/end_line/content
+- Line mode: start_line + end_line + content → DO NOT add old_string/new_string
+- Batch mode: edits array → DO NOT add any other parameters
 `
 
 /**
@@ -1029,38 +1093,40 @@ function createZodType(prop: ToolPropertyDef): z.ZodTypeAny {
 
 /** 生成 Zod Schema */
 export function generateZodSchema(config: ToolConfig): z.ZodSchema {
+    let objectSchema: z.ZodTypeAny
+
     if (config.customSchema) {
-        return config.customSchema
-    }
+        objectSchema = config.customSchema
+    } else {
+        const shape: Record<string, z.ZodTypeAny> = {}
 
-    const shape: Record<string, z.ZodTypeAny> = {}
+        for (const [key, prop] of Object.entries(config.parameters)) {
+            let schema = createZodType(prop)
 
-    for (const [key, prop] of Object.entries(config.parameters)) {
-        let schema = createZodType(prop)
-
-        // 重新应用顶层的 required 验证消息
-        if (prop.type === 'string' && prop.required && !prop.enum) {
-            schema = z.string().min(1, `${key} is required`)
-        }
-
-        if (!prop.required) {
-            schema = schema.optional()
-            if (prop.default !== undefined) {
-                schema = schema.default(prop.default)
+            // 重新应用顶层的 required 验证消息
+            if (prop.type === 'string' && prop.required && !prop.enum) {
+                schema = z.string().min(1, `${key} is required`)
             }
+
+            if (!prop.required) {
+                schema = schema.optional()
+                if (prop.default !== undefined) {
+                    schema = schema.default(prop.default)
+                }
+            }
+
+            shape[key] = schema
         }
 
-        shape[key] = schema
+        // 使用 passthrough() 允许额外的字段（如 _meta）
+        objectSchema = z.object(shape).passthrough()
     }
-
-    // 使用 passthrough() 允许额外的字段（如 _meta）
-    const objectSchema = z.object(shape).passthrough()
 
     // 添加自定义验证
     if (config.validate) {
         return objectSchema.refine(
-            (data) => config.validate!(data).valid,
-            (data) => ({ message: config.validate!(data).error || 'Validation failed' })
+            (data) => config.validate!(data as Record<string, unknown>).valid,
+            (data) => ({ message: config.validate!(data as Record<string, unknown>).error || 'Validation failed' })
         )
     }
 
@@ -1082,9 +1148,24 @@ export function generateToolPromptDescription(config: ToolConfig): string {
     // 工具名
     lines.push(`### ${config.displayName} (\`${config.name}\`)`)
 
-    // 使用 description（包含反碎片化规则）作为主要描述
+    // 主描述（包含反碎片化规则）
     lines.push(config.description)
     lines.push('')
+
+    // 详细描述（补充使用细节）
+    if (config.detailedDescription) {
+        lines.push(config.detailedDescription)
+        lines.push('')
+    }
+
+    // 关键规则
+    if (config.criticalRules && config.criticalRules.length > 0) {
+        lines.push('**Rules:**')
+        for (const rule of config.criticalRules) {
+            lines.push(`- ${rule}`)
+        }
+        lines.push('')
+    }
 
     // 参数
     const params = Object.entries(config.parameters)
@@ -1098,7 +1179,7 @@ export function generateToolPromptDescription(config: ToolConfig): string {
         lines.push('')
     }
 
-    // 常见错误（保留，因为对用户有帮助）
+    // 常见错误
     if (config.commonErrors && config.commonErrors.length > 0) {
         lines.push('**Common Errors:**')
         for (const err of config.commonErrors) {

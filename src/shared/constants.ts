@@ -83,6 +83,7 @@ export const SECURITY_DEFAULTS = {
   SHELL_COMMANDS: [
     'npm', 'yarn', 'pnpm', 'bun',
     'node', 'npx', 'deno',
+    'eslint', 'tsc',
     'git',
     'python', 'python3', 'pip', 'pip3',
     'java', 'javac', 'mvn', 'gradle',
@@ -95,8 +96,7 @@ export const SECURITY_DEFAULTS = {
     'add', 'commit', 'reset', 'restore',
     'push', 'pull', 'fetch', 'remote',
     'branch', 'checkout', 'switch', 'merge', 'rebase', 'cherry-pick',
-    'clone', 'init', 'stash', 'tag', 'config',
+    'clone', 'init', 'stash', 'tag', 'config', 'symbolic-ref',
   ],
 } as const
-
 

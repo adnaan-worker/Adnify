@@ -6,6 +6,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import type { StateCreator } from 'zustand'
 import { logger } from '@utils/Logger'
+import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 import type { FileSnapshot, PendingChange, MessageCheckpoint, CheckpointImage } from '../../types'
 import type { ContextItem } from '../../types'
 import type { ThreadSlice } from './threadSlice'
@@ -100,6 +101,7 @@ export const createCheckpointSlice: StateCreator<
                         errors.push(`Failed to delete: ${change.filePath}`)
                     }
                 } else {
+                    internalWriteTracker.mark(change.filePath)
                     const written = await api.file.write(change.filePath, change.snapshot.content)
                     if (written) {
                         restoredFiles.push(change.filePath)
@@ -134,6 +136,7 @@ export const createCheckpointSlice: StateCreator<
                 const deleted = await api.file.delete(change.filePath)
                 if (!deleted) return false
             } else {
+                internalWriteTracker.mark(change.filePath)
                 const written = await api.file.write(change.filePath, change.snapshot.content)
                 if (!written) return false
             }
@@ -180,9 +183,15 @@ export const createCheckpointSlice: StateCreator<
 
         logger.agent.info('[Checkpoint] Created checkpoint:', checkpoint.id, 'for message:', messageId, 'with files:', Object.keys(fileSnapshots), 'images:', images?.length ?? 0, 'contextItems:', contextItems?.length ?? 0)
 
-        set(state => ({
-            messageCheckpoints: [...state.messageCheckpoints, checkpoint],
-        }))
+        set(state => {
+            let newCheckpoints = [...state.messageCheckpoints, checkpoint]
+            // 限制 checkpoint 数量，超过时删除最旧的
+            const MAX_CHECKPOINTS = 15
+            if (newCheckpoints.length > MAX_CHECKPOINTS) {
+                newCheckpoints = newCheckpoints.slice(-MAX_CHECKPOINTS)
+            }
+            return { messageCheckpoints: newCheckpoints }
+        })
 
         return checkpoint.id
     },
@@ -261,6 +270,7 @@ export const createCheckpointSlice: StateCreator<
                         restoredFiles.push(filePath)
                     }
                 } else {
+                    internalWriteTracker.mark(filePath)
                     const written = await api.file.write(filePath, snapshot.content)
                     if (written) {
                         restoredFiles.push(filePath)

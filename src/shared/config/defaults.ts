@@ -219,11 +219,11 @@ export const AUTO_APPROVE_DEFAULTS = {
 
 export const SECURITY_SETTINGS_DEFAULTS = {
   enablePermissionConfirm: true,
-  enableAuditLog: true,
   strictWorkspaceMode: true,
   allowedShellCommands: [
     'npm', 'yarn', 'pnpm', 'bun',
     'node', 'npx', 'deno',
+    'eslint', 'tsc',
     'git',
     'python', 'python3', 'pip', 'pip3',
     'java', 'javac', 'mvn', 'gradle',

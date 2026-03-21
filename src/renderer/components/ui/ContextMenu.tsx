@@ -71,7 +71,7 @@ export const ContextMenu = memo(function ContextMenu({ x, y, items, onClose }: C
     >
       {items.map((item, index) => {
         if (item.separator) {
-          return <div key={index} className="my-1 border-t border-border/50 mx-2" />
+          return <div key={`separator-${index}`} className="my-1 border-t border-border/50 mx-2" />
         }
         
         const Icon = item.icon

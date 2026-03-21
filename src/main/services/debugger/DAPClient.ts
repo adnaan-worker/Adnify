@@ -539,11 +539,58 @@ export class DAPClient extends EventEmitter {
   }
 
   private handleReverseRequest(request: DAPRequest): void {
-    // 处理反向请求（如 runInTerminal）
     logger.system.info('[DAPClient] Reverse request:', request.command)
-    
-    // TODO: 实现 runInTerminal 等反向请求
-    this.sendResponse(request.seq, request.command, false, 'Not implemented')
+
+    if (request.command === 'runInTerminal') {
+      this.handleRunInTerminal(request)
+    } else {
+      this.sendResponse(request.seq, request.command, false, `Reverse request not supported: ${request.command}`)
+    }
+  }
+
+  private handleRunInTerminal(request: DAPRequest): void {
+    const args = request.arguments as {
+      kind?: 'integrated' | 'external'
+      title?: string
+      cwd: string
+      args: string[]
+      env?: Record<string, string | null>
+    } | undefined
+
+    if (!args?.args?.length) {
+      this.sendResponse(request.seq, request.command, false, 'Missing args for runInTerminal')
+      return
+    }
+
+    try {
+      const [cmd, ...cmdArgs] = args.args
+      const env = { ...process.env }
+      if (args.env) {
+        for (const [key, value] of Object.entries(args.env)) {
+          if (value === null) {
+            delete env[key]
+          } else {
+            env[key] = value
+          }
+        }
+      }
+
+      const child = spawn(cmd, cmdArgs, {
+        cwd: args.cwd,
+        env,
+        stdio: 'ignore',
+        detached: true,
+        shell: true,
+      })
+
+      child.unref()
+
+      this.sendResponse(request.seq, request.command, true)
+      logger.system.info('[DAPClient] runInTerminal launched:', cmd, cmdArgs.join(' '))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.sendResponse(request.seq, request.command, false, `Failed to run in terminal: ${message}`)
+    }
   }
 
   private async sendRequest(command: string, args?: Record<string, unknown>): Promise<Record<string, unknown> | undefined> {

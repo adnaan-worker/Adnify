@@ -5,6 +5,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import type { editor } from 'monaco-editor'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 
 // 断点装饰器样式
 const BREAKPOINT_DECORATION: editor.IModelDecorationOptions = {
@@ -66,7 +67,7 @@ export function useEditorBreakpoints(
   filePath: string | null
 ) {
   const decorationsRef = useRef<string[]>([])
-  const { breakpoints, toggleBreakpoint, getBreakpointsForFile } = useStore()
+  const { breakpoints, toggleBreakpoint, getBreakpointsForFile } = useStore(useShallow(s => ({ breakpoints: s.breakpoints, toggleBreakpoint: s.toggleBreakpoint, getBreakpointsForFile: s.getBreakpointsForFile })))
 
   // 注入样式
   useEffect(() => {

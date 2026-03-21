@@ -21,7 +21,7 @@ export default function ChatHeader({
   setShowSessions,
   onClearMessages,
 }: ChatHeaderProps) {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
 
   return (
     <div className="h-12 flex items-center justify-between px-4 border-b border-border bg-background/50 backdrop-blur-sm z-20">

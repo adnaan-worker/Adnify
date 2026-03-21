@@ -411,10 +411,16 @@ class AdnifyDirService {
       }
     }
 
-    // 清理已删除的线程缓存
+    // 清理已删除的线程：清除缓存 + 删除磁盘文件
     for (const cachedId of this.cache.threads.keys()) {
       if (!threads[cachedId]) {
         this.cache.threads.delete(cachedId)
+        this.dirty.dirtyThreads.delete(cachedId)
+        // 异步删除磁盘上的线程文件
+        if (this.isInitialized()) {
+          const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${cachedId}.json`
+          api.file.delete(filePath).catch(() => { /* ignore */ })
+        }
       }
     }
   }

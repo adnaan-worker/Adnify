@@ -27,14 +27,14 @@ export const EditorBreadcrumbs = memo(function EditorBreadcrumbs({
   const breadcrumbs = getBreadcrumbs(filePath)
 
   return (
-    <div className="h-7 flex items-center px-4 border-b border-border bg-background/40 backdrop-blur-sm text-[11px] text-text-muted select-none">
+    <div className="h-7 flex items-center px-4 bg-background/50 border-b border-border/30 backdrop-blur-sm text-[11px] text-text-muted select-none">
       <div className="flex items-center gap-1 hover:text-text-primary transition-colors cursor-pointer">
         <Home className="w-3 h-3" />
       </div>
       <span className="mx-1 opacity-30">/</span>
       {breadcrumbs.map((part, index, arr) => (
-        <div key={index} className="flex items-center gap-1">
-          <span className={`hover:text-text-primary transition-colors cursor-pointer ${index === arr.length - 1 ? 'text-text-primary font-bold' : ''}`}>
+        <div key={`${part}-${index}`} className="flex items-center gap-1.5 flex-shrink-0">
+          <span className={`hover:text-text-primary transition-colors cursor-pointer px-1.5 py-0.5 rounded-sm ${index === arr.length - 1 ? 'text-text-primary font-medium bg-surface-hover/50' : ''}`}>
             {part}
           </span>
           {index < arr.length - 1 && <ChevronRight className="w-3 h-3 opacity-30" />}

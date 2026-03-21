@@ -17,6 +17,7 @@ export interface DiffView {
 interface DiffPreviewProps {
   diff: DiffView
   isPending: boolean
+  readOnly?: boolean
   language: 'en' | 'zh'
   onClose: () => void
   onAccept?: () => void
@@ -27,6 +28,7 @@ interface DiffPreviewProps {
 export const DiffPreview = memo(function DiffPreview({
   diff,
   isPending,
+  readOnly = false,
   language,
   onClose,
   onAccept,
@@ -198,7 +200,7 @@ export const DiffPreview = memo(function DiffPreview({
           modified={diff.modified}
           onMount={handleEditorMount}
           options={{
-            readOnly: false,
+            readOnly: readOnly,
             renderSideBySide: viewMode === 'split',
             ignoreTrimWhitespace: ignoreWhitespace,
             renderMarginRevertIcon: true,

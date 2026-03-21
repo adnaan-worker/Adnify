@@ -4,6 +4,7 @@
 
 import { memo } from 'react'
 import { Keyboard, X } from 'lucide-react'
+import { formatShortcutKeys } from '@services/keybindingService'
 
 interface ShortcutItem {
   keys: string[]
@@ -100,7 +101,7 @@ export default function KeyboardShortcuts({ onClose }: KeyboardShortcutsProps) {
                         {shortcut.description}
                       </span>
                       <div className="flex items-center gap-1">
-                        {shortcut.keys.map((key, keyIdx) => (
+                        {formatShortcutKeys(shortcut.keys).map((key, keyIdx) => (
                           <span key={keyIdx} className="flex items-center">
                             <ShortcutKey keyName={key} />
                             {keyIdx < shortcut.keys.length - 1 && (

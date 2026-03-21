@@ -31,7 +31,7 @@ export const RichContentRenderer = memo(function RichContentRenderer({
   return (
     <div className={`space-y-3 ${className}`}>
       {content.map((item, index) => (
-        <RichContentItem key={index} item={item} maxHeight={maxHeight} />
+        <RichContentItem key={`${item.type}-${index}`} item={item} maxHeight={maxHeight} />
       ))}
     </div>
   )
@@ -203,7 +203,7 @@ function TableContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: s
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-surface/50 sticky top-0 z-10">
-              {headers.map((h, i) => <th key={i} className="px-3 py-2 text-left font-bold text-text-primary border-b border-border/50 uppercase tracking-tighter">{h}</th>)}
+              {headers.map((h, i) => <th key={h || `header-${i}`} className="px-3 py-2 text-left font-bold text-text-primary border-b border-border/50 uppercase tracking-tighter">{h}</th>)}
             </tr>
           </thead>
           <tbody>

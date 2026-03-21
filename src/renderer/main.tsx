@@ -5,7 +5,7 @@ import { logger } from '@utils/Logger'
 
 // 注入生产环境标记（供 shared 代码使用）
 // 必须在 Logger 首次使用前设置，确保生产环境检测正确
-;(globalThis as any).__PROD__ = import.meta.env.PROD
+globalThis.__PROD__ = import.meta.env.PROD
 
 // 刷新 Logger 的生产环境检测（确保配置已更新）
 logger.refreshProductionMode()

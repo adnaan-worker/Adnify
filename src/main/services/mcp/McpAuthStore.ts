@@ -125,9 +125,15 @@ export namespace McpAuthStore {
     tokens: McpAuthTokens,
     serverUrl?: string
   ): Promise<void> {
-    const entry = (await get(mcpName)) ?? {}
-    entry.tokens = tokens
-    await set(mcpName, entry, serverUrl)
+    await withLock(async () => {
+      const entry = (await get(mcpName)) ?? {}
+      entry.tokens = tokens
+      const filepath = getFilePath()
+      const data = await all()
+      if (serverUrl) entry.serverUrl = serverUrl
+      data[mcpName] = entry
+      await atomicWrite(filepath, JSON.stringify(data, null, 2))
+    })
   }
 
   export async function updateClientInfo(
@@ -135,29 +141,50 @@ export namespace McpAuthStore {
     clientInfo: McpAuthClientInfo,
     serverUrl?: string
   ): Promise<void> {
-    const entry = (await get(mcpName)) ?? {}
-    entry.clientInfo = clientInfo
-    await set(mcpName, entry, serverUrl)
+    await withLock(async () => {
+      const entry = (await get(mcpName)) ?? {}
+      entry.clientInfo = clientInfo
+      const filepath = getFilePath()
+      const data = await all()
+      if (serverUrl) entry.serverUrl = serverUrl
+      data[mcpName] = entry
+      await atomicWrite(filepath, JSON.stringify(data, null, 2))
+    })
   }
 
   export async function updateCodeVerifier(mcpName: string, codeVerifier: string): Promise<void> {
-    const entry = (await get(mcpName)) ?? {}
-    entry.codeVerifier = codeVerifier
-    await set(mcpName, entry)
+    await withLock(async () => {
+      const entry = (await get(mcpName)) ?? {}
+      entry.codeVerifier = codeVerifier
+      const filepath = getFilePath()
+      const data = await all()
+      data[mcpName] = entry
+      await atomicWrite(filepath, JSON.stringify(data, null, 2))
+    })
   }
 
   export async function clearCodeVerifier(mcpName: string): Promise<void> {
-    const entry = await get(mcpName)
-    if (entry) {
-      delete entry.codeVerifier
-      await set(mcpName, entry)
-    }
+    await withLock(async () => {
+      const entry = await get(mcpName)
+      if (entry) {
+        delete entry.codeVerifier
+        const filepath = getFilePath()
+        const data = await all()
+        data[mcpName] = entry
+        await atomicWrite(filepath, JSON.stringify(data, null, 2))
+      }
+    })
   }
 
   export async function updateOAuthState(mcpName: string, oauthState: string): Promise<void> {
-    const entry = (await get(mcpName)) ?? {}
-    entry.oauthState = oauthState
-    await set(mcpName, entry)
+    await withLock(async () => {
+      const entry = (await get(mcpName)) ?? {}
+      entry.oauthState = oauthState
+      const filepath = getFilePath()
+      const data = await all()
+      data[mcpName] = entry
+      await atomicWrite(filepath, JSON.stringify(data, null, 2))
+    })
   }
 
   export async function getOAuthState(mcpName: string): Promise<string | undefined> {
@@ -166,11 +193,16 @@ export namespace McpAuthStore {
   }
 
   export async function clearOAuthState(mcpName: string): Promise<void> {
-    const entry = await get(mcpName)
-    if (entry) {
-      delete entry.oauthState
-      await set(mcpName, entry)
-    }
+    await withLock(async () => {
+      const entry = await get(mcpName)
+      if (entry) {
+        delete entry.oauthState
+        const filepath = getFilePath()
+        const data = await all()
+        data[mcpName] = entry
+        await atomicWrite(filepath, JSON.stringify(data, null, 2))
+      }
+    })
   }
 
   export async function isTokenExpired(mcpName: string): Promise<boolean | null> {

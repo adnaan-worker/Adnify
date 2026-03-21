@@ -5,7 +5,10 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { BrowserWindow, ipcMain } from 'electron'
-import { spawn, execSync, type ChildProcessWithoutNullStreams } from 'child_process'
+import { spawn, execSync, execFile, type ChildProcessWithoutNullStreams } from 'child_process'
+import { promisify } from 'util'
+import * as path from 'path'
+const execFileAsync = promisify(execFile)
 import { EventEmitter } from 'events'
 import { securityManager, OperationType } from './securityModule'
 import { SECURITY_DEFAULTS } from '@shared/constants'
@@ -53,6 +56,34 @@ export function getWhitelist() {
 
 // Terminal instances storage (模块级别，便于清理)
 const terminals = new Map<string, any>() // IPty instances
+const backgroundProcesses = new Map<number, import('child_process').ChildProcess>() // shell:executeBackground 子进程
+
+/**
+ * 可靠地终止 PTY 进程树
+ *
+ * node-pty 的 ConPTY 模式在 Windows 上 kill() 存在异步竞态，
+ * 可能导致 PowerShell/conhost 子进程残留。
+ * 使用 taskkill /F /T 强制终止整个进程树。
+ */
+function killPtyReliably(ptyProcess: any): void {
+  try {
+    ptyProcess.removeAllListeners('exit')
+    ptyProcess.removeAllListeners('data')
+  } catch { /* ignore */ }
+
+  const pid = ptyProcess.pid
+  try {
+    if (process.platform === 'win32' && pid) {
+      // Windows: taskkill /F /T 强制杀死整个进程树（PowerShell + conhost）
+      execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore', timeout: 5000 })
+    } else {
+      ptyProcess.kill()
+    }
+  } catch {
+    // taskkill 失败时 fallback 到 node-pty 原生 kill
+    try { ptyProcess.kill() } catch { /* ignore */ }
+  }
+}
 
 function isTerminalAlive(terminalProcess: any): boolean {
   if (!terminalProcess) return false
@@ -105,12 +136,15 @@ export function pruneExitedTerminals(): number {
  */
 export function cleanupTerminals(): void {
   for (const [id, ptyProcess] of terminals) {
-    try {
-      ptyProcess.kill()
-    } catch (e) { /* ignore */ }
+    killPtyReliably(ptyProcess)
     terminals.delete(id)
   }
-  logger.security.info(`[Terminal] All terminals cleaned up`)
+  // 清理后台进程
+  for (const [pid, child] of backgroundProcesses) {
+    try { child.kill('SIGTERM') } catch { /* ignore */ }
+    backgroundProcesses.delete(pid)
+  }
+  logger.security.info(`[Terminal] All terminals and background processes cleaned up`)
 }
 
 export const __testing = {
@@ -130,12 +164,37 @@ export const __testing = {
 const DANGEROUS_PATTERNS = [
   /rm\s+-rf\s+.*\//i,  // rm -rf /
   /wget\s+.*\s+-O\s+/i,  // 下载文件
-  /curl\s+.*\s+-o\s+/i,  // 下载文件
+  /curl\s+.*\s+(-o\s+|--output\s+)/i,  // 下载文件
+  /curl\s+.*\|\s*(bash|sh|python|node)/i,  // curl | sh 远程执行
+  /wget\s+.*\|\s*(bash|sh|python|node)/i,  // wget | sh 远程执行
   /powershell\s+-e(ncodedCommand)?.*frombase64/i,  // PowerShell 编码命令
   /\/etc\/passwd|\/etc\/shadow/i,
-  /windowssystem32/i,
+  /Windows\\System32/i,
   /registry/i,
+  /\beval\s*\(/i,  // eval 执行
+  /\bchmod\s+[0-7]*7[0-7]*\s/i,  // chmod 危险权限
+  /\bsudo\b/i,  // sudo 提权
 ]
+
+// Shell 注入字符检测（用于 args 参数）
+const SHELL_INJECTION_CHARS = /[;&|`$(){}<>]/
+
+// Git 参数注入检测（仅检测真正危险的 shell 执行字符，允许 git ref 语法如 @{upstream}、HEAD~1）
+const GIT_ARG_INJECTION_CHARS = /[;&|`$]/
+
+/**
+ * 检测单个参数是否包含 shell 注入字符
+ */
+function containsShellInjection(arg: string): boolean {
+  return SHELL_INJECTION_CHARS.test(arg)
+}
+
+/**
+ * 检测 git 参数是否包含注入字符（比通用检测更宽松，允许 {} <> () 用于 git ref）
+ */
+function containsGitArgInjection(arg: string): boolean {
+  return GIT_ARG_INJECTION_CHARS.test(arg)
+}
 
 // 命令安全检查结果
 interface SecurityCheckResult {
@@ -148,19 +207,29 @@ interface SecurityCheckResult {
  * 安全命令解析器
  */
 class SecureCommandParser {
+  private static normalizeCommandForWhitelist(baseCommand: string): string {
+    const normalized = path.basename(baseCommand).toLowerCase()
+    if (process.platform === 'win32') {
+      return normalized.replace(/\.(cmd|bat|exe)$/i, '')
+    }
+    return normalized
+  }
+
   /**
    * 验证命令是否在白名单中
    */
   static validateCommand(baseCommand: string, type: 'shell' | 'git'): SecurityCheckResult {
+    const normalizedCommand = this.normalizeCommandForWhitelist(baseCommand)
+
     if (type === 'git') {
-      const allowed = WHITELIST.git.has(baseCommand.toLowerCase())
+      const allowed = WHITELIST.git.has(normalizedCommand)
       return {
         safe: allowed,
         reason: allowed ? undefined : `Git子命令"${baseCommand}"不在白名单中`,
       }
     }
 
-    const allowed = WHITELIST.shell.has(baseCommand.toLowerCase())
+    const allowed = WHITELIST.shell.has(normalizedCommand)
     return {
       safe: allowed,
       reason: allowed ? undefined : `Shell命令"${baseCommand}"不在白名单中`,
@@ -193,14 +262,12 @@ class SecureCommandParser {
     timeout: number
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve, reject) => {
-      // 使用 spawn 防止 shell 注入
+      // 使用 spawn 直接执行（不经过 shell），防止注入攻击
       const child = spawn(command, args, {
         cwd,
         timeout,
-        shell: true, // 启用 shell 以支持 && 等操作，但需依赖白名单和危险模式检测来保证安全
         env: {
           ...process.env,
-          // 移除可能导致问题的环境变量
           PATH: process.env.PATH,
         },
       })
@@ -293,6 +360,14 @@ export function registerSecureTerminalHandlers(
         reason: whitelistCheck.reason,
       })
       return { success: false, error: whitelistCheck.reason }
+    }
+
+    // 3.5. args 注入字符检测（防止通过参数注入 shell 特殊字符）
+    const injectedArg = args.find(containsShellInjection)
+    if (injectedArg) {
+      const reason = `参数包含危险字符: "${injectedArg}"`
+      securityManager.logOperation(OperationType.SHELL_EXECUTE, fullCommand, false, { reason })
+      return { success: false, error: reason }
     }
 
     // 4. 权限检查（用户确认）
@@ -393,7 +468,20 @@ export function registerSecureTerminalHandlers(
       return { success: false, error: '缺少Git命令' }
     }
 
-    const gitSubCommand = args[0].toLowerCase()
+    // 跳过全局选项探测真正的子命令
+    let cmdIdx = 0
+    while (cmdIdx < args.length && args[cmdIdx].startsWith('-')) {
+      if (args[cmdIdx] === '-c' || args[cmdIdx] === '-C') {
+        cmdIdx += 2
+      } else {
+        cmdIdx += 1
+      }
+    }
+    if (cmdIdx >= args.length) {
+      return { success: false, error: '未找到Git子命令' }
+    }
+
+    const gitSubCommand = args[cmdIdx].toLowerCase()
     const whitelistCheck = SecureCommandParser.validateCommand(gitSubCommand, 'git')
 
     if (!whitelistCheck.safe) {
@@ -411,6 +499,14 @@ export function registerSecureTerminalHandlers(
         reason: dangerousCheck.reason,
       })
       return { success: false, error: dangerousCheck.reason }
+    }
+
+    // 3.5. args 注入字符检测（git 使用宽松规则，允许 @{upstream} 等 ref 语法）
+    const injectedArg = args.find(containsGitArgInjection)
+    if (injectedArg) {
+      const reason = `参数包含危险字符: "${injectedArg}"`
+      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, { reason })
+      return { success: false, error: reason }
     }
 
     // 4. 权限检查
@@ -435,6 +531,16 @@ export function registerSecureTerminalHandlers(
         exitCode: result.exitCode,
       })
 
+      if (result.exitCode !== 0) {
+        // 查询型命令（rev-parse --verify, status 等）exitCode 非零是正常的，不应记为 error
+        const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
+        if (isQueryCommand) {
+          logger.security.debug('[Git] dugite query returned non-zero:', args)
+        } else {
+          logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
+        }
+      }
+
       return {
         success: result.exitCode === 0,
         stdout: result.stdout,
@@ -451,6 +557,15 @@ export function registerSecureTerminalHandlers(
         securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
           exitCode: result.exitCode,
         })
+
+        if (result.exitCode !== 0) {
+          const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
+          if (isQueryCommand) {
+            logger.security.debug('[Git] spawn query returned non-zero:', args)
+          } else {
+            logger.security.error('[Git] spawn exec failed:', args, result.stderr || result.stdout)
+          }
+        }
 
         return {
           success: result.exitCode === 0,
@@ -572,19 +687,172 @@ export function registerSecureTerminalHandlers(
     }
   }
 
+  let ssh2ClientCtor: any = null
+
+  const getSsh2ClientCtor = () => {
+    if (ssh2ClientCtor) return ssh2ClientCtor
+
+    try {
+      const cpuFeaturesPath = require.resolve('cpu-features')
+      require.cache[cpuFeaturesPath] = {
+        id: cpuFeaturesPath,
+        filename: cpuFeaturesPath,
+        loaded: true,
+        exports: () => null,
+        children: [],
+        paths: [],
+      } as unknown as NodeJS.Module
+    } catch {
+    }
+
+    ssh2ClientCtor = require('ssh2').Client
+    return ssh2ClientCtor
+  }
+
+  class SshShellSession extends EventEmitter {
+    private connection: any
+    private stream: any
+    private closed = false
+    private cols: number
+    private rows: number
+
+    constructor(private readonly server: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string }, cols = 80, rows = 24) {
+      super()
+      this.cols = cols
+      this.rows = rows
+      this.connection = null
+      this.stream = null
+    }
+
+    async connect(): Promise<void> {
+      const Client = getSsh2ClientCtor()
+      this.connection = new Client()
+
+      const config: Record<string, unknown> = {
+        host: this.server.host.trim(),
+        port: this.server.port && this.server.port > 0 ? this.server.port : 22,
+        username: this.server.username?.trim() || 'root',
+        readyTimeout: 15000,
+        keepaliveInterval: 10000,
+        keepaliveCountMax: 3,
+        tryKeyboard: Boolean(this.server.password),
+      }
+
+      if (this.server.privateKeyPath?.trim()) {
+        config.privateKey = require('fs').readFileSync(this.server.privateKeyPath.trim(), 'utf8')
+      }
+      if (this.server.password?.trim()) {
+        config.password = this.server.password
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        let settled = false
+        const finishReject = (error: unknown) => {
+          if (settled) return
+          settled = true
+          reject(error)
+        }
+
+        this.connection
+          .on('ready', () => {
+            this.connection.shell({ term: 'xterm-256color', cols: this.cols, rows: this.rows }, (error: Error | undefined, stream: any) => {
+              if (error || !stream) {
+                finishReject(error || new Error('Failed to open remote shell'))
+                return
+              }
+
+              this.stream = stream
+              stream.on('data', (data: Buffer | string) => this.emit('data', Buffer.isBuffer(data) ? data.toString() : data))
+              stream.on('close', () => {
+                if (this.closed) return
+                this.closed = true
+                this.emit('exit', { exitCode: 0 })
+                this.connection.end()
+              })
+              stream.on('error', (err: unknown) => this.emit('error', err))
+
+              if (this.server.remotePath?.trim()) {
+                const escaped = this.server.remotePath.trim().replace(/'/g, `'\''`)
+                stream.write(`cd '${escaped}'\n`)
+              }
+
+              if (!settled) {
+                settled = true
+                resolve()
+              }
+            })
+          })
+          .on('keyboard-interactive', (_name: string, _instructions: string, _lang: string, _prompts: Array<unknown>, finish: (responses: string[]) => void) => {
+            finish([this.server.password || ''])
+          })
+          .on('error', (error: unknown) => {
+            this.emit('error', error)
+            finishReject(error)
+          })
+          .on('close', () => {
+            if (this.closed) return
+            this.closed = true
+            this.emit('exit', { exitCode: 0 })
+          })
+          .connect(config as any)
+      })
+    }
+
+    onData(listener: (data: string) => void) {
+      this.on('data', listener)
+      return this
+    }
+
+    onExit(listener: (event: { exitCode: number; signal?: number }) => void) {
+      this.on('exit', listener)
+      return this
+    }
+
+    write(data: string) {
+      if (this.stream) {
+        this.stream.write(data)
+      }
+    }
+
+    resize(cols: number, rows: number) {
+      this.cols = cols
+      this.rows = rows
+      try {
+        this.stream?.setWindow(rows, cols, 0, 0)
+      } catch {
+      }
+    }
+
+    kill() {
+      if (this.closed) return
+      this.closed = true
+      try {
+        this.stream?.end('exit\n')
+      } catch {
+      }
+      try {
+        this.connection?.end()
+      } catch {
+      }
+      this.emit('exit', { exitCode: 0 })
+    }
+  }
+
   /**
    * 交互式终端创建（默认使用 node-pty；Agent 在 macOS 上可切换为 pipe 会话）
    */
   safeIpcHandle('terminal:interactive', async (
     event,
-    options: { id: string; cwd?: string; shell?: string; backend?: TerminalBackend }
+    options: { id: string; cwd?: string; shell?: string; backend?: TerminalBackend; remote?: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string } }
   ) => {
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
-    const { id, cwd, shell, backend } = options
-    const effectiveBackend = resolveInteractiveTerminalBackend(process.platform, backend)
+    const { id, cwd, shell, backend = 'pty', remote } = options
+    const effectiveBackend = remote?.host
+      ? backend
+      : resolveInteractiveTerminalBackend(process.platform, backend)
 
-    if (effectiveBackend === 'pty' && !pty) {
+    if (!remote?.host && effectiveBackend === 'pty' && !pty) {
       return { success: false, error: 'node-pty not available' }
     }
 
@@ -596,7 +864,7 @@ export function registerSecureTerminalHandlers(
 
     const targetCwd = (cwd && cwd.trim()) || workspace?.roots?.[0] || process.cwd()
 
-    if (workspace && workspace.roots.length > 0 && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
+    if (workspace && workspace.roots.length > 0 && !remote?.host && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', false, {
         reason: '路径在工作区外',
         cwd: targetCwd,
@@ -642,7 +910,6 @@ export function registerSecureTerminalHandlers(
       if (backend && backend !== effectiveBackend) {
         logger.security.warn(`[Terminal] Downgrading requested backend ${backend} to ${effectiveBackend} on ${process.platform}`)
       }
-
       logger.security.info(`[Terminal] Spawning ${effectiveBackend.toUpperCase()} terminal: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
 
       const fs = require('fs')
@@ -662,7 +929,17 @@ export function registerSecureTerminalHandlers(
 
       let terminalProcess: any
 
-      if (effectiveBackend === 'pipe') {
+      if (remote?.host) {
+        try {
+          const session = new SshShellSession(remote)
+          await session.connect()
+          terminalProcess = session
+        } catch (err) {
+          const errorMsg = toAppError(err).message || 'Failed to connect remote shell'
+          logger.security.error(`[Terminal] Remote SSH spawn failed: ${errorMsg}`, err)
+          return { success: false, error: `Failed to connect remote shell: ${errorMsg}` }
+        }
+      } else if (effectiveBackend === 'pipe') {
         const child = spawn(shellPath, shellArgs, {
           cwd: targetCwd,
           env: {
@@ -725,10 +1002,11 @@ export function registerSecureTerminalHandlers(
         id,
         cwd: targetCwd,
         shell: shellPath,
-        backend: effectiveBackend,
+        backend: remote?.host ? 'ssh2' : effectiveBackend,
+        remoteHost: remote?.host,
       })
 
-      logger.security.info(`[Terminal] Created ${effectiveBackend} terminal ${id} with shell ${shellPath}`)
+      logger.security.info(`[Terminal] Created ${remote?.host ? 'ssh2' : effectiveBackend} terminal ${id} with shell ${shellPath}`)
       return { success: true }
     } catch (err) {
       logger.security.error('[Terminal] Failed to create terminal:', err)
@@ -745,14 +1023,13 @@ export function registerSecureTerminalHandlers(
     const fs = require('fs')
     const pathModule = require('path')
 
-    // 检查命令是否可执行
-    const canExecute = (cmd: string): boolean => {
+    // 异步检查命令是否可执行
+    const canExecute = async (cmd: string): Promise<boolean> => {
       try {
-        execSync(`${cmd} --version`, {
+        await execFileAsync(cmd, ['--version'], {
           encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'ignore'],
           timeout: 3000,
-          windowsHide: true,  // Windows 上隐藏控制台窗口
+          windowsHide: true,
         })
         return true
       } catch {
@@ -769,13 +1046,12 @@ export function registerSecureTerminalHandlers(
 
       // Git Bash - 通过 git --exec-path 动态获取
       try {
-        const gitExecPath = execSync('git --exec-path', {
+        const { stdout } = await execFileAsync('git', ['--exec-path'], {
           encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'ignore'],
           windowsHide: true,
-        }).trim()
+        })
+        const gitExecPath = stdout.trim()
         if (gitExecPath) {
-          // e.g., C:\Program Files\Git\mingw64\libexec\git-core -> C:\Program Files\Git\bin\bash.exe
           const gitRoot = pathModule.resolve(gitExecPath, '..', '..', '..')
           const bashPath = pathModule.join(gitRoot, 'bin', 'bash.exe')
           if (fs.existsSync(bashPath)) {
@@ -786,29 +1062,26 @@ export function registerSecureTerminalHandlers(
         // Git 不可用
       }
 
-      // WSL - 直接检测 wsl.exe 是否可用
-      if (canExecute('wsl')) {
-        shells.push({ label: 'WSL', path: 'wsl.exe' })
-      }
-
-      // PowerShell Core (pwsh)
-      if (canExecute('pwsh')) {
-        shells.push({ label: 'PowerShell Core', path: 'pwsh.exe' })
-      }
+      // 并行检测 WSL 和 PowerShell Core
+      const [hasWsl, hasPwsh] = await Promise.all([canExecute('wsl'), canExecute('pwsh')])
+      if (hasWsl) shells.push({ label: 'WSL', path: 'wsl.exe' })
+      if (hasPwsh) shells.push({ label: 'PowerShell Core', path: 'pwsh.exe' })
     } else {
-      // Unix: detect common shells
+      // Unix: detect common shells (并行检测)
       const unixShells = ['bash', 'zsh', 'fish']
-      for (const sh of unixShells) {
+      const results = await Promise.all(unixShells.map(async (sh) => {
         try {
-          const result = execSync(`which ${sh}`, {
+          const { stdout } = await execFileAsync('which', [sh], {
             encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'ignore'],
             windowsHide: true,
           })
-          if (result.trim()) {
-            shells.push({ label: sh.charAt(0).toUpperCase() + sh.slice(1), path: result.trim() })
-          }
+          const path = stdout.trim()
+          if (path) return { label: sh.charAt(0).toUpperCase() + sh.slice(1), path }
         } catch { /* not found */ }
+        return null
+      }))
+      for (const result of results) {
+        if (result) shells.push(result)
       }
     }
 
@@ -853,6 +1126,26 @@ export function registerSecureTerminalHandlers(
       return { success: false, output: '', exitCode: 1, error: 'Working directory outside workspace' }
     }
 
+    // 安全检查：检测危险模式
+    const dangerousCheck = SecureCommandParser.detectDangerousPatterns(command)
+    if (!dangerousCheck.safe) {
+      securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
+        reason: dangerousCheck.reason,
+        source: 'executeBackground',
+      })
+      return { success: false, output: '', exitCode: 1, error: dangerousCheck.reason }
+    }
+
+    // 安全检查：检测 shell 注入
+    if (containsShellInjection(command)) {
+      const reason = `命令包含危险字符: "${command}"`
+      securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
+        reason,
+        source: 'executeBackground',
+      })
+      return { success: false, output: '', exitCode: 1, error: reason }
+    }
+
     return new Promise((resolve) => {
       const isWindows = process.platform === 'win32'
       const shell = customShell || (isWindows ? 'powershell.exe' : '/bin/bash')
@@ -864,9 +1157,12 @@ export function registerSecureTerminalHandlers(
 
       const child = spawn(shell, shellArgs, {
         cwd: workingDir,
-        env: { ...process.env, TERM: 'dumb' }, // 禁用颜色输出
+        env: { ...process.env, TERM: 'dumb' },
         windowsHide: true,
       })
+
+      // 追踪后台进程，以便应用退出时清理
+      if (child.pid) backgroundProcesses.set(child.pid, child)
 
       let stdout = ''
       let stderr = ''
@@ -913,6 +1209,7 @@ export function registerSecureTerminalHandlers(
 
       child.on('close', (code, signal) => {
         clearTimeout(timeoutId)
+        if (child.pid) backgroundProcesses.delete(child.pid)
 
         // 清理输出（移除 ANSI 序列）
         const cleanOutput = (stdout + (stderr ? `\n${stderr}` : ''))
@@ -940,6 +1237,7 @@ export function registerSecureTerminalHandlers(
 
       child.on('error', (err) => {
         clearTimeout(timeoutId)
+        if (child.pid) backgroundProcesses.delete(child.pid)
         logger.security.error(`[Shell] Command error:`, err)
         resolve({
           success: false,
@@ -972,26 +1270,13 @@ export function registerSecureTerminalHandlers(
     if (id) {
       const ptyProcess = terminals.get(id)
       if (ptyProcess) {
-        try {
-          // Remove listeners to prevent race conditions during kill
-          ptyProcess.removeAllListeners('exit')
-          ptyProcess.removeAllListeners('data')
-          ptyProcess.kill()
-        } catch (err) {
-          logger.security.error(`[Terminal] Kill error (id: ${id}):`, err)
-        }
+        killPtyReliably(ptyProcess)
         terminals.delete(id)
       }
     } else {
       // Kill all terminals
       for (const [termId, ptyProcess] of terminals) {
-        try {
-          ptyProcess.removeAllListeners('exit')
-          ptyProcess.removeAllListeners('data')
-          ptyProcess.kill()
-        } catch (err) {
-          logger.security.error(`[Terminal] Kill error (id: ${termId}):`, err)
-        }
+        killPtyReliably(ptyProcess)
         terminals.delete(termId)
       }
     }

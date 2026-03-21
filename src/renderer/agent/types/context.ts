@@ -62,6 +62,9 @@ export interface SkillContext {
   type: 'Skill'
   skillId: string
   name: string
+  description?: string
+  /** LLM 自动选中（非 @mention） */
+  auto?: boolean
 }
 
 /** 上下文项联合类型 */

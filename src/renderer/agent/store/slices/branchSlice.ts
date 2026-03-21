@@ -113,8 +113,27 @@ export const createBranchSlice: StateCreator<
     const messageIndex = thread.messages.findIndex(m => m.id === messageId)
     if (messageIndex === -1) return null
 
-    const branchId = generateId()
+    // 限制每个线程的分支数量
+    const MAX_BRANCHES_PER_THREAD = 10
     const existingBranches = (get().branches[threadId] || []).filter(b => b.id !== MAINLINE_BRANCH_ID)
+    if (existingBranches.length >= MAX_BRANCHES_PER_THREAD) {
+      // 删除最旧的分支
+      const oldest = existingBranches.sort((a, b) => a.createdAt - b.createdAt)[0]
+      if (oldest) {
+        // 如果最旧的分支是当前活动分支，先切换回主线
+        if (get().activeBranchId[threadId] === oldest.id) {
+          get().switchToMainline()
+        }
+        set(state => ({
+          branches: {
+            ...state.branches,
+            [threadId]: (state.branches[threadId] || []).filter(b => b.id !== oldest.id),
+          },
+        }))
+      }
+    }
+
+    const branchId = generateId()
     const branchName = name || `Branch ${existingBranches.length + 1}`
 
     const branchMessages = thread.messages.slice(messageIndex + 1).map(m => ({

@@ -241,7 +241,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
 
   // NoOutputGeneratedError - 通常包装了其他错误，优先提取 cause
   if (NoOutputGeneratedError.isInstance(error)) {
-    const cause = (error as any).cause
+    const cause = (error as NoOutputGeneratedError & { cause?: unknown }).cause
     if (cause) {
       return mapAISDKError(cause)
     }
@@ -254,7 +254,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
 
   // RetryError - 提取 lastError
   if (RetryError.isInstance(error)) {
-    const lastError = (error as any).lastError
+    const lastError = (error as RetryError).lastError
     if (lastError) {
       return mapAISDKError(lastError)
     }
@@ -276,8 +276,8 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
 
   // APICallError - 根据状态码细分
   if (APICallError.isInstance(error)) {
-    const statusCode = (error as any).statusCode
-    const responseBody = (error as any).responseBody
+    const statusCode = error.statusCode
+    const responseBody = error.responseBody
 
     // 尝试从 responseBody 提取详细信息
     let detailMessage = originalMessage
@@ -311,7 +311,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
     return {
       code: ErrorCode.API_CALL_FAILED,
       originalMessage: detailMessage,
-      retryable: (error as any).isRetryable ?? true,
+      retryable: error.isRetryable ?? true,
     }
   }
 
@@ -395,7 +395,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
       retryable: true,
     }
   }
-  const statusCode = (error as any).statusCode
+  const statusCode = (error as Error & { statusCode?: number }).statusCode
   if (error.name === 'APICallError' && typeof statusCode === 'number') {
     if (statusCode === 429) {
       return { code: ErrorCode.API_RATE_LIMIT, originalMessage, retryable: true }
@@ -406,7 +406,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
     return {
       code: ErrorCode.API_CALL_FAILED,
       originalMessage,
-      retryable: (error as any).isRetryable ?? true,
+      retryable: (error as Error & { isRetryable?: boolean }).isRetryable ?? true,
     }
   }
 

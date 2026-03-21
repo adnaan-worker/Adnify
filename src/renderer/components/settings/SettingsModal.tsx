@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { PROVIDERS } from '@/shared/config/providers'
 import { getEditorConfig } from '@renderer/settings'
 import KeybindingPanel from '@components/panels/KeybindingPanel'
@@ -30,7 +31,14 @@ export default function SettingsModal() {
         llmConfig, language, autoApprove, providerConfigs, promptTemplateId,
         agentConfig, aiInstructions, webSearchConfig, taskTrustSettings, mcpConfig, enableFileLogging,
         set, setProvider, setShowSettings, save
-    } = useStore()
+    } = useStore(useShallow(s => ({
+        llmConfig: s.llmConfig, language: s.language, autoApprove: s.autoApprove,
+        providerConfigs: s.providerConfigs, promptTemplateId: s.promptTemplateId,
+        agentConfig: s.agentConfig, aiInstructions: s.aiInstructions,
+        webSearchConfig: s.webSearchConfig, taskTrustSettings: s.taskTrustSettings, mcpConfig: s.mcpConfig,
+        enableFileLogging: s.enableFileLogging, set: s.set, setProvider: s.setProvider,
+        setShowSettings: s.setShowSettings, save: s.save
+    })))
 
     const [activeTab, setActiveTab] = useState<SettingsTab>('provider')
     const [showApiKey, setShowApiKey] = useState(false)
@@ -194,6 +202,31 @@ export default function SettingsModal() {
         setTimeout(() => setSaved(false), 2000)
     }, [localConfig, localLanguage, localAutoApprove, localPromptTemplateId, localAgentConfig, localAiInstructions, localWebSearchConfig, localTaskTrustSettings, localMcpConfig, localEnableFileLogging, localProviderConfigs, editorSettings, advancedEditorConfig, set, setProvider, save])
 
+    // 检测是否有未保存更改（对比本地状态与 store 状态）
+    const isDirty = useMemo(() => {
+        return JSON.stringify(localConfig) !== JSON.stringify(llmConfig) ||
+            localLanguage !== language ||
+            localAutoApprove !== autoApprove ||
+            localPromptTemplateId !== promptTemplateId ||
+            JSON.stringify(localAgentConfig) !== JSON.stringify(agentConfig) ||
+            localAiInstructions !== aiInstructions ||
+            JSON.stringify(localWebSearchConfig) !== JSON.stringify(webSearchConfig) ||
+            JSON.stringify(localMcpConfig) !== JSON.stringify(mcpConfig) ||
+            localEnableFileLogging !== enableFileLogging ||
+            JSON.stringify(localProviderConfigs) !== JSON.stringify(providerConfigs)
+    }, [localConfig, llmConfig, localLanguage, language, localAutoApprove, autoApprove, localPromptTemplateId, promptTemplateId, localAgentConfig, agentConfig, localAiInstructions, aiInstructions, localWebSearchConfig, webSearchConfig, localMcpConfig, mcpConfig, localEnableFileLogging, enableFileLogging, localProviderConfigs, providerConfigs])
+
+    // 关闭设置时检查未保存更改
+    const handleClose = useCallback(() => {
+        if (isDirty) {
+            const message = language === 'zh' ? '您有未保存的更改，确定要关闭吗？' : 'You have unsaved changes. Are you sure you want to close?'
+            if (!window.confirm(message)) {
+                return
+            }
+        }
+        setShowSettings(false)
+    }, [isDirty, language, setShowSettings])
+
     // 使用 useMemo 缓存计算结果
     const providers = useMemo(() => {
         const builtinProviders = Object.entries(PROVIDERS).map(([id, p]) => ({
@@ -233,7 +266,7 @@ export default function SettingsModal() {
     ] as const, [language])
 
     return (
-        <Modal isOpen={true} onClose={() => setShowSettings(false)} title="" size="5xl" noPadding className="overflow-hidden bg-background/80 backdrop-blur-2xl border border-border/50 shadow-2xl shadow-black/20 rounded-3xl">
+        <Modal isOpen={true} onClose={handleClose} title="" size="5xl" noPadding className="overflow-hidden bg-background/80 backdrop-blur-2xl border border-border/50 shadow-2xl shadow-black/20 rounded-3xl">
             <div className="flex h-[75vh] max-h-[800px]">
                 {/* Sidebar - macOS Style */}
                 <div className="w-64 bg-surface/30 backdrop-blur-xl border-r border-border/50 flex flex-col pt-8 pb-6">
@@ -353,7 +386,7 @@ export default function SettingsModal() {
                             {saved ? (language === 'zh' ? '所有更改已保存' : 'All changes saved') : (language === 'zh' ? '有未保存的更改' : 'Unsaved changes')}
                         </span>
                         <div className="flex items-center gap-3">
-                            <Button variant="ghost" onClick={() => setShowSettings(false)} className="hover:bg-text-inverted/[0.05] hover:bg-text-primary/[0.05] text-text-secondary rounded-lg">
+                            <Button variant="ghost" onClick={handleClose} className="hover:bg-text-inverted/[0.05] hover:bg-text-primary/[0.05] text-text-secondary rounded-lg">
                                 {language === 'zh' ? '取消' : 'Cancel'}
                             </Button>
                             <Button

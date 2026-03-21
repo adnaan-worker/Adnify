@@ -550,7 +550,7 @@ export function ProviderSettings({
   const [logitBiasString, setLogitBiasString] = useState('')
 
   // Headers 状态
-  const [customHeaders, setCustomHeaders] = useState<Array<{ key: string; value: string }>>([])
+  const [customHeaders, setCustomHeaders] = useState<Array<{ key: string; value: string; isCustom?: boolean }>>([])
 
   // 从 localProviderConfigs 获取自定义厂商列表
   const customProviders = useMemo(() => {
@@ -578,6 +578,33 @@ export function ProviderSettings({
 
   // 不再使用 useEffect 同步，而是在初始化时设置
   // customHeaders 只用于额外的请求头，不包括默认请求头
+  useEffect(() => {
+    // 每次切换 provider 或者 config.headers 被外部重新加载时，我们需要恢复 customHeaders UI 状态
+    const protocol = getCurrentProtocol()
+    const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
+
+    // 如果 localConfig.headers 里有数据，并且这些数据不在 defaultHeaders 里，那就是用户自己添加的 custom headers
+    if (localConfig.headers) {
+      const newCustomHeaders: Array<{ key: string; value: string; isCustom?: boolean }> = []
+      Object.entries(localConfig.headers).forEach(([key, value]) => {
+        // 过滤掉默认请求头（比如 x-api-key, anthropic-version）
+        if (!defaultHeaders.hasOwnProperty(key)) {
+          // 查看是不是下拉框里没有的值，没的话就是 isCustom
+          const predefinedKeys = ['X-Request-ID', 'X-Organization', 'X-Project-ID', 'User-Agent', 'Content-Type', 'Accept']
+          newCustomHeaders.push({
+            key,
+            value,
+            isCustom: !predefinedKeys.includes(key)
+          })
+        }
+      })
+
+      setCustomHeaders(newCustomHeaders)
+    } else {
+      setCustomHeaders([])
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- localConfig.headers 由 onChange 手动管理，加入依赖会导致循环覆盖
+  }, [localConfig.provider])
 
   // 添加模型到本地配置
   const handleAddModel = (name?: string) => {
@@ -667,7 +694,7 @@ export function ProviderSettings({
     const providerInfo = PROVIDERS[providerId]
     setLocalConfig({
       ...localConfig,
-      provider: providerId as any,
+      provider: providerId,
       apiKey: nextConfig.apiKey || '',
       baseUrl: nextConfig.baseUrl || providerInfo?.baseUrl || '',
       timeout: nextConfig.timeout || providerInfo?.defaults.timeout || 120000,
@@ -700,7 +727,7 @@ export function ProviderSettings({
 
     setLocalConfig({
       ...localConfig,
-      provider: id as any,
+      provider: id,
       apiKey: customConfig.apiKey || '',
       baseUrl: customConfig.baseUrl || '',
       timeout: customConfig.timeout || 120000,
@@ -737,7 +764,7 @@ export function ProviderSettings({
     // 自动选择新添加的 Provider
     setLocalConfig({
       ...localConfig,
-      provider: id as any,
+      provider: id,
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
       timeout: 120000,
@@ -1431,17 +1458,23 @@ export function ProviderSettings({
                             <div className="flex items-start gap-2">
                               <div className="flex-1 space-y-1.5">
                                 <Select
-                                  value={header.key}
+                                  value={header.isCustom ? 'X-Custom-Header' : header.key}
                                   onChange={(value) => {
                                     const newHeaders = [...customHeaders]
-                                    newHeaders[index].key = value
+                                    if (value === 'X-Custom-Header') {
+                                      newHeaders[index].isCustom = true
+                                      newHeaders[index].key = ''
+                                    } else {
+                                      newHeaders[index].isCustom = false
+                                      newHeaders[index].key = value
+                                    }
                                     setCustomHeaders(newHeaders)
                                     // 更新 localConfig - 合并默认请求头和自定义请求头
                                     const protocol = getCurrentProtocol()
                                     const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
                                     const customHeadersObj: Record<string, string> = {}
                                     newHeaders.forEach(h => {
-                                      if (h.key && h.key !== 'X-Custom-Header') {
+                                      if (h.key) {
                                         customHeadersObj[h.key] = h.value || ''
                                       }
                                     })
@@ -1464,14 +1497,29 @@ export function ProviderSettings({
                                   ]}
                                   className="w-full bg-surface-active border-border text-xs h-8"
                                 />
-                                {header.key === 'X-Custom-Header' && (
+                                {header.isCustom && (
                                   <Input
                                     type="text"
-                                    value=""
+                                    value={header.key}
                                     onChange={(e) => {
                                       const newHeaders = [...customHeaders]
                                       newHeaders[index].key = e.target.value
                                       setCustomHeaders(newHeaders)
+
+                                      // 更新 localConfig
+                                      const protocol = getCurrentProtocol()
+                                      const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
+                                      const customHeadersObj: Record<string, string> = {}
+                                      newHeaders.forEach(h => {
+                                        if (h.key) {
+                                          customHeadersObj[h.key] = h.value || ''
+                                        }
+                                      })
+                                      const allHeaders = { ...defaultHeaders, ...customHeadersObj }
+                                      setLocalConfig({
+                                        ...localConfig,
+                                        headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
+                                      })
                                     }}
                                     placeholder={language === 'zh' ? '请求头名称' : 'Header name'}
                                     className="bg-surface-active border-border text-xs font-mono h-8"
@@ -1489,7 +1537,7 @@ export function ProviderSettings({
                                     const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
                                     const customHeadersObj: Record<string, string> = {}
                                     newHeaders.forEach(h => {
-                                      if (h.key && h.key !== 'X-Custom-Header') {
+                                      if (h.key) {
                                         customHeadersObj[h.key] = h.value || ''
                                       }
                                     })
@@ -1512,7 +1560,7 @@ export function ProviderSettings({
                                   const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
                                   const customHeadersObj: Record<string, string> = {}
                                   newHeaders.forEach(h => {
-                                    if (h.key && h.key !== 'X-Custom-Header') {
+                                    if (h.key) {
                                       customHeadersObj[h.key] = h.value || ''
                                     }
                                   })

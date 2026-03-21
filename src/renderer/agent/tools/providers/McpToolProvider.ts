@@ -30,6 +30,11 @@ export class McpToolProvider implements ToolProvider {
 
   private static nameMap = new Map<string, { serverId: string; toolName: string }>()
 
+  /** 清理名称映射缓存 */
+  static clearNameMap(): void {
+    this.nameMap.clear()
+  }
+
   /** 生成 MCP 工具的完整名称 */
   static getFullToolName(serverId: string, toolName: string): string {
     const rawName = `${MCP_TOOL_PREFIX}${serverId}${MCP_TOOL_SEPARATOR}${toolName}`

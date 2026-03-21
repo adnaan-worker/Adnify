@@ -52,6 +52,9 @@ interface ClientState {
 
 export class McpClient extends EventEmitter {
   private state: ClientState
+  private reconnectAttempts = 0
+  private readonly maxReconnectAttempts = 5
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(config: McpServerConfig) {
     super()
@@ -90,6 +93,12 @@ export class McpClient extends EventEmitter {
 
   /** 连接到 MCP 服务器 */
   async connect(): Promise<void> {
+    // 清理已有的重连 timer，防止多个 timer 并行
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+
     if (this.state.status === 'connected' || this.state.status === 'connecting') {
       return
     }
@@ -108,6 +117,7 @@ export class McpClient extends EventEmitter {
       logger.mcp?.error(`[MCP:${config.id}] Connection failed: ${error.code}`, error)
       if (this.state.status !== 'needs_auth' && this.state.status !== 'needs_registration') {
         this.updateStatus('error', error.message)
+        this.scheduleReconnect()
       }
       throw error
     }
@@ -157,6 +167,7 @@ export class McpClient extends EventEmitter {
     this.state.transport = transport
 
     await this.refreshCapabilities()
+    this.reconnectAttempts = 0
     this.updateStatus('connected')
     logger.mcp?.info(`[MCP:${config.id}] Connected (local)`)
   }
@@ -204,9 +215,12 @@ export class McpClient extends EventEmitter {
     const timeout = config.timeout || DEFAULT_TIMEOUT
 
     for (const { name, create } of transports) {
+      // 提升到 try 块外，使 catch 块中也能访问（用于保存 OAuth 等待状态）
+      let transport: Transport | undefined
+      let client: Client | undefined
       try {
-        const transport = create()
-        const client = new Client({
+        transport = create()
+        client = new Client({
           name: 'adnify',
           version: process.env.npm_package_version || '1.0.0',
         })
@@ -218,6 +232,7 @@ export class McpClient extends EventEmitter {
         this.state.transport = transport
 
         await this.refreshCapabilities()
+        this.reconnectAttempts = 0
         this.updateStatus('connected')
         logger.mcp?.info(`[MCP:${config.id}] Connected (${name})`)
         return
@@ -225,8 +240,18 @@ export class McpClient extends EventEmitter {
         lastError = err instanceof Error ? err : new Error(String(err))
 
         // 处理 OAuth 认证错误
-        if (err instanceof UnauthorizedError) {
+        // 注意：bundler 环境下 ESM/CJS 双路径导致 instanceof 跨模块失效，
+        // 需同时兼容 constructor.name 判断
+        const isUnauthorized = err instanceof UnauthorizedError ||
+          (err instanceof Error && err.constructor.name === 'UnauthorizedError')
+
+        if (isUnauthorized) {
           logger.mcp?.info(`[MCP:${config.id}] Requires authentication`)
+
+          // 必须保存 transport/client，后续 finishAuth() 需要在这个实例上调用
+          // 如果不保存，finishAuth 会拿到 null transport 导致无法完成 token 交换
+          this.state.client = client ?? null
+          this.state.transport = transport ?? null
 
           if (lastError.message.includes('registration') || lastError.message.includes('client_id')) {
             this.updateStatus('needs_registration', 'Server requires pre-registered client ID')
@@ -237,7 +262,47 @@ export class McpClient extends EventEmitter {
           return
         }
 
-        logger.mcp?.debug(`[MCP:${config.id}] ${name} transport failed:`, lastError.message)
+        logger.mcp?.warn(`[MCP:${config.id}] ${name} transport failed [${lastError.constructor.name}]: ${lastError.message}`)
+
+        // 若 StreamableHTTP 触发了 OAuth 重定向 URL（说明服务器有响应且需要认证），
+        // 不要继续 fallback 到 SSE，直接标记为 needs_auth
+        if (name === 'StreamableHTTP' && capturedAuthUrl) {
+          logger.mcp?.info(`[MCP:${config.id}] OAuth URL captured, marking as needs_auth`)
+          this.state.client = client ?? null
+          this.state.transport = transport ?? null
+          this.state.authUrl = capturedAuthUrl
+          this.updateStatus('needs_auth')
+          return
+        }
+
+        // 若 StreamableHTTP 报的是 OAuth/认证相关的错误（但未到 redirect 阶段），
+        // 也不应 fallback 到 SSE
+        // 若 OAuth 已禁用（使用 header 认证），StreamableHTTP 失败即终止，不 fallback 到 SSE
+        // StreamableHTTPError 表示服务器已响应（只是返回了 4xx），SSE 无法解决认证问题
+        if (name === 'StreamableHTTP' && oauthDisabled) {
+          const errMsg = lastError.message.toLowerCase()
+          const isCredentialError = errMsg.includes('unauthorized') || errMsg.includes('forbidden') ||
+            errMsg.includes('401') || errMsg.includes('403')
+          const errorDetail = isCredentialError
+            ? 'Access token invalid or missing — check your credentials'
+            : lastError.message
+          logger.mcp?.warn(`[MCP:${config.id}] OAuth disabled, stopping after StreamableHTTP failure`)
+          this.updateStatus('error', errorDetail)
+          return
+        }
+
+        const isOAuthSetupError = lastError.message.includes('client registration') ||
+          lastError.message.includes('Protected Resource') ||
+          lastError.message.includes('auth server') ||
+          lastError.message.includes('OAuth') ||
+          lastError.message.includes('registration_endpoint')
+        if (name === 'StreamableHTTP' && isOAuthSetupError) {
+          logger.mcp?.warn(`[MCP:${config.id}] OAuth setup error, skipping SSE fallback`)
+          this.state.client = client ?? null
+          this.state.transport = transport ?? null
+          this.updateStatus('needs_registration', lastError.message)
+          return
+        }
       }
     }
 
@@ -246,6 +311,12 @@ export class McpClient extends EventEmitter {
 
   /** 断开连接 */
   async disconnect(): Promise<void> {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    this.reconnectAttempts = 0
+
     if (this.state.status === 'disconnected') {
       return
     }
@@ -426,6 +497,29 @@ export class McpClient extends EventEmitter {
 
   // =================== 私有方法 ===================
 
+  /** 指数退避自动重连 */
+  private scheduleReconnect(): void {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      logger.mcp?.warn(`[MCP:${this.id}] Max reconnect attempts reached (${this.maxReconnectAttempts})`)
+      return
+    }
+
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 60000) // 1s, 2s, 4s, 8s, 16s, max 60s
+    this.reconnectAttempts++
+
+    logger.mcp?.info(`[MCP:${this.id}] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+
+    this.reconnectTimer = setTimeout(async () => {
+      try {
+        await this.connect()
+        this.reconnectAttempts = 0 // 成功后重置
+      } catch (err) {
+        logger.mcp?.error(`[MCP:${this.id}] Reconnect failed:`, err)
+        this.scheduleReconnect() // 继续尝试
+      }
+    }, delay)
+  }
+
   private registerNotificationHandlers(client: Client): void {
     client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
       logger.mcp?.info(`[MCP:${this.id}] Tools list changed`)
@@ -456,9 +550,12 @@ export class McpClient extends EventEmitter {
   }
 
   private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    let timer: ReturnType<typeof setTimeout>
     return Promise.race([
       promise,
-      new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms)),
-    ])
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Timeout')), ms)
+      }),
+    ]).finally(() => clearTimeout(timer!))
   }
 }

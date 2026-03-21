@@ -10,6 +10,7 @@ import {
   Globe, Cpu, FolderOpen, Rocket, Eye, EyeOff, Settings
 } from 'lucide-react'
 import { useStore, LLMConfig } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { Language } from '@renderer/i18n'
 import { themeManager, Theme } from '@renderer/config/themeConfig'
 import { PROVIDERS } from '@/shared/config/providers'
@@ -33,7 +34,7 @@ const LANGUAGES: { id: Language; name: string; native: string }[] = [
 ]
 
 export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
-  const { set, language, workspacePath } = useStore()
+  const { set, language, workspacePath } = useStore(useShallow(s => ({ set: s.set, language: s.language, workspacePath: s.workspacePath })))
 
   const [currentStep, setCurrentStep] = useState<Step>('welcome')
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(language)
@@ -84,7 +85,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
 
     try {
       await settingsService.save({
-        llmConfig: providerConfig as any,
+        llmConfig: providerConfig,
         language: selectedLanguage,
         autoApprove: defaultAutoApprove,
         agentConfig: defaultAgentConfig,
@@ -577,7 +578,7 @@ function ProviderStep({
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setConfig({
                   ...config,
-                  provider: p.id as any,
+                  provider: p.id,
                   model: p.models[0],
                   baseUrl: undefined
                 })}

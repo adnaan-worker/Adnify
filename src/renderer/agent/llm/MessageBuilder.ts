@@ -13,9 +13,11 @@ import { prepareMessages, estimateMessagesTokens, CompressionLevel, LEVEL_NAMES 
 import { compressionPredictor } from '../context/compressionPredictor'
 import { countTokens } from '@shared/utils/tokenCounter'
 import { MessageContent, ChatMessage } from '../types'
+import { getAgentConfig } from '../utils/AgentConfig'
 
-// 从 ContextBuilder 导入已有的函数
+// 从 ContextBuilder 导入已有的函数（同时静态引入供内部使用）
 export { buildContextContent, buildUserContent } from './ContextBuilder'
+import { buildUserContent } from './ContextBuilder'
 
 /**
  * 构建发送给 LLM 的消息列表
@@ -32,7 +34,7 @@ export async function buildLLMMessages(
   const currentThread = store.getCurrentThread()
 
   // 获取上下文限制
-  const agentConfig = (await import('../utils/AgentConfig')).getAgentConfig()
+  const agentConfig = getAgentConfig()
   const contextLimit = agentConfig.maxContextTokens || 128_000
   const targetRatio = 0.85 // 目标使用率，留 15% 给输出
 
@@ -47,7 +49,6 @@ export async function buildLLMMessages(
   }
 
   // 预估当前用户消息的 token（包括 context）
-  const { buildUserContent } = await import('./ContextBuilder')
   const userContent = buildUserContent(currentMessage, contextContent)
 
   // 正确估算用户消息 token（支持图片）

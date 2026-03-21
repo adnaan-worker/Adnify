@@ -126,7 +126,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
       token_type: 'Bearer',
       refresh_token: entry.tokens.refreshToken,
       expires_in: entry.tokens.expiresAt
-        ? Math.max(0, Math.floor(entry.tokens.expiresAt - Date.now() / 1000))
+        ? Math.max(0, Math.floor(entry.tokens.expiresAt / 1000 - Date.now() / 1000))
         : undefined,
       scope: entry.tokens.scope,
     }

@@ -8,10 +8,12 @@ import { FolderOpen, History, Folder, Plus, Settings } from 'lucide-react'
 import { api } from '@/renderer/services/electronAPI'
 import { workspaceManager } from '@/renderer/services/WorkspaceManager'
 import { useStore } from '@/renderer/store'
+import { formatShortcut } from '@services/keybindingService'
 import { logger } from '@utils/Logger'
 import { toast } from '@components/common/ToastProvider'
 import { Logo } from '../common/Logo'
 import { getFileName } from '@shared/utils/pathUtils'
+import { t } from '@renderer/i18n'
 
 interface RecentWorkspace {
   path: string
@@ -20,7 +22,8 @@ interface RecentWorkspace {
 
 export default function WelcomePage() {
   const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspace[]>([])
-  const { setShowSettings } = useStore()
+  const setShowSettings = useStore(s => s.setShowSettings)
+  const language = useStore(s => s.language)
 
   useEffect(() => {
     loadRecentWorkspaces()
@@ -58,7 +61,7 @@ export default function WelcomePage() {
     try {
       await workspaceManager.openFolder(path)
     } catch (e) {
-      toast.error('文件夹不存在，已从列表移除', getFileName(path))
+      toast.error(t('workspace.folderNotExist', language), getFileName(path))
       loadRecentWorkspaces()
     }
   }
@@ -92,8 +95,8 @@ export default function WelcomePage() {
                   <FolderOpen className="w-7 h-7" strokeWidth={1.5} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-text-primary transition-colors">打开文件夹</div>
-                  <div className="text-[11px] text-text-muted mt-1 font-medium opacity-70">Open a local project folder</div>
+                  <div className="text-sm font-bold text-text-primary transition-colors">{t('welcome.openFolder', language)}</div>
+                  <div className="text-[11px] text-text-muted mt-1 font-medium opacity-70">{t('welcome.openFolderDesc', language)}</div>
                 </div>
               </button>
 
@@ -105,8 +108,8 @@ export default function WelcomePage() {
                   <Folder className="w-7 h-7" strokeWidth={1.5} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-text-primary transition-colors">打开工作区</div>
-                  <div className="text-[11px] text-text-muted mt-1 font-medium opacity-70">Open workspace file (.adnify)</div>
+                  <div className="text-sm font-bold text-text-primary transition-colors">{t('welcome.openWorkspace', language)}</div>
+                  <div className="text-[11px] text-text-muted mt-1 font-medium opacity-70">{t('welcome.openWorkspaceDesc', language)}</div>
                 </div>
               </button>
 
@@ -115,13 +118,13 @@ export default function WelcomePage() {
                   onClick={() => api.window.new()}
                   className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-text-primary/[0.03] border border-transparent hover:border-border text-xs font-bold text-text-secondary hover:text-text-primary transition-all"
                 >
-                  <Plus className="w-4 h-4" /> 新建窗口
+                  <Plus className="w-4 h-4" /> {t('welcome.newWindow', language)}
                 </button>
                 <button
                   onClick={() => setShowSettings(true)}
                   className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-text-primary/[0.03] border border-transparent hover:border-border text-xs font-bold text-text-secondary hover:text-text-primary transition-all"
                 >
-                  <Settings className="w-4 h-4" /> 设置
+                  <Settings className="w-4 h-4" /> {t('settings', language)}
                 </button>
               </div>
             </div>
@@ -152,7 +155,7 @@ export default function WelcomePage() {
               ) : (
                 <div className="py-12 border-2 border-dashed border-border rounded-2xl flex flex-col items-center justify-center opacity-40">
                   <Folder className="w-8 h-8 mb-2" />
-                  <span className="text-xs font-medium">No recent items</span>
+                  <span className="text-xs font-medium">{t('welcome.noRecentItems', language)}</span>
                 </div>
               )}
             </div>
@@ -162,7 +165,7 @@ export default function WelcomePage() {
         {/* Footer Hint */}
         <div className="mt-16 text-center flex-shrink-0">
           <p className="text-[11px] text-text-muted font-bold uppercase tracking-widest opacity-40">
-            Press <kbd className="mx-1.5 px-2 py-1 bg-surface-muted border border-border-subtle rounded-md text-text-primary font-mono text-[10px] shadow-sm">Ctrl+Shift+O</kbd> for commands
+            {language === 'zh' ? '按' : 'Press'} <kbd className="mx-1.5 px-2 py-1 bg-surface-muted border border-border-subtle rounded-md text-text-primary font-mono text-[10px] shadow-sm">{formatShortcut('Ctrl+Shift+O')}</kbd> {language === 'zh' ? '打开命令面板' : 'for commands'}
           </p>
         </div>
       </div>

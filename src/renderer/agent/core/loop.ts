@@ -15,7 +15,6 @@ import { performanceMonitor, withRetry, isRetryableError } from '@shared/utils'
 import { useAgentStore } from '../store/AgentStore'
 import { useStore } from '@store'
 import { toolManager, initializeToolProviders, setToolLoadingContext, initializeTools } from '../tools'
-import { toolRegistry } from '../tools/registry'
 import { getAgentConfig, READ_TOOLS } from '../utils/AgentConfig'
 import { LoopDetector } from '../utils/LoopDetector'
 import { getReadOnlyTools, isFileEditTool } from '@/shared/config/tools'
@@ -28,6 +27,7 @@ import {
   generateHandoffDocument,
 } from '../context'
 import { updateStats, LEVEL_NAMES, estimateMessagesTokens } from '../context/CompressionManager'
+import type { LintCheckFile } from '../types'
 import type { ChatMessage } from '../types'
 import type { LLMMessage } from '@/shared/types'
 import type { WorkMode } from '@/renderer/modes/types'
@@ -61,67 +61,34 @@ function executeModePostProcessHook(
 
 /**
  * 调用 LLM 并处理流式响应
- * 
+ *
  * @param config - LLM 配置
  * @param messages - 消息历史
- * @param chatMode - 工作模式
  * @param assistantId - 助手消息 ID
  * @param threadStore - 线程绑定的 Store
  * @param requestId - 请求标识，用于多对话隔离
+ * @param tools - 预计算的工具定义（由 runLoop 初始化一次，避免每轮重复初始化）
  * @returns LLM 调用结果
  */
 async function callLLM(
   config: LLMConfig,
   messages: LLMMessage[],
-  chatMode: WorkMode,
-  orchestratorPhase: ExecutionContext['orchestratorPhase'],
   assistantId: string | null,
   threadStore: import('../store/AgentStore').ThreadBoundStore,
-  requestId: string
+  requestId: string,
+  tools: import('@/shared/types/llm').ToolDefinition[]
 ): Promise<LLMCallResult> {
   performanceMonitor.start(`llm:${config.model}`, 'llm', { provider: config.provider, messageCount: messages.length })
 
   const processor = createStreamProcessor(assistantId, threadStore, requestId)
 
   try {
-    // 初始化工具
-    initializeToolProviders()
-    await initializeTools()
-    const templateId = useStore.getState().promptTemplateId
-    setToolLoadingContext({
-      mode: chatMode,
-      templateId,
-      orchestratorPhase,
-    })
-    const tools = chatMode === 'chat' ? [] : toolManager.getAllToolDefinitions()
-
-    // 动态工具控制：根据上下文限制可用工具
-    let activeTools: string[] | undefined
-
-    if (tools.length > 0) {
-      const allToolNames = tools.map(t => t.name)
-      const store = useAgentStore.getState()
-
-      // 场景1: Chat 模式 - 禁用所有工具（已在上面处理）
-      // 场景2: Agent 模式 - 根据压缩等级动态调整
-
-      const currentThread = store.getCurrentThread()
-      const compressionLevel = currentThread?.compressionStats?.level || 0
-      if (compressionLevel >= 3) {
-        // L3/L4: 只保留核心工具，移除 AI 辅助工具（节省 token）
-        // 原 analyze_code, suggest_refactoring 等已删除
-        activeTools = allToolNames
-        logger.agent.info(`[Loop] Compression L${compressionLevel}: ${activeTools.length}/${allToolNames.length} tools active (AI tools disabled)`)
-      }
-    }
-
     // 发送请求（携带 requestId 用于多对话隔离）
     await api.llm.send({
       config: config as import('@shared/types/llm').LLMConfig,
       messages: messages as LLMMessage[],
       tools,
       systemPrompt: '',
-      activeTools,
       requestId
     })
 
@@ -152,12 +119,11 @@ async function callLLM(
 async function callLLMWithRetry(
   config: LLMConfig,
   messages: LLMMessage[],
-  chatMode: WorkMode,
-  orchestratorPhase: ExecutionContext['orchestratorPhase'],
   assistantId: string | null,
   threadStore: import('../store/AgentStore').ThreadBoundStore,
   abortSignal?: AbortSignal,
-  requestId?: string
+  requestId?: string,
+  tools: import('@/shared/types/llm').ToolDefinition[] = []
 ): Promise<LLMCallResult> {
   const retryConfig = getAgentConfig()
   // 确保有 requestId（后备生成）
@@ -181,7 +147,7 @@ async function callLLMWithRetry(
         }
 
         try {
-          const result = await callLLM(config, messages, chatMode, orchestratorPhase, assistantId, threadStore, reqId)
+          const result = await callLLM(config, messages, assistantId, threadStore, reqId, tools)
 
           // 工具调用解析错误不应该导致重试，而是返回给 AI 让它反思
           if (result.error) {
@@ -227,14 +193,25 @@ async function callLLMWithRetry(
 
 // ===== 自动修复 =====
 
+/** autoFix 结果 */
+interface AutoFixResult {
+  /** 注入给 LLM 的错误描述 */
+  content: string
+  /** 结构化的检查结果（用于 UI） */
+  files: LintCheckFile[]
+}
+
+/**
+ * 检查编辑过的文件是否有 lint 错误
+ *
+ * @returns 结构化结果（null 表示无错误）
+ */
 async function autoFix(
   toolCalls: any[],
   workspacePath: string,
-  assistantId: string | null
-): Promise<void> {
-  const store = useAgentStore.getState()
+): Promise<AutoFixResult | null> {
   const writeToolCalls = toolCalls.filter(tc => !READ_TOOLS.includes(tc.name))
-  if (writeToolCalls.length === 0) return
+  if (writeToolCalls.length === 0) return null
 
   const editedFiles = writeToolCalls
     .filter(tc => isFileEditTool(tc.name))
@@ -244,31 +221,33 @@ async function autoFix(
     })
     .filter(path => !path.endsWith('/'))
 
-  if (editedFiles.length === 0) return
+  if (editedFiles.length === 0) return null
 
-  // 并行检查所有文件的 lint 错误
-  const results = await Promise.all(
-    editedFiles.map(async (filePath) => {
-      try {
-        const result = await toolRegistry.execute('get_lint_errors', { path: filePath }, { workspacePath })
-        if (result.success && result.result) {
-          const text = result.result.trim()
-          if (text && text !== '[]' && text !== 'No diagnostics found') {
-            if (/\[error\]/i.test(text) || text.includes('failed to compile') || text.includes('syntax error')) {
-              return `File: ${filePath}\n${text}`
-            }
-          }
-        }
-      } catch { /* ignore */ }
-      return null
+  const { lintService } = await import('../services/lintService')
+  const uniqueEditedFiles = Array.from(new Set(editedFiles))
+  const lintResults = await lintService.getLintErrorsForFiles(uniqueEditedFiles, true)
+  const allFiles: LintCheckFile[] = []
+
+  for (const filePath of uniqueEditedFiles) {
+    const result = lintResults.get(filePath)
+    const errorItems = (result?.errors || []).filter(e => e.severity === 'error')
+    allFiles.push({
+      filePath,
+      errors: errorItems.map(e => ({ severity: e.severity as 'error' | 'warning', message: e.message, line: e.startLine ?? 1 })),
     })
-  )
-
-  const errors = results.filter((e): e is string => e !== null)
-
-  if (errors.length > 0 && assistantId) {
-    store.appendToAssistant(assistantId, `\n\n🔍 **Auto-check**: Detected ${errors.length} issue(s). Attempting to fix...`)
   }
+
+  const filesWithErrors = allFiles.filter(f => f.errors.length > 0)
+  if (filesWithErrors.length === 0) return null
+
+  // 构建注入给 LLM 的文本
+  const lines = filesWithErrors.map(f => {
+    const errLines = f.errors.map(e => `  [${e.severity}] Line ${e.line}: ${e.message}`).join('\n')
+    return `File: ${f.filePath}\n${errLines}`
+  })
+  const content = `Auto-check detected lint errors in ${filesWithErrors.length} file(s). Please fix them:\n\n${lines.join('\n\n')}`
+
+  return { content, files: allFiles }
 }
 
 // ===== 压缩检查与处理 =====
@@ -412,6 +391,16 @@ export async function runLoop(
   // 生成请求 ID，用于 IPC 频道隔离
   const requestId = crypto.randomUUID()
 
+  // 【性能关键】工具初始化只做一次，避免每个 LLM 调用轮次重复初始化
+  initializeToolProviders()
+  await initializeTools()
+  setToolLoadingContext({
+    mode: context.chatMode,
+    templateId: useStore.getState().promptTemplateId,
+    orchestratorPhase: context.orchestratorPhase,
+  })
+  const agentTools = context.chatMode === 'chat' ? [] : toolManager.getAllToolDefinitions()
+
   const loopDetector = new LoopDetector()
   let iteration = 0
   let shouldContinue = true
@@ -436,17 +425,8 @@ export async function runLoop(
       break
     }
 
-    // 调用 LLM（传递 requestId 用于多对话隔离）
-    const result = await callLLMWithRetry(
-      config,
-      llmMessages,
-      context.chatMode,
-      context.orchestratorPhase,
-      assistantId,
-      threadStore,
-      context.abortSignal,
-      requestId,
-    )
+    // 调用 LLM（传递预计算的 tools 和 requestId）
+    const result = await callLLMWithRetry(config, llmMessages, assistantId, threadStore, context.abortSignal, requestId, agentTools)
 
     // 再次检查中止信号（LLM 调用后）
     if (context.abortSignal?.aborted) {
@@ -689,9 +669,23 @@ Try again with the corrected tool call.`
       }
     }
 
-    // 自动修复（并行检查）
+    // 自动修复：检查 lint 错误，若有则注入到 llmMessages 让 AI 可以看到并修复
     if (enableAutoFix && !userRejected && context.workspacePath) {
-      await autoFix(result.toolCalls, context.workspacePath, assistantId)
+      const autoFixResult = await autoFix(result.toolCalls, context.workspacePath)
+      if (autoFixResult) {
+        // 添加结构化的 lint check part（UI 展示用）
+        threadStore.addLintCheckPart(assistantId)
+        threadStore.updateLintCheckPart(assistantId, {
+          files: autoFixResult.files,
+          status: 'failed',
+        })
+        // 注入文本给 LLM
+        llmMessages.push({ role: 'user', content: autoFixResult.content })
+        // 强制继续循环让 AI 看到错误并修复
+        shouldContinue = true
+        threadStore.setStreamPhase('streaming')
+        continue
+      }
     }
 
     if (userRejected) {

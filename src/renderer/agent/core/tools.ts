@@ -9,6 +9,7 @@
  * - 发布事件到 EventBus
  */
 
+import pLimit from 'p-limit'
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { toolManager } from '../tools/providers'
@@ -24,25 +25,40 @@ import type { ToolExecutionContext, AgentToolExecutionResult } from './types'
 // ===== 审批服务 =====
 
 class ApprovalServiceClass {
-  private pendingResolve: ((approved: boolean) => void) | null = null
+  private pendingResolves = new Map<string, (approved: boolean) => void>()
 
-  async waitForApproval(): Promise<boolean> {
+  async waitForApproval(requestId?: string): Promise<boolean> {
+    const id = requestId || crypto.randomUUID()
     return new Promise((resolve) => {
-      this.pendingResolve = resolve
+      this.pendingResolves.set(id, resolve)
     })
   }
 
-  approve(): void {
-    if (this.pendingResolve) {
-      this.pendingResolve(true)
-      this.pendingResolve = null
+  approve(requestId?: string): void {
+    if (requestId) {
+      this.pendingResolves.get(requestId)?.(true)
+      this.pendingResolves.delete(requestId)
+    } else {
+      // 向后兼容：如果没有 requestId，批准最后一个
+      const lastKey = Array.from(this.pendingResolves.keys()).pop()
+      if (lastKey) {
+        this.pendingResolves.get(lastKey)?.(true)
+        this.pendingResolves.delete(lastKey)
+      }
     }
   }
 
-  reject(): void {
-    if (this.pendingResolve) {
-      this.pendingResolve(false)
-      this.pendingResolve = null
+  reject(requestId?: string): void {
+    if (requestId) {
+      this.pendingResolves.get(requestId)?.(false)
+      this.pendingResolves.delete(requestId)
+    } else {
+      // 向后兼容：如果没有 requestId，拒绝最后一个
+      const lastKey = Array.from(this.pendingResolves.keys()).pop()
+      if (lastKey) {
+        this.pendingResolves.get(lastKey)?.(false)
+        this.pendingResolves.delete(lastKey)
+      }
     }
   }
 }
@@ -358,7 +374,6 @@ export async function executeTools(
   if (noApprovalRequired.length > 0) {
     store.setStreamState({ phase: 'tool_running' })
 
-    const pLimit = (await import('p-limit')).default
     const concurrency = getDynamicConcurrency()
     const limit = pLimit(concurrency)
 

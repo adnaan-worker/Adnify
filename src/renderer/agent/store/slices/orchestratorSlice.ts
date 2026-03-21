@@ -487,7 +487,6 @@ export const createOrchestratorSlice: StateCreator<
                 // 按更新时间排序（最新的在前）
                 plans.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
                 set({ plans })
-                console.log(`[OrchestratorSlice] Loaded ${plans.length} plans from disk`)
             }
         } catch (e) {
             console.warn('[OrchestratorSlice] Failed to load plans from disk:', e)

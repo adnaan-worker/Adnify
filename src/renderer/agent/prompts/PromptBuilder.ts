@@ -90,12 +90,17 @@ export interface PromptContext {
   personality: string
   projectRules: ProjectRules | null
   memories: MemoryItem[]
-  skills: SkillItem[]
+  /** auto skills — 只注入轻量索引，AI 通过 apply_skill 工具按需加载 */
+  autoSkills: SkillItem[]
+  /** manual @mention skills — 完整内容注入 */
+  mentionedSkills: SkillItem[]
   customInstructions: string | null
   templateId?: string
   projectSummary?: string | null
   /** Orchestrator 阶段 */
   orchestratorPhase?: 'planning' | 'executing'
+  /** 当前线程的任务列表 */
+  todos?: Array<{ content: string; status: string; activeForm: string }>
 }
 
 // ============================================
@@ -155,6 +160,24 @@ function buildCustomInstructions(instructions: string | null): string | null {
 ${instructions.trim()}`
 }
 
+function buildTodoSection(todos?: PromptContext['todos']): string | null {
+  if (!todos || todos.length === 0) return null
+
+  const completed = todos.filter(t => t.status === 'completed').length
+
+  let section = `## Current Task List (${completed}/${todos.length} completed)\n\n`
+
+  for (const todo of todos) {
+    const icon = todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '●' : '○'
+    const text = todo.status === 'in_progress' ? todo.activeForm : todo.content
+    section += `${icon} [${todo.status}] ${text}\n`
+  }
+
+  section += `\nIMPORTANT: You have an active task list above. If the user's message relates to these tasks, resume from the current in_progress task — do NOT recreate the list. If the user's request is UNRELATED, call todo_write with a completely fresh list.`
+
+  return section
+}
+
 function buildProjectSummary(summary: string | null): string | null {
   if (!summary?.trim()) return null
   logger.agent.info('[PromptBuilder] Injecting project summary into system prompt, length:', summary.length)
@@ -164,9 +187,15 @@ ${summary.trim()}
 Note: This is an auto-generated project summary. Use it to understand the codebase structure before exploring files.`
 }
 
-function buildSkills(skills: SkillItem[]): string | null {
-  const prompt = skillService.buildSkillsPrompt(skills)
-  return prompt || null
+/**
+ * 构建 Skills 提示词（Progressive Disclosure）
+ * - auto skills: 轻量索引（name + description），AI 通过 apply_skill 按需加载
+ * - mentioned skills: 完整内容注入（用户显式 @mention）
+ */
+function buildSkillsSections(autoSkills: SkillItem[], mentionedSkills: SkillItem[]): (string | null)[] {
+  const index = skillService.buildSkillsIndex(autoSkills) || null
+  const fullContent = skillService.buildSkillsPrompt(mentionedSkills) || null
+  return [index, fullContent]
 }
 
 // ============================================
@@ -186,12 +215,13 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     CODE_CONVENTIONS,
     // 使用通用工作流指南
     WORKFLOW_GUIDELINES,
+    buildTodoSection(ctx.todos),
     OUTPUT_FORMAT,
     buildEnvironment(ctx),
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
-    buildSkills(ctx.skills),
+    ...buildSkillsSections(ctx.autoSkills, ctx.mentionedSkills),
     buildCustomInstructions(ctx.customInstructions),
   ]
 
@@ -213,7 +243,7 @@ export function buildChatPrompt(ctx: PromptContext): string {
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
-    buildSkills(ctx.skills),
+    ...buildSkillsSections(ctx.autoSkills, ctx.mentionedSkills),
     buildCustomInstructions(ctx.customInstructions),
   ]
 
@@ -245,7 +275,7 @@ export async function buildAgentSystemPrompt(
     /** 被提到的 Skills (按需加载) */
     mentionedSkills?: string[]
   }
-): Promise<string> {
+): Promise<{ prompt: string; activeSkills: { name: string; description: string }[] }> {
   const { openFiles = [], activeFile, customInstructions, promptTemplateId, orchestratorPhase, mentionedSkills } = options || {}
 
   // 获取模板
@@ -259,21 +289,43 @@ export async function buildAgentSystemPrompt(
   }
 
   // 并行加载动态内容（包括项目摘要和 Skills）
-  let [projectRules, memories, skills, projectSummary] = await Promise.all([
+  const [projectRules, memories, allSkills, projectSummary] = await Promise.all([
     rulesService.getRules(),
     memoryService.getMemories(),
     skillService.getSkills(),
     workspacePath ? loadProjectSummary(workspacePath) : Promise.resolve(null),
   ])
 
-  // 按需过滤技能
-  // 如果提供了 mentionedSkills（用户显式 @ 的），只加载这些
-  // 如果 mentionedSkills 是空数组或未定义（没有 @ 任何 skill），则不加载任何 skill
-  if (mentionedSkills && mentionedSkills.length > 0) {
-    skills = skills.filter(s => mentionedSkills.includes(s.name.toLowerCase()))
-  } else {
-    skills = []
+  // Skill 过滤（Progressive Disclosure）
+  // 1. auto:   只注入轻量索引（name + description），AI 通过 apply_skill 工具按需加载完整内容
+  // 2. manual: 仅 @mention 时完整注入
+  const autoSkills = allSkills.filter(s => s.type === 'auto' && s.enabled)
+
+  const mentionedManualSkills = mentionedSkills?.length
+    ? allSkills.filter(s =>
+        s.type === 'manual' &&
+        s.enabled &&
+        mentionedSkills.includes(s.name.toLowerCase())
+      )
+    : []
+
+  // activeSkills 用于 UI 展示（返回给 Agent.ts 写入 assistant message）
+  const activeSkillNames = new Set<string>()
+  const activeSkillsList: typeof allSkills = []
+  for (const s of [...autoSkills, ...mentionedManualSkills]) {
+    if (!activeSkillNames.has(s.name)) {
+      activeSkillNames.add(s.name)
+      activeSkillsList.push(s)
+    }
   }
+
+  // 获取当前线程的任务列表
+  let todos: PromptContext['todos'] | undefined
+  try {
+    const { useAgentStore } = await import('../store/AgentStore')
+    todos = useAgentStore.getState().getTodos() as PromptContext['todos']
+    if (todos && todos.length === 0) todos = undefined
+  } catch { /* store 未初始化时忽略 */ }
 
   // 构建上下文
   const ctx: PromptContext = {
@@ -286,15 +338,21 @@ export async function buildAgentSystemPrompt(
     personality: template.personality,
     projectRules,
     memories,
-    skills,
+    autoSkills,
+    mentionedSkills: mentionedManualSkills,
     customInstructions: customInstructions || null,
     templateId: template.id,
     projectSummary,
     orchestratorPhase,
+    todos,
   }
 
   // 根据模式选择构建器
-  return mode === 'chat' ? buildChatPrompt(ctx) : buildSystemPrompt(ctx)
+  const prompt = mode === 'chat' ? buildChatPrompt(ctx) : buildSystemPrompt(ctx)
+  return {
+    prompt,
+    activeSkills: activeSkillsList.map(s => ({ name: s.name, description: s.description })),
+  }
 }
 
 // ============================================
@@ -303,7 +361,7 @@ export async function buildAgentSystemPrompt(
 
 function getOS(): string {
   if (typeof navigator !== 'undefined') {
-    return (navigator as any).userAgentData?.platform || navigator.platform || 'Unknown'
+    return navigator.userAgentData?.platform || navigator.platform || 'Unknown'
   }
   return 'Unknown'
 }

@@ -11,10 +11,12 @@ import {
   Variable, Layers, RefreshCw, Trash2, Circle, FileCode
 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { Button } from '../ui'
 import { toast } from '@components/common/ToastProvider'
 import type { DebugConfig, DebugEvent } from '@renderer/types/electron'
 import { getFileName, getDirPath } from '@shared/utils/pathUtils'
+import { safeOpenFile } from '@/renderer/utils/fileUtils'
 
 type DebugTab = 'variables' | 'callstack' | 'breakpoints' | 'console'
 
@@ -25,11 +27,19 @@ interface LaunchConfig extends DebugConfig {
 export default function DebugPanel() {
   const {
     debugVisible, setDebugVisible, workspacePath, language, activeFilePath,
-    // Debug store
     breakpoints, sessions, activeSessionId, stackFrames, scopes, variables, consoleOutput,
     setSessions, setActiveSessionId, setStackFrames, setScopes, setVariables,
     addConsoleOutput, clearConsoleOutput, toggleBreakpoint, clearBreakpoints, toggleBreakpointEnabled
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    debugVisible: s.debugVisible, setDebugVisible: s.setDebugVisible, workspacePath: s.workspacePath,
+    language: s.language, activeFilePath: s.activeFilePath, breakpoints: s.breakpoints,
+    sessions: s.sessions, activeSessionId: s.activeSessionId, stackFrames: s.stackFrames,
+    scopes: s.scopes, variables: s.variables, consoleOutput: s.consoleOutput,
+    setSessions: s.setSessions, setActiveSessionId: s.setActiveSessionId, setStackFrames: s.setStackFrames,
+    setScopes: s.setScopes, setVariables: s.setVariables, addConsoleOutput: s.addConsoleOutput,
+    clearConsoleOutput: s.clearConsoleOutput, toggleBreakpoint: s.toggleBreakpoint,
+    clearBreakpoints: s.clearBreakpoints, toggleBreakpointEnabled: s.toggleBreakpointEnabled,
+  })))
 
   // 面板状态
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -341,9 +351,8 @@ export default function DebugPanel() {
   }
 
   // 跳转到断点位置
-  const gotoBreakpoint = (filePath: string, line: number) => {
-    // 打开文件并跳转
-    window.dispatchEvent(new CustomEvent('open-file', { detail: { path: filePath } }))
+  const gotoBreakpoint = async (filePath: string, line: number) => {
+    await safeOpenFile(filePath, { language })
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent('editor:goto-line', { detail: { line, column: 1 } }))
     }, 100)

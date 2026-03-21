@@ -17,6 +17,7 @@ import {
   ListTodo,
 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import type { IndexStatus } from '@shared/types'
 import { indexWorkerService, IndexProgress } from '@services/indexWorkerService'
 import BottomBarPopover from '../ui/BottomBarPopover'
@@ -35,7 +36,12 @@ export default function StatusBar() {
     activeFilePath, workspacePath, setShowSettings, language,
     terminalVisible, setTerminalVisible, debugVisible, setDebugVisible,
     cursorPosition, isGitRepo, gitStatus, setActiveSidePanel
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    activeFilePath: s.activeFilePath, workspacePath: s.workspacePath, setShowSettings: s.setShowSettings,
+    language: s.language, terminalVisible: s.terminalVisible, setTerminalVisible: s.setTerminalVisible,
+    debugVisible: s.debugVisible, setDebugVisible: s.setDebugVisible, cursorPosition: s.cursorPosition,
+    isGitRepo: s.isGitRepo, gitStatus: s.gitStatus, setActiveSidePanel: s.setActiveSidePanel,
+  })))
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null)
   const [workerProgress, setWorkerProgress] = useState<IndexProgress | null>(null)
 

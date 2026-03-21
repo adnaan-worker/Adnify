@@ -26,7 +26,10 @@ export function isPathInWorkspace(path: string, workspacePath: string): boolean 
   const normalizedWorkspace = normalizePath(workspacePath)
 
   // 如果路径已经是绝对路径且在 workspace 内
-  if (normalizedPath.startsWith(normalizedWorkspace)) {
+  const lowerPath = normalizedPath.toLowerCase()
+  const lowerWorkspace = normalizedWorkspace.toLowerCase()
+
+  if (lowerPath.startsWith(lowerWorkspace)) {
     return true
   }
 
@@ -64,8 +67,12 @@ export function validatePath(
 
 // ============ 基础路径函数 ============
 
-export function normalizePath(path: string): string {
-  return path.replace(/\\/g, '/')
+function coercePathString(path: unknown): string {
+  return typeof path === 'string' ? path : ''
+}
+
+export function normalizePath(path: unknown): string {
+  return coercePathString(path).replace(/\\/g, '/')
 }
 
 /** 路径比较（忽略大小写和分隔符差异） */
@@ -83,26 +90,27 @@ export function pathStartsWith(path: string, prefix: string): boolean {
   return normalizedPath.startsWith(prefixWithSlash)
 }
 
-export function getPathSeparator(path: string): string {
-  return path.includes('\\') ? '\\' : '/'
+export function getPathSeparator(path: unknown): string {
+  return coercePathString(path).includes('\\') ? '\\' : '/'
 }
 
-export function getFileName(path: string | undefined | null): string {
-  if (!path) return ''
-  return path.split(/[/\\]/).pop() || ''
+export function getFileName(path: unknown): string {
+  const safePath = coercePathString(path)
+  if (!safePath) return ''
+  return safePath.split(/[/\\]/).pop() || ''
 }
 
 export const getBasename = getFileName
 
-export function getDirname(path: string): string {
-  const normalized = path.replace(/\\/g, '/')
+export function getDirname(path: unknown): string {
+  const normalized = normalizePath(path)
   const lastSlash = normalized.lastIndexOf('/')
   return lastSlash === -1 ? '' : normalized.slice(0, lastSlash)
 }
 
 export const getDirPath = getDirname
 
-export function getExtension(path: string): string {
+export function getExtension(path: unknown): string {
   const fileName = getFileName(path)
   const dotIndex = fileName.lastIndexOf('.')
   return dotIndex > 0 ? fileName.slice(dotIndex + 1).toLowerCase() : ''
@@ -147,8 +155,11 @@ export function toRelativePath(fullPath: string, workspacePath: string | null): 
   if (!workspacePath) return fullPath
   const normalizedFull = normalizePath(fullPath)
   const normalizedWorkspace = normalizePath(workspacePath)
-  if (normalizedFull.startsWith(normalizedWorkspace)) {
-    let relative = fullPath.slice(workspacePath.length)
+  const lowerFull = normalizedFull.toLowerCase()
+  const lowerWorkspace = normalizedWorkspace.toLowerCase()
+
+  if (lowerFull.startsWith(lowerWorkspace)) {
+    let relative = normalizedFull.slice(normalizedWorkspace.length)
     if (relative.startsWith('/') || relative.startsWith('\\')) relative = relative.slice(1)
     return relative
   }
@@ -207,7 +218,7 @@ function detectPlatform() {
 
   // 2. Renderer 进程 fallback：navigator.userAgentData（现代 Chromium API）
   if (typeof navigator !== 'undefined') {
-    const uad = (navigator as any).userAgentData
+    const uad = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
     if (uad?.platform) {
       const p = uad.platform.toLowerCase()
       return {
@@ -287,4 +298,3 @@ export function uriToPath(uri: string): string {
   }
   return uri
 }
-

@@ -21,7 +21,7 @@ interface SearchFileResult {
 }
 
 interface LLMStreamChunk {
-  type: 'text' | 'reasoning' | 'error' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_delta_end' | 'tool_call_available'
+  type: 'text' | 'reasoning' | 'error' | 'tool_call' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_delta_end' | 'tool_call_end' | 'tool_call_available'
   content?: string
   error?: string
   id?: string
@@ -142,6 +142,23 @@ interface IsolatedWorkspaceResult {
   error?: string
 }
 
+interface RemoteShellEntry {
+  name: string
+  path: string
+  isDirectory: boolean
+  size: number
+  modifyTime?: number
+}
+
+interface RemoteShellServer {
+  host: string
+  port?: number
+  username?: string
+  password?: string
+  privateKeyPath?: string
+  remotePath?: string
+}
+
 export interface ElectronAPI {
   // App lifecycle
   appReady: () => void
@@ -212,7 +229,7 @@ export interface ElectronAPI {
   onLLMDone: (requestId: string, callback: (data: LLMResult) => void) => () => void
 
   // Interactive Terminal
-  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe' }) => Promise<{ success: boolean; error?: string }>
+  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer }) => Promise<{ success: boolean; error?: string }>
   writeTerminal: (id: string, data: string) => Promise<void>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id?: string) => void
@@ -220,6 +237,17 @@ export interface ElectronAPI {
   onTerminalData: (callback: (event: { id: string; data: string }) => void) => () => void
   onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number }) => void) => () => void
   onTerminalError: (callback: (event: { id: string; error: string }) => void) => () => void
+
+  // Remote Shell / SFTP
+  remoteShellList: (server: RemoteShellServer, remotePath?: string) => Promise<RemoteShellEntry[]>
+  remoteShellReadText: (server: RemoteShellServer, remotePath: string) => Promise<string | null>
+  remoteShellWriteText: (server: RemoteShellServer, remotePath: string, content: string) => Promise<boolean>
+  remoteShellMkdir: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => Promise<boolean>
+  remoteShellDelete: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<{ canceled: boolean; uploaded: string[] }>
+  remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<{ canceled: boolean; localPath?: string }>
 
   // Secure Shell Execution
   executeSecureCommand: (request: {
@@ -246,8 +274,6 @@ export interface ElectronAPI {
   }>
 
   // Security Management
-  getAuditLogs: (limit?: number) => Promise<any[]>
-  clearAuditLogs: () => Promise<boolean>
   getPermissions: () => Promise<Record<string, string>>
   resetPermissions: () => Promise<boolean>
 
@@ -270,7 +296,7 @@ export interface ElectronAPI {
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => Promise<{ success: boolean; error?: string }>
   indexTestConnection: (workspacePath: string) => Promise<{ success: boolean; error?: string; latency?: number }>
   indexGetProviders: () => Promise<EmbeddingProvider[]>
-  indexParseCallGraph: (filePath: string, content: string) => Promise<any[]>
+  indexParseCallGraph: (filePath: string, content: string) => Promise<import('@shared/types').CodeGraphNode[]>
   onIndexProgress: (callback: (status: IndexStatusData) => void) => () => void
 
   // LSP
@@ -388,9 +414,9 @@ export interface ElectronAPI {
     env: Record<string, string>
     autoApprove: string[]
     disabled: boolean
-  }) => Promise<{ success: boolean; error?: string }>
-  mcpRemoveServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
-  mcpToggleServer: (serverId: string, disabled: boolean) => Promise<{ success: boolean; error?: string }>
+  }, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
+  mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
+  mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
   mcpSetAutoConnect: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   // Registry
   mcpRegistrySearch: (query?: string) => Promise<{ success: boolean; servers?: any[]; error?: string }>
@@ -400,6 +426,9 @@ export interface ElectronAPI {
   onMcpToolsUpdated: (callback: (event: { serverId: string; tools: any[] }) => void) => () => void
   onMcpResourcesUpdated: (callback: (event: { serverId: string; resources: any[] }) => void) => () => void
   onMcpStateChanged: (callback: (servers: any[]) => void) => () => void
+
+  // Skills
+  skillsGetGlobalDir: () => Promise<string>
 
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => () => void
@@ -450,6 +479,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:rename', oldPath, newPath),
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) =>
     ipcRenderer.invoke('file:search', query, rootPath, options),
+  /** 流式搜索 — 结果通过 search:results 事件增量推送 */
+  searchStream: (query: string, rootPath: string | string[], options: SearchFilesOptions, searchId: string) =>
+    ipcRenderer.invoke('file:search-stream', query, rootPath, options, searchId),
+  onSearchResults: (callback: (searchId: string, results: SearchFileResult[]) => void) => {
+    const handler = (_: IpcRendererEvent, searchId: string, results: SearchFileResult[]) => callback(searchId, results)
+    ipcRenderer.on('search:results', handler)
+    return () => { ipcRenderer.removeListener('search:results', handler) }
+  },
+  onSearchDone: (callback: (searchId: string) => void) => {
+    const handler = (_: IpcRendererEvent, searchId: string) => callback(searchId)
+    ipcRenderer.on('search:done', handler)
+    return () => { ipcRenderer.removeListener('search:done', handler) }
+  },
 
   getSetting: (key: string) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', key, value),
@@ -499,7 +541,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener(channel, handler)
   },
 
-  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe' }) =>
+  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer }) =>
     ipcRenderer.invoke('terminal:interactive', options),
   writeTerminal: (id: string, data: string) => ipcRenderer.invoke('terminal:input', { id, data }),
   executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) =>
@@ -529,13 +571,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('terminal:error', handler)
   },
 
+  remoteShellList: (server: RemoteShellServer, remotePath?: string) => ipcRenderer.invoke('remoteShell:list', server, remotePath),
+  remoteShellReadText: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:readText', server, remotePath),
+  remoteShellWriteText: (server: RemoteShellServer, remotePath: string, content: string) => ipcRenderer.invoke('remoteShell:writeText', server, remotePath, content),
+  remoteShellMkdir: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:mkdir', server, remotePath),
+  remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => ipcRenderer.invoke('remoteShell:rename', server, oldPath, newPath),
+  remoteShellDelete: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:delete', server, remotePath),
+  remoteShellTestConnection: (server: RemoteShellServer) => ipcRenderer.invoke('remoteShell:testConnection', server),
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => ipcRenderer.invoke('remoteShell:upload', server, remoteDirectory),
+  remoteShellDownload: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:download', server, remotePath),
+
   executeSecureCommand: (request: { command: string; args?: string[]; cwd?: string; timeout?: number; requireConfirm?: boolean }) =>
     ipcRenderer.invoke('shell:executeSecure', request),
 
   gitExecSecure: (args: string[], cwd: string) => ipcRenderer.invoke('git:execSecure', args, cwd),
 
-  getAuditLogs: (limit = 100) => ipcRenderer.invoke('security:getAuditLogs', limit),
-  clearAuditLogs: () => ipcRenderer.invoke('security:clearAuditLogs'),
   getPermissions: () => ipcRenderer.invoke('security:getPermissions'),
   resetPermissions: () => ipcRenderer.invoke('security:resetPermissions'),
 
@@ -655,9 +705,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
     autoApprove?: string[]
     disabled?: boolean
-  }) => ipcRenderer.invoke('mcp:addServer', config),
-  mcpRemoveServer: (serverId: string) => ipcRenderer.invoke('mcp:removeServer', serverId),
-  mcpToggleServer: (serverId: string, disabled: boolean) => ipcRenderer.invoke('mcp:toggleServer', serverId, disabled),
+  }, level?: 'user' | 'workspace') => ipcRenderer.invoke('mcp:addServer', config, level),
+  mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace') => ipcRenderer.invoke('mcp:removeServer', serverId, level),
+  mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace') => ipcRenderer.invoke('mcp:toggleServer', serverId, disabled, level),
   mcpSetAutoConnect: (enabled: boolean) => ipcRenderer.invoke('mcp:setAutoConnect', enabled),
   // Registry
   mcpRegistrySearch: (query?: string) => ipcRenderer.invoke('mcp:registrySearch', query),
@@ -688,6 +738,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('mcp:stateChanged', handler)
     return () => ipcRenderer.removeListener('mcp:stateChanged', handler)
   },
+
+  // Skills
+  skillsGetGlobalDir: () => ipcRenderer.invoke('skills:getGlobalDir'),
 
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => {
@@ -724,6 +777,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('debug:evaluate', sessionId, expression, frameId),
   debugGetSessionState: (sessionId: string) => ipcRenderer.invoke('debug:getSessionState', sessionId),
   debugGetAllSessions: () => ipcRenderer.invoke('debug:getAllSessions'),
+  debugGetSupportedTypes: () => ipcRenderer.invoke('debug:getSupportedTypes'),
+  debugGetConfigSnippets: (type: string) => ipcRenderer.invoke('debug:getConfigSnippets', type),
+  debugConfigurationDone: (sessionId: string) => ipcRenderer.invoke('debug:configurationDone', sessionId),
+  debugGetThreads: (sessionId: string) => ipcRenderer.invoke('debug:getThreads', sessionId),
+  debugGetCapabilities: (sessionId: string) => ipcRenderer.invoke('debug:getCapabilities', sessionId),
   onDebugEvent: (callback: (event: { sessionId: string; event: any }) => void) => {
     const handler = (_: IpcRendererEvent, data: { sessionId: string; event: any }) => callback(data)
     ipcRenderer.on('debug:event', handler)

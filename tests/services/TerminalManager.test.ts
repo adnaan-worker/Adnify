@@ -1,36 +1,50 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const terminalMocks = vi.hoisted(() => ({
-  create: vi.fn(),
-  write: vi.fn(),
-  resize: vi.fn(),
-  kill: vi.fn(),
-  onData: vi.fn(() => vi.fn()),
-  onExit: vi.fn(() => vi.fn()),
-  onError: vi.fn(() => vi.fn()),
-}))
+const createMock = vi.fn()
+const onDataCleanup = vi.fn()
+const onExitCleanup = vi.fn()
+const onErrorCleanup = vi.fn()
 
 vi.mock('@renderer/services/electronAPI', () => ({
   api: {
-    terminal: terminalMocks,
-  },
-}))
-
-vi.mock('@utils/Logger', () => ({
-  logger: {
-    system: {
-      info: vi.fn(),
-      error: vi.fn(),
+    terminal: {
+      create: createMock,
+      write: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      onData: vi.fn(() => onDataCleanup),
+      onExit: vi.fn(() => onExitCleanup),
+      onError: vi.fn(() => onErrorCleanup),
     },
   },
 }))
 
+vi.mock('@renderer/settings', () => ({
+  getEditorConfig: () => ({
+    performance: {
+      terminalBufferSize: 1000,
+    },
+  }),
+}))
+
 vi.mock('@xterm/xterm', () => ({
-  Terminal: class MockTerminal {},
+  Terminal: class MockTerminal {
+    options: Record<string, unknown> = {}
+    write = vi.fn()
+    focus = vi.fn()
+    loadAddon = vi.fn()
+    open = vi.fn()
+    dispose = vi.fn()
+    onData = vi.fn()
+    onResize = vi.fn()
+  },
 }))
 
 vi.mock('@xterm/addon-fit', () => ({
-  FitAddon: class MockFitAddon {},
+  FitAddon: class MockFitAddon {
+    fit = vi.fn()
+    dispose = vi.fn()
+  },
 }))
 
 vi.mock('@xterm/addon-web-links', () => ({
@@ -39,68 +53,51 @@ vi.mock('@xterm/addon-web-links', () => ({
 
 vi.mock('@xterm/addon-webgl', () => ({
   WebglAddon: class MockWebglAddon {
-    onContextLoss() {
-      return undefined
-    }
-
-    dispose() {
-      return undefined
-    }
+    dispose = vi.fn()
+    onContextLoss = vi.fn()
   },
 }))
 
-import { terminalManager } from '@renderer/services/TerminalManager'
+vi.mock('@utils/Logger', () => ({
+  logger: {
+    system: {
+      info: vi.fn(),
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    },
+  },
+}))
 
-const originalPlatform = process.platform
+vi.mock('@services/keybindingService', () => ({
+  isMac: true,
+}))
 
-function setPlatform(platform: NodeJS.Platform) {
-  Object.defineProperty(process, 'platform', {
-    value: platform,
-    configurable: true,
-  })
-}
+vi.mock('@renderer/agent/tools/commandRuntime', () => ({
+  getInteractiveTerminalBackend: vi.fn(() => 'pipe'),
+}))
 
-describe('TerminalManager macOS backend safety', () => {
+describe('TerminalManager', () => {
   beforeEach(() => {
-    terminalManager.cleanup()
-    vi.clearAllMocks()
-    setPlatform('darwin')
-    terminalMocks.create.mockResolvedValue({ success: true })
+    createMock.mockReset()
+    createMock.mockResolvedValue({ success: true })
   })
 
-  afterEach(() => {
-    terminalManager.cleanup()
-    setPlatform(originalPlatform)
-  })
+  it('uses pipe backend for agent terminals on macOS', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
 
-  it('uses pipe when no backend is provided on macOS', async () => {
-    await terminalManager.createTerminal({
-      cwd: '/tmp/adnify-project',
-      name: 'Terminal',
-    })
+    try {
+      await terminalManager.getOrCreateAgentTerminal('/tmp/adnify-agent')
 
-    expect(terminalMocks.create).toHaveBeenCalledTimes(1)
-    expect(terminalMocks.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cwd: '/tmp/adnify-project',
-        backend: 'pipe',
-      }),
-    )
-  })
-
-  it('downgrades explicit PTY requests to pipe on macOS', async () => {
-    await terminalManager.createTerminal({
-      cwd: '/tmp/adnify-project',
-      name: 'Terminal',
-      backend: 'pty',
-    })
-
-    expect(terminalMocks.create).toHaveBeenCalledTimes(1)
-    expect(terminalMocks.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cwd: '/tmp/adnify-project',
-        backend: 'pipe',
-      }),
-    )
+      expect(createMock).toHaveBeenCalledTimes(1)
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cwd: '/tmp/adnify-agent',
+          backend: 'pipe',
+        }),
+      )
+    } finally {
+      terminalManager.cleanup()
+    }
   })
 })

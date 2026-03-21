@@ -53,6 +53,16 @@ export type AgentEvent =
   | { type: 'break:micro'; message: string }
   | { type: 'break:suggested'; message: string }
 
+  // Orchestrator 事件
+  | { type: 'plan:start'; planId: string }
+  | { type: 'plan:complete'; planId: string; stats: import('../orchestrator/types').ExecutionStats }
+  | { type: 'plan:failed'; planId: string; error: string }
+  | { type: 'plan:paused'; planId: string }
+  | { type: 'plan:resumed'; planId: string }
+  | { type: 'task:start'; taskId: string; planId: string }
+  | { type: 'task:complete'; taskId: string; output: string; duration: number }
+  | { type: 'task:failed'; taskId: string; error: string }
+
 export type EventType = AgentEvent['type']
 
 type EventHandler<T extends AgentEvent = AgentEvent> = (event: T) => void

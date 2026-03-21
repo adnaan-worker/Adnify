@@ -20,16 +20,36 @@ export interface ModelOptions {
  * 根据配置创建 AI SDK model 实例
  */
 export function createModel(config: LLMConfig, options: ModelOptions = {}): LanguageModel {
-    const { provider, model, apiKey, baseUrl } = config
+    const { provider } = config
+
+    // 替换 headers 中的 {{apiKey}} 占位符
+    const resolvedHeaders = resolveHeaderPlaceholders(config.headers, config.apiKey)
 
     // 内置 provider
     if (isBuiltinProvider(provider)) {
-        return createBuiltinModel(config, options)
+        return createBuiltinModel({ ...config, headers: resolvedHeaders }, options)
     }
 
     // 自定义 provider - 根据 protocol 选择
     const protocol = config.protocol || 'openai'
-    return createCustomModel(protocol, model, apiKey, baseUrl, options)
+    const customOptions = {
+        ...options,
+        headers: resolvedHeaders
+    }
+    return createCustomModel(protocol, config.model, config.apiKey, config.baseUrl, customOptions)
+}
+
+/** 替换 headers 值中的 {{apiKey}} 占位符 */
+export function resolveHeaderPlaceholders(
+    headers?: Record<string, string>,
+    apiKey?: string
+): Record<string, string> | undefined {
+    if (!headers) return undefined
+    const resolved: Record<string, string> = {}
+    for (const [key, value] of Object.entries(headers)) {
+        resolved[key] = typeof value === 'string' ? value.replace(/\{\{apiKey\}\}/g, apiKey || '') : value
+    }
+    return resolved
 }
 
 /**

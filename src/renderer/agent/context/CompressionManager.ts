@@ -468,7 +468,7 @@ function extractImageDescription(messages: ChatMessage[], imageIndex: number): s
     const msg = messages[i]
     if (msg.role === 'assistant') {
       const assistantMsg = msg as AssistantMessage
-      const content = assistantMsg.content || ''
+      const content = typeof assistantMsg.content === 'string' ? assistantMsg.content : ''
 
       // 简单启发式：提取第一句话作为描述（通常 AI 会先描述图片）
       const firstSentence = content.split(/[.!?。！？]/)[0]?.trim()

@@ -4,7 +4,8 @@
  */
 
 import { logger } from '@shared/utils/Logger'
-import { ipcMain, app } from 'electron'
+import { app } from 'electron'
+import { safeIpcHandle } from './safeHandle'
 import { spawn } from 'child_process'
 import { rgPath } from '@vscode/ripgrep'
 import * as path from 'path'
@@ -153,8 +154,105 @@ function parseRipgrepOutput(output: string, rootPath: string): SearchFileResult[
   return results
 }
 
+/**
+ * 流式搜索 — 增量解析 ripgrep 输出并通过 IPC 事件批量推送
+ * 每 50 条结果或 100ms 推送一批，让渲染进程尽早显示
+ */
+function searchStreamInDirectory(
+  query: string,
+  rootPath: string,
+  options: SearchFilesOptions,
+  sender: Electron.WebContents,
+  searchId: string,
+): Promise<void> {
+  if (!query || !rootPath) return Promise.resolve()
+
+  const normalizedPath = path.normalize(rootPath)
+  if (!fs.existsSync(normalizedPath)) return Promise.resolve()
+
+  return new Promise((resolve) => {
+    const args = buildRipgrepArgs(query, normalizedPath, options)
+    const rg = spawn(getRgPath(), args)
+    const normalizedRoot = normalizedPath.toLowerCase().replace(/\\/g, '/')
+
+    let buffer = ''
+    let batch: SearchFileResult[] = []
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+    const BATCH_SIZE = 50
+    const FLUSH_INTERVAL = 100
+
+    const flush = () => {
+      if (batch.length > 0) {
+        try { sender.send('search:results', searchId, batch) } catch { /* window closed */ }
+        batch = []
+      }
+      if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
+    }
+
+    const scheduleFlush = () => {
+      if (!flushTimer) flushTimer = setTimeout(flush, FLUSH_INTERVAL)
+    }
+
+    rg.stdout.on('data', (data) => {
+      buffer += data.toString()
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || '' // 保留不完整的最后一行
+
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          const json = JSON.parse(line)
+          if (json.type === 'match') {
+            let filePath = json.data.path.text
+            const normalizedFilePath = filePath.toLowerCase().replace(/\\/g, '/')
+            if (normalizedFilePath.startsWith(normalizedRoot)) {
+              filePath = filePath.slice(normalizedPath.length).replace(/^[/\\]+/, '')
+            }
+            batch.push({
+              path: filePath,
+              line: json.data.line_number,
+              text: json.data.lines.text.trim().slice(0, 500),
+            })
+            if (batch.length >= BATCH_SIZE) flush()
+            else scheduleFlush()
+          }
+        } catch { /* ignore parse error */ }
+      }
+    })
+
+    rg.on('close', () => {
+      // 处理最后一行
+      if (buffer.trim()) {
+        try {
+          const json = JSON.parse(buffer)
+          if (json.type === 'match') {
+            let filePath = json.data.path.text
+            const normalizedFilePath = filePath.toLowerCase().replace(/\\/g, '/')
+            if (normalizedFilePath.startsWith(normalizedRoot)) {
+              filePath = filePath.slice(normalizedPath.length).replace(/^[/\\]+/, '')
+            }
+            batch.push({ path: filePath, line: json.data.line_number, text: json.data.lines.text.trim().slice(0, 500) })
+          }
+        } catch { /* ignore */ }
+      }
+      flush()
+      try { sender.send('search:done', searchId) } catch { /* window closed */ }
+      resolve()
+    })
+
+    rg.on('error', () => {
+      flush()
+      try { sender.send('search:done', searchId) } catch { /* window closed */ }
+      resolve()
+    })
+
+    setTimeout(() => { if (!rg.killed) rg.kill() }, SEARCH_TIMEOUT)
+  })
+}
+
 export function registerSearchHandlers() {
-  ipcMain.handle('file:search', async (
+  // 传统的一次性搜索（保持向后兼容）
+  safeIpcHandle('file:search', async (
     _event,
     query: string,
     rootPath: string | string[],
@@ -170,6 +268,27 @@ export function registerSearchHandlers() {
     } catch (error) {
       logger.ipc.error('[Search] failed:', error)
       return []
+    }
+  })
+
+  // 流式搜索 — 结果通过 IPC 事件增量推送
+  safeIpcHandle('file:search-stream', async (
+    event,
+    query: string,
+    rootPath: string | string[],
+    options: SearchFilesOptions,
+    searchId: string
+  ) => {
+    const roots = Array.isArray(rootPath) ? rootPath : [rootPath]
+    const sender = event.sender
+
+    try {
+      await Promise.all(
+        roots.map(root => searchStreamInDirectory(query, root, options, sender, searchId))
+      )
+    } catch (error) {
+      logger.ipc.error('[Search stream] failed:', error)
+      try { sender.send('search:done', searchId) } catch { /* window closed */ }
     }
   })
 }

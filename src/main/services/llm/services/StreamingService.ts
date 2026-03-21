@@ -7,7 +7,7 @@ import { streamText } from 'ai'
 import type { StreamTextResult } from 'ai'
 import { BrowserWindow } from 'electron'
 import { logger } from '@shared/utils/Logger'
-import { createModel } from '../modelFactory'
+import { createModel, resolveHeaderPlaceholders } from '../modelFactory'
 import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
 import { applyCaching, getCacheConfig } from '../core/PromptCache'
@@ -60,6 +60,7 @@ export class StreamingService {
       messageCount: messages.length,
       toolCount: tools?.length || 0,
       requestId,
+      headers: config.headers,
     })
 
     try {
@@ -98,7 +99,7 @@ export class StreamingService {
         // AI SDK 高级参数
         maxRetries: config.maxRetries,
         toolChoice: config.toolChoice,
-        headers: config.headers,
+        headers: resolveHeaderPlaceholders(config.headers, config.apiKey),
         timeout: config.timeout,  // 超时配置
         abortSignal,
       }

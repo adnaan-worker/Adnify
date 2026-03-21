@@ -9,6 +9,8 @@ import { logger } from '@utils/Logger'
 import { toAppError, getErrorMessage } from '@shared/utils/errorHandler'
 import type {
   McpServerState,
+  McpTool,
+  McpResource,
   McpToolCallRequest,
   McpToolCallResult,
   McpResourceReadRequest,
@@ -145,13 +147,42 @@ class McpService {
     }
   }
 
-  /** 调用 MCP 工具 */
-  async callTool(request: McpToolCallRequest): Promise<McpToolCallResult> {
+  /** 调用 MCP 工具（带超时保护 + OAuth 自动刷新） */
+  async callTool(request: McpToolCallRequest, timeoutMs = 60_000): Promise<McpToolCallResult> {
+    const execute = () => {
+      let timeoutId: ReturnType<typeof setTimeout>
+      return Promise.race([
+        api.mcp.callTool(request),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error(`MCP tool call timed out after ${timeoutMs}ms: ${request.toolName}`))
+          }, timeoutMs)
+        }),
+      ]).finally(() => clearTimeout(timeoutId!))
+    }
+
     try {
-      const result = await api.mcp.callTool(request)
+      const result = await execute()
       return result
     } catch (err) {
       const error = toAppError(err)
+
+      // OAuth token 过期自动刷新后重试一次
+      const msg = error.message.toLowerCase()
+      if (msg.includes('401') || msg.includes('unauthorized') || msg.includes('token expired')) {
+        logger.agent.info(`[McpService] Token may be expired for ${request.serverId}, attempting refresh`)
+        const refreshResult = await this.refreshOAuthToken(request.serverId)
+        if (refreshResult.success) {
+          try {
+            return await execute()
+          } catch (retryErr) {
+            const retryError = toAppError(retryErr)
+            logger.agent.error(`[McpService] Retry after token refresh failed: ${retryError.code}`, retryError)
+            return { success: false, error: retryError.message }
+          }
+        }
+      }
+
       logger.agent.error(`[McpService] Call tool failed: ${error.code}`, error)
       return { success: false, error: error.message }
     }
@@ -236,9 +267,9 @@ class McpService {
     oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
     autoApprove?: string[]
     disabled?: boolean
-  }): Promise<boolean> {
+  }, level?: 'user' | 'workspace'): Promise<boolean> {
     try {
-      const result = await api.mcp.addServer(config)
+      const result = await api.mcp.addServer(config, level)
       return result.success
     } catch (err) {
       const error = toAppError(err)
@@ -248,9 +279,9 @@ class McpService {
   }
 
   /** 删除服务器 */
-  async removeServer(serverId: string): Promise<boolean> {
+  async removeServer(serverId: string, level?: 'user' | 'workspace'): Promise<boolean> {
     try {
-      const result = await api.mcp.removeServer(serverId)
+      const result = await api.mcp.removeServer(serverId, level)
       return result.success
     } catch (err) {
       const error = toAppError(err)
@@ -260,9 +291,9 @@ class McpService {
   }
 
   /** 切换服务器启用/禁用状态 */
-  async toggleServer(serverId: string, disabled: boolean): Promise<boolean> {
+  async toggleServer(serverId: string, disabled: boolean, level?: 'user' | 'workspace'): Promise<boolean> {
     try {
-      const result = await api.mcp.toggleServer(serverId, disabled)
+      const result = await api.mcp.toggleServer(serverId, disabled, level)
       return result.success
     } catch (err) {
       const error = toAppError(err)
@@ -360,19 +391,19 @@ class McpService {
     this.cleanupFns.push(cleanupStatus)
 
     // 工具列表更新
-    const cleanupTools = api.mcp.onToolsUpdated((event: { serverId: string; tools: any[] }) => {
+    const cleanupTools = api.mcp.onToolsUpdated((event: { serverId: string; tools: McpTool[] }) => {
       store.updateMcpServerTools(event.serverId, event.tools)
     })
     this.cleanupFns.push(cleanupTools)
 
     // 资源列表更新
-    const cleanupResources = api.mcp.onResourcesUpdated((event: { serverId: string; resources: any[] }) => {
+    const cleanupResources = api.mcp.onResourcesUpdated((event: { serverId: string; resources: McpResource[] }) => {
       store.updateMcpServerResources(event.serverId, event.resources)
     })
     this.cleanupFns.push(cleanupResources)
 
     // 完整状态更新
-    const cleanupState = api.mcp.onStateChanged((servers: any[]) => {
+    const cleanupState = api.mcp.onStateChanged((servers: McpServerState[]) => {
       store.setMcpServers(servers)
     })
     this.cleanupFns.push(cleanupState)

@@ -520,21 +520,8 @@ class EmotionAdapter {
     }, breakConfig.breakInterval)
   }
 
-  private showEmotionAwareness(detection: EmotionDetection): void {
+  private showEmotionAwareness(_detection: EmotionDetection): void {
     // 通过 toast 或内联提示显示情绪检测
-    const emotionLabels: Record<EmotionState, string> = {
-      focused: '专注模式',
-      frustrated: '检测到沮丧',
-      tired: '检测到疲劳',
-      excited: '能量满满',
-      bored: '检测到无聊',
-      stressed: '检测到压力',
-      flow: '心流状态',
-      neutral: '工作模式',
-    }
-
-    // 简化 toast 提示
-    console.log(`[Emotion] ${emotionLabels[detection.state]} - 强度: ${Math.round(detection.intensity * 100)}%`)
   }
 
   // 获取情绪对应的 toast 类型

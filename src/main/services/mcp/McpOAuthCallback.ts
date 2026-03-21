@@ -34,6 +34,9 @@ const HTML_SUCCESS = `<!DOCTYPE html>
 </body>
 </html>`
 
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+
 const HTML_ERROR = (error: string) => `<!DOCTYPE html>
 <html>
 <head>
@@ -50,7 +53,7 @@ const HTML_ERROR = (error: string) => `<!DOCTYPE html>
   <div class="container">
     <h1>Authorization Failed</h1>
     <p>An error occurred during authorization.</p>
-    <div class="error">${error}</div>
+    <div class="error">${escapeHtml(error)}</div>
   </div>
 </body>
 </html>`
@@ -89,9 +92,13 @@ export namespace McpOAuthCallback {
     throw new Error(`No available port in range ${OAUTH_CALLBACK_PORT_START}-${OAUTH_CALLBACK_PORT_END}`)
   }
 
-  export async function ensureRunning(): Promise<number> {
+  export async function ensureRunning(retryCount = 0): Promise<number> {
     if (server && currentPort) {
       return currentPort
+    }
+
+    if (retryCount >= 3) {
+      throw new Error('Failed to start OAuth callback server after 3 retries')
     }
 
     const port = await findAvailablePort()
@@ -159,8 +166,8 @@ export namespace McpOAuthCallback {
         if (err.code === 'EADDRINUSE') {
           logger.mcp?.warn(`[OAuth Callback] Port ${port} in use, trying next...`)
           server = undefined
-          // 递归尝试下一个端口
-          ensureRunning().then(resolve).catch(reject)
+          // 递归尝试下一个端口（带重试限制）
+          ensureRunning(retryCount + 1).then(resolve).catch(reject)
         } else {
           reject(err)
         }

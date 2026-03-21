@@ -7,7 +7,7 @@
  * - 用户可以展开折叠组查看历史
  */
 
-import { useMemo, useCallback, useState } from 'react'
+import { useMemo, useCallback, useState, memo } from 'react'
 import { Layers, CheckCircle2, XCircle, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@/renderer/agent/types'
@@ -16,6 +16,7 @@ import FileChangeCard from './FileChangeCard'
 import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
 import { joinPath } from '@shared/utils/pathUtils'
 
@@ -28,7 +29,7 @@ interface ToolCallGroupProps {
     messageId?: string
 }
 
-export default function ToolCallGroup({
+function ToolCallGroup({
     toolCalls,
     pendingToolId,
     onApproveTool,
@@ -36,7 +37,7 @@ export default function ToolCallGroup({
     onOpenDiff,
     messageId,
 }: ToolCallGroupProps) {
-    const { language, openFile, setActiveFile, workspacePath } = useStore()
+    const { language, openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ language: s.language, openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
     const [isExpanded, setIsExpanded] = useState(true)
 
     // 简单分类：已完成 vs 正在执行
@@ -163,6 +164,22 @@ export default function ToolCallGroup({
             if (isSuccess) return `Searched ${qStr}`
             if (isError) return `Search failed`
             return `Searching ${qStr}`
+        }
+
+        // Skill
+        if (name === 'apply_skill') {
+            const skillName = args.skill_name as string
+            if (!skillName) return ''
+            if (isSuccess) return `Applied ${skillName}`
+            if (isError) return `Failed to apply ${skillName}`
+            return `Applying ${skillName}`
+        }
+
+        // Task List
+        if (name === 'todo_write') {
+            if (isSuccess) return 'Tasks updated'
+            if (isError) return 'Failed to update tasks'
+            return 'Updating tasks'
         }
 
         return name.replace(/_/g, ' ')
@@ -321,3 +338,5 @@ export default function ToolCallGroup({
         </div>
     )
 }
+
+export default memo(ToolCallGroup)

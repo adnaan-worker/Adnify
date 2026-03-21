@@ -32,7 +32,7 @@ interface CommandItem extends InputPopupItem {
 }
 
 export default function SlashCommandPopup({ query, position, onSelect, onClose }: SlashCommandPopupProps) {
-    const { language } = useStore()
+    const language = useStore(s => s.language)
     const matchingCommands = slashCommandService.findMatching(query)
 
     // 转换为 InputPopup 需要的格式

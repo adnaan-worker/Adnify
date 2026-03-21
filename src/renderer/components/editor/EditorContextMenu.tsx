@@ -2,12 +2,14 @@
  * 编辑器自定义右键菜单组件
  * 完全国际化支持
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
 import { t, TranslationKey } from '@renderer/i18n'
 import { getIncomingCalls, getOutgoingCalls, lspUriToPath } from '@renderer/services/lspService'
 import { getFileName } from '@shared/utils/pathUtils'
+import { formatShortcut } from '@services/keybindingService'
 import type { editor } from 'monaco-editor'
 import { logger } from '@shared/utils/Logger'
 
@@ -64,10 +66,11 @@ interface EditorContextMenuProps {
 }
 
 export default function EditorContextMenu({ x, y, editor, onClose }: EditorContextMenuProps) {
-  const { language, activeFilePath, openFile, setActiveFile } = useStore()
+  const { language, activeFilePath, openFile, setActiveFile } = useStore(useShallow(s => ({ language: s.language, activeFilePath: s.activeFilePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
   const menuRef = useRef<HTMLDivElement>(null)
   const [callHierarchyResult, setCallHierarchyResult] = useState<CallHierarchyResult | null>(null)
   const [loading, setLoading] = useState(false)
+  const [position, setPosition] = useState({ x, y })
 
   // 获取当前编辑器语言
   const editorLanguage = editor.getModel()?.getLanguageId() || 'plaintext'
@@ -113,20 +116,29 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     }
   }, [onClose, callHierarchyResult])
 
-  // 调整菜单位置，防止超出屏幕
-  useEffect(() => {
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect()
-      const viewportWidth = window.innerWidth
-      const viewportHeight = window.innerHeight
-      
-      if (x + rect.width > viewportWidth) {
-        menuRef.current.style.left = `${viewportWidth - rect.width - 10}px`
-      }
-      if (y + rect.height > viewportHeight) {
-        menuRef.current.style.top = `${viewportHeight - rect.height - 10}px`
-      }
+  // 调整菜单位置，防止超出视口（useLayoutEffect 避免闪烁）
+  useLayoutEffect(() => {
+    if (!menuRef.current) return
+
+    const rect = menuRef.current.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+
+    let adjustedX = x
+    let adjustedY = y
+
+    if (x + rect.width > viewportWidth) {
+      adjustedX = viewportWidth - rect.width - 8
     }
+    if (y + rect.height > viewportHeight) {
+      adjustedY = y - rect.height
+      if (adjustedY < 8) adjustedY = 8
+    }
+
+    setPosition({
+      x: Math.max(8, adjustedX),
+      y: Math.max(8, adjustedY),
+    })
   }, [x, y, callHierarchyResult])
 
   const runAction = (actionId: string) => {
@@ -274,24 +286,24 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     // 导航
     { id: 'goto-def', labelKey: 'ctxGotoDefinition', shortcut: 'F12', action: () => runAction('editor.action.revealDefinition') },
     { id: 'find-refs', labelKey: 'ctxFindReferences', shortcut: 'Shift+F12', action: () => runAction('editor.action.goToReferences') },
-    { id: 'goto-symbol', labelKey: 'ctxGotoSymbol', shortcut: 'Ctrl+Shift+O', action: () => runAction('editor.action.quickOutline') },
+    { id: 'goto-symbol', labelKey: 'ctxGotoSymbol', shortcut: formatShortcut('Ctrl+Shift+O'), action: () => runAction('editor.action.quickOutline') },
     { id: 'find-callers', labelKey: 'ctxFindCallers', action: handleFindCallers, disabled: !supportsCallHierarchy },
     { id: 'find-callees', labelKey: 'ctxFindCallees', action: handleFindCallees, divider: true, disabled: !supportsCallHierarchy },
     // 编辑
     { id: 'rename', labelKey: 'ctxRename', shortcut: 'F2', action: () => runAction('editor.action.rename') },
-    { id: 'change-all', labelKey: 'ctxChangeAll', shortcut: 'Ctrl+F2', action: () => runAction('editor.action.changeAll') },
-    { id: 'format', labelKey: 'ctxFormat', shortcut: 'Shift+Alt+F', action: () => runAction('editor.action.formatDocument'), divider: true },
+    { id: 'change-all', labelKey: 'ctxChangeAll', shortcut: formatShortcut('Ctrl+F2'), action: () => runAction('editor.action.changeAll') },
+    { id: 'format', labelKey: 'ctxFormat', shortcut: formatShortcut('Shift+Alt+F'), action: () => runAction('editor.action.formatDocument'), divider: true },
     // 剪贴板
-    { id: 'cut', labelKey: 'ctxCut', shortcut: 'Ctrl+X', action: handleCut },
-    { id: 'copy', labelKey: 'ctxCopy', shortcut: 'Ctrl+C', action: handleCopy },
-    { id: 'paste', labelKey: 'ctxPaste', shortcut: 'Ctrl+V', action: handlePaste, divider: true },
+    { id: 'cut', labelKey: 'ctxCut', shortcut: formatShortcut('Ctrl+X'), action: handleCut },
+    { id: 'copy', labelKey: 'ctxCopy', shortcut: formatShortcut('Ctrl+C'), action: handleCopy },
+    { id: 'paste', labelKey: 'ctxPaste', shortcut: formatShortcut('Ctrl+V'), action: handlePaste, divider: true },
     // 查找
-    { id: 'find', labelKey: 'ctxFind', shortcut: 'Ctrl+F', action: () => runAction('actions.find') },
-    { id: 'replace', labelKey: 'ctxReplace', shortcut: 'Ctrl+H', action: () => runAction('editor.action.startFindReplaceAction'), divider: true },
+    { id: 'find', labelKey: 'ctxFind', shortcut: formatShortcut('Ctrl+F'), action: () => runAction('actions.find') },
+    { id: 'replace', labelKey: 'ctxReplace', shortcut: formatShortcut('Ctrl+H'), action: () => runAction('editor.action.startFindReplaceAction'), divider: true },
     // 其他
-    { id: 'comment', labelKey: 'ctxToggleComment', shortcut: 'Ctrl+/', action: () => runAction('editor.action.commentLine') },
-    { id: 'delete-line', labelKey: 'ctxDeleteLine', shortcut: 'Ctrl+Shift+K', action: () => runAction('editor.action.deleteLines') },
-    { id: 'select-next', labelKey: 'ctxSelectNext', shortcut: 'Ctrl+D', action: () => runAction('editor.action.addSelectionToNextFindMatch'), divider: true },
+    { id: 'comment', labelKey: 'ctxToggleComment', shortcut: formatShortcut('Ctrl+/'), action: () => runAction('editor.action.commentLine') },
+    { id: 'delete-line', labelKey: 'ctxDeleteLine', shortcut: formatShortcut('Ctrl+Shift+K'), action: () => runAction('editor.action.deleteLines') },
+    { id: 'select-next', labelKey: 'ctxSelectNext', shortcut: formatShortcut('Ctrl+D'), action: () => runAction('editor.action.addSelectionToNextFindMatch'), divider: true },
     // 文件操作
     { 
       id: 'open-in-browser', 
@@ -314,8 +326,8 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     return (
       <div
         ref={menuRef}
-        className="fixed z-50 bg-surface border border-border-subtle rounded-lg shadow-xl py-1 min-w-[280px] max-w-[400px] select-none"
-        style={{ left: x, top: y }}
+        className="fixed z-[100] bg-surface border border-border-subtle rounded-lg shadow-xl py-1 min-w-[280px] max-w-[400px] select-none"
+        style={{ left: position.x, top: position.y }}
       >
         <div className="px-3 py-2 text-sm font-medium text-text-primary border-b border-border-subtle flex items-center justify-between">
           <span>{title}</span>
@@ -353,8 +365,8 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-surface border border-border-subtle rounded-lg shadow-xl py-1 min-w-[220px] select-none"
-      style={{ left: x, top: y }}
+      className="fixed z-[100] bg-surface border border-border-subtle rounded-lg shadow-xl py-1 min-w-[220px] select-none"
+      style={{ left: position.x, top: position.y }}
     >
       {loading && (
         <div className="absolute inset-0 bg-surface/80 flex items-center justify-center rounded-lg">

@@ -1,31 +1,26 @@
 /**
- * 内联编辑组件
- * Cmd+K 风格的内联代码修改
+ * 内联编辑组件 - 悬浮胶囊形态 (Inline Intent Sparkles)
+ * 极简的交互形态，接入 Composer Service 实现原生 Monaco 流式 Diff。
  */
 
-import { api } from '@/renderer/services/electronAPI'
+import { api } from '@renderer/services/electronAPI'
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { X, Sparkles, Check, Loader2, RefreshCw } from 'lucide-react'
+import { Sparkles, Loader2, StopCircle, Check, X } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
-import DiffViewer from '../editor/DiffViewer'
+import { composerService } from '@renderer/agent/services/composerService'
+import { toast } from '../common/ToastProvider'
 
 interface InlineEditProps {
-	// 编辑器位置信息
 	position: { x: number; y: number }
-	// 选中的代码
 	selectedCode: string
-	// 文件路径
 	filePath: string
-	// 选中的行范围
 	lineRange: [number, number]
-	// 关闭回调
 	onClose: () => void
-	// 应用修改回调
-	onApply: (newCode: string) => void
 }
 
-type EditState = 'idle' | 'loading' | 'preview' | 'error'
+type EditState = 'idle' | 'generating' | 'preview'
 
 export default function InlineEdit({
 	position,
@@ -33,192 +28,243 @@ export default function InlineEdit({
 	filePath,
 	lineRange,
 	onClose,
-	onApply,
 }: InlineEditProps) {
 	const [instruction, setInstruction] = useState('')
 	const [state, setState] = useState<EditState>('idle')
-	const [generatedCode, setGeneratedCode] = useState('')
-	const [error, setError] = useState('')
+	const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
+	const [originalContent, setOriginalContent] = useState<string>('')
 	const inputRef = useRef<HTMLInputElement>(null)
-	const { llmConfig, language } = useStore()
+	const { llmConfig, language, updateFileContent } = useStore(useShallow(s => ({ llmConfig: s.llmConfig, language: s.language, updateFileContent: s.updateFileContent })))
+	const containerRef = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {
-		inputRef.current?.focus()
-	}, [])
+		if (state === 'idle') {
+			inputRef.current?.focus()
+		}
+
+		const handleClickOutside = (event: MouseEvent) => {
+			if (containerRef.current && !containerRef.current.contains(event.target as Node) && state === 'idle') {
+				onClose()
+			}
+		}
+		document.addEventListener('mousedown', handleClickOutside)
+		return () => document.removeEventListener('mousedown', handleClickOutside)
+	}, [state, onClose])
 
 	const handleSubmit = useCallback(async () => {
-		if (!instruction.trim() || state === 'loading') return
+		if (!instruction.trim() || state !== 'idle') return
 
-		setState('loading')
-		setError('')
-		setGeneratedCode('')
+		const { openFiles } = useStore.getState()
+		const currentFile = openFiles.find(f => f.path === filePath)
+		if (!currentFile) {
+			onClose()
+			return
+		}
+
+		setState('generating')
+		setOriginalContent(currentFile.content)
+
+		// Create a composer session so inline diff rendering kicks in
+		composerService.ensureSession('Inline Edit', 'AI Inline Edit')
+		composerService.addChange({
+			filePath,
+			relativePath: filePath.split(/[\\/]/).pop() || filePath,
+			oldContent: currentFile.content,
+			newContent: currentFile.content,
+			changeType: 'modify',
+			linesAdded: 0,
+			linesRemoved: 0
+		})
 
 		try {
-			// 构建提示词
 			const prompt = buildEditPrompt(instruction, selectedCode, filePath, lineRange)
+			const config = llmConfig
+			const requestId = crypto.randomUUID()
+			setActiveRequestId(requestId)
 
-			// 调用 LLM
-			const result = await generateEdit(llmConfig, prompt)
+			let generatedBlock = ''
+			const unsubStream = api.llm.onStream(requestId, (chunk: { type: string; content?: string }) => {
+				if (chunk.type === 'text' && chunk.content) {
+					generatedBlock += chunk.content
 
-			if (result.success && result.code) {
-				setGeneratedCode(result.code)
-				setState('preview')
-			} else {
-				setError(result.error || 'Failed to generate code')
-				setState('error')
+					let cleanBlock = generatedBlock.trim()
+					if (cleanBlock.startsWith('```')) {
+						cleanBlock = cleanBlock.replace(/^```\w*\n?/, '').replace(/\n?```$/, '')
+					}
+
+					const oldContentLines = currentFile.content.split('\n')
+					const preContent = oldContentLines.slice(0, lineRange[0] - 1)
+					const postContent = oldContentLines.slice(lineRange[1])
+
+					const newFullContent = [...preContent, cleanBlock, ...postContent].join('\n')
+
+					// Update editor buffer in real-time -> triggers useComposerInlineDiff
+					updateFileContent(filePath, newFullContent)
+
+					// Update composer service explicitly so diff logic has newContent
+					composerService.addChange({
+						filePath,
+						relativePath: filePath.split(/[\\/]/).pop() || filePath,
+						oldContent: currentFile.content,
+						newContent: newFullContent,
+						changeType: 'modify',
+						linesAdded: 0,
+						linesRemoved: 0
+					})
+				}
+			})
+
+			const cleanup = () => {
+				unsubStream()
+				unsubDone()
+				unsubError()
 			}
-		} catch (err: unknown) {
-			const error = err as { message?: string }
-			setError(error.message || 'An error occurred')
-			setState('error')
-		}
-	}, [instruction, state, selectedCode, filePath, lineRange, llmConfig])
 
-	const handleApply = useCallback(() => {
-		if (generatedCode) {
-			onApply(generatedCode)
-			onClose()
-		}
-	}, [generatedCode, onApply, onClose])
+			const unsubDone = api.llm.onDone(requestId, () => {
+				cleanup()
+				setState('preview')
+				setActiveRequestId(null)
+			})
 
-	const handleRetry = useCallback(() => {
-		setState('idle')
-		setTimeout(() => inputRef.current?.focus(), 100)
-	}, [])
+			const unsubError = api.llm.onError(requestId, (err) => {
+				cleanup()
+				console.error('[InlineEdit] AI Edit stream error:', err)
+				toast.error(t('error', language) || 'Error', err.message || 'AI request failed')
+				updateFileContent(filePath, currentFile.content)
+				composerService.rejectChange(filePath)
+				setState('idle')
+				setActiveRequestId(null)
+			})
+
+			await api.llm.send({
+				config,
+				messages: [{ role: 'user', content: prompt }],
+				systemPrompt: 'You are a helpful code editor assistant. Respond ONLY with the raw replacement code. No markdown code blocks, no trailing/leading text.',
+				requestId,
+			})
+		} catch (err: any) {
+			console.error(err)
+			toast.error(t('error', language) || 'Error', err.message || 'Generation failed')
+			updateFileContent(filePath, currentFile.content)
+			composerService.rejectChange(filePath)
+			setState('idle')
+			setActiveRequestId(null)
+		}
+	}, [instruction, state, selectedCode, filePath, lineRange, llmConfig, updateFileContent, onClose])
+
+	const handleAccept = useCallback(() => {
+		// Just clear composer change pending status by "accepting" it
+		composerService.acceptChange(filePath)
+		onClose()
+	}, [filePath, onClose])
+
+	const handleReject = useCallback(() => {
+		// Restore original content
+		updateFileContent(filePath, originalContent)
+		composerService.rejectChange(filePath)
+		onClose()
+	}, [filePath, originalContent, updateFileContent, onClose])
+
+	const handleCancelStream = useCallback(() => {
+		if (activeRequestId) {
+			api.llm.abort()
+			updateFileContent(filePath, originalContent)
+			composerService.rejectChange(filePath)
+			setState('idle')
+			setActiveRequestId(null)
+		}
+	}, [activeRequestId, filePath, originalContent, updateFileContent])
+
+	// 当进入非 idle 状态（input 被摧毁）时，需要全局监听按键
+	useEffect(() => {
+		if (state === 'idle') return
+
+		const handleGlobalKeyDown = (e: KeyboardEvent) => {
+			if (e.key === 'Enter' && !e.shiftKey) {
+				e.preventDefault()
+				if (state === 'preview') handleAccept()
+			} else if (e.key === 'Escape') {
+				e.preventDefault()
+				if (state === 'generating') handleCancelStream()
+				else if (state === 'preview') handleReject()
+			}
+		}
+
+		document.addEventListener('keydown', handleGlobalKeyDown)
+		return () => document.removeEventListener('keydown', handleGlobalKeyDown)
+	}, [state, handleAccept, handleReject, handleCancelStream])
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
-		// 忽略 IME 组合状态中的按键
 		if (e.nativeEvent.isComposing) return
 
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault()
-			if (state === 'preview') {
-				handleApply()
-			} else {
-				handleSubmit()
-			}
+			if (state === 'idle') handleSubmit()
 		} else if (e.key === 'Escape') {
-			onClose()
+			if (state === 'idle') onClose()
 		}
 	}
 
 	return (
 		<div
-			className="fixed z-50 bg-surface border border-border-subtle rounded-lg shadow-2xl overflow-hidden animate-scale-in flex flex-col"
+			ref={containerRef}
+			className="fixed z-50 animate-scale-in"
 			style={{
-				left: position.x,
-				top: position.y,
-				minWidth: 500,
-				maxWidth: 800,
-				maxHeight: '80vh'
+				left: position.x - 20,
+				top: position.y - 40,
 			}}
 		>
-			{/* Header */}
-			<div className="flex items-center justify-between px-3 py-2 bg-surface-hover border-b border-border-subtle shrink-0">
-				<div className="flex items-center gap-2">
-					<Sparkles className="w-4 h-4 text-accent" />
-					<span className="text-xs font-medium text-text-primary">{t('inlineAiEdit', language)}</span>
-					<span className="text-[10px] text-text-muted">
-						{filePath.split('/').pop()}:{lineRange[0]}-{lineRange[1]}
-					</span>
-				</div>
-				<button
-					onClick={onClose}
-					className="p-1 rounded hover:bg-surface-active text-text-muted hover:text-text-primary transition-colors"
-				>
-					<X className="w-3.5 h-3.5" />
-				</button>
-			</div>
-
-			{/* Input */}
-			<div className="p-3 bg-background shrink-0">
-				<input
-					ref={inputRef}
-					type="text"
-					value={instruction}
-					onChange={(e) => setInstruction(e.target.value)}
-					onKeyDown={handleKeyDown}
-					placeholder={t('describeChangesInline', language)}
-					disabled={state === 'loading'}
-					className="w-full bg-surface border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-colors shadow-sm"
-				/>
-			</div>
-
-			{/* Preview (Diff) */}
-			{state === 'preview' && generatedCode && (
-				<div className="flex-1 overflow-hidden flex flex-col bg-background/50 border-t border-border-subtle">
-					<div className="px-3 py-1.5 flex justify-between items-center bg-surface/50 border-b border-border-subtle">
-						<span className="text-[10px] uppercase tracking-wider text-text-muted font-medium">{t('diffPreview', language)}</span>
-						<div className="flex gap-2">
-							<span className="flex items-center gap-1 text-[10px] text-status-error"><span className="w-2 h-2 rounded-full bg-status-error/20 flex items-center justify-center">-</span> {t('original', language)}</span>
-							<span className="flex items-center gap-1 text-[10px] text-status-success"><span className="w-2 h-2 rounded-full bg-status-success/20 flex items-center justify-center">+</span> {t('modified', language)}</span>
-						</div>
-					</div>
-					<div className="flex-1 overflow-auto p-0 min-h-[150px]">
-						<DiffViewer
-							originalContent={selectedCode}
-							modifiedContent={generatedCode}
-							filePath={filePath}
-							onAccept={handleApply}
-							onReject={handleRetry}
-							minimal={true}
+			<div className={`flex items-center gap-2 bg-background/90 backdrop-blur-md border border-border/60 shadow-xl overflow-hidden py-1.5 px-3 transition-all ${state === 'preview' ? 'rounded-md w-auto' : 'rounded-full w-[400px]'
+				}`}>
+				{state === 'idle' && (
+					<>
+						<Sparkles className="w-4 h-4 text-accent flex-shrink-0" />
+						<input
+							ref={inputRef}
+							type="text"
+							value={instruction}
+							onChange={(e) => setInstruction(e.target.value)}
+							onKeyDown={handleKeyDown}
+							placeholder={t('describeChangesInline', language) || 'Ask AI to edit...'}
+							spellCheck={false}
+							className="flex-1 bg-transparent border-none text-[13px] text-text-primary placeholder-text-muted focus:outline-none focus:ring-0 py-0.5"
 						/>
-					</div>
-				</div>
-			)}
+					</>
+				)}
 
-			{/* Error */}
-			{state === 'error' && error && (
-				<div className="px-3 pb-3 shrink-0">
-					<div className="p-2 bg-status-error/10 border border-status-error/20 rounded-lg flex items-center gap-2">
-						<X className="w-4 h-4 text-status-error" />
-						<p className="text-xs text-status-error flex-1">{error}</p>
-						<button onClick={handleRetry} className="text-xs underline text-status-error hover:text-status-error/80">{t('retry', language)}</button>
-					</div>
-				</div>
-			)}
-
-			{/* Actions */}
-			<div className="flex items-center justify-between px-3 py-2 bg-surface-hover border-t border-border-subtle shrink-0">
-				<span className="text-[10px] text-text-muted">
-					{state === 'preview' ? t('pressEnterApply', language) : t('pressEnterGenerate', language)}
-				</span>
-				<div className="flex items-center gap-2">
-					{state === 'loading' && (
-						<div className="flex items-center gap-2 text-xs text-text-muted">
-							<Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
-							{t('generating', language)}
-						</div>
-					)}
-					{state === 'preview' && (
-						<>
-							<button
-								onClick={handleRetry}
-								className="flex items-center gap-1 px-3 py-1.5 rounded bg-surface border border-border-subtle text-text-secondary text-xs hover:bg-surface-hover transition-colors"
-							>
-								<RefreshCw className="w-3 h-3" />
-								{t('retry', language)}
-							</button>
-							<button
-								onClick={handleApply}
-								className="flex items-center gap-1 px-3 py-1.5 rounded bg-accent text-white text-xs hover:bg-accent-hover transition-colors shadow-glow"
-							>
-								<Check className="w-3 h-3" />
-								{t('apply', language)}
-							</button>
-						</>
-					)}
-					{(state === 'idle' || state === 'error') && (
+				{state === 'generating' && (
+					<>
+						<Loader2 className="w-4 h-4 text-accent animate-spin flex-shrink-0" />
+						<span className="flex-1 text-[13px] text-text-secondary truncate">{instruction}</span>
 						<button
-							onClick={handleSubmit}
-							disabled={!instruction.trim()}
-							className="flex items-center gap-1 px-3 py-1.5 rounded bg-accent text-white text-xs hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-glow"
+							onClick={handleCancelStream}
+							className="p-1 rounded-full text-text-muted hover:text-status-error hover:bg-status-error/10 transition-colors tooltip"
+							title={t('cancel', language) || 'Cancel'}
 						>
-							<Sparkles className="w-3 h-3" />
-							{t('generate', language)}
+							<StopCircle className="w-4 h-4" />
 						</button>
-					)}
-				</div>
+					</>
+				)}
+
+				{state === 'preview' && (
+					<>
+						<span className="text-[12px] text-text-secondary pr-2 border-r border-border/50">
+							{t('apply' as any, language) || 'Accept'} (Enter) / {t('cancel' as any, language) || 'Reject'} (Esc)
+						</span>
+						<button
+							onClick={handleAccept}
+							className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[12px] font-medium text-status-success hover:bg-status-success/15 transition-colors"
+						>
+							<Check className="w-3.5 h-3.5" /> Y
+						</button>
+						<button
+							onClick={handleReject}
+							className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[12px] font-medium text-status-error hover:bg-status-error/15 transition-colors"
+						>
+							<X className="w-3.5 h-3.5" /> N
+						</button>
+					</>
+				)}
 			</div>
 		</div>
 	)
@@ -235,99 +281,17 @@ function buildEditPrompt(
 ): string {
 	const lang = filePath.split('.').pop() || 'code'
 
-	return `You are a code editor assistant. Edit the following code according to the user's instruction.
+	return `Task: Edit the code according to the instruction.
 
 File: ${filePath}
-Lines: ${lineRange[0]}-${lineRange[1]}
+Target Lines: ${lineRange[0]}-${lineRange[1]}
 
-Current code:
-\`\`${lang}
+Current code of target lines:
+\`\`\`${lang}
 ${code}
-\`\`
+\`\`\`
 
 User instruction: ${instruction}
 
-Respond with ONLY the modified code, no explanations or markdown formatting. The code should be ready to replace the original selection.`
-}
-
-interface LLMConfigForEdit {
-	provider: string
-	model: string
-	apiKey: string
-	baseUrl?: string
-}
-
-/**
- * 调用 LLM 生成编辑
- */
-async function generateEdit(
-	config: LLMConfigForEdit,
-	prompt: string
-): Promise<{ success: boolean; code?: string; error?: string }> {
-	return new Promise((resolve) => {
-		let result = ''
-		let resolved = false
-		const unsubscribers: (() => void)[] = []
-
-		// 生成请求 ID，用于 IPC 频道隔离
-		const requestId = crypto.randomUUID()
-
-		const cleanup = () => {
-			if (!resolved) {
-				resolved = true
-				unsubscribers.forEach(unsub => unsub())
-			}
-		}
-
-		// 监听流式响应（使用动态频道）
-		unsubscribers.push(
-			api.llm.onStream(requestId, (chunk: { type: string; content?: string }) => {
-				if (chunk.type === 'text' && chunk.content) {
-					result += chunk.content
-				}
-			})
-		)
-
-		// 监听完成
-		unsubscribers.push(
-			api.llm.onDone(requestId, () => {
-				cleanup()
-				// 清理可能的 markdown 代码块
-				let code = result.trim()
-				if (code.startsWith('```')) {
-					code = code.replace(/^```\w*\n?/, '').replace(/\n?```$/, '')
-				}
-				resolve({ success: true, code })
-			})
-		)
-
-		// 监听错误
-		unsubscribers.push(
-			api.llm.onError(requestId, (error: { message: string }) => {
-				cleanup()
-				resolve({ success: false, error: error.message })
-			})
-		)
-
-		// 超时
-		setTimeout(() => {
-			if (!resolved) {
-				cleanup()
-				resolve({ success: false, error: 'Request timeout' })
-			}
-		}, 60000)
-
-		// 发送请求（携带 requestId）
-		api.llm.send({
-			config,
-			messages: [{ role: 'user', content: prompt }],
-			systemPrompt: 'You are a helpful code editor assistant. Respond only with code, no explanations.',
-			requestId,
-		}).catch((err) => {
-			if (!resolved) {
-				cleanup()
-				resolve({ success: false, error: err.message })
-			}
-		})
-	})
+CRITICAL: Respond with ONLY the exactly modified replacement code, without any explanations or formatting wrappers. It is literally being dropped into a regex replace operation.`
 }

@@ -142,7 +142,6 @@ const defaultEditorConfig: EditorConfig = {
 
 const defaultSecuritySettings: SecuritySettings = {
   enablePermissionConfirm: SECURITY_SETTINGS_DEFAULTS.enablePermissionConfirm,
-  enableAuditLog: SECURITY_SETTINGS_DEFAULTS.enableAuditLog,
   strictWorkspaceMode: SECURITY_SETTINGS_DEFAULTS.strictWorkspaceMode,
   allowedShellCommands: [...SECURITY_SETTINGS_DEFAULTS.allowedShellCommands],
   allowedGitSubcommands: [...SECURITY_SETTINGS_DEFAULTS.allowedGitSubcommands],

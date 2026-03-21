@@ -11,6 +11,7 @@ import { useStore } from '@store'
 import { workspaceManager } from '@services/WorkspaceManager'
 import { toast } from '@components/common/ToastProvider'
 import { getFileName, getDirname, getBasename } from '@shared/utils/pathUtils'
+import { t } from '@renderer/i18n'
 
 interface RecentWorkspace {
     path: string
@@ -18,7 +19,8 @@ interface RecentWorkspace {
 }
 
 export default function WorkspaceDropdown() {
-    const { workspace } = useStore()
+    const workspace = useStore(s => s.workspace)
+    const language = useStore(s => s.language)
     const [isOpen, setIsOpen] = useState(false)
     const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspace[]>([])
     const containerRef = useRef<HTMLDivElement>(null)
@@ -70,7 +72,7 @@ export default function WorkspaceDropdown() {
         try {
             await workspaceManager.openFolder(path)
         } catch (e) {
-            toast.error('文件夹不存在，已从列表移除', getFileName(path))
+            toast.error(t('workspace.folderNotExist', language), getFileName(path))
             loadRecent()
         }
     }
@@ -116,13 +118,13 @@ export default function WorkspaceDropdown() {
                         <div className="space-y-0.5">
                             <MenuItem
                                 icon={Monitor}
-                                label="新建窗口"
-                                description="打开一个新的编辑器窗口"
+                                label={t('workspace.newWindow', language)}
+                                description={t('workspace.newWindowDesc', language)}
                                 onClick={() => handleAction(() => api.window.new())}
                             />
                             <MenuItem
                                 icon={FolderOpen}
-                                label="打开文件夹..."
+                                label={t('workspace.openFolder', language)}
                                 onClick={() => handleAction(async () => {
                                     const result = await api.file.openFolder()
                                     if (result && typeof result === 'string') await workspaceManager.openFolder(result)
@@ -130,7 +132,7 @@ export default function WorkspaceDropdown() {
                             />
                             <MenuItem
                                 icon={LayoutGrid}
-                                label="打开工作区..."
+                                label={t('workspace.openWorkspace', language)}
                                 onClick={() => handleAction(async () => {
                                     const result = await api.workspace.open()
                                     if (result && !('redirected' in result)) await workspaceManager.switchTo(result)
@@ -138,7 +140,7 @@ export default function WorkspaceDropdown() {
                             />
                             <MenuItem
                                 icon={Plus}
-                                label="添加文件夹"
+                                label={t('workspace.addFolder', language)}
                                 onClick={() => handleAction(async () => {
                                     const path = await api.workspace.addFolder()
                                     if (path) await workspaceManager.addFolder(path)

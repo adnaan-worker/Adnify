@@ -1,14 +1,12 @@
 /**
  * LSP 集成 Hook
  */
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useStore } from '@store'
 import { logger } from '@utils/Logger'
 import {
   startLspServer,
   didOpenDocument,
-  goToDefinition,
-  lspUriToPath,
   onDiagnostics,
 } from '@services/lspService'
 import { registerLspProviders } from '@services/lspProviders'
@@ -40,59 +38,33 @@ export function useLspIntegration() {
     }
   }, [workspacePath, isLspReady, setIsLspReady])
 
+  // 存储 provider disposables 用于清理
+  const disposablesRef = useRef<import('monaco-editor').IDisposable[]>([])
+
   // 注册 LSP 提供者到 Monaco
   const registerProviders = useCallback((
     monaco: typeof import('monaco-editor') | typeof import('monaco-editor/esm/vs/editor/editor.api')
   ) => {
-    registerLspProviders(monaco as typeof import('monaco-editor'))
+    // 清理旧的 providers
+    disposablesRef.current.forEach(d => d.dispose())
+    disposablesRef.current = []
 
-    // 注册定义提供者（仅 TypeScript/JavaScript）
-    monaco.languages.registerDefinitionProvider(
-      ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
-      {
-        provideDefinition: async (model, position) => {
-          try {
-            const filePath = model.uri.fsPath || lspUriToPath(model.uri.toString())
-            const result = await goToDefinition(
-              filePath,
-              position.lineNumber - 1,
-              position.column - 1
-            )
-
-            if (!result) return null
-
-            const locations = Array.isArray(result) ? result : [result]
-            if (locations.length === 0) return null
-
-            return locations
-              .filter((loc: any) => loc && (loc.uri || loc.targetUri))
-              .map((loc: any) => {
-                const uri = loc.uri || loc.targetUri
-                const range = loc.range || loc.targetSelectionRange || loc.targetRange
-
-                if (!uri || !range || !range.start) return null
-
-                return {
-                  uri: monaco.Uri.parse(uri),
-                  range: {
-                    startLineNumber: range.start.line + 1,
-                    startColumn: range.start.character + 1,
-                    endLineNumber: range.end.line + 1,
-                    endColumn: range.end.character + 1,
-                  },
-                }
-              })
-              .filter(Boolean) as import('monaco-editor').languages.Location[]
-          } catch (error) {
-            logger.ui.error('[LSP] Definition provider error:', error)
-            return null
-          }
-        },
-      }
-    )
+    const lspDisposables = registerLspProviders(monaco as typeof import('monaco-editor'))
+    if (Array.isArray(lspDisposables)) {
+      disposablesRef.current.push(...lspDisposables)
+    }
 
     // 注册路径链接提供者
-    monaco.languages.registerLinkProvider(PATH_LINK_LANGUAGES, pathLinkService.createLinkProvider())
+    const linkDisposable = monaco.languages.registerLinkProvider(PATH_LINK_LANGUAGES, pathLinkService.createLinkProvider())
+    disposablesRef.current.push(linkDisposable)
+  }, [])
+
+  // 组件卸载时清理 provider disposables
+  useEffect(() => {
+    return () => {
+      disposablesRef.current.forEach(d => d.dispose())
+      disposablesRef.current = []
+    }
   }, [])
 
   // 设置诊断监听

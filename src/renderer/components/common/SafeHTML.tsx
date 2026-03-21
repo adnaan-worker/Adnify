@@ -132,7 +132,7 @@ export function SafeHTML({
     const cleaned = sanitizeHtml(originalHtml, options)
 
     // 开发模式调试信息
-    if (debug && process.env.NODE_ENV === 'development') {
+    if (debug && import.meta.env.DEV) {
       console.log('[SafeHTML] Original:', originalHtml.slice(0, 200))
       console.log('[SafeHTML] Sanitized:', cleaned.slice(0, 200))
       
@@ -150,7 +150,7 @@ export function SafeHTML({
   }
 
   // 使用动态标签
-  const Tag = Component as any
+  const Tag = Component as React.ElementType
 
   return (
     <Tag

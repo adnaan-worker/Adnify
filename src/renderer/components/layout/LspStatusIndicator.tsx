@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Zap, ZapOff, Download, Loader2, CheckCircle2 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
 import { getLanguageId, isLanguageSupported } from '@/renderer/services/lspService'
 import BottomBarPopover from '../ui/BottomBarPopover'
@@ -66,7 +67,7 @@ const INSTALL_HINTS: Record<string, { auto: boolean; hint: string; builtin?: boo
 }
 
 export default function LspStatusIndicator() {
-  const { activeFilePath, language } = useStore()
+  const { activeFilePath, language } = useStore(useShallow(s => ({ activeFilePath: s.activeFilePath, language: s.language })))
   const [serverStatus, setServerStatus] = useState<Record<string, LspServerStatus>>({})
   const [installing, setInstalling] = useState<string | null>(null)
   const [currentLanguageId, setCurrentLanguageId] = useState<string | null>(null)
@@ -83,7 +84,7 @@ export default function LspStatusIndicator() {
 
   // 获取服务器状态
   useEffect(() => {
-    api.lsp.getServerStatus().then(setServerStatus).catch(() => { })
+    api.lsp.getServerStatus().then(setServerStatus).catch((e) => logger.lsp.warn('Failed to get LSP server status:', e))
   }, [])
 
   // 安装服务器

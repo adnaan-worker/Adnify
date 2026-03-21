@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { skillService, type SkillItem } from '@/renderer/agent/services/skillService'
+import { skillService, type SkillItem, type SkillTriggerType, type SkillSource } from '@/renderer/agent/services/skillService'
 import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
 import { Button, Input } from '@components/ui'
@@ -21,7 +21,7 @@ interface SkillSettingsProps {
 
 export function SkillSettings({ language }: SkillSettingsProps) {
     const t = (zh: string, en: string) => language === 'zh' ? zh : en
-    const { workspacePath } = useStore()
+    const workspacePath = useStore(s => s.workspacePath)
 
     // Skills list
     const [skills, setSkills] = useState<SkillItem[]>([])
@@ -40,6 +40,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
     // Create new
     const [newSkillName, setNewSkillName] = useState('')
     const [creating, setCreating] = useState(false)
+    const [createLevel, setCreateLevel] = useState<SkillSource>('project')
 
     // Install mode
     const [installMode, setInstallMode] = useState<'marketplace' | 'github' | 'create' | null>(null)
@@ -108,7 +109,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
     const handleCreate = async () => {
         if (!newSkillName.trim()) return
         setCreating(true)
-        const result = await skillService.createSkill(newSkillName.trim())
+        const result = await skillService.createSkill(newSkillName.trim(), '', createLevel)
         if (result.success) {
             showMessage('success', t('创建成功', 'Created successfully'))
             loadSkills()
@@ -126,9 +127,16 @@ export function SkillSettings({ language }: SkillSettingsProps) {
         setCreating(false)
     }
 
-    // Delete skill
+    // Delete skill (with confirmation)
+    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
     const handleDelete = async (name: string) => {
-        const success = await skillService.deleteSkill(name)
+        if (deleteConfirm !== name) {
+            setDeleteConfirm(name)
+            return
+        }
+        setDeleteConfirm(null)
+        const skill = skills.find(s => s.name === name)
+        const success = await skillService.deleteSkill(name, skill?.source || 'project')
         if (success) {
             showMessage('success', t('已删除', 'Deleted'))
             loadSkills()
@@ -168,8 +176,8 @@ export function SkillSettings({ language }: SkillSettingsProps) {
 
                 <p className="text-xs text-text-muted">
                     {t(
-                        'Skills 是基于 agentskills.io 标准的指令包，让 AI 在特定领域拥有专业能力。存放在 .adnify/skills/ 目录中。',
-                        'Skills are instruction packages based on the agentskills.io standard. They give AI specialized capabilities. Stored in .adnify/skills/.'
+                        'Skills 是基于 agentskills.io 标准的指令包，让 AI 在特定领域拥有专业能力。支持全局和项目两级存储。',
+                        'Skills are instruction packages based on the agentskills.io standard. Supports global and project-level storage.'
                     )}
                 </p>
 
@@ -220,6 +228,27 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-medium text-text-primary">{skill.name}</span>
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded ${skill.source === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                                            {skill.source === 'global' ? t('全局', 'Global') : t('项目', 'Project')}
+                                        </span>
+                                        <div className="flex items-center rounded-md border border-border overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                                            {([['auto', t('自动', 'Auto')], ['manual', t('手动', 'Manual')]] as [SkillTriggerType, string][]).map(([val, label]) => (
+                                                <button
+                                                    key={val}
+                                                    onClick={async () => {
+                                                        await skillService.updateSkillType(skill.name, val)
+                                                        loadSkills()
+                                                    }}
+                                                    className={`text-[9px] px-2 py-0.5 transition-colors ${
+                                                        skill.type === val
+                                                            ? 'bg-accent/20 text-accent font-medium'
+                                                            : 'bg-black/20 text-text-muted hover:bg-black/30 hover:text-text-secondary'
+                                                    }`}
+                                                >
+                                                    {label}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                     <p className="text-[11px] text-text-muted mt-0.5 line-clamp-2">{skill.description}</p>
                                 </div>
@@ -238,8 +267,9 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                     </button>
                                     <button
                                         onClick={() => handleDelete(skill.name)}
-                                        className="p-1 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                                        title={t('删除', 'Delete')}
+                                        onBlur={() => deleteConfirm === skill.name && setDeleteConfirm(null)}
+                                        className={`p-1 rounded transition-colors ${deleteConfirm === skill.name ? 'text-red-400 bg-red-500/20' : 'text-text-muted hover:text-red-400 hover:bg-red-500/10'}`}
+                                        title={deleteConfirm === skill.name ? t('再次点击确认删除', 'Click again to confirm') : t('删除', 'Delete')}
                                     >
                                         <Trash2 className="w-3 h-3" />
                                     </button>
@@ -399,6 +429,24 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                 {creating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : t('创建', 'Create')}
                             </Button>
                         </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-text-muted">{t('保存到：', 'Save to:')}</span>
+                            <div className="flex items-center rounded-md border border-border overflow-hidden">
+                                {([['project', t('项目', 'Project')], ['global', t('全局', 'Global')]] as [SkillSource, string][]).map(([val, label]) => (
+                                    <button
+                                        key={val}
+                                        onClick={() => setCreateLevel(val)}
+                                        className={`text-[10px] px-2.5 py-0.5 transition-colors ${
+                                            createLevel === val
+                                                ? 'bg-accent/20 text-accent font-medium'
+                                                : 'bg-black/20 text-text-muted hover:bg-black/30 hover:text-text-secondary'
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                         <p className="text-[11px] text-text-muted">
                             {t(
                                 '将在 .adnify/skills/ 下创建目录和 SKILL.md 模板',
@@ -413,9 +461,9 @@ export function SkillSettings({ language }: SkillSettingsProps) {
             <div className="p-3 rounded-lg bg-accent/5 border border-accent/20 text-xs text-text-muted space-y-1">
                 <p className="font-medium text-accent/80">{t('💡 使用提示', '💡 Tips')}</p>
                 <ul className="list-disc list-inside space-y-0.5 text-[11px]">
-                    <li>{t('Skills 基于 agentskills.io 开放标准，兼容 Claude Code / Gemini CLI / Kiro 的 Skills', 'Skills follow the agentskills.io open standard, compatible with Claude Code / Gemini CLI / Kiro')}</li>
-                    <li>{t('启用的 Skill 会注入到 AI 上下文中，相关任务时自动生效', 'Enabled skills are injected into AI context and activate for relevant tasks')}</li>
-                    <li>{t('可在 skills.sh 浏览社区共享的 Skills', 'Browse community skills at skills.sh')}</li>
+                    <li>{t('自动模式：Skill 名称和描述对 AI 可见，AI 判断相关时自动加载完整内容（零额外延迟）', 'Auto mode: Skill name & description visible to AI, full content loaded on-demand when relevant (zero extra latency)')}</li>
+                    <li>{t('手动模式：需要在聊天中 @skill-name 引用才生效', 'Manual mode: Requires @skill-name mention in chat to activate')}</li>
+                    <li>{t('项目级 Skill 会覆盖同名的全局 Skill', 'Project-level skills override global skills with the same name')}</li>
                 </ul>
             </div>
         </div>

@@ -38,16 +38,8 @@ const QUERIES: Record<string, string> = {
   `
 }
 
-export interface CodeGraphNode {
-    id: string
-    name: string
-    type: 'definition' | 'call'
-    content: string
-    startLine: number
-    endLine: number
-    callerName?: string // For calls, who is the enclosing function
-    calleeName?: string // For calls, who is being called
-}
+import type { CodeGraphNode } from '@shared/types'
+export type { CodeGraphNode }
 
 export class ASTParser {
     private parser: Parser | null = null

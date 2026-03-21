@@ -7,6 +7,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Search, X } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { getFileName } from '@shared/utils/pathUtils'
 import { keybindingService } from '@services/keybindingService'
 import { t } from '@renderer/i18n'
@@ -165,7 +166,7 @@ const FileMatchItem = memo(function FileMatchItem({
 })
 
 export default function QuickOpen({ onClose }: QuickOpenProps) {
-  const { workspacePath, openFile, language } = useStore()
+  const { workspacePath, openFile, language } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, language: s.language })))
   const [query, setQuery] = useState('')
   const [allFiles, setAllFiles] = useState<string[]>([])
   const [matches, setMatches] = useState<FileMatch[]>([])

@@ -148,7 +148,15 @@ export class MessageConverter {
     }
 
     const content = typeof msg.content === 'string' ? msg.content : ''
-    return content.trim() ? { role: 'assistant', content } : null
+    if (!content.trim()) return null
+
+    const result: AssistantModelMessage = { role: 'assistant', content }
+    if (msg.reasoning_content) {
+      result.providerOptions = {
+        openaiCompatible: { reasoning_content: msg.reasoning_content },
+      }
+    }
+    return result
   }
 
   /**
@@ -176,7 +184,13 @@ export class MessageConverter {
       }
     }
 
-    return { role: 'assistant', content }
+    const result: AssistantModelMessage = { role: 'assistant', content }
+    if (msg.reasoning_content) {
+      result.providerOptions = {
+        openaiCompatible: { reasoning_content: msg.reasoning_content },
+      }
+    }
+    return result
   }
 
   /**

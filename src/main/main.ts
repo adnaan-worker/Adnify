@@ -69,7 +69,7 @@ let lastActiveWindow: BrowserWindow | null = null
 
 // 延迟加载的模块
 let ipcModule: typeof import('./ipc') | null = null
-let lspManager: typeof import('./lspManager').lspManager | null = null
+let lspManager: typeof import('./lsp/lspManager').lspManager | null = null
 let securityManager: typeof import('./security').securityManager | null = null
 
 // ==========================================
@@ -220,7 +220,18 @@ function createWindow(isEmpty = false): BrowserWindow {
     logger.system.info(`[Main] Window ${windowId} close event triggered`)
   })
 
+  // 在 close 事件中提前捕获 webContentsId（closed 时 webContents 可能已销毁）
+  let cachedWebContentsId: number | undefined
+  win.on('close', () => {
+    cachedWebContentsId = win.webContents?.id
+  })
+
   win.on('closed', () => {
+    // 清理该窗口关联的 LLM 服务（中止活跃流、释放 AbortController）
+    if (cachedWebContentsId && ipcModule) {
+      try { ipcModule.cleanupLLMService(cachedWebContentsId) } catch { /* ignore */ }
+    }
+
     windows.delete(windowId)
     windowWorkspaces.delete(windowId)
     logger.system.info(`[Main] Window ${windowId} closed and removed from map. Remaining: ${windows.size}`)
@@ -315,7 +326,7 @@ async function initializeModules(firstWin: BrowserWindow) {
   // 并行加载所有模块
   const [ipc, lsp, security, windowIpc, lspInstaller, updaterService] = await Promise.all([
     import('./ipc'),
-    import('./lspManager'),
+    import('./lsp/lspManager'),
     import('./security'),
     import('./ipc/window'),
     import('./lsp/installer'),
@@ -341,7 +352,6 @@ async function initializeModules(firstWin: BrowserWindow) {
   // 配置安全模块
   const securityConfig = configStore.get('securitySettings', {
     enablePermissionConfirm: true,
-    enableAuditLog: true,
     strictWorkspaceMode: true,
     allowedShellCommands: [...SECURITY_DEFAULTS.SHELL_COMMANDS],
     allowedGitSubcommands: [...SECURITY_DEFAULTS.GIT_SUBCOMMANDS],

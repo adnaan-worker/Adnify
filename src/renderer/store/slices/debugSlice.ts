@@ -107,7 +107,11 @@ export const createDebugSlice: StateCreator<DebugSlice, [], [], DebugSlice> = (s
   },
 
   setSessions: (sessions) => set({ sessions }),
-  setActiveSessionId: (id) => set({ activeSessionId: id }),
+  setActiveSessionId: (id) => set(() => ({
+    activeSessionId: id,
+    // 调试会话结束时清空变量缓存
+    ...(id === null ? { variables: new Map(), stackFrames: [], scopes: [] } : {}),
+  })),
   setStackFrames: (frames) => set({ stackFrames: frames }),
   setScopes: (scopes) => set({ scopes }),
   setVariables: (ref, vars) => set(state => {

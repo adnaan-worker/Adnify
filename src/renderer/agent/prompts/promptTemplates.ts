@@ -252,7 +252,34 @@ MCP tools are prefixed with \`mcp_<server>__<tool>\`. They connect to external s
 \`\`\`
 mcp_server__get_data items=["a", "b", "c"]  // If batch supported
 // OR make calls sequentially, waiting for each to complete
-\`\`\`\`;`
+\`\`\`
+
+### Task Management (todo_write)
+
+**IMPORTANT: Before starting any implementation work, evaluate whether the task needs a todo list.**
+
+**Decision rule — call \`todo_write\` IMMEDIATELY when ANY of these is true:**
+1. The task will touch 3+ files or require 3+ distinct implementation steps
+2. The user provides multiple requirements in one message (e.g. "add X, fix Y, update Z")
+3. The user explicitly asks to track tasks, use a task list, or says "帮我列个清单" etc.
+4. The task involves a multi-phase workflow (e.g. implement → test → fix → verify)
+
+**Do NOT call \`todo_write\` when:**
+- Single-file fix, typo correction, one-line change
+- Pure Q&A / explanation / code review with no implementation
+- The entire task is obviously completable in 1-2 trivial steps
+
+**Lifecycle:**
+1. **Create**: Call \`todo_write\` with the full task list BEFORE you start coding — not halfway through
+2. **Resume**: If the system prompt shows a "Current Task List" with incomplete items and the user's message relates to them, continue from the \`in_progress\` task. Do NOT recreate the list.
+3. **New request**: If the user's new message is UNRELATED to existing todos, call \`todo_write\` with a completely fresh list. Never mix old and new tasks.
+4. **Archive**: When all tasks are done, call \`todo_write\` with an empty array \`[]\` to clear the list.
+
+**Format:**
+- Each call replaces the ENTIRE list — always include all tasks
+- Exactly ONE task \`in_progress\` at any time
+- Mark tasks \`completed\` IMMEDIATELY after finishing, not in batches
+- \`content\`: imperative ("Fix the login bug"), \`activeForm\`: continuous ("Fixing the login bug")`;
 
 // BASE_SYSTEM_INFO 不再需要，由 PromptBuilder 动态构建
 
@@ -657,7 +684,8 @@ export function getPromptTemplatePreview(templateId: string): string {
     personality: template.personality,
     projectRules: { content: '[Project-specific rules from .adnify/rules.md]', source: 'preview', lastModified: 0 },
     memories: [],
-    skills: [],
+    autoSkills: [],
+    mentionedSkills: [],
     customInstructions: '[User-defined custom instructions]',
     templateId: template.id,
   }

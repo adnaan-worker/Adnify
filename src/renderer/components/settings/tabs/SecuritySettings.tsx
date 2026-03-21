@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { AlertTriangle, Plus, X, RotateCcw } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
 import { api } from '@renderer/services/electronAPI'
@@ -14,7 +15,7 @@ interface SecuritySettingsProps {
 }
 
 export function SecuritySettings({ language }: SecuritySettingsProps) {
-    const { securitySettings, update } = useStore()
+    const { securitySettings, update } = useStore(useShallow(s => ({ securitySettings: s.securitySettings, update: s.update })))
     const [newShellCmd, setNewShellCmd] = useState('')
     const [newGitCmd, setNewGitCmd] = useState('')
 
@@ -86,7 +87,6 @@ export function SecuritySettings({ language }: SecuritySettingsProps) {
                 </h4>
                 <div className="space-y-4">
                     <Switch label={language === 'zh' ? '启用操作确认' : 'Enable permission confirmation'} checked={securitySettings.enablePermissionConfirm} onChange={(e) => update('securitySettings', { enablePermissionConfirm: e.target.checked })} />
-                    <Switch label={language === 'zh' ? '启用审计日志' : 'Enable audit log'} checked={securitySettings.enableAuditLog} onChange={(e) => update('securitySettings', { enableAuditLog: e.target.checked })} />
                     <Switch label={language === 'zh' ? '严格工作区模式' : 'Strict workspace mode'} checked={securitySettings.strictWorkspaceMode} onChange={(e) => update('securitySettings', { strictWorkspaceMode: e.target.checked })} />
                     <Switch label={language === 'zh' ? '显示安全警告' : 'Show security warnings'} checked={securitySettings.showSecurityWarnings} onChange={(e) => update('securitySettings', { showSecurityWarnings: e.target.checked })} />
                 </div>

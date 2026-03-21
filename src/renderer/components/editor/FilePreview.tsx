@@ -7,11 +7,13 @@ import { logger } from '@utils/Logger'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Eye, Edit, FileQuestion, Image as ImageIcon, AlertTriangle, Columns } from 'lucide-react'
 import { Button } from '../ui'
 import { getFileName } from '@shared/utils/pathUtils'
+import { useStore } from '@store'
+import { t } from '@renderer/i18n'
 
 // 文件类型分类
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico']
@@ -124,6 +126,7 @@ interface ImagePreviewProps {
 }
 
 export function ImagePreview({ path }: ImagePreviewProps) {
+    const language = useStore(s => s.language)
     const [error, setError] = useState(false)
     const [zoom, setZoom] = useState<number | 'fit'>('fit') // 默认自适应
     const [imageSrc, setImageSrc] = useState<string | null>(null)
@@ -232,7 +235,7 @@ export function ImagePreview({ path }: ImagePreviewProps) {
             <div className="h-full flex items-center justify-center bg-background">
                 <div className="text-center p-8">
                     <AlertTriangle className="w-12 h-12 text-warning mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-text-primary mb-2">无法加载图片</h3>
+                    <h3 className="text-lg font-medium text-text-primary mb-2">{t('filePreview.cannotLoadImage', language)}</h3>
                     <p className="text-sm text-text-muted">{path}</p>
                 </div>
             </div>
@@ -242,7 +245,7 @@ export function ImagePreview({ path }: ImagePreviewProps) {
     if (loading) {
         return (
             <div className="h-full flex items-center justify-center bg-background">
-                <div className="text-text-muted">加载中...</div>
+                <div className="text-text-muted">{t('loading', language)}</div>
             </div>
         )
     }
@@ -280,7 +283,7 @@ export function ImagePreview({ path }: ImagePreviewProps) {
                     onClick={() => handleZoomChange('fit')}
                     className={`h-7 px-2 text-xs ${zoom === 'fit' ? 'bg-accent/20 text-accent' : ''}`}
                 >
-                    适应
+                    {t('filePreview.fit', language)}
                 </Button>
                 <Button
                     variant="ghost"
@@ -332,6 +335,7 @@ interface UnsupportedFileProps {
 }
 
 export function UnsupportedFile({ path, fileType }: UnsupportedFileProps) {
+    const language = useStore(s => s.language)
     const ext = path.split('.').pop()?.toLowerCase() || ''
     const fileName = getFileName(path)
 
@@ -353,13 +357,13 @@ export function UnsupportedFile({ path, fileType }: UnsupportedFileProps) {
                 </div>
 
                 <h3 className="text-lg font-medium text-text-primary mb-2">
-                    无法在编辑器中打开此文件
+                    {t('filePreview.cannotOpenFile', language)}
                 </h3>
 
                 <p className="text-sm text-text-muted mb-6">
                     {fileType === 'binary'
-                        ? `"${fileName}" 是二进制文件（.${ext}），无法作为文本编辑。`
-                        : `不支持打开 .${ext} 格式的文件。`
+                        ? t('filePreview.binaryFileDesc', language, { name: fileName, ext })
+                        : t('filePreview.unsupportedFileDesc', language, { ext })
                     }
                 </p>
 
@@ -369,7 +373,7 @@ export function UnsupportedFile({ path, fileType }: UnsupportedFileProps) {
                     className="gap-2"
                 >
                     <ImageIcon className="w-4 h-4" />
-                    使用默认程序打开
+                    {t('filePreview.openWithDefault', language)}
                 </Button>
             </div>
         </div>
@@ -384,6 +388,7 @@ interface MarkdownToolbarProps {
 }
 
 export function MarkdownToolbar({ mode, onModeChange }: MarkdownToolbarProps) {
+    const language = useStore(s => s.language)
     return (
         <div className="flex items-center gap-1 px-2 py-1 border-b border-border bg-surface/30">
             <Button
@@ -391,30 +396,30 @@ export function MarkdownToolbar({ mode, onModeChange }: MarkdownToolbarProps) {
                 size="sm"
                 onClick={() => onModeChange('edit')}
                 className="h-6 px-2 text-xs gap-1"
-                title="编辑模式"
+                title={t('editor.editMode', language)}
             >
                 <Edit className="w-3 h-3" />
-                编辑
+                {t('editor.edit', language)}
             </Button>
             <Button
                 variant={mode === 'split' ? 'secondary' : 'ghost'}
                 size="sm"
                 onClick={() => onModeChange('split')}
                 className="h-6 px-2 text-xs gap-1"
-                title="分屏模式"
+                title={t('editor.splitMode', language)}
             >
                 <Columns className="w-3 h-3" />
-                分屏
+                {t('editor.split', language)}
             </Button>
             <Button
                 variant={mode === 'preview' ? 'secondary' : 'ghost'}
                 size="sm"
                 onClick={() => onModeChange('preview')}
                 className="h-6 px-2 text-xs gap-1"
-                title="预览模式"
+                title={t('editor.previewMode', language)}
             >
                 <Eye className="w-3 h-3" />
-                预览
+                {t('editor.preview', language)}
             </Button>
         </div>
     )

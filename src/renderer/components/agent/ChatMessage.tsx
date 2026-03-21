@@ -5,9 +5,9 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Search, Wrench } from 'lucide-react'
+import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import aiAvatar from '../../assets/icon/ai-avatar.gif'
 import { themeManager } from '../../config/themeConfig'
@@ -24,15 +24,18 @@ import {
   isReasoningPart,
   ReasoningPart,
   isSearchPart,
+  isLintCheckPart,
   ToolCall,
 } from '@renderer/agent/types'
 import FileChangeCard from './FileChangeCard'
 import ToolCallCard from './ToolCallCard'
+import { LintCheckCard } from './LintCheckCard'
 import ToolCallGroup from './ToolCallGroup'
 import { InteractiveCard } from './InteractiveCard'
 import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { MessageBranchActions } from './BranchControls'
 import remarkGfm from 'remark-gfm'
 import { Tooltip } from '../ui/Tooltip'
@@ -69,7 +72,7 @@ interface RenderPartProps {
 // 代码块组件 - 更加精致的玻璃质感
 const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number }) => {
   const [copied, setCopied] = useState(false)
-  const { currentTheme } = useStore()
+  const currentTheme = useStore(s => s.currentTheme)
   const theme = themeManager.getThemeById(currentTheme)
   const syntaxStyle = theme?.type === 'light' ? vs : vscDarkPlus
 
@@ -81,7 +84,7 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
     React.Children.forEach(children, child => {
       if (typeof child === 'string') {
         text += child
-      } else if (typeof child === 'object' && child !== null && 'props' in child && (child as any).props?.className?.includes('fuzzy-cursor')) {
+      } else if (typeof child === 'object' && child !== null && 'props' in child && (child as React.ReactElement<{ className?: string }>).props?.className?.includes('fuzzy-cursor')) {
         hasCursor = true
       } else if (Array.isArray(child)) {
         // Handle nested arrays if any
@@ -141,6 +144,8 @@ CodeBlock.displayName = 'CodeBlock'
 // 辅助函数：清理流式输出中的 XML 工具调用标签
 const cleanStreamingContent = (text: string): string => {
   if (!text) return ''
+  // 短路优化：大部分流式 token 不含 XML 标签，无需执行正则
+  if (!text.includes('<')) return text
   let cleaned = text.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
   cleaned = cleaned.replace(/<function>[\s\S]*?<\/function>/gi, '')
   cleaned = cleaned.replace(/<tool_call>[\s\S]*$/gi, '')
@@ -157,71 +162,29 @@ interface ThinkingBlockProps {
   onTypingComplete?: () => void
 }
 
-const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isStreaming?: boolean }) => {
+// 统一上下文面板 — 单个折叠块，无边框扁平设计
+interface MessageMetaGroupProps {
+  autoSkills?: any[]
+  manualSkills?: any[]
+  searchContent?: string
+  isSearchStreaming?: boolean
+}
+
+const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, isSearchStreaming }: MessageMetaGroupProps) => {
+  // Hooks 必须在所有条件返回之前调用（React 规则）
   const [isExpanded, setIsExpanded] = useState(true)
-  const { language } = useStore()
-  return (
-    <div className="overflow-hidden w-full group rounded-lg hover:bg-text-primary/[0.02] transition-colors my-0.5">
-      <div
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
-      >
-        <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} className="shrink-0 text-text-muted/40 hover:text-text-muted transition-colors">
-          <ChevronDown className="w-3.5 h-3.5" />
-        </motion.div>
+  const { openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
 
-        <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
-          {isStreaming ? (
-            <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
-              <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-            </div>
-          ) : (
-            <Search className="w-3 h-3 text-text-muted/70" />
-          )}
-        </div>
+  const hasAutoSkills = autoSkills && autoSkills.length > 0
+  const hasManualSkills = manualSkills && manualSkills.length > 0
+  const hasSearch = searchContent !== undefined || isSearchStreaming
+  const hasSkills = hasAutoSkills || hasManualSkills
+  const isStreaming = isSearchStreaming
 
-        <span className={`text-[12px] truncate ${isStreaming ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
-          {language === 'zh' ? '自动关联上下文' : 'Auto-Context'}
-        </span>
-      </div>
+  if (!hasSkills && !hasSearch) return null
 
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="pl-[26px] pr-3 pb-3 pt-0 relative">
-              <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
-              <div className="relative z-10 ms-1 border-l-2 border-border/30 pl-2">
-                {content ? (
-                  <div className="max-h-64 overflow-auto custom-scrollbar text-[11px] text-text-muted/80 leading-relaxed font-sans whitespace-pre-wrap">
-                    {content}
-                  </div>
-                ) : (
-                  <div className="text-[11px] italic text-text-muted/40 py-1">
-                    {language === 'zh' ? '正在分析检索出的代码...' : 'Analyzing retrieved code...'}
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-})
-SearchBlock.displayName = 'SearchBlock'
-
-// 协同元数据面板中的一栏 (无外边框)
-const SkillBlock = React.memo(({ items }: { items: any[] }) => {
-  const { language, openFile, setActiveFile, workspacePath } = useStore()
-
-  if (items.length === 0) return null
-
-  const handleOpenSkill = async (skillId: string) => {
+  const handleOpenSkill = async (e: React.MouseEvent, skillId: string) => {
+    e.stopPropagation()
     if (!workspacePath) return
     const { api } = await import('@/renderer/services/electronAPI')
     const filePath = `${workspacePath}/.adnify/skills/${skillId}/SKILL.md`.replace(/\//g, '\\')
@@ -232,53 +195,91 @@ const SkillBlock = React.memo(({ items }: { items: any[] }) => {
     }
   }
 
-  return (
-    <div className="overflow-hidden w-full group rounded-lg hover:bg-text-primary/[0.02] transition-colors my-0.5">
-      <div className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer text-text-secondary transition-colors select-none">
-        <div className="shrink-0 text-transparent w-3.5 h-3.5" /> {/* Spacer for alignment */}
+  // 折叠时的摘要
+  const allSkills = [...(autoSkills || []), ...(manualSkills || [])]
+  const skillNames = allSkills.map((s: any) => s.skillId).join(', ')
 
-        <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
-          <Wrench className="w-3 h-3 text-text-muted/70" />
+  return (
+    <div className="overflow-hidden w-full my-0.5 animate-fade-in relative z-10">
+      {/* 标题行 */}
+      <div
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer select-none group rounded-md hover:bg-text-primary/[0.03] transition-colors"
+      >
+        <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 group-hover:text-text-muted transition-colors">
+          <ChevronDown className="w-3.5 h-3.5" />
+        </motion.div>
+
+        <div className="shrink-0 w-4 h-4 flex items-center justify-center">
+          {isStreaming ? (
+            <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
+              <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            </div>
+          ) : (
+            <Wrench className="w-3 h-3 text-text-muted/50" />
+          )}
         </div>
 
-        <span className="text-[12px] whitespace-nowrap group-hover:text-text-primary transition-colors">
-          {language === 'zh' ? '应用技能' : 'Applied Skills'}:
+        <span className={`text-[12px] ${isStreaming ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
+          Context
         </span>
-        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0 ml-1">
-          {items.map((item, i) => (
-            <button
-              key={item.skillId || i}
-              onClick={() => handleOpenSkill(item.skillId)}
-              className="text-[11px] font-mono font-medium text-text-muted hover:text-accent hover:underline underline-offset-2 transition-all focus:outline-none truncate shadow-sm py-0.5 rounded"
-              title={item.description}
-            >
-              {item.skillId}
-            </button>
-          ))}
-        </div>
+
+        {/* 折叠时显示 skill 名称列表 */}
+        {!isExpanded && skillNames && (
+          <span className="text-[11px] text-text-muted/40 truncate ml-0.5">
+            — {skillNames}
+          </span>
+        )}
       </div>
-    </div>
-  )
-})
-SkillBlock.displayName = 'SkillBlock'
 
-// 统一元数据面板组件（System Context Widget 风格）
-interface MessageMetaGroupProps {
-  skills?: any[]
-  searchContent?: string
-  isSearchStreaming?: boolean
-}
+      {/* 展开内容 — 每行一个类别摘要 */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0 }}
+            animate={{ height: 'auto' }}
+            exit={{ height: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden"
+          >
+            <div className="pb-1.5 pl-[38px] pr-3 space-y-0.5">
+              {/* Skill Referenced */}
+              {hasSkills && (
+                <div className="flex items-center gap-1.5 text-[11px]">
+                  <span className="text-text-muted/35 shrink-0">Skill Referenced</span>
+                  {allSkills.map((item: any, i: number) => (
+                    <React.Fragment key={item.skillId || i}>
+                      {i > 0 && <span className="text-text-muted/20">,</span>}
+                      <button
+                        onClick={(e) => handleOpenSkill(e, item.skillId)}
+                        className="font-mono text-text-muted/55 hover:text-accent transition-colors focus:outline-none"
+                      >
+                        {item.skillId}
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
 
-const MessageMetaGroup = React.memo(({ skills, searchContent, isSearchStreaming }: MessageMetaGroupProps) => {
-  const hasSkills = skills && skills.length > 0
-  const hasSearch = searchContent !== undefined || isSearchStreaming
-
-  if (!hasSkills && !hasSearch) return null
-
-  return (
-    <div className="my-1 w-full flex flex-col animate-fade-in relative z-10">
-      {hasSkills && <SkillBlock items={skills} />}
-      {hasSearch && <SearchBlock content={searchContent || ''} isStreaming={isSearchStreaming} />}
+              {/* File Referenced */}
+              {hasSearch && (
+                <div className="text-[11px]">
+                  {searchContent ? (
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-text-muted/35 shrink-0">File Referenced</span>
+                      <div className="text-text-muted/40 leading-relaxed max-h-32 overflow-auto custom-scrollbar whitespace-pre-wrap">
+                        {searchContent}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-text-muted/25 italic">Searching files...</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 })
@@ -347,12 +348,12 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
     <div className="my-3 group/think overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-text-muted/50 hover:text-text-muted hover:bg-surface-hover transition-colors select-none"
+        className="flex w-full items-center gap-2 px-2 py-1.5 text-text-muted/50 hover:text-text-muted rounded-md hover:bg-text-primary/[0.03] transition-colors select-none"
       >
         <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}>
           <ChevronDown className="w-3.5 h-3.5" />
         </div>
-        <span className="text-[11px] font-medium tracking-wide">
+        <span className="text-[12px]">
           {durationText}
         </span>
       </button>
@@ -361,7 +362,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
         <div className={`relative animate-slide-down scroll-shadow-container ${shadowClass}`}>
           <div
             ref={scrollRef}
-            className="max-h-[300px] overflow-y-auto scrollbar-none px-4 pb-3"
+            className="max-h-[300px] overflow-y-auto scrollbar-none pl-[38px] pr-3 pb-3"
           >
             {content ? (
               <div
@@ -384,14 +385,15 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
 ThinkingBlock.displayName = 'ThinkingBlock'
 
 // Markdown 渲染组件
-const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingComplete }: { content: string; fontSize: number; isStreaming?: boolean; onTypingComplete?: () => void }) => {
+const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming, onTypingComplete }: { content: string; fontSize: number; isStreaming?: boolean; onTypingComplete?: () => void }) => {
+  const content = typeof rawContent === 'string' ? rawContent : String(rawContent ?? '')
   const cleanedContent = React.useMemo(() => {
     return isStreaming ? cleanStreamingContent(content) : content
   }, [content, isStreaming])
 
   const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(cleanedContent, !!isStreaming)
 
-  const { workspacePath, openFile, setActiveFile } = useStore()
+  const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
   const handleOpenFile = React.useCallback(async (filePath: string) => {
     if (!workspacePath) return
@@ -513,6 +515,14 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingCo
 })
 MarkdownContent.displayName = 'MarkdownContent'
 
+// 用于非流式 Part 的立即完成信号（避免在条件分支中直接调用 useEffect）
+const CompletionSignal = ({ onComplete }: { onComplete?: () => void }) => {
+  useEffect(() => {
+    onComplete?.()
+  }, [])
+  return null
+}
+
 // 渲染单个 Part
 const RenderPart = React.memo(({
   part,
@@ -527,11 +537,12 @@ const RenderPart = React.memo(({
   onTypingComplete,
 }: RenderPartProps & { onTypingComplete?: () => void }) => {
   if (isTextPart(part)) {
-    if (!part.content.trim()) return null
+    const textStr = typeof part.content === 'string' ? part.content : String(part.content ?? '')
+    if (!textStr.trim()) return null
     return (
       <MarkdownContent
         key={`text-${index}`}
-        content={part.content}
+        content={textStr}
         fontSize={fontSize}
         isStreaming={isStreaming}
         onTypingComplete={onTypingComplete}
@@ -556,21 +567,21 @@ const RenderPart = React.memo(({
 
   // Search results are static for now, finish immediately
   if (isSearchPart(part)) {
-    // Search is handled globally in MessageMetaGroup, so we just signal completion and render null in the linear flow
-    React.useEffect(() => {
-      onTypingComplete?.()
-    }, [])
-    return null
+    return <CompletionSignal onComplete={onTypingComplete} />
+  }
+
+  // Lint check results
+  if (isLintCheckPart(part)) {
+    return (
+      <>
+        <LintCheckCard part={part} />
+        <CompletionSignal onComplete={onTypingComplete} />
+      </>
+    )
   }
 
   // Tool calls handled by RenderPart (single)
   if (isToolCallPart(part)) {
-    // Call complete immediately on mount for tools, 
-    // but maybe with a slight delay for better visual rhythm
-    React.useEffect(() => {
-      const timer = setTimeout(() => onTypingComplete?.(), 100)
-      return () => clearTimeout(timer)
-    }, [])
 
     const tc = part.toolCall
     const isPending = tc.id === pendingToolId
@@ -612,6 +623,11 @@ const RenderPart = React.memo(({
       return null
     }
 
+    // todo_write 通过底部 TodoListPanel 展示，不在聊天流中渲染卡片
+    if (tc.name === 'todo_write') {
+      return null
+    }
+
     // 其他工具使用 ToolCallCard
     return (
       <div className="my-3 animate-fade-in">
@@ -630,21 +646,6 @@ const RenderPart = React.memo(({
 })
 
 RenderPart.displayName = 'RenderPart'
-
-// Helper for Sequential Group Rendering
-const SequentialToolGroup = ({
-  children,
-  onComplete
-}: {
-  children: React.ReactNode,
-  onComplete?: () => void
-}) => {
-  useEffect(() => {
-    const timer = setTimeout(() => onComplete?.(), 100)
-    return () => clearTimeout(timer)
-  }, [])
-  return <>{children}</>
-}
 
 // 助手消息内容组件 - 将分组逻辑提取出来并 memoize
 const AssistantMessageContent = React.memo(({
@@ -696,40 +697,9 @@ const AssistantMessageContent = React.memo(({
     return result
   }, [parts])
 
-  // Sequential Reveal State
-  const [visibleIndex, setVisibleIndex] = useState(() => {
-    // If streaming, start from 0. If history, show all.
-    // Note: isStreaming prop is for the message status. 
-    return isStreaming ? 0 : 9999
-  })
-
-  // Watch for streaming restart
-  useEffect(() => {
-    if (isStreaming) {
-      // Reset if starting fresh? 
-      // Actually, relying on initial state is safer to avoid flashing content on re-renders.
-      // If we need to support "regenerate" clearing this, key change handles it.
-    } else {
-      // If streaming finishes, show everything immediately
-      setVisibleIndex(9999)
-    }
-  }, [isStreaming])
-
-  const handleGroupComplete = useCallback((index: number) => {
-    setVisibleIndex(prev => Math.max(prev, index + 1))
-  }, [])
-
   return (
     <>
-      {groups.map((group, groupIdx) => {
-        // Simple visibility check
-        // If we are streaming and this is the last group, always show it
-        const isStreamingLastGroup = isStreaming && groupIdx === groups.length - 1;
-
-        if (groupIdx > visibleIndex && !isStreamingLastGroup) return null
-
-        const isLastVisible = groupIdx === visibleIndex || isStreamingLastGroup
-
+      {groups.map((group) => {
         if (group.type === 'part') {
           return (
             <RenderPart
@@ -743,53 +713,38 @@ const AssistantMessageContent = React.memo(({
               fontSize={fontSize}
               isStreaming={isStreaming}
               messageId={messageId}
-              onTypingComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}
             />
           )
-        } else {
-          const content = (
-            <ToolCallGroup
-              key={`group-${group.startIndex}`}
-              toolCalls={group.toolCalls}
+        }
+
+        if (group.toolCalls.length === 1) {
+          return (
+            <RenderPart
+              key={`part-${group.startIndex}`}
+              part={parts[group.startIndex]}
+              index={group.startIndex}
               pendingToolId={pendingToolId}
               onApproveTool={onApproveTool}
               onRejectTool={onRejectTool}
               onOpenDiff={onOpenDiff}
+              fontSize={fontSize}
+              isStreaming={isStreaming}
               messageId={messageId}
             />
           )
-
-          if (group.toolCalls.length === 1) {
-            // For single tool call, RenderPart handles it (via recursive AssistantMessageContent logic? No, wait)
-            // The grouping logic puts single tool call in 'tool_group' if it was bunched?
-            // Ah, previous logic: "if (group.toolCalls.length === 1) return RenderPart..."
-            // Let's stick to that but wrapped for timing.
-            return (
-              <SequentialToolGroup key={`seq-${group.startIndex}`} onComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}>
-                <RenderPart
-                  key={`part-${group.startIndex}`}
-                  part={parts[group.startIndex]}
-                  index={group.startIndex}
-                  pendingToolId={pendingToolId}
-                  onApproveTool={onApproveTool}
-                  onRejectTool={onRejectTool}
-                  onOpenDiff={onOpenDiff}
-                  fontSize={fontSize}
-                  isStreaming={isStreaming}
-                  messageId={messageId}
-                  // Note: RenderPart for tool call handles onTypingComplete internally via useEffect!
-                  onTypingComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}
-                />
-              </SequentialToolGroup>
-            )
-          }
-
-          return (
-            <SequentialToolGroup key={`seq-${group.startIndex}`} onComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}>
-              {content}
-            </SequentialToolGroup>
-          )
         }
+
+        return (
+          <ToolCallGroup
+            key={`group-${group.startIndex}`}
+            toolCalls={group.toolCalls}
+            pendingToolId={pendingToolId}
+            onApproveTool={onApproveTool}
+            onRejectTool={onRejectTool}
+            onOpenDiff={onOpenDiff}
+            messageId={messageId}
+          />
+        )
       })}
     </>
   )
@@ -811,7 +766,7 @@ const ChatMessage = React.memo(({
   const [editContent, setEditContent] = useState('')
   const [copied, setCopied] = useState(false)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
-  const { editorConfig, language } = useStore()
+  const { editorConfig, language } = useStore(useShallow(s => ({ editorConfig: s.editorConfig, language: s.language })))
   const fontSize = editorConfig.fontSize
 
   if (!isUserMessage(message) && !isAssistantMessage(message)) {
@@ -851,7 +806,7 @@ const ChatMessage = React.memo(({
   return (
     <div className={`
       w-full group/msg transition-colors duration-300
-      ${isUser ? 'py-1 bg-transparent' : 'py-2 border-border bg-surface hover:bg-surface-hover'}
+      ${isUser ? 'py-1 bg-transparent' : 'py-2 border-border bg-surface'}
     `}>
       <div className="w-full px-4 flex flex-col gap-1">
 
@@ -922,7 +877,7 @@ const ChatMessage = React.memo(({
                         const imgSrc = `data:${img.source.media_type};base64,${img.source.data}`
                         return (
                           <div
-                            key={i}
+                            key={`img-${img.source.media_type}-${i}`}
                             onClick={() => setPreviewImage(imgSrc)}
                             className="rounded-lg overflow-hidden border border-text-inverted/10 shadow-md h-28 max-w-[200px] group/img relative cursor-zoom-in hover:opacity-90 transition-opacity"
                           >
@@ -1019,7 +974,8 @@ const ChatMessage = React.memo(({
               {/* System Context Widget at the top of the content */}
               {isAssistantMessage(message) && (message.contextItems?.some((item: any) => item.type === 'Skill') || message.parts?.some(isSearchPart)) && (
                 <MessageMetaGroup
-                  skills={message.contextItems?.filter((item: any) => item.type === 'Skill')}
+                  autoSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && item.auto)}
+                  manualSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && !item.auto)}
                   searchContent={message.parts?.find(isSearchPart)?.content || undefined}
                   isSearchStreaming={(message.parts?.find(isSearchPart) as any)?.isStreaming}
                 />

@@ -6,9 +6,10 @@ import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect, useCallback } from 'react'
 import { FolderOpen, Plus, RefreshCw, FolderPlus, GitBranch, FilePlus, ExternalLink, Crosshair } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
 import { joinPath, pathStartsWith } from '@shared/utils/pathUtils'
-import { gitService } from '@renderer/agent/services/gitService'
+import { gitService } from '@renderer/services/gitService'
 import { getEditorConfig } from '@renderer/settings'
 import { toast } from '../../common/ToastProvider'
 import { workspaceManager } from '@services/WorkspaceManager'
@@ -30,7 +31,12 @@ export function ExplorerView() {
     setIsGitRepo,
     expandFolder,
     activeFilePath,
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    workspacePath: s.workspacePath, workspace: s.workspace, files: s.files, setFiles: s.setFiles,
+    language: s.language, triggerFileTreeRefresh: s.triggerFileTreeRefresh, gitStatus: s.gitStatus,
+    setGitStatus: s.setGitStatus, isGitRepo: s.isGitRepo, setIsGitRepo: s.setIsGitRepo,
+    expandFolder: s.expandFolder, activeFilePath: s.activeFilePath,
+  })))
 
   const [creatingIn, setCreatingIn] = useState<{ path: string; type: 'file' | 'folder' } | null>(null)
   const [rootContextMenu, setRootContextMenu] = useState<{ x: number; y: number } | null>(null)

@@ -18,6 +18,7 @@ import {
   Loader2, FolderOpen, CheckCheck, XCircle
 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { getFileName } from '@shared/utils/pathUtils'
 import DiffViewer from '../editor/DiffViewer'
 import { t } from '@renderer/i18n'
@@ -39,7 +40,7 @@ interface ComposerPanelProps {
 }
 
 export default function ComposerPanel({ onClose, initialChanges }: ComposerPanelProps) {
-  const { openFiles, activeFilePath, llmConfig, updateFileContent, language } = useStore()
+  const { openFiles, activeFilePath, llmConfig, updateFileContent, language } = useStore(useShallow(s => ({ openFiles: s.openFiles, activeFilePath: s.activeFilePath, llmConfig: s.llmConfig, updateFileContent: s.updateFileContent, language: s.language })))
 
   const [instruction, setInstruction] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])

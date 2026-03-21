@@ -18,7 +18,7 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ children }) => {
         themeManager.applyTheme(theme);
 
         const isLight = theme.type === 'light';
-        const bgColors = theme.colors.background.split(' ').map(Number);
+        const bgColors = (typeof theme.colors.background === 'string' ? theme.colors.background : '').split(' ').map(Number);
 
         // Convert Tailwind RGB string (e.g. "255 255 255") to Hex for Electron
         let hexColor = isLight ? '#ffffff' : '#09090b';

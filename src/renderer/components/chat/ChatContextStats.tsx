@@ -1,6 +1,7 @@
 /**
  * 上下文统计显示组件
  */
+import { memo } from 'react'
 import { Database, History, FileText, Code } from 'lucide-react'
 import { ContextStats } from '@/renderer/agent'
 import { Language } from '@renderer/i18n'
@@ -11,7 +12,7 @@ interface ChatContextStatsProps {
   compact?: boolean
 }
 
-export default function ChatContextStats({ stats, language, compact = false }: ChatContextStatsProps) {
+function ChatContextStats({ stats, language, compact = false }: ChatContextStatsProps) {
   const usagePercent = stats.totalChars / stats.maxChars
 
   if (compact) {
@@ -120,3 +121,5 @@ export default function ChatContextStats({ stats, language, compact = false }: C
     </div>
   )
 }
+
+export default memo(ChatContextStats)

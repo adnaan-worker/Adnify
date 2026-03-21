@@ -8,12 +8,16 @@ import {
   Plus,
   Trash2,
   Upload,
-  ChevronDown
+  ChevronDown,
+  FolderOpen,
+  ListTodo,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
+import { useShallow } from 'zustand/react/shallow'
 import { useAgent } from '@/renderer/hooks/useAgent'
 import { useAgentStore, selectHandoffRequired } from '@/renderer/agent'
+import { selectTodos } from '@/renderer/agent/store/AgentStore'
 import { t } from '@/renderer/i18n'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import {
@@ -30,6 +34,7 @@ import MentionPopup from '@/renderer/components/agent/MentionPopup'
 import { MentionParser, MentionCandidate } from '@/renderer/agent/utils/MentionParser'
 import ChatMessageUI from './ChatMessage'
 import AgentStatusBar from './AgentStatusBar'
+import { TodoListPanel } from './TodoListPanel'
 import { keybindingService } from '@/renderer/services/keybindingService'
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
 import SlashCommandPopup from './SlashCommandPopup'
@@ -38,6 +43,7 @@ import { Button } from '../ui'
 import { useToast } from '@/renderer/components/common/ToastProvider'
 import ConversationSidebar from './ConversationSidebar'
 import { BranchSelector } from './BranchControls'
+import { composerService } from '@/renderer/agent/services/composerService'
 
 export default function ChatPanel() {
   const {
@@ -48,13 +54,22 @@ export default function ChatPanel() {
     language,
     activeFilePath,
     selectedCode,
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    llmConfig: s.llmConfig,
+    workspacePath: s.workspacePath,
+    openFile: s.openFile,
+    setActiveFile: s.setActiveFile,
+    language: s.language,
+    activeFilePath: s.activeFilePath,
+    selectedCode: s.selectedCode,
+  })))
 
   // 从 AgentStore 获取 inputPrompt
   const inputPrompt = useAgentStore(state => state.inputPrompt)
   const setInputPrompt = useAgentStore(state => state.setInputPrompt)
 
-  const { currentMode: chatMode, setMode: setChatMode } = useModeStore()
+  const chatMode = useModeStore(s => s.currentMode)
+  const setChatMode = useModeStore(s => s.setMode)
 
   const toast = useToast()
 
@@ -87,6 +102,17 @@ export default function ChatPanel() {
 
   const [input, setInput] = useState('')
   const [images, setImages] = useState<PendingImage[]>([])
+  const imagesRef = useRef(images)
+  imagesRef.current = images
+  const messageCheckpointsRef = useRef(messageCheckpoints)
+  messageCheckpointsRef.current = messageCheckpoints
+
+  // 组件卸载时释放所有未发送图片的 ObjectURL
+  useEffect(() => {
+    return () => {
+      imagesRef.current.forEach(img => URL.revokeObjectURL(img.previewUrl))
+    }
+  }, [])
 
   // Unified Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -98,10 +124,24 @@ export default function ChatPanel() {
   const [mentionCandidates, setMentionCandidates] = useState<MentionCandidate[]>([])
   const [mentionLoading, setMentionLoading] = useState(false)
   const [mentionRange, setMentionRange] = useState<{ start: number; end: number } | null>(null)
+  const suggestionRequestId = useRef(0) // 防止 getSuggestions 竞态
   const [isDragging, setIsDragging] = useState(false)
   // 斜杠命令状态
   const [showSlashCommand, setShowSlashCommand] = useState(false)
   const [slashCommandQuery, setSlashCommandQuery] = useState('')
+
+  // Task List 状态
+  const todos = useAgentStore(selectTodos)
+  const [bottomTab, setBottomTab] = useState<'files' | 'tasks'>('files')
+
+  // 当 todos 首次出现时自动切换到 tasks tab
+  const prevTodosLenRef = useRef(0)
+  useEffect(() => {
+    if (todos.length > 0 && prevTodosLenRef.current === 0) {
+      setBottomTab('tasks')
+    }
+    prevTodosLenRef.current = todos.length
+  }, [todos.length])
 
   // Handoff 状态
   const handoffRequired = useAgentStore(selectHandoffRequired)
@@ -211,10 +251,19 @@ export default function ChatPanel() {
     setAtBottom(true)
     setShowScrollButton(false)
   }, [filteredMessages.length])
+  const followOutput = useCallback((isListAtBottom: boolean) => {
+    if (!isStreaming) return false
+    return isListAtBottom ? 'smooth' : false
+  }, [isStreaming])
+
+  const handleTotalListHeightChanged = useCallback(() => {
+    if (!atBottom || !isStreaming) return
+    virtuosoRef.current?.autoscrollToBottom()
+  }, [atBottom, isStreaming])
 
   // 流式输出时的自动滚动 - 只在用户处于底部时才滚动
   useEffect(() => {
-    if (!isStreaming || !atBottom) return
+    if (!isStreaming || !atBottom || typeof virtuosoRef.current?.autoscrollToBottom === 'function') return
 
     let rafId: number
     let intervalId: NodeJS.Timeout
@@ -270,15 +319,6 @@ export default function ChatPanel() {
       setInputPrompt('')
     }
   }, [inputPrompt, setInputPrompt])
-
-  // 实时更新上下文统计
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      // 上下文统计现在由 store 管理
-    }, 500) // 500ms 防抖
-
-    return () => clearTimeout(timer)
-  }, [contextItems, messages, input])
 
   // 处理文件点击
   const handleFileClick = useCallback(async (filePath: string) => {
@@ -527,15 +567,20 @@ export default function ChatPanel() {
       setShowFileMention(true)
       setShowSlashCommand(false)
 
-      // Fetch suggestions
+      // Fetch suggestions（用递增 ID 防止竞态：只接受最新请求的结果）
+      const requestId = ++suggestionRequestId.current
       setMentionLoading(true)
       try {
         const suggestions = await MentionParser.getSuggestions(parseResult.query, workspacePath)
-        setMentionCandidates(suggestions)
+        if (requestId === suggestionRequestId.current) {
+          setMentionCandidates(suggestions)
+        }
       } catch (err) {
         logger.agent.error('Error fetching suggestions:', err)
       } finally {
-        setMentionLoading(false)
+        if (requestId === suggestionRequestId.current) {
+          setMentionLoading(false)
+        }
       }
     } else if (value.startsWith('/') && !value.includes(' ') && value.length < 20) {
       // 斜杠命令：只在行首输入 / 且没有空格时触发
@@ -666,7 +711,7 @@ export default function ChatPanel() {
     }
 
     setInput('')
-    setImages([])
+    setImages((prev) => { prev.forEach((img) => URL.revokeObjectURL(img.previewUrl)); return [] })
     await sendMessage(userMessage)
   }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, handoffRequired])
 
@@ -831,11 +876,55 @@ export default function ChatPanel() {
     }
   }, [getCheckpointForMessage, restoreToCheckpoint, toast, language, messages, addContextItem])
 
+  // AgentStatusBar 回调（提取为 useCallback 避免打破 memo）
+  const handleReviewFile = useCallback(async (filePath: string) => {
+    const change = pendingChanges.find(c => c.filePath === filePath)
+    if (!change) return
+    const currentContent = await api.file.read(filePath)
+    if (currentContent !== null) {
+      const diffUri = `diff://${filePath}`
+      openFile(diffUri, currentContent, change.snapshot.content || '')
+      setActiveFile(diffUri)
+    }
+  }, [pendingChanges, openFile, setActiveFile])
+
+  const handleAcceptFile = useCallback(async (filePath: string) => {
+    acceptChange(filePath)
+    await composerService.acceptChange(filePath)
+    toast.success(`Accepted: ${getFileName(filePath)}`)
+  }, [acceptChange, toast])
+
+  const handleRejectFile = useCallback(async (filePath: string) => {
+    const success = await undoChange(filePath)
+    await composerService.rejectChange(filePath)
+    if (success) {
+      toast.success(`Reverted: ${getFileName(filePath)}`)
+    } else {
+      toast.error('Failed to revert')
+    }
+  }, [undoChange, toast])
+
+  const handleUndoAll = useCallback(async () => {
+    const result = await undoAllChanges()
+    await composerService.rejectAll()
+    if (result.success) {
+      toast.success(`Reverted ${result.restoredFiles.length} files`)
+    } else {
+      toast.error(`Failed to revert some files: ${result.errors.join(', ')}`)
+    }
+  }, [undoAllChanges, toast])
+
+  const handleKeepAll = useCallback(async () => {
+    acceptAllChanges()
+    await composerService.acceptAll()
+    toast.success('All changes accepted')
+  }, [acceptAllChanges, toast])
+
   // 渲染消息
   const renderMessage = useCallback((msg: ChatMessageType) => {
     if (!isUserMessage(msg) && !isAssistantMessage(msg)) return null
 
-    const hasCheckpoint = isUserMessage(msg) && messageCheckpoints.some(cp => cp.messageId === msg.id)
+    const hasCheckpoint = isUserMessage(msg) && messageCheckpointsRef.current.some(cp => cp.messageId === msg.id)
 
     return (
       <ChatMessageUI
@@ -852,7 +941,7 @@ export default function ChatPanel() {
         hasCheckpoint={hasCheckpoint}
       />
     )
-  }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall?.id, messageCheckpoints])
+  }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall?.id])
 
   const virtuosoComponents = useMemo(() => ({
     EmptyPlaceholder: () => (
@@ -1018,14 +1107,17 @@ export default function ChatPanel() {
           <Virtuoso
             ref={virtuosoRef}
             data={filteredMessages}
+            computeItemKey={(_, message) => message.id}
             atBottomStateChange={handleAtBottomStateChange}
             initialTopMostItemIndex={Math.max(0, filteredMessages.length - 1)}
-            followOutput={isStreaming ? 'smooth' : false}
+            followOutput={followOutput}
             itemContent={(_, message) => renderMessage(message)}
             className="flex-1 custom-scrollbar"
             style={{ minHeight: '100px' }}
             overscan={200}
             atBottomThreshold={200}
+            totalListHeightChanged={handleTotalListHeightChanged}
+            skipAnimationFrameInResizeObserver
             components={virtuosoComponents}
           />
 
@@ -1058,49 +1150,63 @@ export default function ChatPanel() {
           {/* Bottom Input Area - Unified Tray */}
           <div className="shrink-0 z-20 flex flex-col">
             <div className="mx-4 mb-4 flex flex-col">
-              {/* Status Bar */}
-              <AgentStatusBar
-                pendingChanges={pendingChanges}
-                isStreaming={isStreaming}
-                isAwaitingApproval={isAwaitingApproval}
-                streamingStatus={streamState.statusText}
-                onStop={abort}
-                onReviewFile={async (filePath) => {
-                  const change = pendingChanges.find(c => c.filePath === filePath)
-                  if (!change) return
+              {/* Status Bar + Task List */}
+              {(() => {
+                const hasChanges = pendingChanges.length > 0 || isStreaming || isAwaitingApproval
+                const hasTodos = todos.length > 0
+                const showBoth = hasChanges && hasTodos
+                const activeView = showBoth ? bottomTab : (hasChanges ? 'files' : 'tasks')
 
-                  const currentContent = await api.file.read(filePath)
-                  if (currentContent !== null) {
-                    const diffUri = `diff://${filePath}`
-                    openFile(diffUri, currentContent, change.snapshot.content || '')
-                    setActiveFile(diffUri)
-                  }
-                }}
-                onAcceptFile={(filePath) => {
-                  acceptChange(filePath)
-                  toast.success(`Accepted: ${getFileName(filePath)}`)
-                }}
-                onRejectFile={async (filePath) => {
-                  const success = await undoChange(filePath)
-                  if (success) {
-                    toast.success(`Reverted: ${getFileName(filePath)}`)
-                  } else {
-                    toast.error('Failed to revert')
-                  }
-                }}
-                onUndoAll={async () => {
-                  const result = await undoAllChanges()
-                  if (result.success) {
-                    toast.success(`Reverted ${result.restoredFiles.length} files`)
-                  } else {
-                    toast.error(`Failed to revert some files: ${result.errors.join(', ')}`)
-                  }
-                }}
-                onKeepAll={() => {
-                  acceptAllChanges()
-                  toast.success('All changes accepted')
-                }}
-              />
+                // 内联切换图标（仅两者都有时渲染）
+                const switcherIcons = showBoth ? (
+                  <div className="flex items-center gap-0.5 mr-1" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => setBottomTab('files')}
+                      className={`p-1 rounded transition-colors ${activeView === 'files'
+                        ? 'text-text-primary bg-surface-hover'
+                        : 'text-text-muted/30 hover:text-text-muted/60'}`}
+                      title="Files"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setBottomTab('tasks')}
+                      className={`p-1 rounded transition-colors ${activeView === 'tasks'
+                        ? 'text-text-primary bg-surface-hover'
+                        : 'text-text-muted/30 hover:text-text-muted/60'}`}
+                      title="Tasks"
+                    >
+                      <ListTodo className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : undefined
+
+                return (hasChanges || hasTodos) ? (
+                  <div className="mb-3">
+                    {activeView === 'files' && hasChanges && (
+                      <AgentStatusBar
+                        pendingChanges={pendingChanges}
+                        isStreaming={isStreaming}
+                        isAwaitingApproval={isAwaitingApproval}
+                        streamingStatus={streamState.statusText}
+                        onStop={abort}
+                        headerPrefix={switcherIcons}
+                        onReviewFile={handleReviewFile}
+                        onAcceptFile={handleAcceptFile}
+                        onRejectFile={handleRejectFile}
+                        onUndoAll={handleUndoAll}
+                        onKeepAll={handleKeepAll}
+                        onApproveTool={approveCurrentTool}
+                        onRejectTool={rejectCurrentTool}
+                      />
+                    )}
+
+                    {activeView === 'tasks' && hasTodos && (
+                      <TodoListPanel todos={todos} headerPrefix={switcherIcons} />
+                    )}
+                  </div>
+                ) : null
+              })()}
 
               {/* Input Component */}
               <ChatInput

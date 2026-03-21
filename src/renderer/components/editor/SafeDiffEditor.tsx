@@ -6,6 +6,9 @@
 import { useRef, useCallback, useEffect, useState } from 'react'
 import { DiffEditor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
+import { useStore } from '@store'
+import { defineMonacoTheme } from './utils/monacoTheme'
+import type { ThemeName } from '@store/slices/themeSlice'
 
 interface SafeDiffEditorProps {
   original: string | undefined
@@ -56,6 +59,12 @@ export function SafeDiffEditor({
     ) => {
       if (!isMountedRef.current) return
       diffEditorRef.current = ed
+
+      // 确保主题已定义（DiffEditor 可能在 Editor 之前挂载）
+      const { currentTheme } = useStore.getState() as { currentTheme: ThemeName }
+      defineMonacoTheme(monacoInstance, currentTheme)
+      monacoInstance.editor.setTheme('adnify-dynamic')
+
       onMount?.(ed, monacoInstance)
     },
     [onMount]

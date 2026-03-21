@@ -11,10 +11,11 @@ import {
   X, Zap, Keyboard, Sparkles, Plus, FolderPlus
 } from 'lucide-react'
 import { useStore, useModeStore } from '@/renderer/store'
+import { useShallow } from 'zustand/react/shallow'
 import { useAgentStore } from '@/renderer/agent'
 import { useAgent } from '@/renderer/hooks/useAgent'
 import { t } from '@/renderer/i18n'
-import { keybindingService } from '@/renderer/services/keybindingService'
+import { keybindingService, formatShortcut, isMac } from '@/renderer/services/keybindingService'
 import { adnifyDir } from '@/renderer/services/adnifyDirService'
 import { toast } from '@/renderer/components/common/ToastProvider'
 
@@ -102,12 +103,22 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     setShowQuickOpen,
     setShowComposer,
     setShowAbout,
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    setShowSettings: s.setShowSettings,
+    setTerminalVisible: s.setTerminalVisible,
+    terminalVisible: s.terminalVisible,
+    workspacePath: s.workspacePath,
+    activeFilePath: s.activeFilePath,
+    language: s.language,
+    setShowQuickOpen: s.setShowQuickOpen,
+    setShowComposer: s.setShowComposer,
+    setShowAbout: s.setShowAbout,
+  })))
 
   // 从 AgentStore 获取 setInputPrompt
   const setInputPrompt = useAgentStore(state => state.setInputPrompt)
 
-  const { setMode } = useModeStore()
+  const setMode = useModeStore(s => s.setMode)
 
   const { clearMessages, clearCheckpoints } = useAgent()
 
@@ -178,7 +189,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       icon: FolderOpen,
       category: 'File',
       action: () => api.file.openFolder(),
-      shortcut: 'Ctrl+O',
+      shortcut: formatShortcut('Ctrl+O'),
     },
     {
       id: 'new-window',
@@ -187,7 +198,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       icon: Plus,
       category: 'Window',
       action: () => api.window.new(),
-      shortcut: 'Ctrl+Shift+N',
+      shortcut: formatShortcut('Ctrl+Shift+N'),
     },
     {
       id: 'add-folder',
@@ -227,9 +238,13 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       icon: Save,
       category: 'File',
       action: () => {
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 's',
+          ctrlKey: !isMac,
+          metaKey: isMac,
+        }))
       },
-      shortcut: 'Ctrl+S',
+      shortcut: formatShortcut('Ctrl+S'),
     },
     {
       id: 'refresh-files',
@@ -255,7 +270,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       icon: Search,
       category: 'File',
       action: () => setShowQuickOpen(true),
-      shortcut: 'Ctrl+P',
+      shortcut: formatShortcut('Ctrl+P'),
     },
     {
       id: 'toggle-terminal',
@@ -264,7 +279,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       icon: Terminal,
       category: 'View',
       action: () => setTerminalVisible(!terminalVisible),
-      shortcut: 'Ctrl+`',
+      shortcut: formatShortcut('Ctrl+`'),
     },
     {
       id: 'open-composer',
@@ -273,7 +288,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       icon: Sparkles,
       category: 'AI Tools',
       action: () => setShowComposer(true),
-      shortcut: 'Ctrl+Shift+I',
+      shortcut: formatShortcut('Ctrl+Shift+I'),
     },
     {
       id: 'settings',
@@ -282,7 +297,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       icon: Settings,
       category: 'Preferences',
       action: () => setShowSettings(true),
-      shortcut: 'Ctrl+,',
+      shortcut: formatShortcut('Ctrl+,'),
     },
     {
       id: 'keyboard-shortcuts',

@@ -11,6 +11,7 @@ import { useStore } from '@store'
 import { t } from '@/renderer/i18n'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_META } from '@/renderer/agent/emotion'
+import { toast } from '../common/ToastProvider'
 
 /** 编辑器栏专用：bgColor、icon、消息 i18n keys（emotion.editor.*） */
 const EDITOR_BAR_EXTRA: Record<EmotionState, {
@@ -29,7 +30,7 @@ const EDITOR_BAR_EXTRA: Record<EmotionState, {
 }
 
 export const EmotionEditorBar: React.FC = () => {
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   const emotion = useEmotionState()
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
   const [isHovered, setIsHovered] = useState(false)
@@ -152,7 +153,9 @@ export const EmotionEditorBar: React.FC = () => {
                 `}
                 style={{ color: meta.color }}
                 onClick={() => {
-                  // TODO: 扩展为详细建议面板或 toast 通知
+                  if (emotion.suggestions && emotion.suggestions.length > 0) {
+                    toast.info(emotion.suggestions[0])
+                  }
                 }}
               >
                 {extra.icon}

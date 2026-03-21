@@ -64,6 +64,92 @@ describe('Tool Definitions', () => {
       // At least some configs should have schemas
       expect(schemaKeys.length).toBeGreaterThanOrEqual(configKeys.length * 0.5)
     })
+
+    it('should allow read_file path arrays', () => {
+      const readFileSchema = TOOL_SCHEMAS.read_file
+      expect(readFileSchema).toBeDefined()
+
+      const result = readFileSchema.safeParse({
+        path: ['src/a.ts', 'src/b.ts'],
+      })
+
+      expect(result.success).toBe(true)
+    })
+
+    it('should reject inverted line ranges in read_file', () => {
+      const readFileSchema = TOOL_SCHEMAS.read_file
+      expect(readFileSchema).toBeDefined()
+
+      const result = readFileSchema.safeParse({
+        path: 'src/main.ts',
+        start_line: 20,
+        end_line: 10,
+      })
+
+      expect(result.success).toBe(false)
+    })
+
+    it('should ignore placeholder line fields and empty edits in edit_file string mode', () => {
+      const editFileSchema = TOOL_SCHEMAS.edit_file
+      expect(editFileSchema).toBeDefined()
+
+      const result = editFileSchema.safeParse({
+        path: 'portal/src/pages/dashboard/DocsPage.tsx',
+        old_string: "const DocsPage = () => {\n  const [selectedKey, setSelectedKey] = useState('quick-start');\n\n  const menuItems = [",
+        new_string: "const DocsPage = () => {\n  const [selectedKey, setSelectedKey] = useState('quick-start');\n  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';\n  const openAIBaseUrl = apiBaseUrl.endsWith('/v1') ? apiBaseUrl : `${apiBaseUrl}/v1`;\n  const chatCompletionsUrl = `${window.location.origin}${openAIBaseUrl}/chat/completions`;\n  const openAIBaseUrlAbsolute = `${window.location.origin}${openAIBaseUrl}`;\n\n  const menuItems = [",
+        start_line: 1,
+        end_line: 1,
+        content: '',
+        replace_all: false,
+        edits: [],
+      })
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.start_line).toBeUndefined()
+        expect(result.data.end_line).toBeUndefined()
+        expect(result.data.content).toBeUndefined()
+        expect(result.data.edits).toBeUndefined()
+      }
+    })
+
+    it('should ignore empty edits in edit_file line mode', () => {
+      const editFileSchema = TOOL_SCHEMAS.edit_file
+      expect(editFileSchema).toBeDefined()
+
+      const result = editFileSchema.safeParse({
+        path: 'src/example.ts',
+        old_string: '',
+        new_string: '',
+        start_line: 3,
+        end_line: 4,
+        content: 'const updated = true',
+        edits: [],
+      })
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.old_string).toBeUndefined()
+        expect(result.data.new_string).toBeUndefined()
+        expect(result.data.edits).toBeUndefined()
+      }
+    })
+
+    it('should still reject genuine mixed edit_file modes', () => {
+      const editFileSchema = TOOL_SCHEMAS.edit_file
+      expect(editFileSchema).toBeDefined()
+
+      const result = editFileSchema.safeParse({
+        path: 'src/example.ts',
+        old_string: 'before',
+        new_string: 'after',
+        start_line: 3,
+        end_line: 4,
+        content: 'const updated = true',
+      })
+
+      expect(result.success).toBe(false)
+    })
   })
 
   describe('toolRegistry', () => {

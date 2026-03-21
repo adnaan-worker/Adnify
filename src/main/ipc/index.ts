@@ -10,7 +10,7 @@ import Store from 'electron-store'
 import { registerWindowHandlers } from './window' // 窗口控制
 import { registerSettingsHandlers } from './settings' // 设置
 import { registerSearchHandlers } from './search' // 搜索
-import { registerLLMHandlers, cleanupLLMService } from './llm' // LLM
+import { registerLLMHandlers, cleanupLLMService, cleanupAllLLMServices } from './llm' // LLM
 import { registerIndexingHandlers } from './indexing' // 索引
 import { registerLspHandlers } from './lsp' // LSP
 import { registerHttpHandlers } from './http' // HTTP
@@ -18,6 +18,8 @@ import { registerMcpHandlers, cleanupMcpHandlers } from './mcp' // MCP
 import { registerResourcesHandlers } from './resources' // 资源
 import { registerDebugHandlers } from './debug' // 调试
 import { registerHealthCheckHandlers } from './healthCheck' // 健康检查
+import { registerRemoteShellHandlers } from './remoteShell' // 远程 Shell / SFTP
+import { registerSkillsHandlers } from './skills' // Skills
 
 // 安全模块
 import {
@@ -124,6 +126,12 @@ export function registerAllHandlers(context: IPCContext) {
   // 健康检查
   registerHealthCheckHandlers()
 
+  // 远程 Shell / SFTP
+  registerRemoteShellHandlers()
+
+  // Skills
+  registerSkillsHandlers()
+
   logger.ipc.info('[Security] 所有安全IPC处理器已注册')
 }
 
@@ -135,6 +143,8 @@ export function cleanupAllHandlers() {
   cleanupTerminals()
   cleanupSecureFileWatcher()
   cleanupMcpHandlers()
+  cleanupAllLLMServices()
+  // DebugService 清理由 performGlobalCleanup 中异步处理（需要 await）
   logger.ipc.info('[IPC] All handlers cleaned up')
 }
 

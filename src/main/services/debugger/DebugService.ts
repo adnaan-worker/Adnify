@@ -384,6 +384,16 @@ export class DebugServiceClass extends EventEmitter {
   }
 
   /**
+   * 停止所有活跃会话（应用退出时调用）
+   */
+  async stopAll(): Promise<void> {
+    const sessionIds = Array.from(this.sessions.keys())
+    for (const id of sessionIds) {
+      try { await this.stop(id) } catch { /* ignore cleanup errors */ }
+    }
+  }
+
+  /**
    * 获取会话能力
    */
   getCapabilities(sessionId: string): DebugCapabilities {

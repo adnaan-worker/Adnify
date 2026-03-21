@@ -34,6 +34,10 @@ export interface OpenFile {
   encoding?: string
   /** 文件是否已被外部删除 */
   isDeleted?: boolean
+  /** 远程文件绑定信息（SFTP 编辑） */
+  remote?: { server: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string }; remotePath: string }
+  /** 最后访问时间（LRU 淘汰用） */
+  lastAccessed?: number
 }
 
 export interface FileSlice {
@@ -56,6 +60,7 @@ export interface FileSlice {
   openFile: (path: string, content: string, originalContent?: string, options?: {
     largeFileInfo?: LargeFileInfo
     encoding?: string
+    remote?: OpenFile['remote']
   }) => void
   closeFile: (path: string) => void
   setActiveFile: (path: string | null) => void
@@ -143,21 +148,21 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
       // 使用规范化路径进行比较，避免路径格式不一致导致重复打开
       const normalizedPath = normalizePath(path)
       const existing = state.openFiles.find((f) => normalizePath(f.path) === normalizedPath)
+      let resultFiles: OpenFile[]
       if (existing) {
-        const updatedFiles = state.openFiles.map((f) =>
+        resultFiles = state.openFiles.map((f) =>
           normalizePath(f.path) === normalizedPath ? {
             ...f,
             content,
             originalContent,
             largeFileInfo: options?.largeFileInfo,
             encoding: options?.encoding,
+            remote: options?.remote,
+            lastAccessed: Date.now(),
           } : f
         )
-        // 使用规范化的路径，保持一致性
-        return { activeFilePath: normalizedPath, openFiles: updatedFiles }
-      }
-      return {
-        openFiles: [...state.openFiles, {
+      } else {
+        resultFiles = [...state.openFiles, {
           path: normalizedPath, // 存储规范化的路径
           content,
           isDirty: false,
@@ -165,8 +170,32 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
           savedVersionId: 1, // Monaco 初始版本号
           largeFileInfo: options?.largeFileInfo,
           encoding: options?.encoding,
-        }],
-        activeFilePath: normalizedPath, // 使用规范化的路径
+          remote: options?.remote,
+          lastAccessed: Date.now(),
+        }]
+      }
+
+      // LRU 淘汰：当打开文件超过阈值时，卸载最久未访问的非 dirty 文件内容
+      const MAX_OPEN_FILES_WITH_CONTENT = 30
+      if (resultFiles.length > MAX_OPEN_FILES_WITH_CONTENT) {
+        const evictCandidates = resultFiles
+          .filter(f => !f.isDirty && f.path !== normalizedPath && f.content.length > 0)
+          .sort((a, b) => (a.lastAccessed || 0) - (b.lastAccessed || 0))
+
+        const toEvict = evictCandidates.slice(0, resultFiles.length - MAX_OPEN_FILES_WITH_CONTENT)
+        const evictPaths = new Set(toEvict.map(f => f.path))
+
+        return {
+          openFiles: resultFiles.map(f =>
+            evictPaths.has(f.path) ? { ...f, content: '', originalContent: undefined } : f
+          ),
+          activeFilePath: normalizedPath,
+        }
+      }
+
+      return {
+        openFiles: resultFiles,
+        activeFilePath: normalizedPath,
       }
     }),
 
@@ -180,7 +209,15 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
       return { openFiles: newOpenFiles, activeFilePath: newActivePath }
     }),
 
-  setActiveFile: (path) => set({ activeFilePath: path ? normalizePath(path) : null }),
+  setActiveFile: (path) => set((state) => {
+    const normalizedPath = path ? normalizePath(path) : null
+    return {
+      activeFilePath: normalizedPath,
+      openFiles: normalizedPath
+        ? state.openFiles.map(f => f.path === normalizedPath ? { ...f, lastAccessed: Date.now() } : f)
+        : state.openFiles,
+    }
+  }),
 
   updateFileContent: (path, content) =>
     set((state) => ({

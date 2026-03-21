@@ -78,6 +78,10 @@ const CORE_TOOLS: string[] = [
   'read_url',
   // 交互与记忆
   'remember',
+  // Skill 按需加载
+  'apply_skill',
+  // 任务列表
+  'todo_write',
 ]
 
 /** UI/UX 工具 - uiux-designer 角色专用 */

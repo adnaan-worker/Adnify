@@ -19,7 +19,7 @@ interface SessionListProps {
 export default function SessionList({ onClose, onLoadSession }: SessionListProps) {
 	const [sessions, setSessions] = useState<SessionSummary[]>([])
 	const [loading, setLoading] = useState(true)
-	const { language } = useStore()
+	const language = useStore(s => s.language)
 	// 从 AgentStore 获取 session 状态
 	const currentSessionId = useAgentStore(state => state.currentSessionId)
 	const setCurrentSessionId = useAgentStore(state => state.setCurrentSessionId)

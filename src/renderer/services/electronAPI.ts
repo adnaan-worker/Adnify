@@ -3,9 +3,29 @@
  * 将扁平的 window.electronAPI 包装成分组的 API 结构
  */
 
+import type {
+  ElectronAPI,
+  RemoteShellEntry,
+  RemoteShellServer,
+  RemoteShellUploadResult,
+  RemoteShellDownloadResult,
+} from '@renderer/types/electron'
+
+type ElectronAPIWithRemoteShell = ElectronAPI & {
+  remoteShellList: (server: RemoteShellServer, remotePath?: string) => Promise<RemoteShellEntry[]>
+  remoteShellReadText: (server: RemoteShellServer, remotePath: string) => Promise<string | null>
+  remoteShellWriteText: (server: RemoteShellServer, remotePath: string, content: string) => Promise<boolean>
+  remoteShellMkdir: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => Promise<boolean>
+  remoteShellDelete: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<RemoteShellUploadResult>
+  remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<RemoteShellDownloadResult>
+}
+
 // 创建分组 API 适配器
 function createGroupedAPI() {
-  const raw = window.electronAPI
+  const raw = window.electronAPI as ElectronAPIWithRemoteShell
 
   return {
     // 应用生命周期
@@ -45,6 +65,11 @@ function createGroupedAPI() {
       openInBrowser: (path: string) => raw.openInBrowser(path),
       search: (query: string, rootPath: string | string[], options?: Parameters<typeof raw.searchFiles>[2]) =>
         raw.searchFiles(query, rootPath, options),
+      /** 流式搜索 — 结果通过事件增量推送 */
+      searchStream: (query: string, rootPath: string | string[], options: Parameters<typeof raw.searchFiles>[2], searchId: string) =>
+        raw.searchStream(query, rootPath, options!, searchId),
+      onSearchResults: (callback: Parameters<typeof raw.onSearchResults>[0]) => raw.onSearchResults(callback),
+      onSearchDone: (callback: Parameters<typeof raw.onSearchDone>[0]) => raw.onSearchDone(callback),
       onChanged: (callback: Parameters<typeof raw.onFileChanged>[0]) => raw.onFileChanged(callback),
     },
 
@@ -103,7 +128,7 @@ function createGroupedAPI() {
 
     // 终端
     terminal: {
-      create: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe' }) => raw.createTerminal(options),
+      create: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer }) => raw.createTerminal(options),
       write: (id: string, data: string) => raw.writeTerminal(id, data),
       resize: (id: string, cols: number, rows: number) => raw.resizeTerminal(id, cols, rows),
       kill: (id?: string) => raw.killTerminal(id),
@@ -111,6 +136,19 @@ function createGroupedAPI() {
       onData: (callback: Parameters<typeof raw.onTerminalData>[0]) => raw.onTerminalData(callback),
       onExit: (callback: Parameters<typeof raw.onTerminalExit>[0]) => raw.onTerminalExit(callback),
       onError: (callback: Parameters<typeof raw.onTerminalError>[0]) => raw.onTerminalError(callback),
+    },
+
+    // 远程 Shell / SFTP
+    remoteShell: {
+      list: (server: RemoteShellServer, remotePath?: string) => raw.remoteShellList(server, remotePath),
+      readText: (server: RemoteShellServer, remotePath: string) => raw.remoteShellReadText(server, remotePath),
+      writeText: (server: RemoteShellServer, remotePath: string, content: string) => raw.remoteShellWriteText(server, remotePath, content),
+      mkdir: (server: RemoteShellServer, remotePath: string) => raw.remoteShellMkdir(server, remotePath),
+      rename: (server: RemoteShellServer, oldPath: string, newPath: string) => raw.remoteShellRename(server, oldPath, newPath),
+      delete: (server: RemoteShellServer, remotePath: string) => raw.remoteShellDelete(server, remotePath),
+      testConnection: (server: RemoteShellServer) => raw.remoteShellTestConnection(server),
+      upload: (server: RemoteShellServer, remoteDirectory: string) => raw.remoteShellUpload(server, remoteDirectory),
+      download: (server: RemoteShellServer, remotePath: string) => raw.remoteShellDownload(server, remotePath),
     },
 
     // Shell 执行
@@ -127,8 +165,6 @@ function createGroupedAPI() {
 
     // 安全管理
     security: {
-      getAuditLogs: (limit?: number) => raw.getAuditLogs(limit),
-      clearAuditLogs: () => raw.clearAuditLogs(),
       getPermissions: () => raw.getPermissions(),
       resetPermissions: () => raw.resetPermissions(),
     },
@@ -184,9 +220,9 @@ function createGroupedAPI() {
       refreshCapabilities: (serverId: string) => raw.mcpRefreshCapabilities(serverId),
       getConfigPaths: () => raw.mcpGetConfigPaths(),
       reloadConfig: () => raw.mcpReloadConfig(),
-      addServer: (config: Parameters<typeof raw.mcpAddServer>[0]) => raw.mcpAddServer(config),
-      removeServer: (serverId: string) => raw.mcpRemoveServer(serverId),
-      toggleServer: (serverId: string, disabled: boolean) => raw.mcpToggleServer(serverId, disabled),
+      addServer: (config: Parameters<typeof raw.mcpAddServer>[0], level?: 'user' | 'workspace') => raw.mcpAddServer(config, level),
+      removeServer: (serverId: string, level?: 'user' | 'workspace') => raw.mcpRemoveServer(serverId, level),
+      toggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace') => raw.mcpToggleServer(serverId, disabled, level),
       setAutoConnect: (enabled: boolean) => raw.mcpSetAutoConnect(enabled),
       startOAuth: (serverId: string) => raw.mcpStartOAuth(serverId),
       finishOAuth: (serverId: string, authorizationCode: string) => raw.mcpFinishOAuth(serverId, authorizationCode),
@@ -195,6 +231,13 @@ function createGroupedAPI() {
       onToolsUpdated: (callback: Parameters<typeof raw.onMcpToolsUpdated>[0]) => raw.onMcpToolsUpdated(callback),
       onResourcesUpdated: (callback: Parameters<typeof raw.onMcpResourcesUpdated>[0]) => raw.onMcpResourcesUpdated(callback),
       onStateChanged: (callback: Parameters<typeof raw.onMcpStateChanged>[0]) => raw.onMcpStateChanged(callback),
+      registrySearch: (query?: string) => raw.mcpRegistrySearch(query),
+      registryGetDetails: (serverName: string) => raw.mcpRegistryGetDetails(serverName),
+    },
+
+    // Skills
+    skills: {
+      getGlobalDir: () => raw.skillsGetGlobalDir(),
     },
 
     // LSP
@@ -262,6 +305,11 @@ function createGroupedAPI() {
       evaluate: (sessionId: string, expression: string, frameId?: number) => raw.debugEvaluate(sessionId, expression, frameId),
       getSessionState: (sessionId: string) => raw.debugGetSessionState(sessionId),
       getAllSessions: () => raw.debugGetAllSessions(),
+      getSupportedTypes: () => raw.debugGetSupportedTypes(),
+      getConfigSnippets: (type: string) => raw.debugGetConfigSnippets(type),
+      configurationDone: (sessionId: string) => raw.debugConfigurationDone(sessionId),
+      getThreads: (sessionId: string) => raw.debugGetThreads(sessionId),
+      getCapabilities: (sessionId: string) => raw.debugGetCapabilities(sessionId),
       onEvent: (callback: Parameters<typeof raw.onDebugEvent>[0]) => raw.onDebugEvent(callback),
     },
 

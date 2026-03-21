@@ -3,7 +3,7 @@
  * 确保 IPC 处理函数在发生严重错误、返回不可序列化对象时，能够被正确捕获并返回给渲染进程
  */
 
-import { ipcMain, IpcMainInvokeEvent } from 'electron'
+import { app, ipcMain, IpcMainInvokeEvent } from 'electron'
 import { toAppError } from '@shared/utils/errorHandler'
 import { logger } from '@shared/utils/Logger'
 
@@ -31,25 +31,28 @@ export function safeIpcHandle<T = unknown>(
         try {
             const result = await handler(event, ...args)
 
-            // 验证对象是否可以被 JSON 序列化（防止 Electron 在底层跨进程通信时抛出 "object could not be cloned" 错误）
+            // 仅开发环境验证可序列化性（避免生产环境双重序列化开销）
             // 特别注意：第三方包（比如 MCP sdk，node-pty 等）可能会返回包含循环引用或是 Native Binding 的不可序列化对象
-            try {
-                JSON.stringify(result)
-                return result
-            } catch (serializeErr) {
-                const targetLogger = (logger as any)[logDomain] || logger.ipc
-                if (targetLogger && targetLogger.error) {
-                    targetLogger.error(`[${channel}] Unserializable return value:`, serializeErr)
-                } else {
-                    logger.ipc.error(`[${channel}] Unserializable return value:`, serializeErr)
-                }
+            if (!app.isPackaged) {
+                try {
+                    JSON.stringify(result)
+                } catch (serializeErr) {
+                    const targetLogger = (logger as any)[logDomain] || logger.ipc
+                    if (targetLogger && targetLogger.error) {
+                        targetLogger.error(`[${channel}] Unserializable return value:`, serializeErr)
+                    } else {
+                        logger.ipc.error(`[${channel}] Unserializable return value:`, serializeErr)
+                    }
 
-                return {
-                    success: false,
-                    error: `IPC response serialization failed for ${channel}: ${(serializeErr as Error).message}`,
-                    code: 'ERR_IPC_SERIALIZATION'
+                    return {
+                        success: false,
+                        error: `IPC response serialization failed for ${channel}: ${(serializeErr as Error).message}`,
+                        code: 'ERR_IPC_SERIALIZATION'
+                    }
                 }
             }
+
+            return result
         } catch (err) {
             const appError = toAppError(err)
             const targetLogger = (logger as any)[logDomain] || logger.ipc

@@ -4,7 +4,8 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { Layout, Type, Sparkles, Terminal, Check, Settings2, Zap } from 'lucide-react'
-import { useStore } from '@store'
+import { useStore, type ThemeName } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { themeManager } from '@/renderer/config/themeConfig'
 import { Input, Select, Switch } from '@components/ui'
 import { EditorSettingsProps } from '../types'
@@ -26,11 +27,11 @@ const TRIGGER_CHAR_OPTIONS = [
 ]
 
 export function EditorSettings({ settings, setSettings, advancedConfig, setAdvancedConfig, language }: EditorSettingsProps) {
-    const { currentTheme, setTheme } = useStore()
+    const { currentTheme, setTheme } = useStore(useShallow(s => ({ currentTheme: s.currentTheme, setTheme: s.setTheme })))
     const allThemes = themeManager.getAllThemes().map(t => t.id)
 
     const handleThemeChange = (themeId: string) => {
-        setTheme(themeId as any)
+        setTheme(themeId as ThemeName)
         api.settings.set('themeId', themeId)
     }
 
@@ -126,7 +127,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 <label className={labelClass}>{language === 'zh' ? '自动换行' : 'Word Wrap'}</label>
                                 <Select
                                     value={settings.wordWrap}
-                                    onChange={(value) => setSettings({ ...settings, wordWrap: value as any })}
+                                    onChange={(value) => setSettings({ ...settings, wordWrap: value as 'on' | 'off' | 'wordWrapColumn' })}
                                     options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }, { value: 'wordWrapColumn', label: 'Column' }]}
                                     className={`w-full ${inputClass}`}
                                 />
@@ -135,7 +136,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 <label className={labelClass}>{language === 'zh' ? '行号' : 'Line Numbers'}</label>
                                 <Select
                                     value={settings.lineNumbers}
-                                    onChange={(value) => setSettings({ ...settings, lineNumbers: value as any })}
+                                    onChange={(value) => setSettings({ ...settings, lineNumbers: value as 'on' | 'off' | 'relative' })}
                                     options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }, { value: 'relative', label: 'Relative' }]}
                                     className={`w-full ${inputClass}`}
                                 />
@@ -185,7 +186,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 <label className={labelClass.replace('mb-2', 'mb-0')}>{language === 'zh' ? '自动保存' : 'Auto Save'}</label>
                                 <Select
                                     value={settings.autoSave}
-                                    onChange={(value) => setSettings({ ...settings, autoSave: value as any })}
+                                    onChange={(value) => setSettings({ ...settings, autoSave: value as 'off' | 'afterDelay' | 'onFocusChange' })}
                                     options={[{ value: 'off', label: 'Off' }, { value: 'afterDelay', label: language === 'zh' ? '延迟后' : 'After Delay' }, { value: 'onFocusChange', label: language === 'zh' ? '失去焦点时' : 'On Focus Change' }]}
                                     className={`w-40 ${inputClass}`}
                                 />

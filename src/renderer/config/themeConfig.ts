@@ -223,6 +223,16 @@ export const builtinThemes: Theme[] = [
 const LOCAL_STORAGE_THEME_KEY = 'adnify-theme-id'
 const LOCAL_STORAGE_CUSTOM_THEMES_KEY = 'adnify-custom-themes'
 
+/** 校验自定义主题的 colors 字段是否完整且为字符串 */
+function isValidTheme(t: unknown): t is Theme {
+  if (!t || typeof t !== 'object') return false
+  const theme = t as Record<string, unknown>
+  if (typeof theme.id !== 'string' || typeof theme.name !== 'string') return false
+  if (!theme.colors || typeof theme.colors !== 'object') return false
+  const colors = theme.colors as Record<string, unknown>
+  return typeof colors.background === 'string' && typeof colors.accent === 'string'
+}
+
 class ThemeManager {
   private currentTheme: Theme = builtinThemes[0]
   private customThemes: Theme[] = []
@@ -236,7 +246,10 @@ class ThemeManager {
       const savedCustomThemes = localStorage.getItem(LOCAL_STORAGE_CUSTOM_THEMES_KEY)
 
       if (savedCustomThemes) {
-        this.customThemes = JSON.parse(savedCustomThemes)
+        const parsed = JSON.parse(savedCustomThemes)
+        if (Array.isArray(parsed)) {
+          this.customThemes = parsed.filter(isValidTheme)
+        }
       }
 
       if (savedThemeId) {
@@ -261,8 +274,9 @@ class ThemeManager {
       ])
 
       if (savedCustomThemes && Array.isArray(savedCustomThemes)) {
-        this.customThemes = savedCustomThemes as Theme[]
-        localStorage.setItem(LOCAL_STORAGE_CUSTOM_THEMES_KEY, JSON.stringify(savedCustomThemes))
+        const validThemes = savedCustomThemes.filter(isValidTheme)
+        this.customThemes = validThemes
+        localStorage.setItem(LOCAL_STORAGE_CUSTOM_THEMES_KEY, JSON.stringify(validThemes))
       }
 
       if (savedThemeId && typeof savedThemeId === 'string') {

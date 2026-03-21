@@ -36,7 +36,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
     const [includeApiKeys, setIncludeApiKeys] = useState(false)
     const [logPath, setLogPath] = useState('')
     const fileInputRef = useRef<HTMLInputElement>(null)
-    const store = useStore()
+    const getStore = () => useStore.getState()
 
     // 获取日志文件路径
     useEffect(() => {
@@ -64,20 +64,20 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
 
         // 如果缓存不存在，从 store 构建
         return {
-            llmConfig: store.llmConfig,
-            language: store.language,
-            autoApprove: store.autoApprove,
-            promptTemplateId: store.promptTemplateId,
-            providerConfigs: store.providerConfigs,
-            agentConfig: store.agentConfig,
-            editorConfig: store.editorConfig,
-            securitySettings: store.securitySettings,
-            webSearchConfig: store.webSearchConfig,
-            taskTrustSettings: store.taskTrustSettings,
-            mcpConfig: store.mcpConfig,
-            aiInstructions: store.aiInstructions,
-            onboardingCompleted: store.onboardingCompleted,
-            enableFileLogging: store.enableFileLogging,
+            llmConfig: getStore().llmConfig,
+            language: getStore().language,
+            autoApprove: getStore().autoApprove,
+            promptTemplateId: getStore().promptTemplateId,
+            providerConfigs: getStore().providerConfigs,
+            agentConfig: getStore().agentConfig,
+            editorConfig: getStore().editorConfig,
+            securitySettings: getStore().securitySettings,
+            webSearchConfig: getStore().webSearchConfig,
+            taskTrustSettings: getStore().taskTrustSettings,
+            mcpConfig: getStore().mcpConfig,
+            aiInstructions: getStore().aiInstructions,
+            onboardingCompleted: getStore().onboardingCompleted,
+            enableFileLogging: getStore().enableFileLogging,
         }
     }
 
@@ -111,36 +111,36 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
             const settings = result.settings
 
             // 应用导入的设置
-            if (settings.language) store.set('language', settings.language as 'en' | 'zh')
-            if (settings.autoApprove) store.set('autoApprove', settings.autoApprove)
-            if (settings.promptTemplateId) store.set('promptTemplateId', settings.promptTemplateId)
-            if (settings.agentConfig) store.set('agentConfig', settings.agentConfig)
-            if (settings.aiInstructions !== undefined) store.set('aiInstructions', settings.aiInstructions)
-            if (settings.editorConfig) store.set('editorConfig', settings.editorConfig)
-            if (settings.securitySettings) store.set('securitySettings', settings.securitySettings)
-            if (settings.webSearchConfig) store.set('webSearchConfig', settings.webSearchConfig)
-            if (settings.taskTrustSettings) store.set('taskTrustSettings', normalizeTaskTrustSettings(settings.taskTrustSettings))
-            if (settings.mcpConfig) store.set('mcpConfig', settings.mcpConfig)
-            if (typeof settings.onboardingCompleted === 'boolean') store.set('onboardingCompleted', settings.onboardingCompleted)
-            if (typeof settings.enableFileLogging === 'boolean') store.set('enableFileLogging', settings.enableFileLogging)
+            if (settings.language) getStore().set('language', settings.language as 'en' | 'zh')
+            if (settings.autoApprove) getStore().set('autoApprove', settings.autoApprove)
+            if (settings.promptTemplateId) getStore().set('promptTemplateId', settings.promptTemplateId)
+            if (settings.agentConfig) getStore().set('agentConfig', settings.agentConfig)
+            if (settings.aiInstructions !== undefined) getStore().set('aiInstructions', settings.aiInstructions)
+            if (settings.editorConfig) getStore().set('editorConfig', settings.editorConfig)
+            if (settings.securitySettings) getStore().set('securitySettings', settings.securitySettings)
+            if (settings.webSearchConfig) getStore().set('webSearchConfig', settings.webSearchConfig)
+            if (settings.taskTrustSettings) getStore().set('taskTrustSettings', normalizeTaskTrustSettings(settings.taskTrustSettings))
+            if (settings.mcpConfig) getStore().set('mcpConfig', settings.mcpConfig)
+            if (typeof settings.onboardingCompleted === 'boolean') getStore().set('onboardingCompleted', settings.onboardingCompleted)
+            if (typeof settings.enableFileLogging === 'boolean') getStore().set('enableFileLogging', settings.enableFileLogging)
 
             // 应用 provider 配置
             if (settings.providerConfigs) {
                 for (const [id, config] of Object.entries(settings.providerConfigs)) {
-                    store.setProvider(id, config as ProviderModelConfig)
+                    getStore().setProvider(id, config as ProviderModelConfig)
                 }
             }
 
             // 应用 LLM 配置
             if (settings.llmConfig) {
-                store.update('llmConfig', {
-                    provider: settings.llmConfig.provider || store.llmConfig.provider,
-                    model: settings.llmConfig.model || store.llmConfig.model,
+                getStore().update('llmConfig', {
+                    provider: settings.llmConfig.provider || getStore().llmConfig.provider,
+                    model: settings.llmConfig.model || getStore().llmConfig.model,
                 })
             }
 
             // 保存设置到持久化存储
-            await store.save()
+            await getStore().save()
 
             toast.success(language === 'zh' ? '配置已导入' : 'Settings imported')
         } catch (error) {
@@ -160,10 +160,12 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
             keysToRemove.forEach(key => localStorage.removeItem(key))
 
             // 2. 清除代码库索引
-            try {
-                // @ts-ignore
-                await (window.electronAPI as any).clearIndex?.()
-            } catch { }
+            const wsPath = getStore().workspacePath
+            if (wsPath) {
+                try {
+                    await api.index.clear(wsPath)
+                } catch { }
+            }
 
             // 3. 清除持久化编辑器配置
             await api.settings.set('editorConfig', undefined)

@@ -159,13 +159,6 @@ export interface McpToolWithServer extends McpTool {
   serverId: string
 }
 
-export interface AuditLog {
-  timestamp: string
-  operation: string
-  target: string
-  success: boolean
-  detail?: string
-}
 
 export interface SecureCommandRequest {
   command: string
@@ -193,6 +186,33 @@ export interface IsolatedWorkspaceResult {
   mode?: IsolationMode
   workspacePath?: string
   error?: string
+}
+
+export interface RemoteShellEntry {
+  name: string
+  path: string
+  isDirectory: boolean
+  size: number
+  modifyTime?: number
+}
+
+export interface RemoteShellServer {
+  host: string
+  port?: number
+  username?: string
+  password?: string
+  privateKeyPath?: string
+  remotePath?: string
+}
+
+export interface RemoteShellUploadResult {
+  canceled: boolean
+  uploaded: string[]
+}
+
+export interface RemoteShellDownloadResult {
+  canceled: boolean
+  localPath?: string
 }
 
 export interface EmbeddingConfigInput {
@@ -346,6 +366,9 @@ export interface ElectronAPI {
   deleteFile: (path: string) => Promise<boolean>
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) => Promise<SearchFileResult[]>
+  searchStream: (query: string, rootPath: string | string[], options: SearchFilesOptions, searchId: string) => Promise<void>
+  onSearchResults: (callback: (searchId: string, results: SearchFileResult[]) => void) => () => void
+  onSearchDone: (callback: (searchId: string) => void) => () => void
   onFileChanged: (callback: (event: { event: 'create' | 'update' | 'delete'; path: string }) => void) => () => void
 
   // Settings
@@ -431,7 +454,7 @@ export interface ElectronAPI {
   }) => Promise<Array<{ text: string; similarity: number; index: number }>>
 
   // Terminal
-  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe' }) => Promise<{ success: boolean; error?: string }>
+  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer }) => Promise<{ success: boolean; error?: string }>
   writeTerminal: (id: string, data: string) => Promise<void>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id?: string) => void
@@ -439,6 +462,17 @@ export interface ElectronAPI {
   onTerminalData: (callback: (event: { id: string; data: string }) => void) => () => void
   onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number }) => void) => () => void
   onTerminalError: (callback: (event: { id: string; error: string }) => void) => () => void
+
+  // Remote Shell / SFTP
+  remoteShellList: (server: RemoteShellServer, remotePath?: string) => Promise<RemoteShellEntry[]>
+  remoteShellReadText: (server: RemoteShellServer, remotePath: string) => Promise<string | null>
+  remoteShellWriteText: (server: RemoteShellServer, remotePath: string, content: string) => Promise<boolean>
+  remoteShellMkdir: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => Promise<boolean>
+  remoteShellDelete: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
+  remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<RemoteShellUploadResult>
+  remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<RemoteShellDownloadResult>
 
   // Shell
   executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) => Promise<{
@@ -455,8 +489,6 @@ export interface ElectronAPI {
   }>
 
   // Security
-  getAuditLogs: (limit?: number) => Promise<AuditLog[]>
-  clearAuditLogs: () => Promise<boolean>
   getPermissions: () => Promise<Record<string, string>>
   resetPermissions: () => Promise<boolean>
 
@@ -575,9 +607,9 @@ export interface ElectronAPI {
     oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
     autoApprove?: string[]
     disabled?: boolean
-  }) => Promise<{ success: boolean; error?: string }>
-  mcpRemoveServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
-  mcpToggleServer: (serverId: string, disabled: boolean) => Promise<{ success: boolean; error?: string }>
+  }, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
+  mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
+  mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
   mcpSetAutoConnect: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   mcpRegistrySearch: (query?: string) => Promise<{ success: boolean; servers?: any[]; error?: string }>
   mcpRegistryGetDetails: (serverName: string) => Promise<{ success: boolean; server?: any; requiredEnvVars?: any[]; localConfig?: any; error?: string }>
@@ -613,6 +645,11 @@ export interface ElectronAPI {
   debugEvaluate: (sessionId: string, expression: string, frameId?: number) => Promise<{ success: boolean; result?: { result: string; type: string }; error?: string }>
   debugGetSessionState: (sessionId: string) => Promise<DebugSessionState | null>
   debugGetAllSessions: () => Promise<DebugSessionState[]>
+  debugGetSupportedTypes: () => Promise<Array<{ type: string; label: string; languages: string[]; configurationSnippets: any[] }>>
+  debugGetConfigSnippets: (type: string) => Promise<any[]>
+  debugConfigurationDone: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+  debugGetThreads: (sessionId: string) => Promise<{ success: boolean; threads?: any[]; error?: string }>
+  debugGetCapabilities: (sessionId: string) => Promise<any>
   onDebugEvent: (callback: (event: { sessionId: string; event: DebugEvent }) => void) => () => void
 
   // Updater
@@ -625,6 +662,9 @@ export interface ElectronAPI {
 
   // App Error (from main process)
   onAppError: (callback: (error: { title: string; message: string; variant?: string }) => void) => () => void
+
+  // Skills
+  skillsGetGlobalDir: () => Promise<string>
 
   // Command
   onExecuteCommand: (callback: (commandId: string) => void) => () => void

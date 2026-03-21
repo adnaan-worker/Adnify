@@ -6,24 +6,98 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { LintError } from '../types'
-import { onDiagnostics, lspUriToPath } from '@services/lspService'
 import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'
+import { useDiagnosticsStore } from '@services/diagnosticsStore'
+import { getNpxCommand, joinPath, normalizePath, platform } from '@shared/utils/pathUtils'
+import { getServerIdForLanguage, LSP_SERVER_DEFINITIONS } from '@shared/languages'
+import { ensureServerForFile, getFileWorkspaceRoot, getLanguageId, waitForDiagnostics } from '@services/lspService'
 
 // 支持的语言和对应的 lint 命令
-const LINT_COMMANDS: Record<string, { command: string; parser: (output: string, file: string) => LintError[] }> = {
+const LINT_COMMANDS: Record<string, {
+	getCommand: () => { command: string; args: string[] }
+	parser: (output: string, file: string) => LintError[]
+}> = {
 	typescript: {
-		command: 'npx tsc --noEmit --pretty false',
+		getCommand: () => ({
+			command: getNpxCommand(),
+			args: ['tsc', '--noEmit', '--pretty', 'false'],
+		}),
 		parser: parseTscOutput,
 	},
 	javascript: {
-		command: 'npx eslint --format json',
+		getCommand: () => ({
+			command: getNpxCommand(),
+			args: ['eslint', '--format', 'json'],
+		}),
 		parser: parseEslintOutput,
 	},
 	python: {
-		command: 'python -m pylint --output-format=json',
+		getCommand: () => ({
+			command: 'python',
+			args: ['-m', 'pylint', '--output-format=json'],
+		}),
 		parser: parsePylintOutput,
 	},
+}
+
+interface ResolvedLintCommand {
+	command: string
+	args: string[]
+	cwd?: string
+}
+
+async function resolveWorkspaceTool(
+	workspaceRoot: string | null,
+	relativePaths: string[],
+	args: string[]
+): Promise<ResolvedLintCommand | null> {
+	if (!workspaceRoot) return null
+
+	for (const relativePath of relativePaths) {
+		const fullPath = joinPath(workspaceRoot, relativePath)
+		try {
+			if (await api.file.exists(fullPath)) {
+				return { command: fullPath, args, cwd: workspaceRoot }
+			}
+		} catch {
+			// ignore and keep falling back
+		}
+	}
+
+	return null
+}
+
+async function resolveLintCommand(filePath: string, language: string): Promise<ResolvedLintCommand | null> {
+	const workspaceRoot = getFileWorkspaceRoot(filePath)
+
+	if (language === 'typescript') {
+		const localTsc = await resolveWorkspaceTool(
+			workspaceRoot,
+			[joinPath('node_modules', '.bin', platform.isWindows ? 'tsc.cmd' : 'tsc')],
+			['--noEmit', '--pretty', 'false', filePath]
+		)
+		if (localTsc) return localTsc
+	}
+
+	if (language === 'javascript') {
+		const localEslint = await resolveWorkspaceTool(
+			workspaceRoot,
+			[joinPath('node_modules', '.bin', platform.isWindows ? 'eslint.cmd' : 'eslint')],
+			['--format', 'json', filePath]
+		)
+		if (localEslint) return localEslint
+	}
+
+	const lintConfig = LINT_COMMANDS[language]
+	if (!lintConfig) return null
+
+	const fallback = lintConfig.getCommand()
+	return {
+		command: fallback.command,
+		args: [...fallback.args, filePath],
+		cwd: workspaceRoot || undefined,
+	}
 }
 
 // 文件扩展名到语言的映射
@@ -148,106 +222,177 @@ function parsePylintOutput(output: string, file: string): LintError[] {
 	return errors
 }
 
-class LintService {
-	private cache: CacheService<LintError[]>
-	private lspDiagnostics: CacheService<LintError[]>
-	private lspDisposer: (() => void) | null = null
+/**
+ * 从 useDiagnosticsStore 中查找指定文件路径对应的 LSP 诊断。
+ * 与 StatusBar/ProblemsView 使用完全相同的数据源和路径规范化逻辑。
+ */
+function getLspDiagnosticsForFile(filePath: string): LintError[] | null {
+	const { diagnostics } = useDiagnosticsStore.getState()
+	if (diagnostics.size === 0) return null
 
-	constructor() {
-		const cacheConfig = getCacheConfig('lint')
-		
-		// 使用统一的 CacheService
-		this.cache = new CacheService<LintError[]>('LintErrors', {
-			maxSize: cacheConfig.maxSize,
-			defaultTTL: cacheConfig.ttlMs,
-			cleanupInterval: 60000,
-		})
-		
-		this.lspDiagnostics = new CacheService<LintError[]>('LspDiagnostics', {
-			maxSize: cacheConfig.maxSize,
-			defaultTTL: 0, // LSP 诊断不过期，由 LSP 更新
-			cleanupInterval: 0,
-		})
+	const normalizedTarget = normalizePath(filePath).toLowerCase()
 
-		// 订阅 LSP 诊断信息
-		this.lspDisposer = onDiagnostics((uri, diagnostics) => {
-			const filePath = lspUriToPath(uri)
-			const errors: LintError[] = diagnostics.map((d: any) => ({
+	for (const [uri, diags] of diagnostics) {
+		// 与 diagnosticsStore.getFileStats 相同的 URI→path 转换
+		let uriPath = uri
+		if (uri.startsWith('file:///')) {
+			uriPath = decodeURIComponent(uri.slice(8))
+		} else if (uri.startsWith('file://')) {
+			uriPath = decodeURIComponent(uri.slice(7))
+		}
+
+		const normalizedUri = normalizePath(uriPath).toLowerCase()
+
+		if (normalizedUri === normalizedTarget || normalizedUri.endsWith(normalizedTarget)) {
+			return diags.map((d) => ({
 				code: d.code?.toString() || 'lsp',
 				message: d.message,
 				severity: d.severity === 1 ? 'error' : 'warning',
 				startLine: d.range.start.line + 1,
 				endLine: d.range.end.line + 1,
-				file: filePath,
+				file: uriPath,
 			}))
-			
-			this.lspDiagnostics.set(filePath, errors)
+		}
+	}
+
+	return null
+}
+
+/** lint 检查结果 */
+export interface LintResult {
+	errors: LintError[]
+	/** LSP 服务器未安装时的提示信息 */
+	notInstalled?: string
+}
+
+// LSP 服务器安装状态缓存（避免每次 lint 都查询）
+let _serverStatusCache: Record<string, { installed: boolean }> | null = null
+let _serverStatusTimestamp = 0
+const SERVER_STATUS_TTL = 60_000 // 60 秒
+
+async function getServerStatus(): Promise<Record<string, { installed: boolean }>> {
+	if (_serverStatusCache && Date.now() - _serverStatusTimestamp < SERVER_STATUS_TTL) {
+		return _serverStatusCache
+	}
+	try {
+		_serverStatusCache = await api.lsp.getServerStatus()
+		_serverStatusTimestamp = Date.now()
+	} catch {
+		_serverStatusCache = {}
+	}
+	return _serverStatusCache!
+}
+
+class LintService {
+	private cache: CacheService<LintError[]>
+
+	constructor() {
+		const cacheConfig = getCacheConfig('lint')
+
+		this.cache = new CacheService<LintError[]>('LintErrors', {
+			maxSize: cacheConfig.maxSize,
+			defaultTTL: cacheConfig.ttlMs,
+			cleanupInterval: 60000,
 		})
 	}
 
 	/**
 	 * 获取文件的 lint 错误
 	 */
-	async getLintErrors(filePath: string, forceRefresh: boolean = false): Promise<LintError[]> {
-		// 1. 优先使用 LSP 诊断信息（最准确）
-		const lspErrors = this.lspDiagnostics.get(filePath)
-		if (lspErrors && lspErrors.length > 0) {
-			return lspErrors
+	async getLintErrors(filePath: string, forceRefresh: boolean = false): Promise<LintResult> {
+		// 1. 优先使用 LSP 诊断信息（与面板完全相同的数据源，支持所有 LSP 语言）
+		const lspErrors = getLspDiagnosticsForFile(filePath)
+		if (lspErrors !== null) {
+			// LSP 已推送过诊断，直接返回（空数组表示该文件无错误）
+			return { errors: lspErrors }
 		}
 
-		// 2. 检查缓存
+		// 2. 检查该语言是否有对应的 LSP 服务器
+		const languageId = getLanguageId(filePath)
+		const serverId = getServerIdForLanguage(languageId)
+
+		if (serverId) {
+			const status = await getServerStatus()
+			const serverStatus = status[serverId]
+			if (!serverStatus || !serverStatus.installed) {
+				// LSP 未安装 → 提示用户
+				const serverDef = LSP_SERVER_DEFINITIONS.find(s => s.id === serverId)
+				const serverName = serverDef?.name || serverId
+				const serverDesc = serverDef?.description || serverId
+				return {
+					errors: [],
+					notInstalled: `Language server "${serverName}" (${serverDesc}) is not installed. Install it in Settings > LSP to enable lint checking for ${languageId} files.`,
+				}
+			}
+
+			// 强制刷新时，主动确保 LSP 已启动并等待一次诊断。
+			// 如果仍然没有结果，再继续走 CLI 回退，避免打包环境中“已安装但返回空”的假阴性。
+			if (forceRefresh) {
+				try {
+					const serverReady = await ensureServerForFile(filePath)
+					if (serverReady) {
+						await waitForDiagnostics(filePath)
+						const refreshedErrors = getLspDiagnosticsForFile(filePath)
+						if (refreshedErrors !== null) {
+							return { errors: refreshedErrors }
+						}
+					}
+				} catch (error) {
+					logger.agent.warn('[Lint] Failed to refresh diagnostics via LSP, falling back if available:', error)
+				}
+			}
+		}
+
+		// 3. 该语言没有 LSP 服务器定义 → 尝试 CLI 回退
+		if (languageId === 'plaintext') {
+			return { errors: [], notInstalled: `Unsupported file type for lint checking.` }
+		}
+
+		// 检查缓存
 		if (!forceRefresh) {
 			const cached = this.cache.get(filePath)
 			if (cached) {
-				return cached
+				return { errors: cached }
 			}
 		}
 
 		const ext = filePath.split('.').pop()?.toLowerCase() || ''
 		const lang = EXT_TO_LANG[ext]
+		const lintConfig = lang ? LINT_COMMANDS[lang] : undefined
 
-		if (!lang) {
-			return [] // 不支持的语言
-		}
-
-		const lintConfig = LINT_COMMANDS[lang]
 		if (!lintConfig) {
-			return []
+			return { errors: [] }
 		}
 
 		try {
-			// 解析命令和参数
-			const [baseCommand, ...commandArgs] = lintConfig.command.split(' ')
-
-			// 对于 TypeScript，尝试在工作区根目录运行以关联 tsconfig
-			const allArgs = lang === 'typescript'
-				? [...commandArgs, '--project', '.', '--file', `"${filePath}"`]
-				: [...commandArgs, `"${filePath}"`]
+			const resolvedCommand = await resolveLintCommand(filePath, lang)
+			if (!resolvedCommand) {
+				return { errors: [] }
+			}
 
 			const result = await api.shell.executeSecure({
-				command: baseCommand,
-				args: allArgs,
+				command: resolvedCommand.command,
+				args: resolvedCommand.args,
+				cwd: resolvedCommand.cwd,
 				timeout: 60000,
 				requireConfirm: false
 			})
 			const output = (result.output || '') + (result.errorOutput || '')
 			const errors = lintConfig.parser(output, filePath)
 
-			// 更新缓存（CacheService 自动处理大小限制和 TTL）
 			this.cache.set(filePath, errors)
-
-			return errors
+			return { errors }
 		} catch (error) {
 			logger.agent.error('Lint error:', error)
-			return []
+			return { errors: [] }
 		}
 	}
 
 	/**
 	 * 批量获取多个文件的 lint 错误
 	 */
-	async getLintErrorsForFiles(filePaths: string[]): Promise<Map<string, LintError[]>> {
-		const results = new Map<string, LintError[]>()
+	async getLintErrorsForFiles(filePaths: string[], forceRefresh: boolean = false): Promise<Map<string, LintResult>> {
+		const results = new Map<string, LintResult>()
 
 		// 并行执行，但限制并发数
 		const batchSize = 3
@@ -256,12 +401,12 @@ class LintService {
 			const batchResults = await Promise.all(
 				batch.map(async (path) => ({
 					path,
-					errors: await this.getLintErrors(path),
+					result: await this.getLintErrors(path, forceRefresh),
 				}))
 			)
 
-			for (const { path, errors } of batchResults) {
-				results.set(path, errors)
+			for (const { path, result } of batchResults) {
+				results.set(path, result)
 			}
 		}
 
@@ -343,10 +488,8 @@ class LintService {
 	clearCache(filePath?: string): void {
 		if (filePath) {
 			this.cache.delete(filePath)
-			this.lspDiagnostics.delete(filePath)
 		} else {
 			this.cache.clear()
-			this.lspDiagnostics.clear()
 		}
 	}
 
@@ -356,7 +499,6 @@ class LintService {
 	getCacheStats() {
 		return {
 			lint: this.cache.getStats(),
-			lsp: this.lspDiagnostics.getStats(),
 		}
 	}
 
@@ -389,12 +531,7 @@ class LintService {
 	 * 销毁服务
 	 */
 	dispose() {
-		if (this.lspDisposer) {
-			this.lspDisposer()
-			this.lspDisposer = null
-		}
 		this.cache.destroy()
-		this.lspDiagnostics.destroy()
 	}
 }
 

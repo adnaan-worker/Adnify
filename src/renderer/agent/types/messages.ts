@@ -38,8 +38,22 @@ export interface SearchPart {
   isStreaming?: boolean
 }
 
+/** Lint 自动检查结果 */
+export interface LintCheckPart {
+  type: 'lint_check'
+  /** 检查的文件列表及其错误 */
+  files: LintCheckFile[]
+  /** 整体状态 */
+  status: 'checking' | 'passed' | 'failed'
+}
+
+export interface LintCheckFile {
+  filePath: string
+  errors: { severity: 'error' | 'warning'; message: string; line: number }[]
+}
+
 /** 助手消息部分 */
-export type AssistantPart = TextPart | ReasoningPart | ToolCallPart | SearchPart
+export type AssistantPart = TextPart | ReasoningPart | ToolCallPart | SearchPart | LintCheckPart
 
 /** Token 使用统计 */
 export interface TokenUsage {
@@ -158,6 +172,10 @@ export function isToolCallPart(part: AssistantPart): part is ToolCallPart {
 
 export function isSearchPart(part: AssistantPart): part is SearchPart {
   return part.type === 'search'
+}
+
+export function isLintCheckPart(part: AssistantPart): part is LintCheckPart {
+  return part.type === 'lint_check'
 }
 
 // ============================================

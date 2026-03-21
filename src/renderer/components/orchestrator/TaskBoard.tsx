@@ -459,7 +459,7 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     const handleStart = useCallback(async () => {
         if (plan) {
             // 使用 orchestratorExecutor 启动执行
-            const { startPlanExecution } = await import('@/renderer/agent/services/orchestratorExecutor')
+            const { startPlanExecution } = await import('@/renderer/agent/orchestrator/orchestratorExecutor')
             const result = await startPlanExecution(plan.id)
             if (!result.success) {
                 console.error('Failed to start execution:', result.message)
@@ -469,7 +469,7 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
 
     const handleStop = useCallback(async () => {
         // 使用 orchestratorExecutor 停止执行
-        const { stopPlanExecution } = await import('@/renderer/agent/services/orchestratorExecutor')
+        const { stopPlanExecution } = await import('@/renderer/agent/orchestrator/orchestratorExecutor')
         await stopPlanExecution()
     }, [])
 

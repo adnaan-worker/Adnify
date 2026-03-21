@@ -75,20 +75,21 @@ export function registerSettingsHandlers(
         const securitySettings = (cleanedValue ?? value) as any
         const defaults = {
           enablePermissionConfirm: true,
-          enableAuditLog: true,
           strictWorkspaceMode: true,
           allowedShellCommands: SECURITY_DEFAULTS.SHELL_COMMANDS,
           allowedGitSubcommands: SECURITY_DEFAULTS.GIT_SUBCOMMANDS,
         }
         securityRef.securityManager.updateConfig(securitySettings ?? defaults)
 
-        // 更新白名单（删除/undefined 时用默认值）
-        const shellCommands = securitySettings?.allowedShellCommands?.length
-          ? securitySettings.allowedShellCommands
-          : SECURITY_DEFAULTS.SHELL_COMMANDS
-        const gitCommands = securitySettings?.allowedGitSubcommands?.length
-          ? securitySettings.allowedGitSubcommands
-          : SECURITY_DEFAULTS.GIT_SUBCOMMANDS
+        // 更新白名单：undefined/null 用默认值；显式传 [] 表示「禁用全部」需保留
+        const shellCommands =
+          securitySettings?.allowedShellCommands != null
+            ? securitySettings.allowedShellCommands
+            : SECURITY_DEFAULTS.SHELL_COMMANDS
+        const gitCommands =
+          securitySettings?.allowedGitSubcommands != null
+            ? securitySettings.allowedGitSubcommands
+            : SECURITY_DEFAULTS.GIT_SUBCOMMANDS
         securityRef.updateWhitelist(shellCommands, gitCommands)
       }
 
@@ -149,7 +150,8 @@ export function registerSettingsHandlers(
 
   // 恢复工作区 (Legacy fallback)
   ipcMain.handle('workspace:restore:legacy', () => {
-    return resolveStore('lastWorkspacePath').get('lastWorkspacePath')
+    const store = resolveStore('lastWorkspacePath')
+    return store ? store.get('lastWorkspacePath') : undefined
   })
 
   // 获取用户数据路径

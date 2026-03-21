@@ -5,13 +5,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ChevronRight, FileText, Code, Hash, Braces, Box, Loader2 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import type { LspDocumentSymbol } from '@shared/types'
 import { getFileName } from '@shared/utils/pathUtils'
 import { logger } from '@utils/Logger'
 import { getDocumentSymbols } from '@services/lspService'
 
 export function OutlineView() {
-  const { activeFilePath, language, isLspReady } = useStore()
+  const { activeFilePath, language, isLspReady } = useStore(useShallow(s => ({ activeFilePath: s.activeFilePath, language: s.language, isLspReady: s.isLspReady })))
   const [symbols, setSymbols] = useState<LspDocumentSymbol[]>([])
   const [expandedSymbols, setExpandedSymbols] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)

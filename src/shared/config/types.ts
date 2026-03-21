@@ -192,7 +192,6 @@ export interface EditorConfig {
 
 export interface SecuritySettings {
   enablePermissionConfirm: boolean
-  enableAuditLog: boolean
   strictWorkspaceMode: boolean
   allowedShellCommands: string[]
   allowedGitSubcommands: string[]

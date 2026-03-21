@@ -9,6 +9,7 @@ import {
   type McpPreset,
   type McpPresetCategory,
 } from '@shared/types/mcp'
+import { platform as runtimePlatform } from '@shared/utils/pathUtils'
 
 /** 分类显示名称 */
 export const MCP_CATEGORY_NAMES: Record<McpPresetCategory, { en: string; zh: string }> = {
@@ -544,30 +545,50 @@ export const MCP_PRESETS: McpPreset[] = [
     type: 'local',
     id: 'figma',
     name: 'Figma',
-    description: 'Connect to Figma API to inspect design tokens, nodes, and more using stdio',
-    descriptionZh: '连接 Figma API 以检查设计令牌、节点等内容（使用标准 IO 传输）',
+    description: 'Figma MCP server — inspect designs, components, styles via Personal Access Token',
+    descriptionZh: 'Figma MCP 服务器 — 通过个人访问令牌检查设计、组件、样式',
     category: 'design',
     icon: 'Figma',
     command: 'npx',
-    args: ['-y', 'figma-mcp'],
+    args: ['-y', '@hapins/figma-mcp'],
     envConfig: [
       {
-        key: 'FIGMA_API_KEY',
-        label: 'Figma Access Token',
-        labelZh: 'Figma 访问令牌',
-        description: 'Get from Figma Settings > Personal Access Tokens',
-        descriptionZh: '从 Figma 设置 > 个人访问令牌获取',
+        key: 'FIGMA_ACCESS_TOKEN',
+        label: 'Figma Personal Access Token',
+        labelZh: 'Figma 个人访问令牌',
+        description: 'Get from Figma Settings > Security > Personal access tokens',
+        descriptionZh: '从 Figma 设置 > 安全 > 个人访问令牌获取',
         required: true,
         secret: true,
         placeholder: 'figd_...',
       },
     ],
-    defaultAutoApprove: ['get_file', 'get_nodes'],
+    defaultAutoApprove: ['get_file', 'get_node', 'get_component', 'get_style'],
     requiresConfig: true,
-    docsUrl: 'https://github.com/figma/mcp-server',
-    tags: ['figma', 'design', 'ui', 'code-generation'],
-    usageExamples: ['Connect to my Figma file: [Figma URL]', 'Get the nodes from my Figma file', 'Inspect design tokens'],
-    usageExamplesZh: ['连接我的 Figma 文件：[Figma URL]', '获取 Figma 文件中的节点信息', '检查设计令牌'],
+    docsUrl: 'https://help.figma.com/hc/en-us/articles/8085703771159-Manage-personal-access-tokens',
+    tags: ['figma', 'design', 'ui', 'components', 'styles'],
+    usageExamples: ['Get the design of my Figma file: [Figma URL]', 'Inspect components in my file', 'Get color styles from Figma'],
+    usageExamplesZh: ['获取我的 Figma 文件设计：[Figma URL]', '检查文件中的组件', '获取 Figma 的颜色样式'],
+  },
+  {
+    type: 'remote',
+    id: 'figma-desktop',
+    name: 'Figma Desktop',
+    description: 'Connect to local Figma desktop app MCP server — no OAuth, instant access',
+    descriptionZh: '连接本地 Figma 桌面应用的 MCP 服务器，无需 OAuth，即开即用',
+    category: 'design',
+    icon: 'Figma',
+    url: 'http://127.0.0.1:3845/mcp',
+    envConfig: [],
+    defaultAutoApprove: ['get_file', 'get_node', 'get_local_variables', 'get_code_connect_map'],
+    requiresConfig: false,
+    docsUrl: 'https://developers.figma.com/docs/figma-mcp-server/local-server-installation/',
+    official: true,
+    tags: ['figma', 'design', 'ui', 'desktop', 'local'],
+    setupNote: 'Requires Figma desktop app (v116+) with MCP server enabled in Settings > Feature flags.',
+    setupNoteZh: '需要安装 Figma 桌面应用（v116+），并在设置 > 功能标志中启用 MCP 服务器。',
+    usageExamples: ['Get the design of my Figma file: [Figma URL]', 'Read local variables in my design file', 'Export component code from Figma'],
+    usageExamplesZh: ['获取我的 Figma 文件设计：[Figma URL]', '读取设计文件中的本地变量', '从 Figma 导出组件代码'],
   },
   {
     type: 'local',
@@ -586,6 +607,146 @@ export const MCP_PRESETS: McpPreset[] = [
     tags: ['docs', 'library', 'documentation'],
     usageExamples: ['How to use React Query useQuery hook?', 'Show me Tailwind CSS flexbox utilities', 'Get Next.js App Router documentation'],
     usageExamplesZh: ['如何使用 React Query 的 useQuery hook？', '显示 Tailwind CSS 的 flexbox 工具类', '获取 Next.js App Router 文档'],
+  },
+
+  // ===== 推理增强 =====
+  {
+    type: 'local',
+    id: 'sequential-thinking',
+    name: 'Sequential Thinking',
+    description: 'Dynamic step-by-step reasoning for complex problem solving',
+    descriptionZh: '动态逐步推理，帮助解决复杂问题',
+    category: 'ai',
+    icon: 'Brain',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-sequential-thinking'],
+    envConfig: [],
+    defaultAutoApprove: ['sequentialthinking'],
+    requiresConfig: false,
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking',
+    official: true,
+    tags: ['reasoning', 'thinking', 'chain-of-thought'],
+    usageExamples: ['Break down this complex architecture decision step by step', 'Help me think through the pros and cons of this approach'],
+    usageExamplesZh: ['一步步分析这个复杂的架构决策', '帮我逐步思考这个方案的利弊'],
+  },
+
+  // ===== 免费搜索 =====
+  {
+    type: 'local',
+    id: 'duckduckgo',
+    name: 'DuckDuckGo Search',
+    description: 'Free web search using DuckDuckGo — no API key required',
+    descriptionZh: '使用 DuckDuckGo 进行免费网络搜索，无需 API 密钥',
+    category: 'search',
+    icon: 'Search',
+    command: 'uvx',
+    args: ['duckduckgo-mcp-server'],
+    envConfig: [],
+    defaultAutoApprove: ['search'],
+    requiresConfig: false,
+    docsUrl: 'https://github.com/nickclyde/duckduckgo-mcp-server',
+    tags: ['search', 'free', 'web'],
+    usageExamples: ['Search for the latest news about AI', 'Find tutorials about TypeScript'],
+    usageExamplesZh: ['搜索 AI 最新动态', '查找 TypeScript 教程'],
+    dependencies: [
+      { type: 'uv', checkCommand: 'uvx --version', installNote: 'Install uv: https://docs.astral.sh/uv/', installNoteZh: '安装 uv: https://docs.astral.sh/uv/' },
+    ],
+  },
+
+  // ===== 时间工具 =====
+  {
+    type: 'local',
+    id: 'time',
+    name: 'Time',
+    description: 'Get current time and perform timezone conversions',
+    descriptionZh: '获取当前时间并进行时区转换',
+    category: 'other',
+    icon: 'Clock',
+    command: 'uvx',
+    args: ['mcp-server-time', '--local-timezone', '${LOCAL_TIMEZONE}'],
+    envConfig: [
+      { key: 'LOCAL_TIMEZONE', label: 'Local Timezone', labelZh: '本地时区', required: false, secret: false, defaultValue: 'Asia/Shanghai', placeholder: 'Asia/Shanghai' },
+    ],
+    defaultAutoApprove: ['get_current_time', 'convert_time'],
+    requiresConfig: false,
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/time',
+    official: true,
+    tags: ['time', 'timezone', 'utility'],
+    usageExamples: ['What time is it now in Tokyo?', 'Convert 3pm EST to Beijing time'],
+    usageExamplesZh: ['现在东京是几点？', '将美东时间下午3点转换为北京时间'],
+    dependencies: [
+      { type: 'uv', checkCommand: 'uvx --version', installNote: 'Install uv: https://docs.astral.sh/uv/', installNoteZh: '安装 uv: https://docs.astral.sh/uv/' },
+    ],
+  },
+
+  // ===== 数据库/后端 =====
+  {
+    type: 'local',
+    id: 'supabase',
+    name: 'Supabase',
+    description: 'Query and manage your Supabase database, auth, and storage',
+    descriptionZh: '查询和管理 Supabase 数据库、认证和存储',
+    category: 'database',
+    icon: 'Database',
+    command: 'npx',
+    args: ['-y', '@supabase/mcp-server-supabase@latest', '--access-token', '${SUPABASE_ACCESS_TOKEN}'],
+    envConfig: [
+      { key: 'SUPABASE_ACCESS_TOKEN', label: 'Access Token', labelZh: '访问令牌', description: 'Get from Supabase Dashboard > Account > Access Tokens', descriptionZh: '从 Supabase 控制台 > 账户 > 访问令牌获取', required: true, secret: true },
+    ],
+    defaultAutoApprove: ['list_projects', 'list_tables', 'execute_sql'],
+    requiresConfig: true,
+    docsUrl: 'https://github.com/supabase-community/supabase-mcp',
+    official: true,
+    tags: ['supabase', 'database', 'backend', 'postgres'],
+    usageExamples: ['List all tables in my Supabase project', 'Query users from my database', 'Show storage buckets'],
+    usageExamplesZh: ['列出 Supabase 项目中的所有表', '从数据库查询用户', '显示存储桶'],
+  },
+
+  // ===== 项目管理 =====
+  {
+    type: 'local',
+    id: 'jira',
+    name: 'Jira',
+    description: 'Manage Jira issues, sprints, and projects',
+    descriptionZh: '管理 Jira 问题、迭代和项目',
+    category: 'development',
+    icon: 'ListOrdered',
+    command: 'npx',
+    args: ['-y', 'mcp-atlassian'],
+    envConfig: [
+      { key: 'JIRA_URL', label: 'Jira URL', labelZh: 'Jira 地址', required: true, secret: false, placeholder: 'https://your-org.atlassian.net' },
+      { key: 'JIRA_USERNAME', label: 'Email', labelZh: '邮箱', required: true, secret: false, placeholder: 'you@company.com' },
+      { key: 'JIRA_API_TOKEN', label: 'API Token', labelZh: 'API 令牌', description: 'Create at https://id.atlassian.com/manage-profile/security/api-tokens', descriptionZh: '在 https://id.atlassian.com/manage-profile/security/api-tokens 创建', required: true, secret: true },
+    ],
+    defaultAutoApprove: ['list_issues', 'get_issue', 'search_issues'],
+    requiresConfig: true,
+    docsUrl: 'https://github.com/sooperset/mcp-atlassian',
+    tags: ['jira', 'project', 'atlassian', 'issues'],
+    usageExamples: ['Show my assigned Jira issues', 'Find all bugs in current sprint', 'Get details of PROJ-123'],
+    usageExamplesZh: ['显示分配给我的 Jira 问题', '查找当前迭代中的所有 Bug', '获取 PROJ-123 的详情'],
+  },
+
+  // ===== 支付 =====
+  {
+    type: 'local',
+    id: 'stripe',
+    name: 'Stripe',
+    description: 'Manage Stripe payments, customers, subscriptions, and more',
+    descriptionZh: '管理 Stripe 支付、客户、订阅等',
+    category: 'development',
+    icon: 'Boxes',
+    command: 'npx',
+    args: ['-y', '@stripe/mcp', '--tools=all'],
+    envConfig: [
+      { key: 'STRIPE_SECRET_KEY', label: 'Secret Key', labelZh: '密钥', description: 'Find in Stripe Dashboard > Developers > API keys', descriptionZh: '在 Stripe 控制台 > 开发者 > API 密钥中找到', required: true, secret: true, placeholder: 'sk_...' },
+    ],
+    defaultAutoApprove: ['list_customers', 'list_products', 'list_invoices', 'retrieve_balance'],
+    requiresConfig: true,
+    docsUrl: 'https://github.com/stripe/agent-toolkit',
+    official: true,
+    tags: ['stripe', 'payment', 'billing'],
+    usageExamples: ['Show recent Stripe payments', 'List all active subscriptions', 'Find customers with failed payments'],
+    usageExamplesZh: ['显示最近的 Stripe 收款', '列出所有活跃订阅', '查找支付失败的客户'],
   },
 
   // ===== 文件系统类 =====
@@ -641,9 +802,8 @@ export function searchPresets(query: string): McpPreset[] {
 
 /** 获取当前平台 */
 export function getCurrentPlatform(): McpPlatform {
-  const platform = process.platform
-  if (platform === 'win32') return 'windows'
-  if (platform === 'darwin') return 'macos'
+  if (runtimePlatform.isWindows) return 'windows'
+  if (runtimePlatform.isMac) return 'macos'
   return 'linux'
 }
 

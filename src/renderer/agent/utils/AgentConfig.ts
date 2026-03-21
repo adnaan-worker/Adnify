@@ -12,13 +12,20 @@ import { getReadOnlyTools } from '@/shared/config/tools'
 // 重新导出类型
 export type { AgentRuntimeConfig }
 
+// 缓存：store.agentConfig 引用不变时复用上次结果
+let _cachedSource: Record<string, any> | null = null
+let _cachedResult: AgentRuntimeConfig | null = null
+
 /**
  * 从 store 获取动态配置
- * 合并用户配置和默认配置
+ * 合并用户配置和默认配置（带引用缓存）
  */
 export function getAgentConfig(): AgentRuntimeConfig {
     const agentConfig = useStore.getState().agentConfig || {}
-    return {
+    if (agentConfig === _cachedSource && _cachedResult) return _cachedResult
+
+    _cachedSource = agentConfig
+    const result: AgentRuntimeConfig = {
         // 基础配置
         maxToolLoops: agentConfig.maxToolLoops ?? DEFAULT_AGENT_CONFIG.maxToolLoops,
         maxHistoryMessages: agentConfig.maxHistoryMessages ?? DEFAULT_AGENT_CONFIG.maxHistoryMessages,
@@ -79,6 +86,8 @@ export function getAgentConfig(): AgentRuntimeConfig {
         // 自动上下文
         enableAutoContext: agentConfig.enableAutoContext ?? DEFAULT_AGENT_CONFIG.enableAutoContext,
     }
+    _cachedResult = result
+    return result
 }
 
 /**

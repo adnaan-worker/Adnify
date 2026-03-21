@@ -1,21 +1,19 @@
 /**
- * 文件变更卡片 - 带 Diff 预览的设计
- * 显示删除/新增行的 unified diff 视图，支持语法高亮
- * 
- * 增强功能：
- * - 实时流式 Diff 更新（订阅 streamingEditService）
- * - 与多文件 Diff 面板联动
+ * File change card with diff preview.
+ * UI is unchanged; data flow is optimized for streaming updates.
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, memo } from 'react'
 import { Check, X, ChevronDown, ExternalLink } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@renderer/agent/types'
+import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
-import InlineDiffPreview, { getDiffStats } from './InlineDiffPreview'
+import InlineDiffPreview, { getApproxLineDeltaStats, getDiffStats } from './InlineDiffPreview'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { CodeSkeleton } from '../ui/Loading'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
 import { toast } from '@components/common/ToastProvider'
 
@@ -28,7 +26,7 @@ interface FileChangeCardProps {
     messageId?: string
 }
 
-export default function FileChangeCard({
+function FileChangeCard({
     toolCall,
     isAwaitingApproval,
     onApprove,
@@ -36,71 +34,46 @@ export default function FileChangeCard({
     onOpenInEditor,
 }: FileChangeCardProps) {
     const [isExpanded, setIsExpanded] = useState(false)
-    const { openFile, setActiveFile, workspacePath } = useStore()
-
-    // 合并 arguments 与 streamingState.partialArgs，实现流式参数实时展示
-    const args = useMemo(() => ({
-        ...(toolCall.arguments || {}),
-        ...(toolCall.streamingState?.partialArgs || {}),
-    }), [toolCall.arguments, toolCall.streamingState?.partialArgs]) as Record<string, unknown>
+    const { openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
+    const { args, isSuccess, isError, isRunning, isStreaming } = useToolDisplayState(toolCall)
 
     const meta = args._meta as Record<string, unknown> | undefined
     const filePath = (args.path || meta?.filePath) as string || ''
 
-    const { status } = toolCall
-    const isSuccess = status === 'success'
-    const isError = status === 'error'
-    const isRejected = status === 'rejected'
-    const isRunning = status === 'running' || status === 'pending'
-
-    // 是否正在流式输出（强制在非终态时才允许，防止残留字段导致一直 loading）
-    const isFinalState = isSuccess || isError || isRejected
-    const isStreaming = !isFinalState && (!!toolCall.streamingState?.isStreaming || args._streaming === true)
-
-    // 流式内容状态 - 订阅 streamingEditService 获取实时更新
+    // Local streamed content used by the diff preview.
     const [streamingContent, setStreamingContent] = useState<string | null>(null)
 
-    // 订阅流式编辑更新
+    // Subscribe only to this file path instead of all active edits.
     useEffect(() => {
         if (!isRunning && !isStreaming) {
             setStreamingContent(null)
             return
         }
 
-        // 尝试获取该文件的流式编辑状态
         const editState = streamingEditService.getEditByFilePath(filePath)
         if (editState) {
             setStreamingContent(editState.currentContent)
         }
 
-        // 订阅全局变更
-        const unsubscribe = streamingEditService.subscribeGlobal((activeEdits) => {
-            for (const [, state] of activeEdits) {
-                if (state.filePath === filePath) {
-                    setStreamingContent(state.currentContent)
-                    return
-                }
-            }
+        const unsubscribe = streamingEditService.subscribeByFilePath(filePath, state => {
+            setStreamingContent(state?.currentContent ?? null)
         })
 
         return unsubscribe
     }, [filePath, isRunning, isStreaming])
 
-    // 获取新旧内容用于 diff
+    // Build old content for diffing.
     const oldContent = useMemo(() => {
-        // 优先从 meta 获取（工具执行完成后会有准确的 oldContent）
         if (meta?.oldContent !== undefined) {
             return meta.oldContent as string
         }
 
-        // 流式模式下 edit_file：用 old_string 作为旧内容，实现 patch 风格实时 diff
+        // For streamed edits, old_string is the best local base.
         if ((isRunning || isStreaming) && args.old_string) {
             return args.old_string as string
         }
 
-        // 在流式传输或运行阶段，如果工具是局部编辑类（非全量覆盖），
-        // 且还没有 meta 结果（即工具未完成），暂时忽略旧内容，
-        // 避免将 patch 片段与完整旧文件对比导致显示大面积删除。
+        // Hide unrelated old-content noise while partial edits are still streaming.
         if ((isRunning || isStreaming) && !meta?.oldContent && !args.old_string) {
             const isPartialEdit = toolCall.name === 'edit_file'
             if (isPartialEdit) return ''
@@ -110,63 +83,46 @@ export default function FileChangeCard({
     }, [meta, args.old_string, isRunning, isStreaming, toolCall.name])
 
     const newContent = useMemo(() => {
-        // 优先使用流式内容（实时更新）
+        // Prefer live streamed content while the tool is active.
         if (streamingContent && (isRunning || isStreaming)) {
             return streamingContent
         }
         if (meta?.newContent) return meta.newContent as string
-        // Fallback: 从 args 中获取
         return (args.content || args.code || args.new_string || args.replacement || args.source) as string || ''
     }, [args, meta, streamingContent, isRunning, isStreaming])
 
-    // 计算行数变化 - 优先使用工具返回的准确统计
     const diffStats = useMemo(() => {
-        // 优先使用工具执行后返回的准确统计数据
+        // Prefer precise stats returned by the tool when available.
         if (meta?.linesAdded !== undefined || meta?.linesRemoved !== undefined) {
             return {
                 added: (meta.linesAdded as number) || 0,
                 removed: (meta.linesRemoved as number) || 0
             }
         }
-        // 流式传输中或没有 meta 时，使用 diff 计算（可能不准确）
         if (!newContent) return { added: 0, removed: 0 }
+        if (isRunning || isStreaming) {
+            return getApproxLineDeltaStats(oldContent, newContent)
+        }
         try {
             return getDiffStats(oldContent, newContent)
         } catch {
             return { added: 0, removed: 0 }
         }
-    }, [oldContent, newContent, meta])
+    }, [oldContent, newContent, meta, isRunning, isStreaming])
 
-    // 自动展开 logic
+    // Auto-expand while the tool is active.
     useEffect(() => {
         if (isRunning || isStreaming) {
             setIsExpanded(true)
         }
     }, [isRunning, isStreaming])
 
-    // 延迟渲染逻辑：动画期间不渲染重型内容
-    const [showContent, setShowContent] = useState(false)
-    useEffect(() => {
-        let timer: NodeJS.Timeout
-        if (isExpanded) {
-            // 展开时：延迟显示内容，等待动画完成
-            // 缩短到 100ms，让用户感觉更快
-            timer = setTimeout(() => setShowContent(true), 100)
-        } else {
-            // 收起时：立即隐藏内容，防止重绘
-            setShowContent(false)
-        }
-        return () => clearTimeout(timer)
-    }, [isExpanded])
-
-    // 判断是否是新建文件
-    // 注意：不能仅依据 !oldContent 判断，因为编辑状态下初始可能没有 oldContent 流回来
     const isNewFile = ['create_file', 'create_file_or_folder'].includes(toolCall.name) ||
         (!oldContent && !!newContent && !['edit_file', 'replace_file_content', 'write_file'].includes(toolCall.name))
 
 
 
-    // 计算卡片样式
+    // Card style only; visual design remains unchanged.
     const cardStyle = useMemo(() => {
         if (isAwaitingApproval) return 'border-l-2 border-yellow-500 bg-yellow-500/5'
         if (isError) return 'bg-red-500/5'
@@ -321,7 +277,7 @@ export default function FileChangeCard({
 
                             <div className="relative z-10 ms-1">
                                 <div className="max-h-64 overflow-auto custom-scrollbar relative min-h-[60px] border-l-2 border-border/30 pl-2">
-                                    {showContent || isRunning || isStreaming ? (
+                                    {isExpanded ? (
                                         <InlineDiffPreview
                                             oldContent={oldContent}
                                             newContent={newContent}
@@ -330,7 +286,6 @@ export default function FileChangeCard({
                                             maxLines={50}
                                         />
                                     ) : (
-                                        // 使用统一的代码骨架屏
                                         <div className="min-h-[160px] opacity-50 pt-2">
                                             <CodeSkeleton lines={5} />
                                         </div>
@@ -371,3 +326,7 @@ export default function FileChangeCard({
         </motion.div>
     )
 }
+
+export default memo(FileChangeCard)
+
+

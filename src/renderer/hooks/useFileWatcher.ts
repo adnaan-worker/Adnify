@@ -6,6 +6,7 @@ import { useStore } from '@store'
 import { api } from '@renderer/services/electronAPI'
 import { getFileName, pathEquals } from '@shared/utils/pathUtils'
 import { removeFileFromTypeService } from '@renderer/services/monacoTypeService'
+import { internalWriteTracker } from '@renderer/services/internalWriteTracker'
 
 export function useFileWatcher() {
   useEffect(() => {
@@ -51,8 +52,14 @@ export function useFileWatcher() {
       // 内容相同，不需要操作
       if (newContent === openFile.content) return
 
-      if (openFile.isDirty) {
-        // 文件有未保存更改，显示冲突提示
+      // 检查是否为应用内部写入（Agent 工具、Composer 等）
+      const isInternal = internalWriteTracker.consume(event.path)
+
+      if (isInternal) {
+        // 内部写入，静默刷新，不弹确认框
+        reloadFileFromDisk(openFile.path, newContent)
+      } else if (openFile.isDirty) {
+        // 真正的外部修改且有未保存更改，显示冲突提示
         const shouldReload = confirm(
           `文件 "${getFileName(event.path)}" 已被外部修改。\n\n是否重新加载？（本地更改将丢失）`
         )
@@ -60,7 +67,7 @@ export function useFileWatcher() {
           reloadFileFromDisk(openFile.path, newContent)
         }
       } else {
-        // 文件无更改，直接刷新
+        // 外部修改但无本地更改，直接刷新
         reloadFileFromDisk(openFile.path, newContent)
       }
     })

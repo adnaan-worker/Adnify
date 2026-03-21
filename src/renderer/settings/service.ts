@@ -221,9 +221,6 @@ class SettingsService {
         if (cleaned) cleanedProviderConfigs[id] = cleaned as ProviderConfig
       }
 
-      // DEBUG: 查看保存时 llmConfig 的实际值
-      console.log('[SettingsService] Saving llmConfig:', JSON.stringify(settings.llmConfig, null, 2))
-
       // 构建 app-settings
       const appSettings = {
         llmConfig: {

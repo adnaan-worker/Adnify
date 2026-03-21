@@ -6,12 +6,13 @@ import { api } from '@/renderer/services/electronAPI'
 import { useState, useMemo } from 'react'
 import { ChevronRight, FileText, AlertCircle, AlertTriangle, Info, CheckCircle2 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import type { LspDiagnostic } from '@shared/types'
 import { useDiagnosticsStore } from '@services/diagnosticsStore'
 import { getFileName } from '@shared/utils/pathUtils'
 
 export function ProblemsView() {
-  const { openFile, setActiveFile, language } = useStore()
+  const { openFile, setActiveFile, language } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, language: s.language })))
   
   // 从全局 store 获取诊断数据
   const diagnostics = useDiagnosticsStore(state => state.diagnostics)
@@ -155,9 +156,9 @@ export function ProblemsView() {
 
                 {isExpanded && (
                   <div className="flex flex-col gap-0.5 mt-0.5 mb-2">
-                    {diags.map((diag, idx) => (
+                    {diags.map((diag) => (
                       <div
-                        key={idx}
+                        key={`${diag.range.start.line}-${diag.message.slice(0, 30)}`}
                         onClick={() => handleDiagnosticClick(uri, diag)}
                         className="flex items-start gap-2 px-3 py-2 mx-2 ml-6 rounded-md cursor-pointer hover:bg-surface-hover group border border-transparent hover:border-border-subtle transition-all"
                       >

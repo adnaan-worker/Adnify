@@ -28,11 +28,12 @@ import {
     createOrchestratorSlice,
     type OrchestratorSlice,
 } from './slices/orchestratorSlice'
-import type { ChatMessage, ContextItem, StreamState } from '../types'
+import type { ChatMessage, ContextItem, StreamState, TodoItem } from '../types'
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../context/types'
 import { buildHandoffContext } from '../context/HandoffManager'
 import type { EmotionDetection, EmotionHistory } from '../types/emotion'
+import type { ToolStreamingPreview } from '@/shared/types'
 
 // 重新导出刷新函数供外部使用
 export { flushStreamingBuffer }
@@ -108,6 +109,9 @@ export interface ThreadBoundStore {
     // 状态操作
     setStreamState: (state: Partial<StreamState>) => void
     setStreamPhase: (phase: StreamState['phase']) => void
+    setToolStreamingPreview: (toolCallId: string, preview: ToolStreamingPreview) => void
+    clearToolStreamingPreview: (toolCallId: string) => void
+    getToolStreamingPreview: (toolCallId: string) => ToolStreamingPreview | undefined
     setCompressionStats: (stats: CompressionStats | null) => void
     setContextSummary: (summary: StructuredSummary | null) => void
     setCompressionPhase: (phase: import('../types').CompressionPhase) => void
@@ -123,6 +127,10 @@ export interface ThreadBoundStore {
     addSearchPart: (messageId: string) => string
     updateSearchPart: (messageId: string, partId: string, content: string, isStreaming?: boolean, append?: boolean) => void
     finalizeSearchPart: (messageId: string, partId: string) => void
+
+    // Lint Check 操作
+    addLintCheckPart: (messageId: string) => void
+    updateLintCheckPart: (messageId: string, updates: Partial<import('../types').LintCheckPart>) => void
 
     // 交互式内容操作
     setInteractive: (messageId: string, interactive: import('../types').InteractiveContent) => void
@@ -282,6 +290,12 @@ export const useAgentStore = create<AgentStore>()(
                 // 状态操作
                 setStreamState: (state) => threadSlice.setStreamState(state, threadId),
                 setStreamPhase: (phase) => threadSlice.setStreamState({ phase }, threadId),
+                setToolStreamingPreview: (toolCallId, preview) =>
+                    threadSlice.setToolStreamingPreview(toolCallId, preview, threadId),
+                clearToolStreamingPreview: (toolCallId) =>
+                    threadSlice.clearToolStreamingPreview(toolCallId, threadId),
+                getToolStreamingPreview: (toolCallId) =>
+                    threadSlice.getToolStreamingPreview(toolCallId, threadId),
                 setCompressionStats: (stats) => threadSlice.setCompressionStats(stats, threadId),
                 setContextSummary: (summary) => threadSlice.setContextSummary(summary, threadId),
                 setCompressionPhase: (phase) => threadSlice.setCompressionPhase(phase, threadId),
@@ -303,6 +317,12 @@ export const useAgentStore = create<AgentStore>()(
                     messageSlice.updateSearchPart(messageId, partId, content, isStreaming, append, threadId),
                 finalizeSearchPart: (messageId, partId) =>
                     messageSlice.finalizeSearchPart(messageId, partId, threadId),
+
+                // Lint Check 操作
+                addLintCheckPart: (messageId) =>
+                    messageSlice.addLintCheckPart(messageId, threadId),
+                updateLintCheckPart: (messageId, updates) =>
+                    messageSlice.updateLintCheckPart(messageId, updates, threadId),
 
                 // 交互式内容操作
                 setInteractive: (messageId, interactive) =>
@@ -349,6 +369,7 @@ export const useAgentStore = create<AgentStore>()(
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_CONTEXT_ITEMS: ContextItem[] = []
+const EMPTY_TODOS: TodoItem[] = []
 const DEFAULT_STREAM_STATE: StreamState = { phase: 'idle' }
 
 export const selectCurrentThread = (state: AgentStore) => {
@@ -360,6 +381,11 @@ export const selectMessages = (state: AgentStore) => {
     if (!state.currentThreadId) return EMPTY_MESSAGES
     const thread = state.threads[state.currentThreadId]
     return thread?.messages || EMPTY_MESSAGES
+}
+
+export const selectToolStreamingPreview = (toolCallId: string) => (state: AgentStore) => {
+    if (!state.currentThreadId) return undefined
+    return state.threads[state.currentThreadId]?.toolStreamingPreviews?.[toolCallId]
 }
 
 // 从当前线程获取流状态
@@ -411,6 +437,15 @@ export const selectBranches = (state: AgentStore) => {
     const filtered = allBranches.filter(b => b.id !== MAINLINE_BRANCH_ID)
     filteredBranchesCache.set(threadId, { branches: allBranches, filtered })
 
+    // 清理不存在线程的缓存
+    if (filteredBranchesCache.size > 100) {
+        for (const key of filteredBranchesCache.keys()) {
+            if (!state.threads[key]) {
+                filteredBranchesCache.delete(key)
+            }
+        }
+    }
+
     return filtered
 }
 
@@ -460,6 +495,11 @@ export const selectCompressionPhase = (state: AgentStore) => {
 export const selectIsCompacting = (state: AgentStore): boolean => {
     const thread = selectCurrentThread(state)
     return thread?.isCompacting ?? false
+}
+
+export const selectTodos = (state: AgentStore) => {
+    const thread = selectCurrentThread(state)
+    return thread?.todos || EMPTY_TODOS
 }
 
 // ===== StreamingBuffer 初始化 =====

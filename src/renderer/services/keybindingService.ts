@@ -1,7 +1,9 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
+import { platform } from '@shared/utils/pathUtils'
 
 const LOCAL_STORAGE_KEY = 'adnify-keybindings'
+const isMac = platform.isMac
 
 export interface Command {
     id: string
@@ -74,17 +76,19 @@ class KeybindingService {
         const key = parts.pop()
         if (!key) return false
 
-        const meta = parts.includes('meta') || parts.includes('cmd') || parts.includes('command')
-        const ctrl = parts.includes('ctrl') || parts.includes('control')
+        const hasMeta = parts.includes('meta') || parts.includes('cmd') || parts.includes('command')
+        const hasCtrl = parts.includes('ctrl') || parts.includes('control')
         const shift = parts.includes('shift')
         const alt = parts.includes('alt') || parts.includes('option')
 
-        // 修饰键匹配
+        // macOS: Ctrl 在绑定定义中映射到 Command (metaKey)
+        const meta = isMac ? (hasCtrl || hasMeta) : hasMeta
+        const ctrl = isMac ? false : hasCtrl
+
         const modifiersMatch =
             (e.metaKey === meta) &&
             (e.ctrlKey === ctrl) &&
             (e.altKey === alt)
-        // Shift 单独检查：如果绑定不需要 Shift，但用户按了 Shift，也不匹配
         const shiftMatch = shift || !e.shiftKey
 
         // 按键匹配（忽略大小写）
@@ -170,3 +174,32 @@ class KeybindingService {
 }
 
 export const keybindingService = new KeybindingService()
+
+/**
+ * 根据平台转换快捷键显示文本
+ * macOS: Ctrl→⌘  Alt→⌥  Shift→⇧  Backquote→`
+ */
+export function formatShortcut(shortcut: string): string {
+    if (!isMac) return shortcut
+    return shortcut
+        .replace(/Ctrl\+/gi, '⌘')
+        .replace(/Alt\+/gi, '⌥')
+        .replace(/Shift\+/gi, '⇧')
+}
+
+/**
+ * 将快捷键字符串拆分为适合 macOS 显示的按键数组
+ * macOS: Ctrl→⌘  Alt→⌥  Shift→⇧
+ */
+export function formatShortcutKeys(keys: string[]): string[] {
+    if (!isMac) return keys
+    return keys.map(k => {
+        const lower = k.toLowerCase()
+        if (lower === 'ctrl') return '⌘'
+        if (lower === 'alt') return '⌥'
+        if (lower === 'shift') return '⇧'
+        return k
+    })
+}
+
+export { isMac }

@@ -5,10 +5,12 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { toAppError } from '@shared/utils/errorHandler'
+import { resolveEditFileRequest } from '@/shared/utils/editFile'
+import { resolveReadFileRequest } from '@/shared/utils/readFile'
 import { logger } from '@utils/Logger'
 import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
 import { validatePath, isSensitivePath } from '@shared/utils/pathUtils'
-import { pathToLspUri, waitForDiagnostics, isLanguageSupported, getLanguageId } from '@/renderer/services/lspService'
+import { pathToLspUri, waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
 import {
     calculateLineChanges,
 } from '@/renderer/utils/searchReplace'
@@ -20,24 +22,57 @@ import { memoryService } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
 import { composerService } from '../services/composerService'
 import { toRelativePath } from '@shared/utils/pathUtils'
-import { getInteractiveTerminalBackend, isLongRunningCommand } from './commandRuntime'
+import { isLongRunningCommand } from './commandRuntime'
+import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 
 // ===== 辅助函数 =====
 
 /**
  * 文件写入后通知 LSP 并等待诊断
- * 用于在 Agent 修改文件后获取最新的诊断信息
+ *
+ * 关键：必须先 didOpen/didChange 让 LSP 感知文件内容，
+ * 否则 LSP 不会为未打开的文件推送诊断。
  */
-async function notifyLspAfterWrite(filePath: string): Promise<void> {
+async function notifyLspAfterWrite(filePath: string, newContent?: string): Promise<void> {
     const languageId = getLanguageId(filePath)
     if (!isLanguageSupported(languageId)) return
 
     try {
-        // 等待 LSP 返回诊断信息（最多等待 3 秒）
+        // 1. 通知 LSP 文件内容变更（didOpen 内部处理了已打开→didChange 的切换）
+        if (newContent !== undefined) {
+            await didOpenDocument(filePath, newContent)
+        }
+        // 2. 等待 LSP 返回诊断信息（最多等待 3 秒）
         await waitForDiagnostics(filePath)
     } catch {
         // 忽略错误，不影响主流程
     }
+}
+
+/**
+ * 文件变更后通知 composerService（行内预览集成）
+ */
+function notifyComposerChange(opts: {
+    filePath: string
+    workspacePath: string
+    oldContent: string | null
+    newContent: string | null
+    changeType: 'create' | 'modify' | 'delete'
+    linesAdded: number
+    linesRemoved: number
+    toolCallId?: string
+}): void {
+    composerService.ensureSession()
+    composerService.addChange({
+        filePath: opts.filePath,
+        relativePath: toRelativePath(opts.filePath, opts.workspacePath),
+        oldContent: opts.oldContent,
+        newContent: opts.newContent,
+        changeType: opts.changeType,
+        linesAdded: opts.linesAdded,
+        linesRemoved: opts.linesRemoved,
+        toolCallId: opts.toolCallId,
+    })
 }
 
 interface DirTreeNode {
@@ -101,21 +136,12 @@ function resolvePath(p: unknown, workspacePath: string | null, allowRead = false
 const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
     async read_file(args, ctx) {
         // 支持单个文件或多个文件
-        let pathArg = args.path
-
-        // 鲁棒性增强：如果 path 是字符串形式的 JSON 数组（某些模型会这样做），尝试解析它
-        if (typeof pathArg === 'string' && pathArg.trim().startsWith('[') && pathArg.trim().endsWith(']')) {
-            try {
-                const parsed = JSON.parse(pathArg)
-                if (Array.isArray(parsed)) {
-                    pathArg = parsed
-                }
-            } catch (e) {
-                // 如果解析失败，保留原样，由 resolvePath 处理
-            }
+        const resolution = resolveReadFileRequest(args)
+        if (!resolution.ok) {
+            return { success: false, result: '', error: `Validation failed: ${resolution.error}` }
         }
 
-        const paths = Array.isArray(pathArg) ? pathArg : [pathArg as string]
+        const paths = resolution.mode === 'multi' ? resolution.args.paths : [resolution.args.path]
 
         // 如果是多个文件，使用并行读取
         if (paths.length > 1) {
@@ -134,8 +160,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                                 const nodes = await api.index.parseCallGraph(validPath, content)
                                 if (nodes && nodes.length > 0) {
                                     graphContent = '\n--- AST Call Graph Summary ---\n'
-                                    const defs: any[] = nodes.filter(n => n.type === 'definition')
-                                    const calls: any[] = nodes.filter(n => n.type === 'call')
+                                    const defs = nodes.filter(n => n.type === 'definition')
+                                    const calls = nodes.filter(n => n.type === 'call')
                                     for (const def of defs) {
                                         const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
                                         const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
@@ -167,8 +193,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const nodes = await api.index.parseCallGraph(path, content)
             if (nodes && nodes.length > 0) {
                 graphContent = '\n\n--- AST Call Graph Summary ---\n'
-                const defs: any[] = nodes.filter(n => n.type === 'definition')
-                const calls: any[] = nodes.filter(n => n.type === 'call')
+                const defs = nodes.filter(n => n.type === 'definition')
+                const calls = nodes.filter(n => n.type === 'call')
                 for (const def of defs) {
                     const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
                     const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
@@ -178,8 +204,12 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         } catch (e) { }
 
         const lines = content.split('\n')
-        const startLine = typeof args.start_line === 'number' ? Math.max(1, args.start_line) : 1
-        const endLine = typeof args.end_line === 'number' ? Math.min(lines.length, args.end_line) : lines.length
+        const startLine = resolution.mode === 'single' && typeof resolution.args.start_line === 'number'
+            ? Math.max(1, resolution.args.start_line)
+            : 1
+        const endLine = resolution.mode === 'single' && typeof resolution.args.end_line === 'number'
+            ? Math.min(lines.length, resolution.args.end_line)
+            : lines.length
         let numberedContent = lines.slice(startLine - 1, endLine).map((line, i) => `${startLine + i}: ${line}`).join('\n')
 
         // 使用 maxSingleFileChars 限制单个文件的输出大小
@@ -242,11 +272,16 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             const matches: string[] = []
+            const searchRegex = isRegex ? new RegExp(pattern, 'gi') : null
 
             content.split('\n').forEach((line, index) => {
-                const matched = isRegex
-                    ? new RegExp(pattern, 'gi').test(line)
-                    : line.toLowerCase().includes(pattern.toLowerCase())
+                let matched: boolean
+                if (searchRegex) {
+                    searchRegex.lastIndex = 0
+                    matched = searchRegex.test(line)
+                } else {
+                    matched = line.toLowerCase().includes(pattern.toLowerCase())
+                }
                 if (matched) matches.push(`${pathArg}:${index + 1}: ${line.trim()}`)
             })
 
@@ -273,19 +308,19 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const originalContent = await api.file.read(path)
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
 
-        // 判断使用哪种模式
-        const hasBatchMode = args.edits && Array.isArray(args.edits)
-        const hasLineMode = args.start_line || args.end_line || args.content
+        const resolution = resolveEditFileRequest(args)
+
+        // 判断使用哪种模式：content 单独存在时不触发 line mode（保持与 validate 逻辑一致）
+        if (!resolution.ok) {
+            return { success: false, result: '', error: `Validation failed: ${resolution.error}` }
+        }
+
+        const hasBatchMode = resolution.mode === 'batch'
+        const hasLineMode = resolution.mode === 'line'
 
         // 🎯 Fast-Edit 精华：批量编辑模式
         if (hasBatchMode) {
-            const edits = args.edits as Array<{
-                action: 'replace' | 'insert' | 'delete'
-                start_line?: number
-                end_line?: number
-                after_line?: number
-                content?: string
-            }>
+            const { edits } = resolution.args
 
             // 验证缓存
             if (!fileCacheService.hasValidCache(path)) {
@@ -336,7 +371,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 }
             }
 
-            const allWarnings: any[] = []
+            const allWarnings: import('../../utils/smartReplace').EditWarning[] = []
             let linesAdded = 0
             let linesRemoved = 0
 
@@ -412,33 +447,24 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             const newContent = lines.join('\n')
+            internalWriteTracker.mark(path)
             const success = await api.file.write(path, newContent)
             if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
             fileCacheService.markFileAsRead(path, newContent)
 
-            // 🎯 集成行内预览：将变更记录到 composerService
-            composerService.ensureSession()
-            composerService.addChange({
-                filePath: path,
-                relativePath: toRelativePath(path, ctx.workspacePath || ''),
-                oldContent: originalContent,
-                newContent: newContent,
-                changeType: 'modify',
-                linesAdded,
-                linesRemoved,
-                toolCallId: (ctx as any).toolCallId
-            })
+            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded, linesRemoved, toolCallId: ctx.toolCallId })
 
-            await notifyLspAfterWrite(path)
+            await notifyLspAfterWrite(path, newContent)
 
             if (allWarnings.length > 0) {
                 logger.agent.warn(`[edit_file] ${path}: Detected ${allWarnings.length} potential issues in batch`, allWarnings)
             }
 
-            const result: any = {
+            const warningsSuffix = allWarnings.length > 0 ? ` (${allWarnings.length} warning${allWarnings.length > 1 ? 's' : ''} detected)` : ''
+            return {
                 success: true,
-                result: `File updated successfully (batch mode: ${edits.length} edits applied)`,
+                result: `File updated successfully (batch mode: ${edits.length} edits applied)${warningsSuffix}`,
                 meta: {
                     filePath: path,
                     oldContent: originalContent,
@@ -446,23 +472,15 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     linesAdded,
                     linesRemoved,
                     totalLines: lines.length,
-                    editsApplied: edits.length
+                    editsApplied: edits.length,
+                    ...(allWarnings.length > 0 && { warnings: allWarnings }),
                 }
             }
-
-            if (allWarnings.length > 0) {
-                result.meta.warnings = allWarnings
-                result.result += ` (${allWarnings.length} warning${allWarnings.length > 1 ? 's' : ''} detected)`
-            }
-
-            return result
         }
 
         if (hasLineMode) {
             // 行模式（原 replace_file_content）
-            const startLine = args.start_line as number
-            const endLine = args.end_line as number
-            const content = args.content as string
+            const { start_line: startLine, end_line: endLine, content } = resolution.args
 
             // 验证缓存
             if (!fileCacheService.hasValidCache(path)) {
@@ -470,6 +488,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             if (originalContent === '') {
+                internalWriteTracker.mark(path)
                 const success = await api.file.write(path, content)
                 if (success) fileCacheService.markFileAsRead(path, content)
                 return success
@@ -496,7 +515,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             lines.splice(startLine - 1, endLine - startLine + 1, ...newLines)
             const newContent = lines.join('\n')
 
-            // 🎯 Fast-Edit 精华：智能警告检测
+            // Fast-Edit 精华：智能警告检测
             const { checkLineReplaceWarnings } = await import('../../utils/smartReplace')
             const warnings = checkLineReplaceWarnings(oldLines, newLines, lines, startLine, endLine)
 
@@ -504,51 +523,33 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 logger.agent.warn(`[edit_file] ${path}: Detected ${warnings.length} potential issues`, warnings)
             }
 
+            internalWriteTracker.mark(path)
             const success = await api.file.write(path, newContent)
             if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
             fileCacheService.markFileAsRead(path, newContent)
 
-            // 🎯 集成行内预览
             const lineChanges = calculateLineChanges(originalContent, newContent)
-            composerService.ensureSession()
-            composerService.addChange({
-                filePath: path,
-                relativePath: toRelativePath(path, ctx.workspacePath || ''),
-                oldContent: originalContent,
-                newContent: newContent,
-                changeType: 'modify',
-                linesAdded: lineChanges.added,
-                linesRemoved: lineChanges.removed,
-                toolCallId: (ctx as any).toolCallId
-            })
+            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
 
-            await notifyLspAfterWrite(path)
+            await notifyLspAfterWrite(path, newContent)
 
-            const result: any = {
+            const warningsSuffix = warnings.length > 0 ? ` (${warnings.length} warning${warnings.length > 1 ? 's' : ''} detected)` : ''
+            return {
                 success: true,
-                result: 'File updated successfully (line mode)',
+                result: `File updated successfully (line mode)${warningsSuffix}`,
                 meta: {
                     filePath: path,
                     oldContent: originalContent,
                     newContent,
                     linesAdded: lineChanges.added,
-                    linesRemoved: lineChanges.removed
+                    linesRemoved: lineChanges.removed,
+                    ...(warnings.length > 0 && { warnings }),
                 }
             }
-
-            // 如果有警告，添加到结果中
-            if (warnings.length > 0) {
-                result.meta.warnings = warnings
-                result.result += ` (${warnings.length} warning${warnings.length > 1 ? 's' : ''} detected)`
-            }
-
-            return result
         } else {
             // 字符串模式（原 edit_file）
-            const oldString = args.old_string as string
-            const newString = args.new_string as string
-            const replaceAll = args.replace_all as boolean | undefined
+            const { old_string: oldString, new_string: newString, replace_all: replaceAll } = resolution.args
 
             const normalizedContent = normalizeLineEndings(originalContent)
             const normalizedOld = normalizeLineEndings(oldString)
@@ -587,26 +588,16 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             const newContent = result.newContent!
+            internalWriteTracker.mark(path)
             const writeSuccess = await api.file.write(path, newContent)
             if (!writeSuccess) return { success: false, result: '', error: 'Failed to write file' }
 
             fileCacheService.markFileAsRead(path, newContent)
 
-            // 🎯 集成行内预览
             const lineChanges = calculateLineChanges(originalContent, newContent)
-            composerService.ensureSession()
-            composerService.addChange({
-                filePath: path,
-                relativePath: toRelativePath(path, ctx.workspacePath || ''),
-                oldContent: originalContent,
-                newContent: newContent,
-                changeType: 'modify',
-                linesAdded: lineChanges.added,
-                linesRemoved: lineChanges.removed,
-                toolCallId: (ctx as any).toolCallId
-            })
+            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
 
-            await notifyLspAfterWrite(path)
+            await notifyLspAfterWrite(path, newContent)
 
             const strategyInfo = result.strategy !== 'exact' ? ` (matched via ${result.strategy} strategy)` : ''
 
@@ -629,26 +620,16 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const path = resolvePath(args.path, ctx.workspacePath)
         const content = args.content as string
         const originalContent = await api.file.read(path) || ''
+        internalWriteTracker.mark(path)
         const success = await api.file.write(path, content)
         if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
         // 通知 LSP 并等待诊断
-        await notifyLspAfterWrite(path)
+        await notifyLspAfterWrite(path, content)
 
         const lineChanges = calculateLineChanges(originalContent, content)
 
-        // 🎯 集成行内预览
-        composerService.ensureSession()
-        composerService.addChange({
-            filePath: path,
-            relativePath: toRelativePath(path, ctx.workspacePath || ''),
-            oldContent: originalContent,
-            newContent: content,
-            changeType: originalContent ? 'modify' : 'create',
-            linesAdded: lineChanges.added,
-            linesRemoved: lineChanges.removed,
-            toolCallId: (ctx as any).toolCallId
-        })
+        notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent: content, changeType: originalContent ? 'modify' : 'create', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
         return { success: true, result: 'File written successfully', meta: { filePath: path, oldContent: originalContent, newContent: content, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
     },
 
@@ -662,24 +643,14 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         }
 
         const content = (args.content as string) || ''
+        internalWriteTracker.mark(path)
         const success = await api.file.write(path, content)
 
         if (success) {
             // 通知 LSP 并等待诊断
-            await notifyLspAfterWrite(path)
+            await notifyLspAfterWrite(path, content)
 
-            // 🎯 集成行内预览
-            composerService.ensureSession()
-            composerService.addChange({
-                filePath: path,
-                relativePath: toRelativePath(path, ctx.workspacePath || ''),
-                oldContent: null,
-                newContent: content,
-                changeType: 'create',
-                linesAdded: content.split('\n').length,
-                linesRemoved: 0,
-                toolCallId: (ctx as any).toolCallId
-            })
+            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: null, newContent: content, changeType: 'create', linesAdded: content.split('\n').length, linesRemoved: 0, toolCallId: ctx.toolCallId })
         }
 
         return { success, result: success ? 'File created' : 'Failed to create file', meta: { filePath: path, isNewFile: true, newContent: content, linesAdded: content.split('\n').length } }
@@ -688,108 +659,92 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     async delete_file_or_folder(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath)
         const success = await api.file.delete(path)
+        if (success) {
+            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: null, newContent: null, changeType: 'delete', linesAdded: 0, linesRemoved: 0 })
+        }
         return { success, result: success ? 'Deleted successfully' : 'Failed to delete' }
     },
 
     async run_command(args, ctx) {
         const command = args.command as string
-        const cwd = args.cwd ? resolvePath(args.cwd, ctx.workspacePath, true) : ctx.workspacePath
+        // cwd 解析：若 AI 传了 cwd 参数，解析为绝对路径；否则用工作区根目录
+        const resolvedCwd = args.cwd ? resolvePath(args.cwd, ctx.workspacePath, true) : null
         const isBackground = args.is_background as boolean
         const config = getAgentConfig()
         const timeout = args.timeout
             ? (args.timeout as number) * 1000
             : config.toolTimeoutMs
 
-        // 智能判定长进程
         const isLongRunningProcess = isLongRunningCommand(command, isBackground)
 
-        if (isLongRunningProcess) {
-            try {
-                // 1. 初始化终端并在 UI 里展示
-                const { terminalManager } = await import('@/renderer/services/TerminalManager')
+        try {
+            const { terminalManager } = await import('@/renderer/services/TerminalManager')
 
-                // 确保我们在主进程上下文中
-                const fallbackCwd = cwd
-                    || ctx.workspacePath
-                    || (typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '.')
+            // 先唤出面板，再创建/获取终端，避免竞态：
+            // 若先创建终端，notify() 触发时面板还不可见 → useEffect 销毁刚创建的终端
+            useStore.getState().setTerminalVisible(true)
 
-                const termId = await terminalManager.createTerminal({
-                    name: command.split(' ')[0] || 'Task',
-                    cwd: fallbackCwd,
-                    backend: getInteractiveTerminalBackend()
-                })
+            // 获取或复用 Agent 专属终端（初始 cwd 用工作区根目录，避免反复改变终端目录）
+            const termId = await terminalManager.getOrCreateAgentTerminal(
+                ctx.workspacePath || '/'
+            )
 
-                // 这边给终端发送换行使其执行
-                terminalManager.writeToTerminal(termId, `${command}\r`)
+            // 激活 Agent 终端 tab，让用户看到执行过程
+            terminalManager.setActiveTerminal(termId)
 
-                // 2. 唤出面板，让用户可见 (如果在渲染器中可获取的话)
-                useStore.getState().setTerminalVisible(true)
-                terminalManager.setActiveTerminal(termId)
+            // === 长进程：直接写入并立即返回，让用户在终端里跟踪 ===
+            if (isLongRunningProcess) {
+                // 长进程也需要处理 cwd
+                const bgCmd = resolvedCwd
+                    ? (/windows/i.test(navigator.userAgent)
+                        ? `Push-Location "${resolvedCwd}"; ${command}; Pop-Location`
+                        : `(cd "${resolvedCwd}" && ${command})`)
+                    : command
+                terminalManager.writeToTerminal(termId, `${bgCmd}\r`)
+
+                // 长进程占用了当前终端的 shell，释放 agentTerminalId
+                // 使下一次 run_command 自动创建新终端，避免命令被 stdin 吞掉
+                terminalManager.releaseAgentTerminal()
 
                 return {
                     success: true,
-                    result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\n\nThe process is now running interactively in the UI terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check its startup logs. Use 'send_terminal_input' if you need to answer prompts or type Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
-                    meta: {
-                        command,
-                        cwd,
-                        terminalId: termId,
-                        isBackground: true
-                    }
-                }
-            } catch (error) {
-                const errorMsg = error instanceof Error ? error.message : String(error)
-                logger.agent.error('[run_command] Interactive execution failed:', errorMsg)
-                return {
-                    success: false,
-                    result: `Error: Failed to start interactive terminal: ${errorMsg}`,
-                    error: errorMsg
+                    result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\n\nThe process is running in the Agent terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check logs. Use 'send_terminal_input' to send input or Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
+                    meta: { command, cwd: resolvedCwd, terminalId: termId, isBackground: true }
                 }
             }
-        }
 
-        try {
-            // 使用后台执行（不依赖 PTY，更可靠）
-            const result = await api.shell.executeBackground({
+            // === 短命令：用 sentinel 机制精确捕获输出，同时用户可见 ===
+            // 将 resolvedCwd 传给 executeCommandWithOutput，由其负责临时切换目录
+            const { output, exitCode, timedOut } = await terminalManager.executeCommandWithOutput(
+                termId,
                 command,
-                cwd: cwd || ctx.workspacePath || undefined,
                 timeout,
-            })
+                resolvedCwd || undefined,
+            )
 
-            // 构建结果信息
-            const output = result.output || ''
             const hasOutput = output.trim().length > 0
-
             let resultText = output
-            if (result.error) {
-                resultText = hasOutput
-                    ? `${output}\n\n[Error: ${result.error}]`
-                    : `Error: ${result.error}`
-            } else if (!hasOutput) {
-                resultText = result.exitCode === 0 ? 'Command executed successfully (no output)' : `Command exited with code ${result.exitCode} (no output)`
+
+            if (!hasOutput) {
+                resultText = exitCode === 0
+                    ? 'Command executed successfully (no output)'
+                    : `Command exited with code ${exitCode} (no output)`
             }
 
-            // 判断成功：
-            // 1. 退出码为 0 一定是成功
-            // 2. 有正常输出且没有明确错误也视为成功（让 AI 判断内容）
-            // 3. 超时或执行错误才是失败
-            const isSuccess = result.exitCode === 0 || (hasOutput && !result.error)
+            if (timedOut) {
+                resultText = `[Timed out after ${timeout / 1000}s]\n${output}`
+            }
 
+            const isSuccess = exitCode === 0 && !timedOut
             return {
                 success: isSuccess,
                 result: resultText,
-                meta: {
-                    command,
-                    cwd,
-                    exitCode: result.exitCode ?? (result.success ? 0 : 1),
-                    timedOut: result.error?.includes('timed out')
-                },
-                error: isSuccess ? undefined : resultText // 设置 error 让 LLM 知道失败了
+                meta: { command, cwd: resolvedCwd, exitCode, timedOut, terminalId: termId },
+                error: isSuccess ? undefined : resultText
             }
         } catch (error) {
-            // 捕获执行异常（如 IPC 通信失败）
             const errorMsg = error instanceof Error ? error.message : String(error)
             logger.agent.error('[run_command] Execution failed:', errorMsg)
-
             return {
                 success: false,
                 result: `Error: Failed to execute command: ${errorMsg}`,
@@ -880,7 +835,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
     async get_lint_errors(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath, true)
-        const errors = await lintService.getLintErrors(path, args.refresh as boolean)
+        const { errors, notInstalled } = await lintService.getLintErrors(path, args.refresh as boolean)
+        if (notInstalled) {
+            return { success: true, result: notInstalled }
+        }
         return { success: true, result: errors.length ? errors.map((e) => `[${e.severity}] ${e.message} (Line ${e.startLine})`).join('\n') : 'No lint errors found.' }
     },
 
@@ -980,7 +938,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     async ask_user(args, _ctx) {
         const question = args.question as string
         const rawOptions = args.options as Array<{ id?: string; value?: string; label: string; description?: string }>
-        const multiSelect = (args.multiSelect as boolean) || false
+        const multiSelect = (args.multi_select as boolean) || false
 
         // 兼容处理：支持 id 或 value 作为选项标识符
         const options = rawOptions.map((opt, idx) => ({
@@ -1029,6 +987,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             // 保存需求文档 (markdown)
             const mdPath = `${planDir}/${planId}.md`
+            internalWriteTracker.mark(mdPath)
             await api.file.write(mdPath, requirementsDoc)
 
             // 构建任务对象
@@ -1063,6 +1022,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             // 保存规划文件 (json)
             const jsonPath = `${planDir}/${planId}.json`
+            internalWriteTracker.mark(jsonPath)
             await api.file.write(jsonPath, JSON.stringify(plan, null, 2))
 
             // 添加到 store 并打开 TaskBoard
@@ -1121,6 +1081,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 const mdPath = `${ctx.workspacePath}/.adnify/plan/${plan.requirementsDoc}`
                 const existingContent = await api.file.read(mdPath)
                 const newContent = `${existingContent}\n\n---\n## Updates\n${updateRequirements}`
+                internalWriteTracker.mark(mdPath)
                 await api.file.write(mdPath, newContent)
                 changes.push('Updated requirements document')
             }
@@ -1177,6 +1138,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const updatedPlan = store.plans.find(p => p.id === planId)
             if (updatedPlan) {
                 const jsonPath = `${ctx.workspacePath}/.adnify/plan/${planId}.json`
+                internalWriteTracker.mark(jsonPath)
                 await api.file.write(jsonPath, JSON.stringify(updatedPlan, null, 2))
             }
 
@@ -1224,7 +1186,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 }
             }
 
-            const { startPlanExecution } = await import('../services/orchestratorExecutor')
+            const { startPlanExecution } = await import('../orchestrator/orchestratorExecutor')
 
             // 异步启动执行（不等待完成）
             const result = await startPlanExecution(plan.id)
@@ -1259,7 +1221,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             if (stack) {
                 // 验证 stack 类型
                 const validStacks = ['html-tailwind', 'react', 'nextjs', 'vue', 'svelte', 'swiftui', 'react-native', 'flutter'] as const
-                const techStack = validStacks.includes(stack as any) ? stack as import('./uiux').TechStack : 'react'
+                const techStack = (validStacks as readonly string[]).includes(stack) ? stack as import('./uiux').TechStack : 'react'
 
                 const result = await uiuxDatabase.searchStack(query, techStack, maxResults)
                 if (result.count === 0) {
@@ -1282,7 +1244,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             // 否则搜索域数据
             // 验证 domain 类型
             const validDomains = ['style', 'color', 'typography', 'chart', 'landing', 'product', 'ux', 'prompt'] as const
-            const uiuxDomain = domain && validDomains.includes(domain as any) ? domain as import('./uiux').UiuxDomain : undefined
+            const uiuxDomain = domain && (validDomains as readonly string[]).includes(domain) ? domain as import('./uiux').UiuxDomain : undefined
 
             const result = await uiuxDatabase.search(query, uiuxDomain, maxResults)
             if (result.count === 0) {
@@ -1363,6 +1325,128 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 error: `Failed to remember: ${toAppError(err).message}`,
             }
         }
+    },
+
+    async apply_skill(args, _ctx) {
+        const skillName = args.skill_name as string
+        if (!skillName) return { success: false, result: '', error: 'Missing skill_name' }
+
+        try {
+            const { skillService } = await import('../services/skillService')
+            const skill = await skillService.getSkillByName(skillName)
+            if (!skill) {
+                return {
+                    success: false,
+                    result: '',
+                    error: `Skill "${skillName}" not found. Check available skills in the system prompt.`,
+                }
+            }
+
+            // skill 安装目录
+            const installPath = skill.filePath.replace(/[/\\]SKILL\.md$/i, '')
+            const { platform } = await import('@shared/utils/pathUtils')
+            const isWin = platform.isWindows
+            const normalizedPath = isWin ? installPath.replace(/\//g, '\\') : installPath
+
+            // 扫描 skill 目录下的所有文件，让 AI 知道有哪些脚本可用
+            let fileTree = ''
+            try {
+                const items = await api.file.readDir(installPath)
+                if (items && items.length > 0) {
+                    const listFiles = async (dir: string, prefix: string): Promise<string[]> => {
+                        const entries = await api.file.readDir(dir)
+                        if (!entries) return []
+                        const lines: string[] = []
+                        for (const entry of entries) {
+                            if (entry.name === 'SKILL.md' || entry.name.startsWith('.') || entry.name === 'node_modules') continue
+                            const entryPath = `${dir}${isWin ? '\\' : '/'}${entry.name}`
+                            if (entry.isDirectory) {
+                                lines.push(`${prefix}${entry.name}/`)
+                                lines.push(...await listFiles(entryPath, prefix + '  '))
+                            } else {
+                                lines.push(`${prefix}${entry.name}`)
+                            }
+                        }
+                        return lines
+                    }
+                    const tree = await listFiles(installPath, '  ')
+                    if (tree.length > 0) {
+                        fileTree = `\n\n## Skill Directory Contents\n\`\`\`\n${normalizedPath}/\n${tree.join('\n')}\n\`\`\``
+                    }
+                }
+            } catch {
+                // 扫描失败不影响主流程
+            }
+
+            const scriptHint = isWin
+                ? `On Windows: use \`node\` for .js, \`python\` for .py, \`cmd /c\` for .bat/.cmd`
+                : `Use \`bash\` for .sh, \`node\` for .js, \`python\` for .py`
+
+            const result = [
+                `<skill name="${skill.name}" path="${normalizedPath}">`,
+                skill.content,
+                `</skill>`,
+                fileTree,
+                ``,
+                `## Execution Guidelines`,
+                `- **Working Directory (CRITICAL)**: Set \`cwd\` to \`${normalizedPath}\` for ALL shell commands from this skill`,
+                `- **Scripts**: If the skill references scripts or commands, execute them from the skill directory. ${scriptHint}`,
+                `- **Relative Paths**: All relative paths in the skill instructions are relative to \`${normalizedPath}\``,
+            ].join('\n')
+
+            return { success: true, result }
+        } catch (err) {
+            return {
+                success: false,
+                result: '',
+                error: `Failed to load skill: ${toAppError(err).message}`,
+            }
+        }
+    },
+
+    async todo_write(args) {
+        const todos = args.todos as Array<{ content: string; status: string; activeForm: string }>
+        if (!Array.isArray(todos)) {
+            return { success: false, result: '', error: 'todos must be an array' }
+        }
+
+        const { useAgentStore } = await import('../store/AgentStore')
+        const store = useAgentStore.getState()
+
+        // 空数组 = 归档清空
+        if (todos.length === 0) {
+            store.setTodos([])
+            return { success: true, result: 'Task list cleared' }
+        }
+
+        // 验证格式
+        for (const todo of todos) {
+            if (!todo.content || !todo.status || !todo.activeForm) {
+                return { success: false, result: '', error: 'Each todo must have content, status, and activeForm' }
+            }
+            if (!['pending', 'in_progress', 'completed'].includes(todo.status)) {
+                return { success: false, result: '', error: `Invalid status: ${todo.status}` }
+            }
+        }
+
+        // 存储到当前线程状态
+        store.setTodos(
+            todos.map(t => ({
+                content: t.content,
+                status: t.status as 'pending' | 'in_progress' | 'completed',
+                activeForm: t.activeForm,
+            }))
+        )
+
+        // 返回摘要
+        const completed = todos.filter(t => t.status === 'completed').length
+        const inProgress = todos.find(t => t.status === 'in_progress')
+        const allCompleted = todos.every(t => t.status === 'completed')
+        const summary = allCompleted
+            ? `All ${todos.length} tasks completed. Call todo_write with empty array [] to clear the list.`
+            : `Task list updated (${completed}/${todos.length} completed)` +
+              (inProgress ? `. Currently: ${inProgress.activeForm}` : '')
+        return { success: true, result: summary }
     },
 }
 

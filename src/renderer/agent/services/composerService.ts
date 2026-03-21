@@ -13,6 +13,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { getDirname } from '@shared/utils/pathUtils'
+import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 
 
 export interface FileChange {
@@ -161,6 +162,7 @@ class ComposerServiceClass {
         if (parentDir && parentDir !== filePath) {
           await api.file.mkdir(parentDir)
         }
+        internalWriteTracker.mark(filePath)
         await api.file.write(filePath, change.newContent)
       }
 
@@ -185,6 +187,7 @@ class ComposerServiceClass {
     // Restore original content if it was modified
     if (change.changeType === 'modify' && change.oldContent !== null) {
       try {
+        internalWriteTracker.mark(filePath)
         await api.file.write(filePath, change.oldContent)
       } catch (error) {
         logger.agent.error('[Composer] Failed to restore file:', error)

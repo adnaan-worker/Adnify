@@ -26,6 +26,7 @@ export class McpManager extends EventEmitter {
   private configLoader: McpConfigLoader
   private initialized = false
   private autoConnectEnabled = true // 默认启用
+  private cachedConfigs: McpServerConfig[] | null = null
 
   constructor() {
     super()
@@ -60,14 +61,15 @@ export class McpManager extends EventEmitter {
   }
 
   /** 异步后台自动连接所有未禁用的服务器 */
-  private autoConnectServers(): void {
+  private async autoConnectServers(): Promise<void> {
     // 检查是否启用自动连接
     if (!this.autoConnectEnabled) {
       logger.mcp?.info('[McpManager] Auto-connect is disabled, skipping')
       return
     }
 
-    const configs = this.configLoader.loadConfig()
+    const configs = await this.configLoader.loadConfig()
+    this.cachedConfigs = configs
     const enabledConfigs = configs.filter((c) => !c.disabled)
 
     if (enabledConfigs.length === 0) {
@@ -94,12 +96,15 @@ export class McpManager extends EventEmitter {
       })
     ).then(() => {
       logger.mcp?.info('[McpManager] Auto-connect completed')
+    }).catch((err) => {
+      logger.mcp?.error('[McpManager] Auto-connect error:', err)
     })
   }
 
   /** 重新加载配置 */
   async reloadConfig(): Promise<void> {
-    const configs = this.configLoader.loadConfig()
+    const configs = await this.configLoader.loadConfig()
+    this.cachedConfigs = configs
     const currentIds = new Set(this.clients.keys())
     const newIds = new Set(configs.map((c) => c.id))
 
@@ -127,7 +132,7 @@ export class McpManager extends EventEmitter {
   async connectServer(configOrId: McpServerConfig | string): Promise<void> {
     let config: McpServerConfig
     if (typeof configOrId === 'string') {
-      const configs = this.configLoader.loadConfig()
+      const configs = await this.configLoader.loadConfig()
       const found = configs.find((c) => c.id === configOrId)
       if (!found) {
         logger.mcp?.error(`[McpManager] Server config not found: ${configOrId}`)
@@ -200,9 +205,12 @@ export class McpManager extends EventEmitter {
     await this.connectServer(serverId)
   }
 
-  /** 获取所有服务器状态 */
-  getServersState(): McpServerState[] {
-    const configs = this.configLoader.loadConfig()
+  /** 获取所有服务器状态（使用缓存配置，避免频繁读取文件） */
+  async getServersState(): Promise<McpServerState[]> {
+    if (!this.cachedConfigs) {
+      this.cachedConfigs = await this.configLoader.loadConfig()
+    }
+    const configs = this.cachedConfigs
     const states: McpServerState[] = []
 
     for (const config of configs) {
@@ -310,34 +318,34 @@ export class McpManager extends EventEmitter {
   }
 
   /** 添加服务器 */
-  async addServer(config: McpServerConfig): Promise<void> {
-    await this.configLoader.addServer(config)
-    logger.mcp?.info(`[McpManager] Added server: ${config.id}`)
+  async addServer(config: McpServerConfig, level: 'user' | 'workspace' = 'user'): Promise<void> {
+    await this.configLoader.addServer(config, level)
+    logger.mcp?.info(`[McpManager] Added server: ${config.id} (${level})`)
   }
 
   /** 删除服务器 */
-  async removeServer(serverId: string): Promise<void> {
+  async removeServer(serverId: string, level: 'user' | 'workspace' = 'user'): Promise<void> {
     if (this.clients.has(serverId)) {
       await this.disconnectServer(serverId)
     }
-    await this.configLoader.removeServer(serverId)
-    logger.mcp?.info(`[McpManager] Removed server: ${serverId}`)
+    await this.configLoader.removeServer(serverId, level)
+    logger.mcp?.info(`[McpManager] Removed server: ${serverId} (${level})`)
   }
 
   /** 切换服务器启用/禁用 */
-  async toggleServer(serverId: string, disabled: boolean): Promise<void> {
-    await this.configLoader.toggleServer(serverId, disabled)
+  async toggleServer(serverId: string, disabled: boolean, level: 'user' | 'workspace' = 'user'): Promise<void> {
+    await this.configLoader.toggleServer(serverId, disabled, level)
     if (disabled && this.clients.has(serverId)) {
       await this.disconnectServer(serverId)
     }
-    logger.mcp?.info(`[McpManager] Toggled server ${serverId}: disabled=${disabled}`)
+    logger.mcp?.info(`[McpManager] Toggled server ${serverId}: disabled=${disabled} (${level})`)
   }
 
   /** 获取配置路径 */
   getConfigPaths(): { user: string; workspace: string[] } {
     return {
       user: this.configLoader.getUserConfigPath(),
-      workspace: this.configLoader['workspaceRoots'].map((root) => this.configLoader.getWorkspaceConfigPath(root)),
+      workspace: this.configLoader.getWorkspaceRoots().map((root) => this.configLoader.getWorkspaceConfigPath(root)),
     }
   }
 
@@ -361,11 +369,47 @@ export class McpManager extends EventEmitter {
     // 打开浏览器
     try {
       await shell.openExternal(authUrl)
-      return { success: true, authorizationUrl: authUrl }
     } catch (err) {
       const error = toAppError(err)
       return { success: false, error: `Failed to open browser: ${error.message}` }
     }
+
+    // 通知渲染进程：OAuth 等待中（使用 connecting 状态复用现有 UI）
+    this.sendToRenderer('mcp:serverStatus', {
+      serverId,
+      status: 'connecting',
+      oauthPending: true,
+    })
+
+    // 从 AuthStore 取回 OAuth state，自动监听回调并完成授权
+    McpAuthStore.get(serverId).then((authEntry) => {
+      const oauthState = authEntry?.oauthState
+      if (!oauthState) {
+        logger.mcp?.warn(`[McpManager] No OAuth state found for ${serverId}, cannot auto-complete`)
+        return
+      }
+
+      logger.mcp?.info(`[McpManager] Waiting for OAuth callback for ${serverId}...`)
+      McpOAuthCallback.waitForCallback(oauthState)
+        .then(async (code) => {
+          logger.mcp?.info(`[McpManager] OAuth callback received for ${serverId}, completing auth...`)
+          const result = await this.finishOAuth(serverId, code)
+          if (!result.success) {
+            this.sendToRenderer('mcp:serverStatus', { serverId, status: 'error', error: result.error })
+          }
+        })
+        .catch((err: Error) => {
+          const cancelled = err.message === 'Authorization cancelled' || err.message === 'OAuth callback server stopped'
+          if (!cancelled) {
+            logger.mcp?.error(`[McpManager] OAuth failed for ${serverId}: ${err.message}`)
+            this.sendToRenderer('mcp:serverStatus', { serverId, status: 'error', error: `OAuth failed: ${err.message}` })
+          }
+        })
+    }).catch((err) => {
+      logger.mcp?.error(`[McpManager] Failed to load auth store for ${serverId}:`, err)
+    })
+
+    return { success: true, authorizationUrl: authUrl }
   }
 
   /** 完成 OAuth 认证 */
@@ -416,14 +460,15 @@ export class McpManager extends EventEmitter {
 
   private handleConfigChange(): void {
     if (!this.initialized) return
+    this.cachedConfigs = null // 清除缓存，强制重新加载
     logger.mcp?.info('[McpManager] Config changed, reloading...')
     this.reloadConfig().catch((err) => {
       logger.mcp?.error('[McpManager] Failed to reload config:', err)
     })
   }
 
-  private notifyStateChange(): void {
-    const state = this.getServersState()
+  private async notifyStateChange(): Promise<void> {
+    const state = await this.getServersState()
     this.sendToRenderer('mcp:stateChanged', state)
   }
 
