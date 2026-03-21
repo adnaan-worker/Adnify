@@ -22,6 +22,23 @@ import { TaskTemplatePicker } from './TaskTemplatePicker'
 import { WorkPackageColumn } from './WorkPackageColumn'
 import { buildWorkPackageRuntimeActivity } from './workPackageRuntime'
 
+const EXECUTION_CONSOLE_EMPTY_STATE = {
+  runtime: 'Execution thread is ready and waiting for the first update.',
+  tools: 'No active tools are visible yet.',
+  assistant: 'No assistant output has been captured yet.',
+  verification: 'Verification has not started yet.',
+}
+
+function getVerificationSummary(proposal?: ChangeProposal | null): string {
+  if (!proposal) {
+    return EXECUTION_CONSOLE_EMPTY_STATE.verification
+  }
+
+  return proposal.verificationSummary
+    || proposal.verificationBlockedReason
+    || `Verification is ${proposal.verificationStatus}.`
+}
+
 interface ExecutionTaskPanelProps {
   task: ExecutionTask
   workPackages?: WorkPackage[]
@@ -92,6 +109,15 @@ export function ExecutionTaskPanel({
   const selectedWorkPackageActivity = selectedWorkPackage
     ? workPackageActivities.get(selectedWorkPackage.id) || null
     : null
+  const runtimeSummary = selectedWorkPackageActivity?.userPreview || selectedWorkPackage?.objective || task.objective
+  const assistantSummary = selectedWorkPackageActivity?.assistantPreview || EXECUTION_CONSOLE_EMPTY_STATE.assistant
+  const toolSummary = selectedWorkPackageActivity?.toolPreview || EXECUTION_CONSOLE_EMPTY_STATE.tools
+  const verificationSummary = getVerificationSummary(selectedProposal)
+  const verificationTone = selectedProposal?.verificationStatus === 'passed'
+    ? 'border-emerald-500/20 bg-emerald-500/10'
+    : selectedProposal
+      ? 'border-amber-500/20 bg-amber-500/10'
+      : 'border-border/60 bg-background/40'
 
   return (
     <section className="rounded-2xl border border-border bg-surface/20 p-5 space-y-5">
@@ -164,6 +190,70 @@ export function ExecutionTaskPanel({
           ) : null}
         </div>
       </div>
+
+      <section className="rounded-xl border border-border bg-background/20 p-4 space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1">
+            <div className="text-xs uppercase tracking-[0.2em] text-text-muted">Execution Console</div>
+            <div className="text-sm font-semibold text-text-primary">
+              {selectedWorkPackage?.title || task.objective}
+            </div>
+            <div className="text-xs text-text-secondary break-words">{runtimeSummary}</div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="px-2 py-1 rounded-full bg-background/60 text-text-secondary">
+              {selectedWorkPackage?.status || task.state}
+            </span>
+            <span className="px-2 py-1 rounded-full bg-accent/10 text-accent">
+              {selectedWorkPackageActivity?.phaseLabel || 'Waiting for thread'}
+            </span>
+            {selectedProposal ? (
+              <span className="px-2 py-1 rounded-full bg-background/60 text-text-secondary">
+                {selectedProposal.verificationStatus}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg border border-border/60 bg-background/40 px-3 py-3 space-y-2">
+            <div className="text-[11px] uppercase tracking-wide text-text-muted">Runtime Activity</div>
+            <div className="text-xs text-text-primary break-words">
+              {selectedWorkPackageActivity?.phaseLabel || EXECUTION_CONSOLE_EMPTY_STATE.runtime}
+            </div>
+            <div className="text-[11px] text-text-secondary break-words">{runtimeSummary}</div>
+          </div>
+
+          <div className="rounded-lg border border-border/60 bg-background/40 px-3 py-3 space-y-2">
+            <div className="text-[11px] uppercase tracking-wide text-text-muted">Tool activity</div>
+            <div className="text-xs text-text-primary break-all">{toolSummary}</div>
+            {selectedWorkPackage?.workspaceId ? (
+              <div className="text-[11px] text-text-secondary break-all">{selectedWorkPackage.workspaceId}</div>
+            ) : null}
+          </div>
+
+          <div className="rounded-lg border border-border/60 bg-background/40 px-3 py-3 space-y-2">
+            <div className="text-[11px] uppercase tracking-wide text-text-muted">Latest assistant output</div>
+            <div className="text-xs text-text-primary break-words">{assistantSummary}</div>
+            {selectedWorkPackageActivity?.messageCount ? (
+              <div className="text-[11px] text-text-secondary">
+                {`Messages: ${selectedWorkPackageActivity.messageCount}`}
+              </div>
+            ) : null}
+          </div>
+
+          <div className={`rounded-lg border px-3 py-3 space-y-2 ${verificationTone}`}>
+            <div className="text-[11px] uppercase tracking-wide text-text-muted">Verification Summary</div>
+            <div className="text-xs text-text-primary break-words">{verificationSummary}</div>
+            {selectedProposal?.verificationMode ? (
+              <div className="text-[11px] text-text-secondary">
+                {`Mode: ${selectedProposal.verificationMode}`}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       <ExecutionDiagnosticsPanel
         task={task}
