@@ -15,6 +15,7 @@ import { SECURITY_DEFAULTS } from '@shared/constants'
 import { safeIpcHandle } from '../ipc/safeHandle'
 import { normalizePipeTerminalInput } from './terminalInput'
 import { resolveInteractiveTerminalBackend, type InteractiveTerminalBackend } from '@shared/utils/terminalBackend'
+import { getAccessibleWorkspaceRoots } from './isolatedWorkspace'
 
 
 interface SecureShellRequest {
@@ -151,6 +152,9 @@ export const __testing = {
   bindTrackedTerminal,
   resolveInteractiveBackend(platform: NodeJS.Platform, requestedBackend?: InteractiveTerminalBackend) {
     return resolveInteractiveTerminalBackend(platform, requestedBackend)
+  },
+  resolveValidationRoots(workspaceRoots: string[]) {
+    return getAccessibleWorkspaceRoots(workspaceRoots)
   },
   getTrackedTerminalCount() {
     return terminals.size
@@ -294,6 +298,14 @@ class SecureCommandParser {
   }
 }
 
+function resolveValidationRoots(workspace: { roots: string[] } | null | undefined): string[] {
+  if (!workspace || workspace.roots.length === 0) {
+    return []
+  }
+
+  return getAccessibleWorkspaceRoots(workspace.roots)
+}
+
 /**
  * 注册安全的终端处理程序
  */
@@ -319,6 +331,7 @@ export function registerSecureTerminalHandlers(
     const { command, args = [], cwd, timeout = 30000, requireConfirm = true } = request
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
+    const validationRoots = resolveValidationRoots(workspace)
 
     if (!mainWindow) {
       return { success: false, error: '主窗口未就绪' }
@@ -328,11 +341,11 @@ export function registerSecureTerminalHandlers(
     let targetPath: string
     if (workspace) {
       targetPath = cwd || workspace.roots[0]
-      if (!securityManager.validateWorkspacePath(targetPath, workspace.roots)) {
+      if (validationRoots.length > 0 && !securityManager.validateWorkspacePath(targetPath, validationRoots)) {
         securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
           reason: '路径在工作区外',
           targetPath,
-          workspace: workspace.roots,
+          workspace: validationRoots,
         })
         return { success: false, error: '不允许在工作区外执行命令' }
       }
@@ -436,13 +449,15 @@ export function registerSecureTerminalHandlers(
     // 优先使用请求来源窗口的工作区（支持多窗口隔离）
     const windowId = event.sender.id
     const windowRoots = getWindowWorkspace?.(windowId)
-    const workspace = windowRoots ? { roots: windowRoots } : getWorkspace()
+    const workspace = windowRoots ? { roots: windowRoots } : getWorkspace(event)
+    const validationRoots = resolveValidationRoots(workspace)
 
     // 调试日志：记录 workspace 状态
     logger.security.debug('[Git] Workspace check:', {
       windowId,
       windowRoots: windowRoots || 'null',
       workspaceFromStore: workspace?.roots || 'null',
+      validationRoots: validationRoots.length > 0 ? validationRoots : 'null',
       cwd,
     })
 
@@ -452,12 +467,12 @@ export function registerSecureTerminalHandlers(
       logger.security.info('[Git] No workspace set, trusting cwd:', cwd)
     } else {
       // 2. 验证工作区边界
-      if (!securityManager.validateWorkspacePath(cwd, workspace.roots)) {
-        logger.security.warn('[Git] Path validation failed:', { cwd, roots: workspace.roots })
+      if (validationRoots.length > 0 && !securityManager.validateWorkspacePath(cwd, validationRoots)) {
+        logger.security.warn('[Git] Path validation failed:', { cwd, roots: validationRoots })
         securityManager.logOperation(OperationType.GIT_EXEC, args.join(' '), false, {
           reason: '路径在工作区外',
           cwd,
-          workspace: workspace.roots,
+          workspace: validationRoots,
         })
         return { success: false, error: '不允许在工作区外执行Git命令' }
       }
@@ -847,6 +862,7 @@ export function registerSecureTerminalHandlers(
   ) => {
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
+    const validationRoots = resolveValidationRoots(workspace)
     const { id, cwd, shell, backend = 'pty', remote } = options
     const effectiveBackend = remote?.host
       ? backend
@@ -864,10 +880,11 @@ export function registerSecureTerminalHandlers(
 
     const targetCwd = (cwd && cwd.trim()) || workspace?.roots?.[0] || process.cwd()
 
-    if (workspace && workspace.roots.length > 0 && !remote?.host && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
+    if (validationRoots.length > 0 && !remote?.host && !securityManager.validateWorkspacePath(targetCwd, validationRoots)) {
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', false, {
         reason: '路径在工作区外',
         cwd: targetCwd,
+        workspace: validationRoots,
       })
       return { success: false, error: '终端只能在工作区内创建' }
     }
@@ -1119,10 +1136,11 @@ export function registerSecureTerminalHandlers(
   ): Promise<{ success: boolean; output: string; exitCode: number; error?: string }> => {
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
+    const validationRoots = resolveValidationRoots(workspace)
     const workingDir = cwd || workspace?.roots[0] || process.cwd()
 
     // 验证工作目录
-    if (workspace && !securityManager.validateWorkspacePath(workingDir, workspace.roots)) {
+    if (validationRoots.length > 0 && !securityManager.validateWorkspacePath(workingDir, validationRoots)) {
       return { success: false, output: '', exitCode: 1, error: 'Working directory outside workspace' }
     }
 

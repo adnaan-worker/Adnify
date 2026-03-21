@@ -13,6 +13,7 @@ import { SECURITY_DEFAULTS } from '@shared/constants'
 import type Store from 'electron-store'
 import { buildRuntimeCleanupTasks, type RuntimeCleanupReason } from './lifecycle/runtimeCleanup'
 import { resolveBeforeQuitAction, resolveWindowAllClosedAction } from './lifecycle/quitLifecycle'
+import { bootstrapFirstWindow } from './startup/bootstrapFirstWindow'
 
 // ==========================================
 // 常量定义
@@ -319,18 +320,15 @@ async function performRuntimeCleanup(reason: RuntimeCleanupReason): Promise<void
 
 
 // ==========================================
-// 模块加载（后台异步）
+// 主进程启动
 // ==========================================
 
-async function initializeModules(firstWin: BrowserWindow) {
-  // 并行加载所有模块
-  const [ipc, lsp, security, windowIpc, lspInstaller, updaterService] = await Promise.all([
+async function prepareCriticalIpcHandlers() {
+  const [ipc, lsp, security, lspInstaller] = await Promise.all([
     import('./ipc'),
     import('./lsp/lspManager'),
     import('./security'),
-    import('./ipc/window'),
     import('./lsp/installer'),
-    import('./services/updater'),
   ])
 
   ipcModule = ipc
@@ -343,13 +341,6 @@ async function initializeModules(firstWin: BrowserWindow) {
     lspInstaller.setCustomLspBinDir(customLspPath)
   }
 
-  // 窗口控制已在创建窗口前注册，此处仅确保 window:new 等依赖 createWindow 的 handler 生效
-  windowIpc.registerWindowHandlers(createWindow)
-
-  // 更新服务：IPC 已在创建窗口前注册，此处仅初始化主窗口引用
-  updaterService.updateService.initialize(firstWin)
-
-  // 配置安全模块
   const securityConfig = configStore.get('securitySettings', {
     enablePermissionConfirm: true,
     strictWorkspaceMode: true,
@@ -363,7 +354,7 @@ async function initializeModules(firstWin: BrowserWindow) {
     securityConfig.allowedGitSubcommands || [...SECURITY_DEFAULTS.GIT_SUBCOMMANDS]
   )
 
-  // 注册 IPC 处理器
+  // 在渲染进程可交互前注册全部核心 IPC，避免欢迎页点击时出现 handler 未就绪。
   ipc.registerAllHandlers({
     getMainWindow,
     createWindow,
@@ -376,8 +367,13 @@ async function initializeModules(firstWin: BrowserWindow) {
     setWindowWorkspace: (id: number, roots: string[]) => windowWorkspaces.set(id, roots),
     getWindowWorkspace: (id: number) => windowWorkspaces.get(id) || null,
   })
+}
 
-  // 设置菜单
+async function initializeWindowServices(firstWin: BrowserWindow) {
+  const { updateService } = await import('./services/updater')
+
+  updateService.initialize(firstWin)
+
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'File', submenu: [{ role: 'quit' }] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
@@ -435,42 +431,45 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
 // ==========================================
 
 app.whenReady().then(async () => {
-  // 1. 初始化 Store（必须在模块加载前完成）
-  await initStores()
+  try {
+    await bootstrapFirstWindow({
+      initStores: async () => {
+        await initStores()
 
-  // 2. 检查是否启用文件日志
-  const appSettings = configStore.get('app-settings') as any
-  const enableFileLogging = appSettings?.enableFileLogging ?? false
-  logger.system.info('[Main] File logging setting loaded:', { enableFileLogging, type: typeof enableFileLogging })
+        const appSettings = configStore.get('app-settings') as any
+        const enableFileLogging = appSettings?.enableFileLogging ?? false
+        logger.system.info('[Main] File logging setting loaded:', { enableFileLogging, type: typeof enableFileLogging })
 
-  if (enableFileLogging) {
-    const { getUserConfigDir } = await import('./services/configPath')
-    const logPath = path.join(getUserConfigDir(), 'logs', 'main.log')
-    logger.enableFileLogging(logPath)
-    logger.system.info('[Main] File logging enabled', {
-      logPath,
-      version: app.getVersion(),
-      platform: process.platform,
-      arch: process.arch,
-      isPackaged: app.isPackaged,
+        if (enableFileLogging) {
+          const { getUserConfigDir } = await import('./services/configPath')
+          const logPath = path.join(getUserConfigDir(), 'logs', 'main.log')
+          logger.enableFileLogging(logPath)
+          logger.system.info('[Main] File logging enabled', {
+            logPath,
+            version: app.getVersion(),
+            platform: process.platform,
+            arch: process.arch,
+            isPackaged: app.isPackaged,
+          })
+        } else {
+          logger.system.info('[Main] File logging is disabled')
+        }
+      },
+      registerWindowHandlers: async () => {
+        const { registerWindowHandlers } = await import('./ipc/window')
+        registerWindowHandlers(createWindow)
+      },
+      registerUpdaterHandlers: async () => {
+        const { registerUpdaterHandlers } = await import('./ipc/updater')
+        registerUpdaterHandlers()
+      },
+      registerCriticalIpcHandlers: prepareCriticalIpcHandlers,
+      createWindow,
+      initializeWindowServices,
     })
-  } else {
-    logger.system.info('[Main] File logging is disabled')
+  } catch (err) {
+    logger.system.error('[Main] Failed to bootstrap first window:', err)
   }
-
-  // 3. 先注册窗口与更新 IPC，避免渲染进程加载时 handler 未就绪（setTheme / updater 等）
-  const { registerWindowHandlers } = await import('./ipc/window')
-  registerWindowHandlers(createWindow)
-  const { registerUpdaterHandlers } = await import('./ipc/updater')
-  registerUpdaterHandlers()
-
-  // 4. 创建窗口
-  const firstWin = createWindow()
-
-  // 5. 后台加载模块（不阻塞窗口显示）
-  initializeModules(firstWin).catch(err => {
-    logger.system.error('[Main] Module initialization failed:', err)
-  })
 })
 
 app.on('second-instance', () => {

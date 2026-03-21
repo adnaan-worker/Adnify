@@ -9,6 +9,7 @@ import * as path from 'path'
 import { dialog, BrowserWindow } from 'electron'
 import { SECURITY_DEFAULTS, isSensitivePath as sharedIsSensitivePath } from '@shared/constants'
 import { pathStartsWith, pathEquals } from '@shared/utils/pathUtils'
+import { isRegisteredIsolatedWorkspacePath } from './isolatedWorkspace'
 
 // 敏感操作类型
 export enum OperationType {
@@ -215,15 +216,20 @@ class SecurityManager implements SecurityModule {
       const resolvedPath = path.resolve(filePath)
 
       // 使用 pathStartsWith 进行路径比较（忽略大小写和分隔符差异）
-      const isInside = workspaces.some(ws => {
+      const matchedWorkspace = workspaces.find(ws => {
         if (typeof ws !== 'string') return false
         const resolvedWorkspace = path.resolve(ws)
         return pathStartsWith(resolvedPath, resolvedWorkspace) || pathEquals(resolvedPath, resolvedWorkspace)
       })
 
       const isSensitive = typeof resolvedPath === 'string' && this.isSensitivePath(resolvedPath)
+      const allowsRegisteredIsolatedWorkspace =
+        Boolean(matchedWorkspace)
+        && isSensitive
+        && isRegisteredIsolatedWorkspacePath(resolvedPath)
+        && isRegisteredIsolatedWorkspacePath(matchedWorkspace as string)
 
-      return isInside && !isSensitive
+      return Boolean(matchedWorkspace) && (!isSensitive || allowsRegisteredIsolatedWorkspace)
     } catch (error) {
       logger.security.error('[Security] Path validation error:', error)
       return false
