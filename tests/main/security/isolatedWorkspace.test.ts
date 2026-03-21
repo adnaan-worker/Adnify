@@ -101,6 +101,23 @@ describe('isolated workspace', () => {
     ])
   })
 
+  it('includes task-owned isolated roots for task-level execution targets', () => {
+    const workspaceRoot = makeTempDir('adnify-workspace-')
+    const isolatedWorkspace = makeTempDir('adnify-task-iso-')
+
+    __testing.registerRecord({
+      taskId: 'task-level',
+      sourcePath: workspaceRoot,
+      workspacePath: isolatedWorkspace,
+      mode: 'copy',
+    })
+
+    expect(getAccessibleWorkspaceRoots([workspaceRoot])).toEqual([
+      workspaceRoot,
+      isolatedWorkspace,
+    ])
+  })
+
 
   it('disposes package-scoped isolated workspaces independently within one task', async () => {
     const sourcePath = makeTempDir('adnify-source-')

@@ -25,6 +25,37 @@ function matchesWorkspaceRoots(candidatePath: string, workspaceRoots: string | s
   })
 }
 
+function createMockChildProcess(exitCode = 0, stdoutText = '') {
+  const stdout = new EventEmitter()
+  const stderr = new EventEmitter()
+  const child = new EventEmitter() as EventEmitter & {
+    stdout: EventEmitter
+    stderr: EventEmitter
+    stdin?: { destroyed: boolean; write: ReturnType<typeof vi.fn> }
+    killed: boolean
+    pid?: number
+    kill: ReturnType<typeof vi.fn>
+  }
+
+  child.stdout = stdout
+  child.stderr = stderr
+  child.killed = false
+  child.pid = 23456
+  child.kill = vi.fn(() => {
+    child.killed = true
+    return true
+  })
+
+  setTimeout(() => {
+    if (stdoutText) {
+      stdout.emit('data', Buffer.from(stdoutText))
+    }
+    child.emit('close', exitCode)
+  }, 0)
+
+  return child
+}
+
 class MockSshClient extends EventEmitter {
   shell(_options: unknown, callback: (error: Error | undefined, stream: EventEmitter & {
     write: ReturnType<typeof vi.fn>
@@ -232,6 +263,95 @@ describe('secureTerminal', () => {
       isolatedWorkspace,
       expect.arrayContaining([workspaceRoot, isolatedWorkspace]),
     )
+  })
+
+  it('allows secure shell execution inside task-owned isolated workspaces', async () => {
+    const workspaceRoot = makeTempDir('adnify-workspace-')
+    const isolatedWorkspace = makeTempDir('adnify-isolated-')
+
+    childSpawnMock.mockReturnValue(createMockChildProcess(0, `${isolatedWorkspace}\n`))
+
+    const isolatedWorkspaceModule = await import('@main/security/isolatedWorkspace')
+    const { securityManager } = await import('@main/security/securityModule')
+    vi.mocked(securityManager.validateWorkspacePath).mockImplementation(matchesWorkspaceRoots)
+
+    isolatedWorkspaceModule.__testing.registerRecord({
+      taskId: 'task-shell',
+      sourcePath: workspaceRoot,
+      workspacePath: isolatedWorkspace,
+      mode: 'copy',
+    })
+
+    const module = await import('@main/security/secureTerminal')
+    module.registerSecureTerminalHandlers(
+      () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any,
+      () => ({ roots: [workspaceRoot] }),
+    )
+
+    const handler = handlers.get('shell:executeSecure')
+    expect(handler).toBeTypeOf('function')
+
+    const result = await handler?.({}, {
+      command: 'pwd',
+      cwd: isolatedWorkspace,
+      requireConfirm: false,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      exitCode: 0,
+      output: `${isolatedWorkspace}\n`,
+    })
+    expect(securityManager.validateWorkspacePath).toHaveBeenCalledWith(
+      isolatedWorkspace,
+      expect.arrayContaining([workspaceRoot, isolatedWorkspace]),
+    )
+    expect(childSpawnMock).toHaveBeenCalledWith(
+      'pwd',
+      [],
+      expect.objectContaining({
+        cwd: isolatedWorkspace,
+        timeout: 30000,
+      }),
+    )
+  })
+
+  it('blocks secure shell execution when cwd escapes accessible isolated workspace roots', async () => {
+    const workspaceRoot = makeTempDir('adnify-workspace-')
+    const isolatedWorkspace = makeTempDir('adnify-isolated-')
+    const outsideRoot = makeTempDir('adnify-outside-')
+
+    const isolatedWorkspaceModule = await import('@main/security/isolatedWorkspace')
+    const { securityManager } = await import('@main/security/securityModule')
+    vi.mocked(securityManager.validateWorkspacePath).mockImplementation(matchesWorkspaceRoots)
+
+    isolatedWorkspaceModule.__testing.registerRecord({
+      taskId: 'task-shell',
+      sourcePath: workspaceRoot,
+      workspacePath: isolatedWorkspace,
+      mode: 'copy',
+    })
+
+    const module = await import('@main/security/secureTerminal')
+    module.registerSecureTerminalHandlers(
+      () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any,
+      () => ({ roots: [workspaceRoot] }),
+    )
+
+    const handler = handlers.get('shell:executeSecure')
+    expect(handler).toBeTypeOf('function')
+
+    const result = await handler?.({}, {
+      command: 'pwd',
+      cwd: outsideRoot,
+      requireConfirm: false,
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: '不允许在工作区外执行命令',
+    })
+    expect(childSpawnMock).not.toHaveBeenCalled()
   })
 
   it('skips local workspace validation for remote interactive terminals', async () => {

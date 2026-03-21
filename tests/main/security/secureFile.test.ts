@@ -179,6 +179,43 @@ describe('secureFile workspace protections', () => {
     )
   })
 
+  it('blocks file writes outside accessible roots even when task-driven isolated workspaces exist', async () => {
+    const workspaceRoot = makeTempDir('adnify-workspace-')
+    const isolatedWorkspace = makeTempDir('adnify-isolated-')
+    const outsideRoot = makeTempDir('adnify-outside-')
+    const targetFile = path.join(outsideRoot, 'escape.ts')
+
+    const isolatedWorkspaceModule = await import('@main/security/isolatedWorkspace')
+    const { securityManager } = await import('@main/security/securityModule')
+    vi.mocked(securityManager.validateWorkspacePath).mockImplementation(matchesWorkspaceRoots)
+
+    isolatedWorkspaceModule.__testing.registerRecord({
+      taskId: 'task-write',
+      sourcePath: workspaceRoot,
+      workspacePath: isolatedWorkspace,
+      mode: 'copy',
+    })
+
+    const { registerSecureFileHandlers } = await import('@main/security/secureFile')
+    registerSecureFileHandlers(
+      () => null,
+      {},
+      () => ({ roots: [workspaceRoot] }),
+    )
+
+    const handler = handlers.get('file:write')
+    expect(handler).toBeTypeOf('function')
+
+    const result = await handler?.({}, targetFile, 'export const escaped = true\n')
+
+    expect(result).toBe(false)
+    expect(fs.existsSync(targetFile)).toBe(false)
+    expect(securityManager.validateWorkspacePath).toHaveBeenCalledWith(
+      targetFile,
+      expect.arrayContaining([workspaceRoot, isolatedWorkspace]),
+    )
+  })
+
   it('blocks renames that escape the accessible workspace roots', async () => {
     const workspaceRoot = makeTempDir('adnify-workspace-')
     const outsideRoot = makeTempDir('adnify-outside-')
