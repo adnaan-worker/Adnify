@@ -56,6 +56,7 @@ export * from './services'
 
 // 任务会话类型
 export * from './taskSession'
+export * from './taskSessionGates'
 
 // ============================================
 // 工具函数
