@@ -33,16 +33,35 @@ interface FileEdit {
   status: 'pending' | 'applied' | 'rejected'
 }
 
+type ComposerPanelMode = 'task' | 'review'
+
+interface TaskSessionEntryDraft {
+  goal: string
+  successCriteria: string
+  contextNote: string
+}
+
 interface ComposerPanelProps {
   onClose: () => void
   // 可选：从 Agent 传入的已有变更
   initialChanges?: FileChange[]
+  defaultMode?: ComposerPanelMode
+  initialTaskDraft?: Partial<TaskSessionEntryDraft>
 }
 
-export default function ComposerPanel({ onClose, initialChanges }: ComposerPanelProps) {
+export default function ComposerPanel({
+  onClose,
+  initialChanges,
+  defaultMode,
+  initialTaskDraft,
+}: ComposerPanelProps) {
   const { openFiles, activeFilePath, llmConfig, updateFileContent, language } = useStore(useShallow(s => ({ openFiles: s.openFiles, activeFilePath: s.activeFilePath, llmConfig: s.llmConfig, updateFileContent: s.updateFileContent, language: s.language })))
 
+  const [mode, setMode] = useState<ComposerPanelMode>(defaultMode ?? (initialChanges && initialChanges.length > 0 ? 'review' : 'task'))
   const [instruction, setInstruction] = useState('')
+  const [taskGoal, setTaskGoal] = useState(initialTaskDraft?.goal ?? '')
+  const [taskSuccessCriteria, setTaskSuccessCriteria] = useState(initialTaskDraft?.successCriteria ?? '')
+  const [taskContextNote, setTaskContextNote] = useState(initialTaskDraft?.contextNote ?? '')
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [fileEdits, setFileEdits] = useState<FileEdit[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
@@ -108,6 +127,11 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
     setSelectedFiles(prev => prev.filter(p => p !== path))
   }, [])
 
+  const attachOpenFilesAsContext = useCallback(() => {
+    const nextFiles = openFiles.map((file: { path: string }) => file.path)
+    setSelectedFiles(prev => Array.from(new Set([...prev, ...nextFiles])))
+  }, [openFiles])
+
   const toggleEditExpanded = useCallback((path: string) => {
     setExpandedEdits(prev => {
       const next = new Set(prev)
@@ -119,6 +143,30 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
       return next
     })
   }, [])
+
+  const handleGeneratePlan = useCallback(() => {
+    if (!taskGoal.trim()) return
+
+    if (selectedFiles.length === 0) {
+      if (activeFilePath) {
+        setSelectedFiles([activeFilePath])
+      } else if (openFiles.length > 0) {
+        setSelectedFiles([openFiles[0].path])
+      }
+    }
+
+    if (!instruction.trim()) {
+      const planSummary = [
+        `Goal: ${taskGoal.trim()}`,
+        taskSuccessCriteria.trim() ? `Success Criteria: ${taskSuccessCriteria.trim()}` : null,
+        taskContextNote.trim() ? `Context: ${taskContextNote.trim()}` : null,
+      ].filter(Boolean).join('\n')
+
+      setInstruction(planSummary)
+    }
+
+    setMode('review')
+  }, [activeFilePath, instruction, openFiles, selectedFiles.length, taskContextNote, taskGoal, taskSuccessCriteria])
 
   const handleGenerate = useCallback(async () => {
     if (!instruction.trim() || selectedFiles.length === 0) return
@@ -254,6 +302,12 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
     })
   }, [])
 
+  const hasReviewChanges = fileEdits.length > 0 || (composerState.currentSession && composerState.currentSession.changes.length > 0)
+  const modeSubtitle = mode === 'task' ? 'Task-first planning' : t('multiFileEdit', language)
+  const selectedContextLabel = selectedFiles.length > 0
+    ? `${selectedFiles.length} context attachment(s)`
+    : 'Attach files, tabs, or notes before planning.'
+
   return (
     <Modal
       isOpen={true}
@@ -281,7 +335,7 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
                 </span>
               </h2>
               <p className="text-xs text-text-muted font-medium opacity-60 uppercase tracking-widest">
-                {t('multiFileEdit', language)}
+                {modeSubtitle}
               </p>
             </div>
           </div>
@@ -294,18 +348,37 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden relative">
+          <div className="px-8 pt-6">
+            <div className="inline-flex rounded-2xl border border-border-subtle bg-surface/10 p-1">
+              <button
+                type="button"
+                onClick={() => setMode('task')}
+                className={`rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] transition-all duration-300 ${mode === 'task' ? 'bg-accent text-accent-foreground shadow-lg shadow-accent/20' : 'text-text-muted hover:text-text-primary'}`}
+              >
+                Generate Plan
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('review')}
+                className={`rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] transition-all duration-300 ${mode === 'review' ? 'bg-accent text-accent-foreground shadow-lg shadow-accent/20' : 'text-text-muted hover:text-text-primary'}`}
+              >
+                Patch Review
+              </button>
+            </div>
+          </div>
+
           {/* Main Content Area: Two Columns if changes exist, else single */}
-          <div className={`flex-1 flex overflow-hidden ${(fileEdits.length > 0 || (composerState.currentSession && composerState.currentSession.changes.length > 0)) ? 'divide-x divide-border-subtle' : ''}`}>
+          <div className={`flex-1 flex overflow-hidden ${hasReviewChanges ? 'divide-x divide-border-subtle' : ''}`}>
 
             {/* Left/Main Column: Input & File Selection */}
-            <div className={`flex flex-col ${(fileEdits.length > 0 || (composerState.currentSession && composerState.currentSession.changes.length > 0)) ? 'w-[45%]' : 'w-full'} transition-all duration-500`}>
+            <div className={`flex flex-col ${hasReviewChanges ? 'w-[45%]' : 'w-full'} transition-all duration-500`}>
 
               {/* File Selection Area */}
               <div className="px-8 py-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-[10px] font-black text-text-primary uppercase tracking-[0.2em] opacity-40 flex items-center gap-2">
                     <FolderOpen className="w-3 h-3" />
-                    {t('filesToEdit', language)}
+                    {mode === 'task' ? 'Context Attachments' : t('filesToEdit', language)}
                   </h3>
                   <div className="relative">
                     <button
@@ -348,6 +421,26 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
                   </div>
                 </div>
 
+                {mode === 'task' ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={attachOpenFilesAsContext}
+                      className="rounded-xl border border-border-subtle bg-surface/10 px-3 py-2 text-[11px] font-bold text-text-primary hover:border-accent/30 hover:bg-accent/5 transition-all duration-300"
+                    >
+                      Use open files as context
+                    </button>
+                    <div className="rounded-xl border border-border-subtle bg-surface/10 px-3 py-2 text-[11px] text-text-secondary">
+                      {selectedContextLabel}
+                    </div>
+                    {activeFilePath ? (
+                      <div className="rounded-xl border border-border-subtle bg-surface/10 px-3 py-2 text-[11px] text-text-secondary">
+                        {`Active file: ${getFileName(activeFilePath)}`}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {/* Selected Files Chips */}
                 <div className="flex flex-wrap gap-2 min-h-[40px] p-3 rounded-2xl bg-surface/10 border border-border-subtle">
                   {selectedFiles.map(path => (
@@ -376,59 +469,134 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
 
               {/* Instruction Input Area */}
               <div className="px-8 pb-8">
-                <div className="relative flex flex-col rounded-2xl border border-border-subtle bg-surface/5 focus-within:border-accent/40 transition-all duration-300 overflow-hidden">
-                  <textarea
-                    ref={inputRef}
-                    value={instruction}
-                    onChange={(e) => setInstruction(e.target.value)}
-                    placeholder={t('describeChanges', language)}
-                    className="w-full h-32 bg-transparent border-none px-5 py-4 text-sm text-text-primary placeholder-text-muted/40 focus:ring-0 focus:outline-none resize-none leading-relaxed"
-                    style={{ fontSize: `${fontSize}px` }}
-                    disabled={isGenerating}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                        e.preventDefault()
-                        handleGenerate()
-                      }
-                    }}
-                  />
-
-                  {/* Input Toolbar */}
-                  <div className="px-5 py-3 border-t border-border-subtle flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface/20 border border-border-subtle">
-                        <div className={`w-1.5 h-1.5 rounded-full ${selectedFiles.length > 0 ? 'bg-accent animate-pulse' : 'bg-text-muted opacity-30'}`} />
-                        <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">
-                          {t('filesSelected', language, { count: String(selectedFiles.length) })}
-                        </span>
+                {mode === 'task' ? (
+                  <div className="rounded-2xl border border-border-subtle bg-surface/5 overflow-hidden">
+                    <div className="px-5 py-4 border-b border-border-subtle bg-surface/10">
+                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted opacity-60">
+                        Task Session
                       </div>
-                      {instruction.length > 0 && (
-                        <span className="text-[10px] font-bold text-text-muted opacity-40 uppercase tracking-tighter">
-                          {instruction.length} chars
-                        </span>
-                      )}
+                      <div className="mt-2 text-sm font-semibold text-text-primary">
+                        Shape the task before we enter patch review.
+                      </div>
                     </div>
 
-                    <button
-                      onClick={handleGenerate}
-                      disabled={!instruction.trim() || selectedFiles.length === 0 || isGenerating}
-                      className="relative group/btn overflow-hidden flex items-center gap-2 px-6 py-2.5 bg-accent text-accent-foreground text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-accent-hover disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed transition-all duration-500 shadow-xl shadow-accent/20"
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover/btn:translate-x-[100%] transition-transform duration-1000" />
-                      {isGenerating ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          {t('generating', language)}
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-4 h-4" />
-                          {t('generateEdits', language)}
-                        </>
-                      )}
-                    </button>
+                    <div className="px-5 py-4 space-y-4">
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-black uppercase tracking-[0.16em] text-text-muted">Goal</div>
+                        <textarea
+                          ref={inputRef}
+                          value={taskGoal}
+                          onChange={(e) => setTaskGoal(e.target.value)}
+                          placeholder="Describe the outcome you want shipped."
+                          className="w-full h-28 rounded-2xl border border-border-subtle bg-background/30 px-4 py-3 text-sm text-text-primary placeholder-text-muted/40 focus:border-accent/40 focus:outline-none resize-none leading-relaxed"
+                          style={{ fontSize: `${fontSize}px` }}
+                        />
+                      </div>
+
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <div className="space-y-2">
+                          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-text-muted">Success Criteria</div>
+                          <textarea
+                            value={taskSuccessCriteria}
+                            onChange={(e) => setTaskSuccessCriteria(e.target.value)}
+                            placeholder="Define how we know the task is complete."
+                            className="w-full h-24 rounded-2xl border border-border-subtle bg-background/30 px-4 py-3 text-sm text-text-primary placeholder-text-muted/40 focus:border-accent/40 focus:outline-none resize-none leading-relaxed"
+                            style={{ fontSize: `${fontSize}px` }}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-text-muted">Context Notes</div>
+                          <textarea
+                            value={taskContextNote}
+                            onChange={(e) => setTaskContextNote(e.target.value)}
+                            placeholder="Capture constraints, references, or rollout notes."
+                            className="w-full h-24 rounded-2xl border border-border-subtle bg-background/30 px-4 py-3 text-sm text-text-primary placeholder-text-muted/40 focus:border-accent/40 focus:outline-none resize-none leading-relaxed"
+                            style={{ fontSize: `${fontSize}px` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="px-5 py-3 border-t border-border-subtle flex items-center justify-between gap-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="rounded-full border border-border-subtle bg-surface/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-text-muted">
+                          {selectedContextLabel}
+                        </div>
+                        {taskSuccessCriteria.trim() ? (
+                          <div className="rounded-full border border-border-subtle bg-surface/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-text-muted">
+                            Success criteria ready
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleGeneratePlan}
+                        disabled={!taskGoal.trim()}
+                        className="relative group/btn overflow-hidden flex items-center gap-2 px-6 py-2.5 bg-accent text-accent-foreground text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-accent-hover disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed transition-all duration-500 shadow-xl shadow-accent/20"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover/btn:translate-x-[100%] transition-transform duration-1000" />
+                        <Sparkles className="w-4 h-4" />
+                        Generate Plan
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="relative flex flex-col rounded-2xl border border-border-subtle bg-surface/5 focus-within:border-accent/40 transition-all duration-300 overflow-hidden">
+                    <textarea
+                      ref={inputRef}
+                      value={instruction}
+                      onChange={(e) => setInstruction(e.target.value)}
+                      placeholder={t('describeChanges', language)}
+                      className="w-full h-32 bg-transparent border-none px-5 py-4 text-sm text-text-primary placeholder-text-muted/40 focus:ring-0 focus:outline-none resize-none leading-relaxed"
+                      style={{ fontSize: `${fontSize}px` }}
+                      disabled={isGenerating}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                          e.preventDefault()
+                          handleGenerate()
+                        }
+                      }}
+                    />
+
+                    {/* Input Toolbar */}
+                    <div className="px-5 py-3 border-t border-border-subtle flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface/20 border border-border-subtle">
+                          <div className={`w-1.5 h-1.5 rounded-full ${selectedFiles.length > 0 ? 'bg-accent animate-pulse' : 'bg-text-muted opacity-30'}`} />
+                          <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">
+                            {t('filesSelected', language, { count: String(selectedFiles.length) })}
+                          </span>
+                        </div>
+                        {instruction.length > 0 && (
+                          <span className="text-[10px] font-bold text-text-muted opacity-40 uppercase tracking-tighter">
+                            {instruction.length} chars
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={handleGenerate}
+                        disabled={!instruction.trim() || selectedFiles.length === 0 || isGenerating}
+                        className="relative group/btn overflow-hidden flex items-center gap-2 px-6 py-2.5 bg-accent text-accent-foreground text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-accent-hover disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed transition-all duration-500 shadow-xl shadow-accent/20"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover/btn:translate-x-[100%] transition-transform duration-1000" />
+                        {isGenerating ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            {t('generating', language)}
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            {t('generateEdits', language)}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {error && (
                   <div className="mt-4 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center gap-3 text-xs text-red-400 font-bold animate-in slide-in-from-top-2 duration-300">
@@ -440,7 +608,7 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
             </div>
 
             {/* Right Column: Changes & Diff Preview */}
-            {(fileEdits.length > 0 || (composerState.currentSession && composerState.currentSession.changes.length > 0)) && (
+            {hasReviewChanges && (
               <div className="flex-1 flex flex-col bg-surface/5 overflow-hidden animate-in slide-in-from-right-4 duration-500">
 
                 {/* Changes Header */}
