@@ -14,7 +14,8 @@ import {
   Clipboard,
   ExternalLink,
   Loader2,
-  Globe
+  Globe,
+  Terminal
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -46,6 +47,7 @@ interface VirtualFileTreeProps {
   onStartCreate: (path: string, type: 'file' | 'folder') => void
   onCancelCreate: () => void
   onCreateSubmit: (parentPath: string, name: string, type: 'file' | 'folder') => void
+  onOpenTerminal: (cwd: string) => Promise<void>
 }
 
 export const VirtualFileTree = memo(function VirtualFileTree({
@@ -54,7 +56,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   creatingIn,
   onStartCreate,
   onCancelCreate,
-  onCreateSubmit
+  onCreateSubmit,
+  onOpenTerminal
 }: VirtualFileTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
@@ -489,6 +492,11 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
   }, [expandFolder, loadChildren, onStartCreate])
 
+  const handleOpenTerminalHere = useCallback((node: FlattenedNode) => {
+    const cwd = node.item.isDirectory ? node.item.path : getDirPath(node.item.path)
+    void onOpenTerminal(cwd)
+  }, [onOpenTerminal])
+
   // 聚焦重命名输入框
   useEffect(() => {
     if (renamingPath && renameInputRef.current) {
@@ -504,9 +512,11 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         { id: 'newFile', label: t('newFile', language), icon: FilePlus, onClick: () => handleNewFile(node) },
         { id: 'newFolder', label: t('newFolder', language), icon: FolderPlus, onClick: () => handleNewFolder(node) },
         { id: 'sep1', label: '', separator: true },
+        { id: 'openTerminal', label: t('openIntegratedTerminalHere', language) || 'Open Integrated Terminal Here', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
+        { id: 'sep2', label: '', separator: true },
         { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
         { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
-        { id: 'sep2', label: '', separator: true },
+        { id: 'sep3', label: '', separator: true },
         { id: 'copyPath', label: t('copyPath', language) || 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
         { id: 'copyRelPath', label: t('copyRelativePath', language) || 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
         { id: 'reveal', label: t('revealInExplorer', language) || 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
@@ -516,9 +526,11 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       node.item.name.toLowerCase().endsWith('.htm')
 
     const items: ContextMenuItem[] = [
+      { id: 'openTerminal', label: t('openIntegratedTerminalHere', language) || 'Open Integrated Terminal Here', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
+      { id: 'sep1', label: '', separator: true },
       { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
       { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
-      { id: 'sep1', label: '', separator: true },
+      { id: 'sep2', label: '', separator: true },
       { id: 'copyPath', label: t('copyPath', language) || 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
       { id: 'copyRelPath', label: t('copyRelativePath', language) || 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
       { id: 'reveal', label: t('revealInExplorer', language) || 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
@@ -531,7 +543,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
 
     return items
-  }, [language, handleNewFile, handleNewFolder, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])
+  }, [language, handleNewFile, handleNewFolder, handleOpenTerminalHere, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])
 
   // 渲染单个节点
   const renderNode = (node: FlattenedNode, index: number) => {

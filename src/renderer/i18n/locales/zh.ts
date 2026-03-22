@@ -53,6 +53,7 @@ export const zh = {
   'closeTerminal': '关闭',
   'killTerminal': '终止终端',
   'selectAll': '全选',
+  'openIntegratedTerminalHere': '在此处打开集成终端',
 
   // Tools
   'toolResultFor': '工具结果：',

@@ -62,6 +62,8 @@ const TerminalPanel = memo(function TerminalPanel() {
     const scriptMenuRef = useRef<HTMLDivElement>(null)
     const scriptButtonRef = useRef<HTMLButtonElement>(null)
 
+    const prevTerminalVisibleRef = useRef(false)
+
     // ===== 订阅 terminalManager =====
 
     useEffect(() => {
@@ -167,14 +169,6 @@ const TerminalPanel = memo(function TerminalPanel() {
         loadScripts()
     }, [selectedRoot])
 
-    // 当终端面板可见但没有终端时，自动创建一个
-    useEffect(() => {
-        const hasValidWorkspace = selectedRoot || (workspace?.roots && workspace.roots.length > 0)
-        if (terminalVisible && managerState.terminals.length === 0 && availableShells.length > 0 && hasValidWorkspace) {
-            createTerminal()
-        }
-    }, [terminalVisible, managerState.terminals.length, availableShells.length, selectedRoot, workspace?.roots])
-
     // ===== 窗口大小调整 =====
 
     useEffect(() => {
@@ -268,6 +262,19 @@ const TerminalPanel = memo(function TerminalPanel() {
         })
         setShowShellMenu(false)
     }, [selectedRoot, workspace?.roots, availableShells])
+
+    // 仅在终端面板从关闭 -> 打开时，且当前没有终端时自动创建一个
+    // 避免用户关闭最后一个终端后，又被这个 effect 立即自动创建回来
+    useEffect(() => {
+        const hasValidWorkspace = selectedRoot || (workspace?.roots && workspace.roots.length > 0)
+        const wasVisible = prevTerminalVisibleRef.current
+
+        if (terminalVisible && !wasVisible && managerState.terminals.length === 0 && availableShells.length > 0 && hasValidWorkspace) {
+            createTerminal()
+        }
+
+        prevTerminalVisibleRef.current = terminalVisible
+    }, [terminalVisible, managerState.terminals.length, availableShells.length, selectedRoot, workspace?.roots, createTerminal])
 
     const closeTerminal = useCallback((id: string, e?: React.MouseEvent) => {
         e?.stopPropagation()

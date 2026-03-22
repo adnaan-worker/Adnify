@@ -2,6 +2,7 @@
  * 通用右键菜单组件
  */
 import { useCallback, useState, useLayoutEffect, memo } from 'react'
+import { createPortal } from 'react-dom'
 import { LucideIcon } from 'lucide-react'
 import { useCloseOnOutsideOrEscape } from '@/renderer/hooks/usePerformance'
 
@@ -59,14 +60,16 @@ export const ContextMenu = memo(function ContextMenu({ x, y, items, onClose }: C
 
   const handleItemClick = useCallback((item: ContextMenuItem) => {
     if (item.disabled) return
-    item.onClick?.()
     onClose()
+    window.setTimeout(() => {
+      item.onClick?.()
+    }, 0)
   }, [onClose])
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[100] min-w-[220px] p-1.5 bg-surface/80 backdrop-blur-xl border border-border/50 rounded-xl shadow-2xl shadow-black/20 animate-scale-in flex flex-col gap-0.5"
+      className="fixed z-[99999] min-w-[220px] p-1.5 bg-surface/95 backdrop-blur-xl border border-border/50 rounded-xl shadow-2xl shadow-black/30 animate-scale-in flex flex-col gap-0.5"
       style={{ left: position.x, top: position.y }}
     >
       {items.map((item, index) => {
@@ -83,8 +86,8 @@ export const ContextMenu = memo(function ContextMenu({ x, y, items, onClose }: C
             disabled={item.disabled}
             className={`
               w-full px-2.5 py-1.5 flex items-center gap-2.5 text-left text-[13px] transition-all rounded-lg select-none group
-              ${item.disabled 
-                ? 'text-text-muted/40 cursor-not-allowed' 
+              ${item.disabled
+                ? 'text-text-muted/40 cursor-not-allowed'
                 : item.danger
                   ? 'text-text-secondary hover:bg-red-500/10 hover:text-red-500'
                   : 'text-text-secondary hover:bg-accent/10 hover:text-text-primary'
@@ -99,7 +102,8 @@ export const ContextMenu = memo(function ContextMenu({ x, y, items, onClose }: C
           </button>
         )
       })}
-    </div>
+    </div>,
+    document.body
   )
 })
 

@@ -53,6 +53,7 @@ export const en = {
   'closeTerminal': 'Close',
   'killTerminal': 'Kill Terminal',
   'selectAll': 'Select All',
+  'openIntegratedTerminalHere': 'Open Integrated Terminal Here',
 
   // Tools
   'toolResultFor': 'Tool result for',

@@ -4,7 +4,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect, useCallback } from 'react'
-import { FolderOpen, Plus, RefreshCw, FolderPlus, GitBranch, FilePlus, ExternalLink, Crosshair } from 'lucide-react'
+import { FolderOpen, Plus, RefreshCw, FolderPlus, GitBranch, FilePlus, ExternalLink, Crosshair, Terminal } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
@@ -16,6 +16,7 @@ import { workspaceManager } from '@services/WorkspaceManager'
 import { directoryCacheService } from '@services/directoryCacheService'
 import { Button, Tooltip, ContextMenu, ContextMenuItem } from '../../ui'
 import { VirtualFileTree } from '../../tree/VirtualFileTree'
+import { terminalManager } from '@/renderer/services/TerminalManager'
 
 export function ExplorerView() {
   const {
@@ -37,6 +38,7 @@ export function ExplorerView() {
     setGitStatus: s.setGitStatus, isGitRepo: s.isGitRepo, setIsGitRepo: s.setIsGitRepo,
     expandFolder: s.expandFolder, activeFilePath: s.activeFilePath,
   })))
+  const setTerminalVisible = useStore(state => state.setTerminalVisible)
 
   const [creatingIn, setCreatingIn] = useState<{ path: string; type: 'file' | 'folder' } | null>(null)
   const [rootContextMenu, setRootContextMenu] = useState<{ x: number; y: number } | null>(null)
@@ -194,10 +196,25 @@ export function ExplorerView() {
     [workspacePath]
   )
 
+  const openTerminalAtPath = useCallback(async (cwd: string) => {
+    setTerminalVisible(true)
+    await terminalManager.createTerminal({
+      cwd,
+      name: t('terminal', language),
+    })
+  }, [language, setTerminalVisible])
+
   const rootMenuItems: ContextMenuItem[] = [
     { id: 'newFile', label: t('newFile', language), icon: FilePlus, onClick: () => handleRootCreate('file') },
     { id: 'newFolder', label: t('newFolder', language), icon: FolderPlus, onClick: () => handleRootCreate('folder') },
     { id: 'sep1', label: '', separator: true },
+    {
+      id: 'openTerminal',
+      label: t('openIntegratedTerminalHere', language) || 'Open Integrated Terminal Here',
+      icon: Terminal,
+      onClick: () => workspacePath && openTerminalAtPath(workspacePath),
+    },
+    { id: 'sep2', label: '', separator: true },
     { id: 'refresh', label: t('refresh', language), icon: RefreshCw, onClick: refreshFiles },
     {
       id: 'reveal',
@@ -246,6 +263,7 @@ export function ExplorerView() {
             onStartCreate={handleStartCreate}
             onCancelCreate={handleCancelCreate}
             onCreateSubmit={handleCreateSubmit}
+            onOpenTerminal={openTerminalAtPath}
           />
         ) : workspace && workspace.roots.length > 0 ? (
           <div className="flex-1 flex items-center justify-center">
